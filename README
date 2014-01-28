@@ -1,0 +1,355 @@
+
+
+                         CORE ANALYSIS SUITE
+
+  The core analysis suite is a self-contained tool that can be used to
+  investigate either live systems, kernel core dumps created from dump
+  creation facilities such as kdump, kvmdump, xendump, the netdump and
+  diskdump packages offered by Red Hat, the LKCD kernel patch, the mcore
+  kernel patch created by Mission Critical Linux, as well as other formats
+  created by manufacturer-specific firmware.
+
+  o  The tool is loosely based on the SVR4 crash command, but has been
+     completely integrated with gdb in order to be able to display 
+     formatted kernel data structures, disassemble source code, etc.
+     
+  o  The current set of available commands consist of common kernel core
+     analysis tools such as a context-specific stack traces, source code
+     disassembly, kernel variable displays, memory display, dumps of 
+     linked-lists, etc.  In addition, any gdb command may be entered,
+     which in turn will be passed onto the gdb module for execution.  
+
+  o  There are several commands that delve deeper into specific kernel
+     subsystems, which also serve as templates for kernel developers
+     to create new commands for analysis of a specific area of interest.
+     Adding a new command is a simple affair, and a quick recompile
+     adds it to the command menu.
+
+  o  The intent is to make the tool independent of Linux version dependencies,
+     building in recognition of major kernel code changes so as to adapt to 
+     new kernel versions, while maintaining backwards compatibility.
+
+  A whitepaper with complete documentation concerning the use of this utility
+  can be found here:
+ 
+         http://people.redhat.com/anderson/crash_whitepaper
+ 
+  These are the current prerequisites: 
+
+  o  At this point, x86, ia64, x86_64, ppc64, ppc, arm, arm64, alpha, s390
+     and s390x-based kernels are supported.  Other architectures may be
+     addressed in the future.
+
+  o  One size fits all -- the utility can be run on any Linux kernel version
+     version dating back to 2.2.5-15.  A primary design goal is to always
+     maintain backwards-compatibility.
+
+  o  In order to contain debugging data, the top-level kernel Makefile's CFLAGS
+     definition must contain the -g flag.  Typically distributions will contain
+     a package containing a vmlinux file with full debuginfo data.  If not, the
+     kernel must be rebuilt:
+
+     For 2.2 kernels that are not built with -g, change the following line:
+
+        CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
+
+     to:
+
+        CFLAGS = -g -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
+
+     For 2.4 kernels that are not built with -g, change the following line:
+
+        CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strict-aliasing
+
+     to:
+
+        CFLAGS := -g $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strict-aliasing
+
+     For 2.6 and later kernels that are not built with -g, the kernel should
+     be configured with CONFIG_DEBUG_INFO enabled, which in turn will add
+     the -g flag to the CFLAGS setting in the kernel Makefile.
+ 
+     After the kernel is re-compiled, the uncompressed "vmlinux" kernel
+     that is created in the top-level kernel build directory must be saved.
+
+  To build the crash utility: 
+
+    $ tar -xf crash-7.0.4.tar.gz
+    $ cd crash-7.0.4
+    $ make
+
+  The initial build will take several minutes  because the embedded gdb module
+  must be configured and and built.  Alternatively, the crash source RPM file
+  may be installed and built, and the resultant crash binary RPM file installed.
+
+  The crash binary can only be used on systems of the same architecture as
+  the host build system.  There are a few optional manners of building the
+  crash binary:
+
+  o  On an x86_64 host, a 32-bit x86 binary that can be used to analyze
+     32-bit x86 dumpfiles may be built by typing "make target=X86".
+  o  On an x86 or x86_64 host, a 32-bit x86 binary that can be used to analyze
+     32-bit arm dumpfiles may be built by typing "make target=ARM".
+  o  On an ppc64 host, a 32-bit ppc binary that can be used to analyze
+     32-bit ppc dumpfiles may be built by typing "make target=PPC".
+  o  On an x86_64 host, an x86_64 binary that can be used to analyze
+     arm64 dumpfiles may be built by typing "make target=ARM64".
+
+  Traditionally when vmcores are compressed via the makedumpfile(8) facility
+  the libz compression library is used, and by default the crash utility
+  only supports libz.  Recently makedumpfile has been enhanced to optionally
+  use either the LZO or snappy compression libraries.  To build crash with
+  either or both of those libraries, type "make lzo" or "make snappy".
+
+  All of the alternate build commands above are "sticky" in that the
+  special "make" targets only have to be entered one time; all subsequent
+  builds will follow suit.
+
+  If the tool is run against a kernel dumpfile, two arguments are required, the
+  uncompressed kernel name and the kernel dumpfile name.  
+
+  If run on a live system, only the kernel name is required, because /dev/mem 
+  will be used as the "dumpfile".  On Red Hat or Fedora kernels where the
+  /dev/mem device is restricted, the /dev/crash memory driver will be used.
+  If neither /dev/mem or /dev/crash are available, then /proc/kcore will be
+  be used as the live memory source.  If /proc/kcore is also restricted, then
+  the Red Hat /dev/crash driver may be compiled and installed; its source
+  is included in the crash-7.0.4/memory_driver subdirectory.
+
+  If the kernel file is stored in /boot, /, /boot/efi, or in any /usr/src
+  or /usr/lib/debug/lib/modules subdirectory, then no command line arguments
+  are required -- the first kernel found that matches /proc/version will be
+  used as the namelist.
+  
+  For example, invoking crash on a live system would look like this:
+
+    $ crash
+    
+    crash 7.0.4
+    Copyright (C) 2002-2013  Red Hat, Inc.
+    Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
+    Copyright (C) 1999-2006  Hewlett-Packard Co
+    Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited
+    Copyright (C) 2006, 2007  VA Linux Systems Japan K.K.
+    Copyright (C) 2005, 2011  NEC Corporation
+    Copyright (C) 1999, 2002, 2007  Silicon Graphics, Inc.
+    Copyright (C) 1999, 2000, 2001, 2002  Mission Critical Linux, Inc.
+    This program is free software, covered by the GNU General Public License,
+    and you are welcome to change it and/or distribute copies of it under
+    certain conditions.  Enter "help copying" to see the conditions.
+    This program has absolutely no warranty.  Enter "help warranty" for details.
+     
+    GNU gdb 7.6
+    Copyright 2013 Free Software Foundation, Inc.
+    License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+    This is free software: you are free to change and redistribute it.
+    There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+    and "show warranty" for details.
+    This GDB was configured as "i686-pc-linux-gnu"...
+     
+          KERNEL: /boot/vmlinux
+        DUMPFILE: /dev/mem
+            CPUS: 1
+            DATE: Wed Dec 11 15:57:58 2013
+          UPTIME: 10 days, 22:55:18
+    LOAD AVERAGE: 0.08, 0.03, 0.01
+           TASKS: 42
+        NODENAME: ha2.mclinux.com
+         RELEASE: 2.4.0-test10
+         VERSION: #11 SMP Thu Nov 4 15:09:25 EST 2000
+         MACHINE: i686  (447 MHz)
+	  MEMORY: 128 MB
+             PID: 3621                                  
+         COMMAND: "crash"
+            TASK: c463c000  
+             CPU: 0
+           STATE: TASK_RUNNING (ACTIVE)
+
+    crash> help
+
+    *              files          mach           repeat         timer          
+    alias          foreach        mod            runq           tree           
+    ascii          fuser          mount          search         union          
+    bt             gdb            net            set            vm             
+    btop           help           p              sig            vtop           
+    dev            ipcs           ps             struct         waitq          
+    dis            irq            pte            swap           whatis         
+    eval           kmem           ptob           sym            wr             
+    exit           list           ptov           sys            q              
+    extend         log            rd             task           
+    
+    crash version: 7.0.4    gdb version: 7.6
+    For help on any command above, enter "help <command>".
+    For help on input options, enter "help input".
+    For help on output options, enter "help output".
+
+    crash> 
+ 
+  When run on a dumpfile, both the kernel namelist and dumpfile must be 
+  entered on the command line.  For example, when run on a core dump created
+  by the Red Hat netdump or diskdump facilities:
+
+    $ crash vmlinux vmcore
+ 
+    crash 7.0.4
+    Copyright (C) 2002-2013  Red Hat, Inc.
+    Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
+    Copyright (C) 1999-2006  Hewlett-Packard Co
+    Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited
+    Copyright (C) 2006, 2007  VA Linux Systems Japan K.K.
+    Copyright (C) 2005, 2011  NEC Corporation
+    Copyright (C) 1999, 2002, 2007  Silicon Graphics, Inc.
+    Copyright (C) 1999, 2000, 2001, 2002  Mission Critical Linux, Inc.
+    This program is free software, covered by the GNU General Public License,
+    and you are welcome to change it and/or distribute copies of it under
+    certain conditions.  Enter "help copying" to see the conditions.
+    This program has absolutely no warranty.  Enter "help warranty" for details.
+     
+    GNU gdb 7.6
+    Copyright 2013 Free Software Foundation, Inc.
+    License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+    This is free software: you are free to change and redistribute it.
+    There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+    and "show warranty" for details.
+    This GDB was configured as "i686-pc-linux-gnu"...
+    
+          KERNEL: vmlinux
+        DUMPFILE: vmcore
+            CPUS: 4
+            DATE: Tue Mar  2 13:57:09 2004
+          UPTIME: 00:02:40
+    LOAD AVERAGE: 2.24, 0.96, 0.37
+           TASKS: 70
+        NODENAME: pro1.lab.boston.redhat.com
+         RELEASE: 2.6.3-2.1.214.11smp
+         VERSION: #1 SMP Tue Mar 2 10:58:27 EST 2004
+         MACHINE: i686  (2785 Mhz)
+          MEMORY: 512 MB
+           PANIC: "Oops: 0002 [#1]" (check log for details)
+             PID: 0
+         COMMAND: "swapper"
+            TASK: 22fa200  (1 of 4)  [THREAD_INFO: 2356000]
+             CPU: 0
+           STATE: TASK_RUNNING (PANIC)
+    
+    crash> 
+
+  The tool's environment is context-specific.  On a live system, the default
+  context is the command itself; on a dump the default context will be the
+  task that panicked.  The most commonly-used commands are:
+
+    set     - set a new task context by pid, task address, or cpu.
+    bt      - backtrace of the current context, or as specified with arguments.
+    p       - print the contents of a kernel variable.
+    rd      - read memory, which may be either kernel virtual, user virtual, or
+              physical.
+    ps      - simple process listing.
+    log     - dump the kernel log_buf.
+    struct  - print the contents of a structure at a specified address.
+    foreach - execute a command on all tasks, or those specified, in the system.
+ 
+  Detailed help concerning the use of each of the commands in the menu above 
+  may be displayed by entering "help command", where "command" is one of those 
+  listed above.  Rather than getting bogged down in details here, simply
+  run the help command on each of the commands above.  Note that many commands
+  have multiple options so as to avoid the proliferation of command names.
+
+  Command output may be piped to external commands or redirected to files.
+  Enter "help output" for details.
+
+  The command line history mechanism allows for command-line recall and 
+  command-line editing.  Input files containing a set of crash commands may 
+  be substituted for command-line input.  Enter "help input" for details.
+
+  Note that a .crashrc file (or .<your-command-name>rc if the name has been 
+  changed), may contain any number of "set" or "alias" commands -- see the
+  help pages on those two commands for details.
+ 
+  Lastly, if a command is entered that is not recognized, it is checked
+  against the kernel's list of variables, structure, union or typedef names, 
+  and if found, the command is passed to "p", "struct", "union" or "whatis".
+  That being the case, as long as a kernel variable/structure/union name is 
+  different than any of the current commands.
+
+  (1) A kernel variable can be dumped by simply entering its name:
+ 
+      crash> init_mm
+      init_mm = $2 = {
+        mmap = 0xc022d540, 
+        mmap_avl = 0x0, 
+        mmap_cache = 0x0, 
+        pgd = 0xc0101000, 
+        count = {
+          counter = 0x6
+        }, 
+        map_count = 0x1, 
+        mmap_sem = {
+          count = {
+            counter = 0x1
+          }, 
+          waking = 0x0, 
+          wait = 0x0
+        }, 
+        context = 0x0, 
+        start_code = 0xc0000000, 
+        end_code = 0xc022b4c8,
+        end_data = c0250388,
+        ...
+      
+  (2) A structure or can be dumped simply by entering its name and address:  
+
+      crash> vm_area_struct c5ba3910
+      struct vm_area_struct {
+        vm_mm = 0xc3ae3210, 
+        vm_start = 0x821b000, 
+        vm_end = 0x8692000, 
+        vm_next = 0xc5ba3890, 
+        vm_page_prot = {
+          pgprot = 0x25
+        }, 
+        vm_flags = 0x77, 
+        vm_avl_height = 0x4, 
+        vm_avl_left = 0xc0499540, 
+        vm_avl_right = 0xc0499f40, 
+        vm_next_share = 0xc04993c0, 
+        vm_pprev_share = 0xc0499060, 
+        vm_ops = 0x0, 
+        vm_offset = 0x0, 
+        vm_file = 0x0, 
+        vm_pte = 0x0
+      }
+
+
+  The crash utility has been designed to facilitate the task of adding new 
+  commands.  New commands may be permanently compiled into the crash executable,
+  or dynamically added during runtime using shared object files.
+ 
+  To permanently add a new command to the crash executable's menu:
+
+    1. For a command named "xxx", put a reference to cmd_xxx() in defs.h.
+   
+    2. Add cmd_xxx into the base_command_table[] array in global_data.c. 
+
+    3. Write cmd_xxx(), putting it in one of the appropriate files.  Look at 
+       the other commands for guidance on getting symbolic data, reading
+       memory, displaying data, etc...
+
+    4. Recompile and run.
+
+  Note that while the initial compile of crash, which configures and compiles
+  the gdb module, takes several minutes, subsequent re-compiles to do such
+  things as add new commands or fix bugs just takes a few seconds.
+
+  Alternatively, you can create shared object library files consisting of
+  crash command extensions, that can be dynamically linked into the crash
+  executable during runtime or during initialization.  This will allow the
+  the same shared object to be used with subsequent crash releases without
+  having to re-merge the command's code into each new set of crash sources.
+  The dynamically linked-in commands will automatically show up in the crash
+  help menu.  For details, enter "help extend" during runtime, or enter
+  "crash -h extend" from the shell command line.
+ 
+
+
+
+

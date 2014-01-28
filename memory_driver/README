@@ -1,0 +1,24 @@
+For live system analysis, the physical memory source must be one
+of the following devices:
+
+  /dev/mem
+  /proc/kcore
+  /dev/crash
+
+If the live system kernel was configured with CONFIG_STRICT_DEVMEM,
+then /dev/mem cannot be used. 
+
+If the live system kernel was configured without CONFIG_PROC_KCORE,
+or if /proc/kcore is non-functional, then /proc/kcore cannot be used.  
+
+The third alternative is this /dev/crash driver.  Presuming that 
+/lib/modules/`uname -r`/build points to a kernel build tree or
+kernel "devel" package tree, the module can simply be built and
+installed like so:
+
+  # make
+  ...
+  # insmod crash.ko
+
+Once installed, the /dev/crash driver will be used by default for
+live system crash sessions.
