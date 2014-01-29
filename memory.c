@@ -1,8 +1,8 @@
 /* memory.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2013 David Anderson
- * Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014 David Anderson
+ * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -4193,6 +4193,7 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 #define SLAB_FIRST_NODE        (ADDRESS_SPECIFIED << 22)
 #define CACHE_SET              (ADDRESS_SPECIFIED << 23)
 #define SLAB_OVERLOAD_PAGE_PTR (ADDRESS_SPECIFIED << 24)
+#define SLAB_BITFIELD          (ADDRESS_SPECIFIED << 25)
 
 #define GET_ALL \
 	(GET_SHARED_PAGES|GET_TOTALRAM_PAGES|GET_BUFFERS_PAGES|GET_SLAB_PAGES)
@@ -16872,6 +16873,10 @@ dump_kmem_cache_slub(struct meminfo *si)
 	si->cache_count = get_kmem_cache_list(&si->cache_list);
 	si->cache_buf = GETBUF(SIZE(kmem_cache));
 
+	if (VALID_MEMBER(page_objects) &&
+	    OFFSET(page_objects) == OFFSET(page_inuse))
+		si->flags |= SLAB_BITFIELD;
+
 	if (!si->reqname &&
 	     !(si->flags & (ADDRESS_SPECIFIED|GET_SLAB_PAGES)))
 		fprintf(fp, "%s", kmem_cache_hdr);
@@ -17173,7 +17178,7 @@ static void
 do_slab_slub(struct meminfo *si, int verbose)
 {
 	physaddr_t paddr; 
-	ulong vaddr;
+	ulong vaddr, objects_vaddr;
 	ushort inuse, objects; 
 	ulong freelist, cpu_freelist, cpu_slab_ptr;
 	int i, cpu_slab, is_free, node;
@@ -17212,9 +17217,23 @@ do_slab_slub(struct meminfo *si, int verbose)
 	 *  is kept in the slab.
 	 */
 	if (VALID_MEMBER(page_objects)) {
-		if (!readmem(si->slab + OFFSET(page_objects), KVADDR, &objects,
+		objects_vaddr = si->slab + OFFSET(page_objects);
+		if (si->flags & SLAB_BITFIELD)
+			objects_vaddr += sizeof(ushort);
+		if (!readmem(objects_vaddr, KVADDR, &objects,
 		    sizeof(ushort), "page.objects", RETURN_ON_ERROR))
 			return;
+		/*
+		 *  Strip page.frozen bit.
+		 */
+		if (si->flags & SLAB_BITFIELD) {
+			if (__BYTE_ORDER == __LITTLE_ENDIAN) {
+				objects <<= 1;
+				objects >>= 1;
+			}
+			if (__BYTE_ORDER == __BIG_ENDIAN)
+				objects >>= 1;
+		}
 
 		if (CRASHDEBUG(1) && (objects != si->objects))
 			error(NOTE, "%s: slab: %lx oo objects: %ld "
