@@ -1,7 +1,7 @@
 /* x86_64.c -- core analysis suite
  *
- * Copyright (C) 2004-2013 David Anderson
- * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2014 David Anderson
+ * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -4143,6 +4143,10 @@ x86_64_eframe_verify(struct bt_info *bt, long kvaddr, long cs, long ss,
 		 * RSP may be 0 from MSR_IA32_SYSENTER_ESP.
 		 */
 		if (STREQ(closest_symbol(rip), "ia32_sysenter_target"))
+			return TRUE;
+
+		if ((rip == 0) && INSTACK(rsp, bt) &&
+		    STREQ(bt->call_target, "ret_from_fork"))
 			return TRUE;
         }
 
