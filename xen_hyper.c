@@ -207,6 +207,7 @@ xen_hyper_domain_init(void)
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_domain_flags, "domain", "domain_flags");
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_evtchn, "domain", "evtchn");
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_is_hvm, "domain", "is_hvm");
+	XEN_HYPER_MEMBER_OFFSET_INIT(domain_guest_type, "domain", "guest_type");
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_is_privileged, "domain", "is_privileged");
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_debugger_attached, "domain", "debugger_attached");
 
@@ -1247,22 +1248,37 @@ xen_hyper_store_domain_context(struct xen_hyper_domain_context *dc,
 		dc->domain_flags = ULONG(dp + XEN_HYPER_OFFSET(domain_domain_flags));
 	else if (XEN_HYPER_VALID_MEMBER(domain_is_shut_down)) {
 		dc->domain_flags = 0;
-		if (*(dp + XEN_HYPER_OFFSET(domain_is_hvm))) {
+                if (XEN_HYPER_VALID_MEMBER(domain_is_hvm) &&
+                    *(dp + XEN_HYPER_OFFSET(domain_is_hvm))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_HVM;
-		} else if (*(dp + XEN_HYPER_OFFSET(domain_is_privileged))) {
+		}
+                if (XEN_HYPER_VALID_MEMBER(domain_guest_type) &&
+                    *(dp + XEN_HYPER_OFFSET(domain_guest_type))) {
+			/* For now PVH and HVM are the same for crash.
+			 * and 0 is PV.
+			 */
+			dc->domain_flags |= XEN_HYPER_DOMS_HVM;
+		}
+		if (*(dp + XEN_HYPER_OFFSET(domain_is_privileged))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_privileged;
-		} else if (*(dp + XEN_HYPER_OFFSET(domain_debugger_attached))) {
+		}
+		if (*(dp + XEN_HYPER_OFFSET(domain_debugger_attached))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_debugging;
-		} else if (XEN_HYPER_VALID_MEMBER(domain_is_polling) &&
+		}
+		if (XEN_HYPER_VALID_MEMBER(domain_is_polling) &&
 				*(dp + XEN_HYPER_OFFSET(domain_is_polling))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_polling;
-		} else if (*(dp + XEN_HYPER_OFFSET(domain_is_paused_by_controller))) {
+		}
+		if (*(dp + XEN_HYPER_OFFSET(domain_is_paused_by_controller))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_ctrl_pause;
-		} else if (*(dp + XEN_HYPER_OFFSET(domain_is_dying))) {
+		}
+		if (*(dp + XEN_HYPER_OFFSET(domain_is_dying))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_dying;
-		} else if (*(dp + XEN_HYPER_OFFSET(domain_is_shutting_down))) {
+		}
+		if (*(dp + XEN_HYPER_OFFSET(domain_is_shutting_down))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_shuttingdown;
-		} else if (*(dp + XEN_HYPER_OFFSET(domain_is_shut_down))) {
+		}
+		if (*(dp + XEN_HYPER_OFFSET(domain_is_shut_down))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_shutdown;
 		}
 	} else {

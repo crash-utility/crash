@@ -767,11 +767,13 @@ xen_hyper_dump_xen_hyper_offset_table(char *spec, ulong makestruct)
 	XEN_HYPER_PRI(fp, len, "domain_next_in_list: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_offset_table.domain_next_in_list));
 	XEN_HYPER_PRI(fp, len, "domain_domain_flags: ", buf, flag,
-		(buf, "%lx\n", xen_hyper_offset_table.domain_domain_flags));
+		(buf, "%ld\n", xen_hyper_offset_table.domain_domain_flags));
 	XEN_HYPER_PRI(fp, len, "domain_evtchn: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_offset_table.domain_evtchn));
 	XEN_HYPER_PRI(fp, len, "domain_is_hvm: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_offset_table.domain_is_hvm));
+	XEN_HYPER_PRI(fp, len, "domain_guest_type: ", buf, flag,
+		(buf, "%ld\n", xen_hyper_offset_table.domain_guest_type));
 	XEN_HYPER_PRI(fp, len, "domain_is_privileged: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_offset_table.domain_is_privileged));
 	XEN_HYPER_PRI(fp, len, "domain_debugger_attached: ", buf, flag,

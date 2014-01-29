@@ -673,6 +673,7 @@ struct xen_hyper_offset_table {
 	long domain_domain_flags;
 	long domain_evtchn;
 	long domain_is_hvm;
+	long domain_guest_type;
 	long domain_is_privileged;
 	long domain_debugger_attached;
 	long domain_is_polling;
