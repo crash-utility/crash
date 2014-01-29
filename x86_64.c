@@ -4114,6 +4114,8 @@ x86_64_eframe_verify(struct bt_info *bt, long kvaddr, long cs, long ss,
 	long rip, long rsp, long rflags)
 {
 	int estack;
+	struct syment *sp;
+	ulong offset, exception;
 
 	if ((rflags & RAZ_MASK) || !(rflags & 0x2))
 		return FALSE;
@@ -4151,7 +4153,14 @@ x86_64_eframe_verify(struct bt_info *bt, long kvaddr, long cs, long ss,
 		if ((rip == 0) && INSTACK(rsp, bt) &&
 		    STREQ(bt->call_target, "ret_from_fork"))
 			return TRUE;
-        }
+
+		if (readmem(kvaddr - 8, KVADDR, &exception, sizeof(ulong), 
+		    "exception type", RETURN_ON_ERROR|QUIET) &&
+		    (sp = value_search(exception, &offset)) &&
+		    STREQ(sp->name, "page_fault"))
+			return TRUE;
+			
+	}
 
         if ((cs == 0x10) && kvaddr) {
                 if (is_kernel_text(rip) && IS_KVADDR(rsp) &&
