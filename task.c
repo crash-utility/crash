@@ -5283,7 +5283,10 @@ cmd_foreach(void)
 			break;
 
 		case 'F':
-			fd->flags |= FOREACH_F_FLAG;
+			if (fd->flags & FOREACH_F_FLAG)
+				fd->flags |= FOREACH_F_FLAG2;
+			else
+				fd->flags |= FOREACH_F_FLAG;
 			break;
 
 		case 'a':
@@ -5838,6 +5841,8 @@ foreach(struct foreach_data *fd)
                                         bt->flags |= BT_FULL;
                                 if (fd->flags & FOREACH_F_FLAG) 
                                         bt->flags |= (BT_FULL|BT_FULL_SYM_SLAB);
+                                if (fd->flags & FOREACH_F_FLAG2) 
+                                        bt->flags |= BT_FULL_SYM_SLAB2;
                                 if (fd->flags & FOREACH_x_FLAG) 
 					bt->radix = 16;
                                 if (fd->flags & FOREACH_d_FLAG) 

@@ -1,8 +1,8 @@
 /* kernel.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2013 David Anderson
- * Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014 David Anderson
+ * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1997,7 +1997,10 @@ cmd_bt(void)
 			break;
 
 		case 'F':
-			bt->flags |= (BT_FULL|BT_FULL_SYM_SLAB);
+			if (bt->flags & BT_FULL_SYM_SLAB)
+				bt->flags |= BT_FULL_SYM_SLAB2;
+			else
+				bt->flags |= (BT_FULL|BT_FULL_SYM_SLAB);
 			break;
 
 		case 'o':

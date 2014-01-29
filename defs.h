@@ -1,8 +1,8 @@
 /* defs.h - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2013 David Anderson
- * Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014 David Anderson
+ * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -1045,34 +1045,35 @@ extern struct machdep_table *machdep;
 #define MAX_FOREACH_ARGS     (50)
 #define MAX_REGEX_ARGS       (10)
 
-#define FOREACH_CMD          (0x1)
-#define FOREACH_r_FLAG       (0x2)
-#define FOREACH_s_FLAG       (0x4)
-#define FOREACH_S_FLAG       (0x8)
-#define FOREACH_i_FLAG      (0x10)
-#define FOREACH_e_FLAG      (0x20)
-#define FOREACH_g_FLAG      (0x40)
-#define FOREACH_l_FLAG      (0x80)
-#define FOREACH_p_FLAG     (0x100)
-#define FOREACH_t_FLAG     (0x200)
-#define FOREACH_u_FLAG     (0x400)
-#define FOREACH_m_FLAG     (0x800)
-#define FOREACH_v_FLAG    (0x1000)
-#define FOREACH_KERNEL    (0x2000)
-#define FOREACH_USER      (0x4000)
-#define FOREACH_SPECIFIED (0x8000)
-#define FOREACH_ACTIVE   (0x10000)
-#define FOREACH_k_FLAG   (0x20000)
-#define FOREACH_c_FLAG   (0x40000)
-#define FOREACH_f_FLAG   (0x80000)
-#define FOREACH_o_FLAG  (0x100000)
-#define FOREACH_T_FLAG  (0x200000)
-#define FOREACH_F_FLAG  (0x400000)
-#define FOREACH_x_FLAG  (0x800000)
-#define FOREACH_d_FLAG (0x1000000)
-#define FOREACH_STATE  (0x2000000)
-#define FOREACH_a_FLAG (0x4000000)
-#define FOREACH_G_FLAG (0x8000000)
+#define FOREACH_CMD            (0x1)
+#define FOREACH_r_FLAG         (0x2)
+#define FOREACH_s_FLAG         (0x4)
+#define FOREACH_S_FLAG         (0x8)
+#define FOREACH_i_FLAG        (0x10)
+#define FOREACH_e_FLAG        (0x20)
+#define FOREACH_g_FLAG        (0x40)
+#define FOREACH_l_FLAG        (0x80)
+#define FOREACH_p_FLAG       (0x100)
+#define FOREACH_t_FLAG       (0x200)
+#define FOREACH_u_FLAG       (0x400)
+#define FOREACH_m_FLAG       (0x800)
+#define FOREACH_v_FLAG      (0x1000)
+#define FOREACH_KERNEL      (0x2000)
+#define FOREACH_USER        (0x4000)
+#define FOREACH_SPECIFIED   (0x8000)
+#define FOREACH_ACTIVE     (0x10000)
+#define FOREACH_k_FLAG     (0x20000)
+#define FOREACH_c_FLAG     (0x40000)
+#define FOREACH_f_FLAG     (0x80000)
+#define FOREACH_o_FLAG    (0x100000)
+#define FOREACH_T_FLAG    (0x200000)
+#define FOREACH_F_FLAG    (0x400000)
+#define FOREACH_x_FLAG    (0x800000)
+#define FOREACH_d_FLAG   (0x1000000)
+#define FOREACH_STATE    (0x2000000)
+#define FOREACH_a_FLAG   (0x4000000)
+#define FOREACH_G_FLAG   (0x8000000)
+#define FOREACH_F_FLAG2 (0x10000000)
 
 #define FOREACH_PS_EXCLUSIVE \
   (FOREACH_g_FLAG|FOREACH_a_FLAG|FOREACH_t_FLAG|FOREACH_c_FLAG|FOREACH_p_FLAG|FOREACH_l_FLAG|FOREACH_r_FLAG)
@@ -4827,6 +4828,7 @@ ulong cpu_map_addr(const char *type);
 #define BT_KDUMP_ELF_REGS   (0x80000000000ULL)
 #define BT_USER_SPACE      (0x100000000000ULL)
 #define BT_KERNEL_SPACE    (0x200000000000ULL)
+#define BT_FULL_SYM_SLAB2  (0x400000000000ULL)
 #define BT_SYMBOL_OFFSET   (BT_SYMBOLIC_ARGS)
 
 #define BT_REF_HEXVAL         (0x1)

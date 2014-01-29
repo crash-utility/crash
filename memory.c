@@ -297,6 +297,7 @@ static ulong kmem_cache_nodelists(ulong);
 #define NET_ENDIAN    (0x4000)
 #define DISPLAY_RAW   (0x8000)
 #define NO_ERROR     (0x10000)
+#define SLAB_CACHE2  (0x20000)
 #define DISPLAY_TYPES (DISPLAY_RAW|DISPLAY_ASCII|DISPLAY_8|\
 		       DISPLAY_16|DISPLAY_32|DISPLAY_64)
 
@@ -1171,8 +1172,12 @@ cmd_rd(void)
 		case 'S':
 			if (flag & DISPLAY_DEFAULT) {
 				flag |= SYMBOLIC;
-				if (c == 'S')
-					flag |= SLAB_CACHE;
+				if (c == 'S') {
+					if (flag & SLAB_CACHE)
+						flag |= SLAB_CACHE2;
+					else
+						flag |= SLAB_CACHE;
+				}
 			} else {
 				error(INFO, "-%c option"
 				    " is only allowed with %d-bit display\n",
@@ -1499,7 +1504,7 @@ display_memory(ulonglong addr, long count, ulong flag, int memtype, void *opt)
 				if ((flag & SLAB_CACHE) && 
 				    vaddr_to_kmem_cache(mem.u64, slab, 
 				    !VERBOSE)) {
-					if (CRASHDEBUG(1))
+					if ((flag & SLAB_CACHE2) || CRASHDEBUG(1))
 						sprintf(buf, "[%llx:%s]", 
 							(ulonglong)mem.u64,
 							slab);
@@ -1536,7 +1541,7 @@ display_memory(ulonglong addr, long count, ulong flag, int memtype, void *opt)
 				if ((flag & SLAB_CACHE) && 
 				    vaddr_to_kmem_cache(mem.u32, slab, 
 				    !VERBOSE)) {
-					if (CRASHDEBUG(1))
+					if ((flag & SLAB_CACHE2) || CRASHDEBUG(1))
 						sprintf(buf, "[%x:%s]", 
 							mem.u32, slab);
 					else
@@ -1878,7 +1883,7 @@ format_stack_entry(struct bt_info *bt, char *retbuf, ulong value, ulong limit)
 				sprintf(retbuf, INT_PRLEN == 16 ? 
 				    "%-16s" : "%-8s", buf);
 			else if (vaddr_to_kmem_cache(value, slab, !VERBOSE)) {
-				if (CRASHDEBUG(1))
+				if ((bt->flags & BT_FULL_SYM_SLAB2) || CRASHDEBUG(1))
 					sprintf(buf, "[%lx:%s]", value, slab);
 				else
 					sprintf(buf, "[%s]", slab);
@@ -1895,7 +1900,7 @@ format_stack_entry(struct bt_info *bt, char *retbuf, ulong value, ulong limit)
 			    strlen(value_to_symstr(value, buf, 0)))
 				sprintf(retbuf, "%-16s", buf);
 			else if (vaddr_to_kmem_cache(value, slab, !VERBOSE)) {
-				if (CRASHDEBUG(1))
+				if ((bt->flags & BT_FULL_SYM_SLAB2) || CRASHDEBUG(1))
 					sprintf(buf, "[%lx:%s]", value, slab);
 				else 
 					sprintf(buf, "[%s]", slab);
