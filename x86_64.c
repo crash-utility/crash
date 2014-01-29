@@ -107,6 +107,7 @@ static ulong x86_64_get_stacktop_hyper(ulong);
 static int x86_64_framesize_cache_resize(void);
 static int x86_64_framesize_cache_func(int, ulong, int *, int);
 static ulong x86_64_get_framepointer(struct bt_info *, ulong);
+int search_for_eframe_target_caller(struct bt_info *, ulong, int *);
 static int x86_64_get_framesize(struct bt_info *, ulong, ulong);
 static void x86_64_framesize_debug(struct bt_info *);
 static void x86_64_get_active_set(void);
@@ -3279,9 +3280,11 @@ in_exception_stack:
 				level++;
 			rsp += SIZE(pt_regs);
 			irq_eframe = 0;
+			bt->flags |= BT_EFRAME_TARGET;
 			if (bt->eframe_ip && ((framesize = x86_64_get_framesize(bt, 
 			    bt->eframe_ip, rsp)) >= 0))
 				rsp += framesize;
+			bt->flags &= ~BT_EFRAME_TARGET;
 		}
 		level++;
         }
@@ -7188,6 +7191,57 @@ x86_64_get_framepointer(struct bt_info *bt, ulong rsp)
 	return framepointer;
 }
 
+int
+search_for_eframe_target_caller(struct bt_info *bt, ulong stkptr, int *framesize)
+{
+	int i;
+	ulong *up, offset, rsp;
+	struct syment *sp1, *sp2;
+	char *called_function;
+
+	if ((sp1 = value_search(bt->eframe_ip, &offset)))
+		called_function = sp1->name;
+	else
+		return FALSE;
+
+	rsp = stkptr;
+
+	for (i = (rsp - bt->stackbase)/sizeof(ulong);
+	    rsp < bt->stacktop; i++, rsp += sizeof(ulong)) {
+
+		up = (ulong *)(&bt->stackbuf[i*sizeof(ulong)]);
+
+		if (!is_kernel_text(*up))
+			continue;
+
+		if (!(sp1 = value_search(*up, &offset)))
+			continue;
+
+		if (!offset && !(bt->flags & BT_FRAMESIZE_DISABLE))
+			continue;
+
+		/*
+		 *  Get the syment of the function that the text 
+		 *  routine above called before leaving its return 
+		 *  address on the stack -- if it can be determined.
+		 */
+		if ((sp2 = x86_64_function_called_by((*up)-5))) {
+			if (STREQ(sp2->name, called_function)) {
+				if (CRASHDEBUG(1)) {
+					fprintf(fp, 
+					    "< %lx/%s rsp: %lx caller: %s >\n", 
+						bt->eframe_ip, called_function, 
+						stkptr, sp1->name);
+				}
+				*framesize = rsp - stkptr;
+				return TRUE;
+			}
+		}
+	}
+
+	return FALSE;
+}
+
 #define BT_FRAMESIZE_IGNORE_MASK \
 	(BT_OLD_BACK_TRACE|BT_TEXT_SYMBOLS|BT_TEXT_SYMBOLS_ALL|BT_FRAMESIZE_DISABLE)
  
@@ -7220,6 +7274,10 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp)
 	}
 
 	exception = bt->eframe_ip == textaddr ? TRUE : FALSE;
+
+	if ((bt->flags & BT_EFRAME_TARGET) &&
+	    search_for_eframe_target_caller(bt, rsp, &framesize))
+		return framesize;
 
 	if (!(bt->flags & BT_FRAMESIZE_DEBUG) &&
 	    x86_64_framesize_cache_func(FRAMESIZE_QUERY, textaddr, &framesize,
