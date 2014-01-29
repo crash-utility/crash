@@ -17257,14 +17257,11 @@ do_slab_slub(struct meminfo *si, int verbose)
 			cpu_slab = i;
 			/*
 			 *  Later slub scheme uses the per-cpu freelist
-			 *  and keeps page->inuse maxed out, so count 
-			 *  the free objects by hand.
+			 *  so count the free objects by hand.
 			 */
 			if (cpu_freelist)
 				freelist = cpu_freelist;
-			if ((si->objects - inuse) == 0)
-				inuse = si->objects - 
-					count_free_objects(si, freelist);
+			inuse = si->objects - count_free_objects(si, freelist);
 			break;
 		}
 	}
