@@ -912,7 +912,7 @@ set_command_prompt(char *new_prompt)
  *  Signal number 0 is sent for a generic restart.
  */
 #define MAX_RECURSIVE_SIGNALS (10)
-#define MAX_SIGINTS_ACCEPTED  (3)
+#define MAX_SIGINTS_ACCEPTED  (1)
 
 void
 restart(int sig)
@@ -956,6 +956,10 @@ restart(int sig)
 		pc->flags &= ~IN_RESTART;
 		if (pc->sigint_cnt == MAX_SIGINTS_ACCEPTED) {
 			restore_sanity();
+			if (pc->ifile_in_progress) {
+				pc->ifile_in_progress = 0;
+				pc->ifile_offset = 0;
+			}
 			break;
 		}
 		return;
@@ -968,7 +972,7 @@ restart(int sig)
 		break;
 	}
 
-	fprintf(fp, "\n");
+	fprintf(stderr, "\n");
 
 	pc->flags &= ~(IN_FOREACH|IN_GDB|IN_RESTART);
 	longjmp(pc->main_loop_env, 1);
