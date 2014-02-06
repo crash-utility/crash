@@ -6788,7 +6788,7 @@ display_version(void)
 static 
 char *version_info[] = {
 
-"Copyright (C) 2002-2013  Red Hat, Inc.",
+"Copyright (C) 2002-2014  Red Hat, Inc.",
 "Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation", 
 "Copyright (C) 1999-2006  Hewlett-Packard Co",
 "Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited",
