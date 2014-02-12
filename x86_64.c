@@ -2566,6 +2566,7 @@ static const char *exception_functions[] = {
 	"xen_hypervisor_callback",
 	"xen_debug",
 	"xen_int3",
+	"async_page_fault",
 	NULL,
 };
 
