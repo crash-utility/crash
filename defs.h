@@ -59,7 +59,7 @@
 #define ATTRIBUTE_UNUSED __attribute__ ((__unused__))
 #endif
 
-#define BASELEVEL_REVISION  "7.0.4"
+#define BASELEVEL_REVISION  "7.0.5"
 
 #undef TRUE
 #undef FALSE
