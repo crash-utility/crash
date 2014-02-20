@@ -5414,16 +5414,22 @@ search_for_switch_to(ulong start, ulong end)
 {
 	ulong max_instructions, address;
 	char buf1[BUFSIZE];
-	char buf2[BUFSIZE];
+	char search_string1[BUFSIZE];
+	char search_string2[BUFSIZE];
 	int found;
 
 	max_instructions = end - start;
 	found = FALSE;
 	sprintf(buf1, "x/%ldi 0x%lx", max_instructions, start);
-	if (symbol_exists("__switch_to"))
-		sprintf(buf2, "callq  0x%lx", symbol_value("__switch_to"));
-	else
-		buf2[0] = NULLCHAR;
+	if (symbol_exists("__switch_to")) {
+		sprintf(search_string1,
+			"callq  0x%lx", symbol_value("__switch_to"));
+		sprintf(search_string2,
+			"call   0x%lx", symbol_value("__switch_to"));
+	} else {
+		search_string1[0] = NULLCHAR;
+		search_string2[0] = NULLCHAR;
+	}
 
 	open_tmpfile();
 
@@ -5436,7 +5442,9 @@ search_for_switch_to(ulong start, ulong end)
 			break;
 		if (strstr(buf1, "<__switch_to>"))
 			found = TRUE;
-		if (strlen(buf2) && strstr(buf1, buf2))
+		if (strlen(search_string1) && strstr(buf1, search_string1))
+			found = TRUE;
+		if (strlen(search_string2) && strstr(buf1, search_string2))
 			found = TRUE;
 	}
 	close_tmpfile();
