@@ -8677,13 +8677,32 @@ static void
 kmem_cache_downsize(void)
 {
 	char *cache_buf;
-	uint buffer_size; 
+	ulong kmem_cache;
+	uint buffer_size, object_size; 
 	int nr_node_ids;
 	int nr_cpu_ids;
 
+	if (vt->flags & KMALLOC_SLUB) {
+		if (kernel_symbol_exists("kmem_cache") &&
+		    VALID_MEMBER(kmem_cache_objsize) &&
+		    try_get_symbol_data("kmem_cache", 
+		    sizeof(ulong), &kmem_cache) &&
+		    readmem(kmem_cache + OFFSET(kmem_cache_objsize), 
+		    KVADDR, &object_size, sizeof(int), 
+		    "kmem_cache objsize/object_size", RETURN_ON_ERROR)) {
+			ASSIGN_SIZE(kmem_cache) = object_size;
+			if (CRASHDEBUG(1))
+				fprintf(fp, "\nkmem_cache_downsize: %ld to %ld\n",
+					STRUCT_SIZE("kmem_cache"), 
+					SIZE(kmem_cache));
+		}
+		return;
+	}
+
 	if ((THIS_KERNEL_VERSION < LINUX(2,6,22)) ||
 	    !(vt->flags & PERCPU_KMALLOC_V2_NODES) ||
-	    !kernel_symbol_exists("cache_cache") ||
+	    (!kernel_symbol_exists("cache_cache") && 
+	     !kernel_symbol_exists("kmem_cache_boot")) ||
 	    (!MEMBER_EXISTS("kmem_cache", "buffer_size") &&
 	     !MEMBER_EXISTS("kmem_cache", "size"))) {
 		return;
@@ -8691,7 +8710,28 @@ kmem_cache_downsize(void)
 
 	if (vt->flags & NODELISTS_IS_PTR) {
 		/* 
-		 * kmem_cache.array[] is actually sized by 
+		 * More recent kernels have kmem_cache.array[] sized
+		 * by the number of cpus plus the number of nodes.
+		 */
+		if (kernel_symbol_exists("kmem_cache_boot") &&
+		    MEMBER_EXISTS("kmem_cache", "object_size") &&
+		    readmem(symbol_value("kmem_cache_boot") +
+		    MEMBER_OFFSET("kmem_cache", "object_size"), 
+		    KVADDR, &object_size, sizeof(int), 
+		    "kmem_cache_boot object_size", RETURN_ON_ERROR))
+			ASSIGN_SIZE(kmem_cache_s) = object_size;
+		else if (kernel_symbol_exists("cache_cache") &&
+		    MEMBER_EXISTS("kmem_cache", "object_size") &&
+		    readmem(symbol_value("cache_cache") +
+		    MEMBER_OFFSET("kmem_cache", "object_size"), 
+		    KVADDR, &object_size, sizeof(int), 
+		    "cache_cache object_size", RETURN_ON_ERROR))
+			ASSIGN_SIZE(kmem_cache_s) = object_size;
+		else
+			object_size = 0;
+
+		/* 
+		 * Older kernels have kmem_cache.array[] sized by 
 		 * the number of cpus; real value is nr_cpu_ids, 
 		 * but fallback is kt->cpus.
 		 */
@@ -8702,10 +8742,12 @@ kmem_cache_downsize(void)
 			nr_cpu_ids = kt->cpus;
 	
 		ARRAY_LENGTH(kmem_cache_s_array) = nr_cpu_ids;
-		ASSIGN_SIZE(kmem_cache_s) = OFFSET(kmem_cache_s_array) +
-			sizeof(ulong) * nr_cpu_ids;
+
+		if (!object_size)
+			ASSIGN_SIZE(kmem_cache_s) = OFFSET(kmem_cache_s_array) +
+				sizeof(ulong) * nr_cpu_ids;
 		if (CRASHDEBUG(1))
-			fprintf(fp, "kmem_cache_downsize: %ld to %ld\n",
+			fprintf(fp, "\nkmem_cache_downsize: %ld to %ld\n",
 				STRUCT_SIZE("kmem_cache"), SIZE(kmem_cache_s));
 		return;
 	}
@@ -8713,7 +8755,7 @@ kmem_cache_downsize(void)
 	cache_buf = GETBUF(SIZE(kmem_cache_s));
 
 	if (!readmem(symbol_value("cache_cache"), KVADDR, cache_buf, 
-	    SIZE(kmem_cache_s), "kmem_cache buffer", FAULT_ON_ERROR)) {
+	    SIZE(kmem_cache_s), "kmem_cache buffer", RETURN_ON_ERROR)) {
 		FREEBUF(cache_buf);
 		return;
 	}
@@ -8741,8 +8783,7 @@ kmem_cache_downsize(void)
 
 		if (CRASHDEBUG(1)) {
      			fprintf(fp, 
-			    "\nkmem_cache_downsize: SIZE(kmem_cache_s): %ld "
-			    "cache_cache.buffer_size: %d\n",
+			    "\nkmem_cache_downsize: %ld to %d\n",
 				STRUCT_SIZE("kmem_cache"), buffer_size);
 			fprintf(fp,
 			    "kmem_cache_downsize: nr_node_ids: %ld\n",
@@ -16789,6 +16830,8 @@ kmem_cache_init_slub(void)
 		error(WARNING, 
 		    "kmem_cache_init_slub: numnodes: %d without CONFIG_NUMA\n",
 			vt->numnodes);
+
+	kmem_cache_downsize();
 
 	vt->cpu_slab_type = MEMBER_TYPE("kmem_cache", "cpu_slab");
 
