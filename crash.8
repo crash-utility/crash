@@ -399,7 +399,8 @@ or
 .TP
 .B --less
 Use 
-.I /usr/bin/less as the command output scroller, overriding 
+.I /usr/bin/less 
+as the command output scroller, overriding 
 any settings in either 
 .I ./.crashrc 
 or 
@@ -446,6 +447,12 @@ When loading the debuginfo data of kernel modules with the
 command, search for their object files in
 .I directory
 instead of in the standard location.
+.TP
+.BI --kaslr \ offset
+If an x86 or x86_64 kernel was configured with 
+.B CONFIG_RANDOMIZE_BASE,
+the offset value is equal to the difference between the symbol values 
+compiled into the vmlinux file and their relocated value.
 .TP
 .BI --reloc \ size
 When analyzing live x86 kernels that were configured with a

@@ -198,22 +198,6 @@ symtab_init(void)
 			no_debugging_data(FATAL);
 	}
 	
-	symcount = bfd_read_minisymbols(st->bfd, FALSE, &minisyms, &size);
-
-	if (symcount <= 0)
-		no_debugging_data(FATAL);
-	
-	sort_x = bfd_make_empty_symbol(st->bfd);
-	sort_y = bfd_make_empty_symbol(st->bfd);
-	if (sort_x == NULL || sort_y == NULL)
-		error(FATAL, "bfd_make_empty_symbol() failed\n");
-	
-	gnu_qsort(st->bfd, minisyms, symcount, size, sort_x, sort_y);
-	
-	store_symbols(st->bfd, FALSE, minisyms, symcount, size);
-	
-	free(minisyms);
-
 	/*
 	 *  Gather references to the kernel sections.
 	 */
@@ -222,6 +206,7 @@ symtab_init(void)
                 error(FATAL, "symbol table section array malloc: %s\n",
                         strerror(errno));
 	BZERO(st->sections, st->bfd->section_count * sizeof(struct sec *));
+	st->first_section_start = st->last_section_end = 0;
 
 	bfd_map_over_sections(st->bfd, section_header_info, KERNEL_SECTIONS);
 	if ((st->flags & (NO_SEC_LOAD|NO_SEC_CONTENTS)) ==
@@ -232,6 +217,22 @@ symtab_init(void)
 			error(FATAL, DEBUGINFO_ERROR_MESSAGE2);
 		}
 	}
+
+	symcount = bfd_read_minisymbols(st->bfd, FALSE, &minisyms, &size);
+
+	if (symcount <= 0)
+		no_debugging_data(FATAL);
+
+	sort_x = bfd_make_empty_symbol(st->bfd);
+	sort_y = bfd_make_empty_symbol(st->bfd);
+	if (sort_x == NULL || sort_y == NULL)
+		error(FATAL, "bfd_make_empty_symbol() failed\n");
+
+	gnu_qsort(st->bfd, minisyms, symcount, size, sort_x, sort_y);
+
+	store_symbols(st->bfd, FALSE, minisyms, symcount, size);
+
+	free(minisyms);
 
 	symname_hash_init();
 	symval_hash_init();
@@ -590,7 +591,7 @@ store_symbols(bfd *abfd, int dynamic, void *minisyms, long symcount,
 	st->symcnt = 0;
 	sp = st->symtable;
 
-	if (machine_type("X86")) {
+	if (machine_type("X86") || machine_type("X86_64")) {
 		if (!(kt->flags & RELOC_SET))
 			kt->flags |= RELOC_FORCE;
 	} else
@@ -663,7 +664,7 @@ store_sysmap_symbols(void)
                 error(FATAL, "symbol table namespace malloc: %s\n",
                         strerror(errno));
 
-	if (!machine_type("X86"))
+	if (!machine_type("X86") && !machine_type("X86_64"))
 		kt->flags &= ~RELOC_SET;
 
 	first = 0;
@@ -735,7 +736,20 @@ relocate(ulong symval, char *symname, int first_symbol)
 		break;
 	}
 
-	return (symval - kt->relocate);
+	if (machine_type("X86_64")) {
+		/*
+		 * There are some symbols which are outside of any section
+		 * either because they are offsets or because they are absolute
+		 * addresses.  These should not be relocated.
+		 */
+		if (symval >= st->first_section_start &&
+			symval <= st->last_section_end) {
+			return symval - kt->relocate;
+		} else {
+			return symval;
+		}
+	} else
+		return symval - kt->relocate;
 }
 
 /*
@@ -2721,6 +2735,9 @@ dump_symbol_table(void)
 		fprintf(fp, "     __per_cpu_start: (unused)\n");
 		fprintf(fp, "       __per_cpu_end: (unused)\n");
 	}
+
+	fprintf(fp, " first_section_start: %lx\n", st->first_section_start);
+	fprintf(fp, "    last_section_end: %lx\n", st->last_section_end);
 
         fprintf(fp, "    symval_hash[%d]: %lx\n", SYMVAL_HASH,
                 (ulong)&st->symval_hash[0]);
@@ -9679,6 +9696,7 @@ section_header_info(bfd *bfd, asection *section, void *reqptr)
 	struct load_module *lm;
 	ulong request;
         asection **sec;
+	ulong section_end_address;
 
 	request = ((ulong)reqptr);
 
@@ -9697,6 +9715,11 @@ section_header_info(bfd *bfd, asection *section, void *reqptr)
                 	kt->etext_init = kt->stext_init +
                         	(ulong)bfd_section_size(bfd, section);
 		}
+
+		if (STREQ(bfd_get_section_name(bfd, section), ".text")) {
+			st->first_section_start = (ulong)
+				bfd_get_section_vma(bfd, section);
+		}
                 if (STREQ(bfd_get_section_name(bfd, section), ".text") ||
                     STREQ(bfd_get_section_name(bfd, section), ".data")) {
                         if (!(bfd_get_section_flags(bfd, section) & SEC_LOAD))
@@ -9712,6 +9735,14 @@ section_header_info(bfd *bfd, asection *section, void *reqptr)
                 if (STREQ(bfd_get_section_name(bfd, section), ".debug_frame")) {
 			st->dwarf_debug_frame_file_offset = (off_t)section->filepos;
 			st->dwarf_debug_frame_size = (ulong)bfd_section_size(bfd, section);
+		}
+
+		if (st->first_section_start != 0) {
+			section_end_address =
+				(ulong) bfd_get_section_vma(bfd, section) +
+				(ulong) bfd_section_size(bfd, section);
+			if (section_end_address > st->last_section_end)
+				st->last_section_end = section_end_address;
 		}
 		break;
 

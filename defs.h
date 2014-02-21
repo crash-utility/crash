@@ -2417,6 +2417,8 @@ struct symbol_table_data {
 	ulong __per_cpu_end;
 	off_t dwarf_debug_frame_file_offset;
 	ulong dwarf_debug_frame_size;
+	ulong first_section_start;
+	ulong last_section_end;
 };
 
 /* flags for st */
