@@ -7,8 +7,8 @@
  * netdump dumpfiles, the facilities in netdump.c are used.  For
  * compressed dumpfiles, the facilities in this file are used.
  *
- * Copyright (C) 2004-2013 David Anderson
- * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2014 David Anderson
+ * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2005  FUJITSU LIMITED
  * Copyright (C) 2005  NEC Corporation
  *
@@ -806,6 +806,7 @@ int
 is_diskdump(char *file)
 {
 	int sz, i;
+	char *tmpstring;
 
 	if (!open_dump_file(file) || !read_dump_header(file))
 		return FALSE;
@@ -843,6 +844,16 @@ is_diskdump(char *file)
 		pc->readmem = read_diskdump;
 		pc->flags |= DISKDUMP;
 		get_log_from_vmcoreinfo(file, vmcoreinfo_read_string);
+	}
+
+	/*
+	 * We may need the _stext_SYMBOL from the vmcore_info to adjust for
+	 * kaslr and we may not have gotten it elsewhere.
+	 */
+	if ((tmpstring = vmcoreinfo_read_string("SYMBOL(_stext)"))) {
+		kt->vmcoreinfo._stext_SYMBOL = htol(tmpstring, 
+			RETURN_ON_ERROR, NULL);
+		free(tmpstring);
 	}
 
 	return TRUE;
@@ -1893,6 +1904,9 @@ vmcoreinfo_read_string(const char *key)
 	off_t offset;
 	char keybuf[BUFSIZE];
 	const off_t failed = (off_t)-1;
+
+	if (dd->header->header_version < 3)
+		return NULL;
 
 	buf = value_string = NULL;
 	size_vmcoreinfo = dd->sub_header_kdump->size_vmcoreinfo;

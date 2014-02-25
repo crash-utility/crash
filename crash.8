@@ -297,7 +297,7 @@ or
 .I /proc/kcore
 devices.
 .TP
-.B --log dumpfile
+.BI --log \ dumpfile
 Dump the contents of the kernel log buffer.  A kernel namelist
 argument is not necessary, but the dumpfile must contain the
 VMCOREINFO data taken from the original /proc/vmcore ELF header.
@@ -448,11 +448,12 @@ command, search for their object files in
 .I directory
 instead of in the standard location.
 .TP
-.BI --kaslr \ offset
-If an x86 or x86_64 kernel was configured with 
+.BI --kaslr \ offset | auto
+If an x86_64 kernel was configured with 
 .B CONFIG_RANDOMIZE_BASE,
 the offset value is equal to the difference between the symbol values 
-compiled into the vmlinux file and their relocated value.
+compiled into the vmlinux file and their relocated KASLR values.  If set to
+auto, the KASLR offset value will be automatically calculated.
 .TP
 .BI --reloc \ size
 When analyzing live x86 kernels that were configured with a

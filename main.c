@@ -218,13 +218,23 @@ main(int argc, char **argv)
 				kt->module_tree = optarg;
 
 			else if (STREQ(long_options[option_index].name, "kaslr")) {
-				if (!calculate(optarg, &kt->relocate, NULL, 0)) {
-					error(INFO, "invalid --kaslr argument: %s\n",
-						optarg);
-					program_usage(SHORT_FORM);
+				if (!machine_type("X86_64"))
+					error(INFO, "--kaslr only valid "
+						"with X86_64 machine type.\n");
+				else if (STREQ(optarg, "auto"))
+					kt->flags2 |= (RELOC_AUTO|KASLR);
+				else {
+					if (!calculate(optarg, &kt->relocate,
+							NULL, 0)) {
+						error(INFO,
+						    "invalid --kaslr argument: %s\n",
+						    optarg);
+						program_usage(SHORT_FORM);
+					}
+					kt->relocate *= -1;
+					kt->flags |= RELOC_SET;
+					kt->flags2 |= KASLR;
 				}
-				kt->relocate *= -1;
-				kt->flags |= RELOC_SET;
 
 			} else if (STREQ(long_options[option_index].name, "reloc")) {
 				if (!calculate(optarg, &kt->relocate, NULL, 0)) {

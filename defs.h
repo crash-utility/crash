@@ -603,6 +603,10 @@ struct new_utsname {
 
 #define GCC_VERSION_DEPRECATED (GCC_3_2|GCC_3_2_3|GCC_2_96|GCC_3_3_2|GCC_3_3_3)
 
+/* flags2 */
+#define RELOC_AUTO                  (0x1ULL)
+#define KASLR                       (0x2ULL)
+
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
 #define PVOPS()     (kt->flags & ARCH_PVOPS)
@@ -705,6 +709,7 @@ struct kernel_table {                   /* kernel data */
 		ulong phys_base_SYMBOL;
 		ulong _stext_SYMBOL;
 	} vmcoreinfo;
+	ulonglong flags2;
 };
 
 /*

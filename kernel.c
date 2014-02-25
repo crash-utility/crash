@@ -5139,6 +5139,16 @@ dump_kernel_table(int verbose)
 	if (kt->flags & IRQ_DESC_TREE)
 		fprintf(fp, "%sIRQ_DESC_TREE", others++ ? "|" : "");
 	fprintf(fp, ")\n");
+
+        others = 0;
+        fprintf(fp, "        flags2: %llx %s", kt->flags2,
+		kt->flags2 ? " \n  (" : " (unused");
+	if (kt->flags2 & RELOC_AUTO)
+		fprintf(fp, "%sRELOC_AUTO", others++ ? "|" : "");
+	if (kt->flags2 & KASLR)
+		fprintf(fp, "%sKASLR", others++ ? "|" : "");
+	fprintf(fp, ")\n");
+
         fprintf(fp, "         stext: %lx\n", kt->stext);
         fprintf(fp, "         etext: %lx\n", kt->etext);
         fprintf(fp, "    stext_init: %lx\n", kt->stext_init);
@@ -5196,8 +5206,12 @@ dump_kernel_table(int verbose)
 	fprintf(fp, "   gcc_version: %d.%d.%d\n", kt->gcc_version[0], 
 		kt->gcc_version[1], kt->gcc_version[2]);
 	fprintf(fp, "     BUG_bytes: %d\n", kt->BUG_bytes);
-	fprintf(fp, "      relocate: %lx\n", kt->relocate);
-	fprintf(fp, " runq_siblings: %d\n", kt->runq_siblings);
+	fprintf(fp, "      relocate: %lx", kt->relocate);
+	if (kt->flags2 & KASLR)
+		fprintf(fp, "  (KASLR offset: %lx / %ldMB)", 
+			kt->relocate * -1,
+			(kt->relocate * -1) >> 20);
+	fprintf(fp, "\n runq_siblings: %d\n", kt->runq_siblings);
 	fprintf(fp, "  __rq_idx[NR_CPUS]: ");
 	nr_cpus = kt->kernel_NR_CPUS ? kt->kernel_NR_CPUS : NR_CPUS;
 	for (i = 0; i < nr_cpus; i++) {

@@ -27,6 +27,7 @@ static void store_symbols(bfd *, int, void *, long, unsigned int);
 static void store_sysmap_symbols(void);
 static ulong relocate(ulong, char *, int);
 static int relocate_force(ulong, char *);
+static ulong symbol_value_from_proc_kallsyms(char *);
 static void strip_module_symbol_end(char *s);
 static int compare_syms(const void *, const void *);
 static int compare_mods(const void *, const void *);
@@ -557,6 +558,55 @@ strip_symbol_end(const char *name, char *buf)
 }
 
 /*
+ * Derives the kernel aslr offset by comparing the _stext symbol from the
+ * the vmcore_info in the dump file to the _stext symbol in the vmlinux file.
+ */
+static void
+derive_kaslr_offset(bfd *abfd, int dynamic, bfd_byte *start, bfd_byte *end,
+		    unsigned int size, asymbol *store)
+{
+	symbol_info syminfo;
+	asymbol *sym;
+	char *name;
+	unsigned long relocate;
+	char buf[BUFSIZE];
+	ulong _stext_relocated;
+
+	if (ACTIVE()) {
+		_stext_relocated = symbol_value_from_proc_kallsyms("_stext");
+		if (_stext_relocated == BADVAL)
+			return;
+	} else {
+		_stext_relocated = kt->vmcoreinfo._stext_SYMBOL;
+		if (_stext_relocated == 0)
+			return;
+	}
+
+	for (; start < end; start += size) {
+		sym = bfd_minisymbol_to_symbol(abfd, dynamic, start, store);
+		if (sym == NULL)
+			error(FATAL, "bfd_minisymbol_to_symbol() failed\n");
+
+		bfd_get_symbol_info(abfd, sym, &syminfo);
+		name = strip_symbol_end(syminfo.name, buf);
+		if (strcmp("_stext", name) == 0) {
+			relocate = syminfo.value - _stext_relocated;
+			/*
+			 * To avoid mistaking an mismatched kernel version with
+			 * a kaslr offset, we make sure that the offset is
+			 * aligned by 0x1000, as it always will be for
+			 * kaslr.
+			 */
+			if ((relocate & 0xFFF) == 0) {
+				kt->relocate = relocate;
+				kt->flags |= RELOC_SET;
+				return;
+			}
+		}
+	}
+}
+
+/*
  *  Store the symbols gathered by symtab_init().  The symbols are stored
  *  in increasing numerical order.
  */
@@ -591,15 +641,20 @@ store_symbols(bfd *abfd, int dynamic, void *minisyms, long symcount,
 	st->symcnt = 0;
 	sp = st->symtable;
 
-	if (machine_type("X86") || machine_type("X86_64")) {
+	first = 0;
+	from = (bfd_byte *) minisyms;
+	fromend = from + symcount * size;
+
+	if (machine_type("X86")) {
 		if (!(kt->flags & RELOC_SET))
 			kt->flags |= RELOC_FORCE;
+	} else if (machine_type("X86_64")) {
+		if ((kt->flags2 & RELOC_AUTO) && !(kt->flags & RELOC_SET))
+			derive_kaslr_offset(abfd, dynamic, from,
+				fromend, size, store);
 	} else
 		kt->flags &= ~RELOC_SET;
 
-	first = 0;
-  	from = (bfd_byte *) minisyms;
-  	fromend = from + symcount * size;
   	for (; from < fromend; from += size)
     	{
       		if ((sym = bfd_minisymbol_to_symbol(abfd, dynamic, from, store))
@@ -832,6 +887,48 @@ relocate_force(ulong symval, char *symname)
 		    " %d symbols in /proc/kallsyms\n", count);
 
 	return FALSE;
+}
+
+/*
+ *  Get a symbol value from /proc/kallsyms.
+ */
+static ulong
+symbol_value_from_proc_kallsyms(char *symname)
+{
+        FILE *kp;
+	char buf[BUFSIZE];
+        char *kallsyms[MAXARGS];
+	ulong kallsym;
+	int found;
+
+	if (!file_exists("/proc/kallsyms", NULL)) {
+		error(INFO, 
+		    "cannot determine relocation value: "
+		    "/proc/kallsyms does not exist\n\n");
+		return BADVAL;
+	}
+
+	if ((kp = fopen("/proc/kallsyms", "r")) == NULL) {
+		error(INFO, 
+		    "cannot determine relocation value: "
+		    "cannot open /proc/kallsyms\n\n");
+		return BADVAL;
+	}
+
+	found = FALSE;
+	while (!found && fgets(buf, BUFSIZE, kp) &&
+	    (parse_line(buf, kallsyms) == 3) && 
+	    hexadecimal(kallsyms[0], 0)) {
+
+		if (STREQ(kallsyms[2], symname)) {
+			kallsym = htol(kallsyms[0], RETURN_ON_ERROR, NULL);
+			found = TRUE;
+			break;
+		}
+	}
+	fclose(kp);
+
+	return(found ? kallsym : BADVAL);
 }
 
 /*
@@ -11514,6 +11611,10 @@ patch_kernel_symbol(struct gnu_request *req)
 			error(WARNING, 
 			    "\nkernel relocated [%ldMB]: patching %ld gdb minimal_symbol values\n",
 				kt->relocate >> 20, st->symcnt);
+		if (kt->flags2 & RELOC_AUTO)
+			error(WARNING, 
+			    "\nkernel relocated [%ldMB]: patching %ld gdb minimal_symbol values\n",
+				(kt->relocate * -1) >> 20, st->symcnt);
                 fprintf(fp, (pc->flags & SILENT) || !(pc->flags & TTY) ? "" :
                  "\nplease wait... (patching %ld gdb minimal_symbol values) ",
 			st->symcnt);
