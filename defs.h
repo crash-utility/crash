@@ -2447,6 +2447,8 @@ struct symbol_table_data {
 #define MODSECT_VMASK   (MODSECT_V1|MODSECT_V2|MODSECT_V3)
 #define NO_STRIP       (0x10000)
 
+#define NO_LINE_NUMBERS() ((st->flags & GDB_SYMS_PATCHED) && !(kt->flags2 & KASLR))
+
 #endif /* !GDB_COMMON */
 
 #define ALL_MODULES      (0)

@@ -5658,7 +5658,7 @@ foreach(struct foreach_data *fd)
 				error(FATAL, 
 				    "bt: -x and -d options are mutually exclusive\n");
 
-                        if ((fd->flags & FOREACH_l_FLAG) && GDB_PATCHED()) {
+                        if ((fd->flags & FOREACH_l_FLAG) && NO_LINE_NUMBERS()) {
 				error(INFO, "line numbers are not available\n");
 				fd->flags &= ~FOREACH_l_FLAG;
 			}

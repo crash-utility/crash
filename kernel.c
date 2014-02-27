@@ -1377,7 +1377,7 @@ cmd_dis(void)
 			break;
 
 		case 'l':
-			if (GDB_PATCHED())
+			if (NO_LINE_NUMBERS())
 				error(INFO, "line numbers are not available\n");
 			else
 				req->flags |= GNU_PRINT_LINE_NUMBERS;
@@ -2040,7 +2040,7 @@ cmd_bt(void)
 			break;
 			
 		case 'l':
-			if (GDB_PATCHED())
+			if (NO_LINE_NUMBERS())
 				error(INFO, "line numbers are not available\n");
 			else
 				bt->flags |= BT_LINE_NUMBERS;
@@ -4912,7 +4912,7 @@ dump_sys_call_table(char *spec, int cnt)
 #else
 	ulong *sys_call_table, *sct, sys_ni_syscall, addr;
 #endif
-	if (GDB_PATCHED())
+	if (NO_LINE_NUMBERS())
 		error(INFO, "line numbers are not available\n"); 
 
 	NR_syscalls = get_NR_syscalls(&confirmed);
