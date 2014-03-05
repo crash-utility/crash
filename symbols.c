@@ -4446,6 +4446,18 @@ value_search(ulong value, ulong *offset)
 #endif
                         if (offset) 
 				*offset = 0;
+
+			/* 
+			 *  Avoid "SyS" and "compat_SyS" kernel syscall 
+			 *  aliases by returning the real symbol name,
+			 *  which is the next symbol in the list.
+			 */
+			if ((STRNEQ(sp->name, "SyS_") || 
+			     STRNEQ(sp->name, "compat_SyS_")) &&
+			    ((spnext = sp+1) < st->symend) &&
+			    (spnext->value == value))
+				sp = spnext;
+
                         return((struct syment *)sp);
                 }
                 if (sp->value > value) {
