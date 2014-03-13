@@ -1,8 +1,8 @@
 /* tools.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2013 David Anderson
- * Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014 David Anderson
+ * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -4126,9 +4126,9 @@ dump_struct_members_for_tree(struct tree_data *td, int idx, ulong struct_p)
 #define HASH_QUEUE_CLOSED     (0x8)
 
 #define HQ_ENTRY_CHUNK   (1024)
-#define NR_HASH_QUEUES   (HQ_ENTRY_CHUNK/8)
+#define NR_HASH_QUEUES_DEFAULT   (32768UL)
 #define HQ_SHIFT         (machdep->pageshift)
-#define HQ_INDEX(X)      (((X) >> HQ_SHIFT) % NR_HASH_QUEUES)
+#define HQ_INDEX(X)      (((X) >> HQ_SHIFT) % pc->nr_hash_queues)
 
 struct hq_entry {
         int next;
@@ -4143,7 +4143,7 @@ struct hq_head {
 
 struct hash_table {
 	ulong flags;
-	struct hq_head queue_heads[NR_HASH_QUEUES];
+	struct hq_head *queue_heads;
 	struct hq_entry *memptr;
 	long count;
 	long index;
@@ -4160,6 +4160,18 @@ hq_init(void)
 	struct hash_table *ht;
 
 	ht = &hash_table;
+
+	if (pc->nr_hash_queues == 0)
+		pc->nr_hash_queues = NR_HASH_QUEUES_DEFAULT;
+
+        if ((ht->queue_heads = (struct hq_head *)malloc(pc->nr_hash_queues *
+	    sizeof(struct hq_head))) == NULL) {
+		error(INFO, "cannot malloc memory for hash queue heads: %s\n",
+			strerror(errno));
+		ht->flags = HASH_QUEUE_NONE;
+		pc->flags &= ~HASH;
+		return;
+	}
 
         if ((ht->memptr = (struct hq_entry *)malloc(HQ_ENTRY_CHUNK * 
 	    sizeof(struct hq_entry))) == NULL) {
@@ -4241,7 +4253,7 @@ hq_open(void)
 		return FALSE;
 
 	ht->flags &= ~(HASH_QUEUE_FULL|HASH_QUEUE_CLOSED);
-	BZERO(ht->queue_heads, sizeof(struct hq_head) * NR_HASH_QUEUES);
+	BZERO(ht->queue_heads, sizeof(struct hq_head) * pc->nr_hash_queues);
 	BZERO(ht->memptr, ht->count * sizeof(struct hq_entry));
 	ht->index = 0;
 
@@ -4403,7 +4415,7 @@ dump_hash_table(int verbose)
         if (ht->flags & HASH_QUEUE_FULL)
                 fprintf(fp, "%sHASH_QUEUE_FULL", others++ ? "|" : "");
 	fprintf(fp, ")\n");
-	fprintf(fp, "   queue_heads[%d]: %lx\n", NR_HASH_QUEUES, 
+	fprintf(fp, "  queue_heads[%ld]: %lx\n", pc->nr_hash_queues, 
 		(ulong)ht->queue_heads);
 	fprintf(fp, "             memptr: %lx\n", (ulong)ht->memptr);
 	fprintf(fp, "              count: %ld  ", ht->count);
@@ -4416,7 +4428,7 @@ dump_hash_table(int verbose)
 	minq = ~(0);
 	maxq = 0;
 
-	for (i = 0; i < NR_HASH_QUEUES; i++) {
+	for (i = 0; i < pc->nr_hash_queues; i++) {
                	if (ht->queue_heads[i].next == 0) {
 			minq = 0;
                        	continue;
@@ -4448,8 +4460,8 @@ dump_hash_table(int verbose)
 	if (elements != ht->index)
         	fprintf(fp, "     elements found: %ld (expected %ld)\n", 
 			elements, ht->index);
-        fprintf(fp, "      queues in use: %ld of %d\n", queues_in_use, 
-		NR_HASH_QUEUES);
+        fprintf(fp, "      queues in use: %ld of %ld\n", queues_in_use, 
+		pc->nr_hash_queues);
 	fprintf(fp, " queue length range: %d to %d\n", minq, maxq);
 
 	if (verbose) {

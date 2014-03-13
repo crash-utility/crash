@@ -69,6 +69,7 @@ static struct option long_options[] = {
 	{"hex", 0, 0, 0},
 	{"dec", 0, 0, 0},
 	{"no_strip", 0, 0, 0},
+	{"hash", required_argument, 0, 0},
         {0, 0, 0, 0}
 };
 
@@ -217,7 +218,12 @@ main(int argc, char **argv)
 		        else if (STREQ(long_options[option_index].name, "mod"))
 				kt->module_tree = optarg;
 
-			else if (STREQ(long_options[option_index].name, "kaslr")) {
+		        else if (STREQ(long_options[option_index].name, "hash")) {
+				if (!calculate(optarg, &pc->nr_hash_queues, NULL, 0)) {
+					error(INFO, "invalid --hash argument: %s\n",
+						optarg);
+				}
+			} else if (STREQ(long_options[option_index].name, "kaslr")) {
 				if (!machine_type("X86_64"))
 					error(INFO, "--kaslr only valid "
 						"with X86_64 machine type.\n");
@@ -1594,6 +1600,7 @@ dump_program_context(void)
 	fprintf(fp, "          cleanup: %s\n", pc->cleanup);
 	fprintf(fp, "            scope: %lx %s\n", pc->scope,
 		pc->scope ? "" : "(not set)");
+	fprintf(fp, "   nr_hash_queues: %ld\n", pc->nr_hash_queues);
 }
 
 char *

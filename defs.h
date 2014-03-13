@@ -513,6 +513,7 @@ struct program_context {
         void (*cmd_cleanup)(void *);    /* per-command cleanup function */
 	void *cmd_cleanup_arg;          /* optional cleanup function argument */
 	ulong scope;			/* optional text context address */
+	ulong nr_hash_queues;		/* hash queue head count */
 };
 
 #define READMEM  pc->readmem

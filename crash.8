@@ -463,6 +463,10 @@ value that is larger than its
 value, then it will be necessary to enter
 a relocation size equal to the difference between the two values.
 .TP
+.BI --hash \ count
+Set the number of internal hash queue heads used for list gathering
+and verification.  The default count is 32768.
+.TP
 .B --minimal
 Bring up a session that is restricted to the 
 .I log, dis, rd, sym, eval, set
