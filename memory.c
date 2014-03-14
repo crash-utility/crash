@@ -7344,6 +7344,8 @@ multiple_lists:
 					fprintf(fp, "%6d %6d\n", 0, 0);
 				continue;
 			}
+			if (verbose)
+				fprintf(fp, "\n");
 
 			BZERO(ld, sizeof(struct list_data));
 			ld->flags = verbose | RETURN_ON_DUPLICATE;
