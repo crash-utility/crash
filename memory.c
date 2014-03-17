@@ -146,7 +146,8 @@ static int dump_zone_page_usage(void);
 static void dump_multidimensional_free_pages(struct meminfo *);
 static void dump_free_pages_zones_v1(struct meminfo *);
 static void dump_free_pages_zones_v2(struct meminfo *);
-static int dump_zone_free_area(ulong, int, ulong);
+struct free_page_callback_data;
+static int dump_zone_free_area(ulong, int, ulong, struct free_page_callback_data *);
 static void dump_page_hash_table(struct meminfo *);
 static void kmem_search(struct meminfo *);
 static void kmem_cache_init(void);
@@ -6661,7 +6662,7 @@ dump_free_pages_zones_v1(struct meminfo *fi)
 			if (value)
 				found += dump_zone_free_area(node_zones+
 					OFFSET(zone_struct_free_area), 
-					vt->nr_free_areas, verbose);
+					vt->nr_free_areas, verbose, NULL);
 
 			node_zones += SIZE(zone_struct);
 		}
@@ -6781,6 +6782,36 @@ dump_free_pages_zones_v1(struct meminfo *fi)
 
 
 /*
+ *  Callback function for free-list search for a specific page.
+ */
+struct free_page_callback_data {
+	physaddr_t searchphys;
+	long block_size;	
+	ulong page;
+	int found;
+};
+
+static int
+free_page_callback(void *page, void *arg)
+{
+	struct free_page_callback_data *cbd = arg;
+	physaddr_t this_phys;
+
+	if (!page_to_phys((ulong)page, &this_phys))
+		return FALSE;
+
+	if ((cbd->searchphys >= this_phys) && 
+	    (cbd->searchphys < (this_phys + cbd->block_size))) {
+		cbd->page = (ulong)page;
+		cbd->found = TRUE;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+
+/*
  *  Same as dump_free_pages_zones_v1(), but updated for numerous 2.6 zone 
  *  and free_area related data structure changes.
  */
@@ -6795,7 +6826,8 @@ dump_free_pages_zones_v2(struct meminfo *fi)
 	int order, errflag, do_search;
 	ulong offset, verbose, value, sum, found; 
 	ulong this_addr;
-	physaddr_t phys, this_phys, searchphys;
+	physaddr_t phys, this_phys, searchphys, end_paddr;
+	struct free_page_callback_data callback_data;
 	ulong pp;
         ulong zone_mem_map;
         ulong zone_start_paddr;
@@ -6832,6 +6864,8 @@ dump_free_pages_zones_v2(struct meminfo *fi)
 			    "dump_free_pages_zones_v2: no memtype specified\n");
                 }
 		do_search = TRUE;
+		callback_data.searchphys = searchphys;
+		callback_data.found = FALSE;
         } else {
                 searchphys = 0;
 		do_search = FALSE;
@@ -6983,15 +7017,32 @@ dump_free_pages_zones_v2(struct meminfo *fi)
 	
 			sum += value;
 
-			if (value)
-				found += dump_zone_free_area(node_zones+
-					OFFSET(zone_free_area), 
-					vt->nr_free_areas, verbose);
+			if (value) {
+				if (do_search) {
+					end_paddr = nt->start_paddr +
+						((physaddr_t)nt->size * 
+						 (physaddr_t)PAGESIZE());
+
+					if ((searchphys >= nt->start_paddr) &&
+					    (searchphys < end_paddr))
+						found += dump_zone_free_area(node_zones+
+							OFFSET(zone_free_area), 
+							vt->nr_free_areas, verbose,
+							&callback_data);
+
+					if (callback_data.found)
+						goto done_search;
+				} else 
+					found += dump_zone_free_area(node_zones+
+						OFFSET(zone_free_area), 
+						vt->nr_free_areas, verbose, NULL);
+			}
 
 			node_zones += SIZE(zone);
 		}
 	}
 
+done_search:
 	hq_close();
 
         if (fi->flags & (GET_FREE_PAGES|GET_ZONE_SIZES|GET_FREE_HIGHMEM_PAGES)) {
@@ -7206,7 +7257,8 @@ char *free_area_hdr3 = "AREA    SIZE  FREE_AREA_STRUCT\n";
 char *free_area_hdr4 = "AREA    SIZE  FREE_AREA_STRUCT  BLOCKS  PAGES\n";
 
 static int
-dump_zone_free_area(ulong free_area, int num, ulong verbose)
+dump_zone_free_area(ulong free_area, int num, ulong verbose, 
+		    struct free_page_callback_data *callback_data)
 {
 	int i, j;
 	long chunk_size;
@@ -7353,7 +7405,13 @@ multiple_lists:
 			ld->end = free_list;
 			ld->list_head_offset = OFFSET(page_lru) + 
 				OFFSET(list_head_next);
-
+			if (callback_data) {
+				ld->flags &= ~VERBOSE;
+				ld->flags |= (LIST_CALLBACK|CALLBACK_RETURN);
+				ld->callback_func = free_page_callback;
+				ld->callback_data = (void *)callback_data;
+				callback_data->block_size = chunk_size * PAGESIZE();
+			}
 			cnt = do_list(ld);
 			if (cnt < 0) {
 				error(pc->curcmd_flags & IGNORE_ERRORS ? INFO : FATAL, 
@@ -7361,6 +7419,11 @@ multiple_lists:
 					j, free_area);
 				if (pc->curcmd_flags & IGNORE_ERRORS)
 					goto bailout;
+			}
+
+			if (callback_data && callback_data->found) {
+				fprintf(fp, "%lx\n", callback_data->page);
+				goto bailout;
 			}
 
 			if (!verbose)
