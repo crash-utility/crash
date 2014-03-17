@@ -3433,6 +3433,10 @@ do_list(struct list_data *ld)
 			console("%sLIST_STRUCT_RADIX_16", others++ ? "|" : "");
 		if (ld->flags & LIST_ALLOCATE)
 			console("%sLIST_ALLOCATE", others++ ? "|" : "");
+		if (ld->flags & LIST_CALLBACK)
+			console("%sLIST_CALLBACK", others++ ? "|" : "");
+		if (ld->flags & CALLBACK_RETURN)
+			console("%sCALLBACK_RETURN", others++ ? "|" : "");
 		console(")\n");
 		console("           start: %lx\n", ld->start);
 		console("   member_offset: %ld\n", ld->member_offset);
@@ -3446,6 +3450,8 @@ do_list(struct list_data *ld)
 			console("   structname[%d]: %s\n", i, ld->structname[i]);
 		console("          header: %s\n", ld->header);
 		console("        list_ptr: %lx\n", (ulong)ld->list_ptr);
+		console("   callback_func: %lx\n", (ulong)ld->callback_func);
+		console("   callback_data: %lx\n", (ulong)ld->callback_data);
 	}
 
 	count = 0;
@@ -3527,6 +3533,11 @@ do_list(struct list_data *ld)
 
 		count++;
                 last = next;
+
+		if ((ld->flags & LIST_CALLBACK) &&
+		    ld->callback_func((void *)(next - ld->list_head_offset),
+		    ld->callback_data) && (ld->flags & CALLBACK_RETURN))
+			break;
 
                 if (!readmem(next + ld->member_offset, KVADDR, &next, 
 		    sizeof(void *), "list entry", readflag)) {

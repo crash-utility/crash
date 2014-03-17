@@ -2274,6 +2274,8 @@ struct list_data {             /* generic structure used by do_list() to walk */
 	int structname_args;
 	char *header;
 	ulong *list_ptr;
+	int (*callback_func)(void *, void *); 
+	void *callback_data;
 };
 #define LIST_OFFSET_ENTERED  (VERBOSE << 1)
 #define LIST_START_ENTERED   (VERBOSE << 2)
@@ -2285,6 +2287,8 @@ struct list_data {             /* generic structure used by do_list() to walk */
 #define LIST_STRUCT_RADIX_16 (VERBOSE << 8)
 #define LIST_HEAD_REVERSE    (VERBOSE << 9)
 #define LIST_ALLOCATE       (VERBOSE << 10)
+#define LIST_CALLBACK       (VERBOSE << 11)
+#define CALLBACK_RETURN     (VERBOSE << 12)
 
 struct tree_data {
 	ulong flags;
