@@ -4762,7 +4762,7 @@ x86_64_dis_filter(ulong vaddr, char *inbuf, unsigned int output_radix)
  *  (on alpha -- not necessarily seen on x86_64) so this routine both fixes the 
  *  references as well as imposing the current output radix on the translations.
  */
-	console("IN: %s", inbuf);
+	console(" IN: %s", inbuf);
 
 	colon = strstr(inbuf, ":");
 
@@ -4814,7 +4814,14 @@ x86_64_dis_filter(ulong vaddr, char *inbuf, unsigned int output_radix)
                 }
         }
 
-	console("    %s", inbuf);
+	if (value_symbol(vaddr) &&
+	    (strstr(inbuf, "nopl   0x0(%rax,%rax,1)") ||
+	     strstr(inbuf, "data32 data32 data32 xchg %ax,%ax"))) {
+		strip_line_end(inbuf);
+		strcat(inbuf, " [FTRACE NOP]\n");
+	}
+
+	console("OUT: %s", inbuf);
 
 	return TRUE;
 }
