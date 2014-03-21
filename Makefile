@@ -239,6 +239,8 @@ gdb_unzip:
 	@rm -f gdb.files
 	@for FILE in ${GDB_FILES} dummy; do\
 	  echo $$FILE >> gdb.files; done
+	@if [ ! -f ${GDB}.tar.gz ] && [ ! -f /usr/bin/wget ]; then \
+	  echo /usr/bin/wget is required to download ${GDB}.tar.gz; echo; exit 1; fi
 	@if [ ! -f ${GDB}.tar.gz ] && [ -f /usr/bin/wget ]; then \
 	  wget http://ftp.gnu.org/gnu/gdb/${GDB}.tar.gz; fi
 	@tar --exclude-from gdb.files -xvzmf ${GDB}.tar.gz
