@@ -2647,9 +2647,9 @@ struct load_module {
 #define MACHINE_TYPE       "ARM64"    
 
 #define PTOV(X) \
-	((unsigned long)(X)-(machdep->machspec->phys_offset)+(machdep->kvbase))
+	((unsigned long)(X)-(machdep->machspec->phys_offset)+(machdep->machspec->page_offset))
 #define VTOP(X) \
-	((unsigned long)(X)-(machdep->kvbase)+(machdep->machspec->phys_offset))
+	((unsigned long)(X)-(machdep->machspec->page_offset)+(machdep->machspec->phys_offset))
 
 #define USERSPACE_TOP   (machdep->machspec->userspace_top)
 #define PAGE_OFFSET     (machdep->machspec->page_offset)
@@ -2759,16 +2759,25 @@ typedef signed int s32;
 /* 
  * source: Documentation/arm64/memory.txt 
  */
-#define ARM64_USERSPACE_TOP  (0x0000007fffffffffUL)
-#define ARM64_VMALLOC_START  (0xffffff8000000000UL)
-#define ARM64_VMALLOC_END    (0xffffffbbfffeffffUL)
-#define ARM64_VMEMMAP_VADDR  (0xffffffbc00000000UL)
-#define ARM64_VMEMMAP_END    (0xffffffbffbbfffffUL)
-#define ARM64_MODULES_VADDR  (0xffffffbffc000000UL)
-#define ARM64_MODULES_END    (0xffffffbfffffffffUL)
-#define ARM64_PAGE_OFFSET    (0xffffffc000000000UL)
+#define ARM64_USERSPACE_TOP_4K  (0x0000007fffffffffUL)
+#define ARM64_VMALLOC_START_4K  (0xffffff8000000000UL)
+#define ARM64_VMALLOC_END_4K    (0xffffffbbfffeffffUL)
+#define ARM64_VMEMMAP_VADDR_4K  (0xffffffbc00000000UL)
+#define ARM64_VMEMMAP_END_4K    (0xffffffbdffffffffUL)
+#define ARM64_MODULES_VADDR_4K  (0xffffffbffc000000UL)
+#define ARM64_MODULES_END_4K    (0xffffffbfffffffffUL)
+#define ARM64_PAGE_OFFSET_4K    (0xffffffc000000000UL)
 
-#define ARM64_STACK_SIZE   (8192)
+#define ARM64_USERSPACE_TOP_64K  (0x000003ffffffffffUL)
+#define ARM64_VMALLOC_START_64K  (0xfffffc0000000000UL)
+#define ARM64_VMALLOC_END_64K    (0xfffffdfbfffeffffUL)
+#define ARM64_VMEMMAP_VADDR_64K  (0xfffffdfc00000000UL)
+#define ARM64_VMEMMAP_END_64K    (0xfffffdfdffffffffUL)
+#define ARM64_MODULES_VADDR_64K  (0xfffffdfffc000000UL)
+#define ARM64_MODULES_END_64K    (0xfffffdffffffffffUL)
+#define ARM64_PAGE_OFFSET_64K    (0xfffffe0000000000UL)
+
+#define ARM64_STACK_SIZE   (16384)
 
 #define _SECTION_SIZE_BITS      30
 #define _MAX_PHYSMEM_BITS       40

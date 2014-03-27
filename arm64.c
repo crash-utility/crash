@@ -1,8 +1,8 @@
 /*
  * arm64.c - core analysis suite
  *
- * Copyright (C) 2012,2013 David Anderson
- * Copyright (C) 2012,2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2012-2014 David Anderson
+ * Copyright (C) 2012-2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -95,6 +95,17 @@ arm64_init(int when)
 		switch (machdep->pagesize)
 		{
 		case 4096:
+			machdep->machspec->userspace_top = ARM64_USERSPACE_TOP_4K;
+			machdep->machspec->page_offset = ARM64_PAGE_OFFSET_4K;
+			machdep->machspec->vmalloc_start_addr = ARM64_VMALLOC_START_4K;
+			machdep->machspec->vmalloc_end = ARM64_VMALLOC_END_4K;
+			machdep->machspec->vmemmap_vaddr = ARM64_VMEMMAP_VADDR_4K;
+			machdep->machspec->vmemmap_end = ARM64_VMEMMAP_END_4K;
+			machdep->machspec->modules_vaddr = ARM64_MODULES_VADDR_4K;
+			machdep->machspec->modules_end = ARM64_MODULES_END_4K;
+			machdep->kvbase = ARM64_VMALLOC_START_4K;
+			machdep->identity_map_base = ARM64_PAGE_OFFSET_4K; 
+
 			machdep->flags |= VM_L3_4K;
 			machdep->ptrs_per_pgd = PTRS_PER_PGD_L3_4K;
 			if ((machdep->pgd = 
@@ -110,6 +121,17 @@ arm64_init(int when)
 			break;
 
 		case 65536:
+			machdep->machspec->userspace_top = ARM64_USERSPACE_TOP_64K;
+			machdep->machspec->page_offset = ARM64_PAGE_OFFSET_64K;
+			machdep->machspec->vmalloc_start_addr = ARM64_VMALLOC_START_64K;
+			machdep->machspec->vmalloc_end = ARM64_VMALLOC_END_64K;
+			machdep->machspec->vmemmap_vaddr = ARM64_VMEMMAP_VADDR_64K;
+			machdep->machspec->vmemmap_end = ARM64_VMEMMAP_END_64K;
+			machdep->machspec->modules_vaddr = ARM64_MODULES_VADDR_64K;
+			machdep->machspec->modules_end = ARM64_MODULES_END_64K;
+			machdep->kvbase = ARM64_VMALLOC_START_64K;
+			machdep->identity_map_base = ARM64_PAGE_OFFSET_64K; 
+
 			machdep->flags |= VM_L2_64K;
 			machdep->ptrs_per_pgd = PTRS_PER_PGD_L2_64K;
 			if ((machdep->pgd = 
@@ -133,17 +155,7 @@ arm64_init(int when)
 		machdep->clear_machdep_cache = arm64_clear_machdep_cache;
 
 		machdep->stacksize = ARM64_STACK_SIZE;
-		machdep->machspec->userspace_top = ARM64_USERSPACE_TOP;
-		machdep->machspec->page_offset = ARM64_PAGE_OFFSET;
-		machdep->machspec->vmalloc_start_addr = ARM64_VMALLOC_START;
-		machdep->machspec->vmalloc_end = ARM64_VMALLOC_END;
-		machdep->machspec->vmemmap_vaddr = ARM64_VMEMMAP_VADDR;
-		machdep->machspec->vmemmap_end = ARM64_VMEMMAP_END;
-		machdep->machspec->modules_vaddr = ARM64_MODULES_VADDR;
-		machdep->machspec->modules_end = ARM64_MODULES_END;
-
-		machdep->kvbase = ARM64_VMALLOC_START;
-		machdep->identity_map_base = ARM64_PAGE_OFFSET; 
+		machdep->flags |= VMEMMAP;
 
 		arm64_calc_phys_offset();
 		
@@ -215,7 +227,8 @@ arm64_init(int when)
 
 	case LOG_ONLY:
 		machdep->machspec = &arm64_machine_specific;
-		machdep->identity_map_base = ARM64_PAGE_OFFSET;
+		error(FATAL, "crash --log not implemented on ARM64: TBD\n");
+		/* machdep->identity_map_base = ARM64_PAGE_OFFSET; */
 		arm64_calc_phys_offset();
 		break;
 	}
@@ -227,25 +240,19 @@ arm64_init(int when)
 static int
 arm64_verify_symbol(const char *name, ulong value, char type)
 {
-//	if (STREQ(name, "swapper_pg_dir"))
-//		machdep->flags |= KSYMS_START;
-//
-//	if (!name || !strlen(name) || !(machdep->flags & KSYMS_START))
-//		return FALSE;
-//
-//	if (STREQ(name, "$a") || STREQ(name, "$n") || STREQ(name, "$d"))
-//		return FALSE;
-//
-//	if (STREQ(name, "PRRR") || STREQ(name, "NMRR"))
-//		return FALSE;
-//
-//	if ((type == 'A') && STRNEQ(name, "__crc_"))
-//		return FALSE;
-//
-//	if (CRASHDEBUG(8) && name && strlen(name))
-//		fprintf(fp, "%08lx %s\n", value, name);
-//
-	NOT_IMPLEMENTED(WARNING);
+	if (!name || !strlen(name))
+		return FALSE;
+
+	if ((value == 0) && 
+	    ((type == 'a') || (type == 'n') || (type == 'N') || (type == 'U')))
+		return FALSE;
+
+	if (STREQ(name, "$d") || STREQ(name, "$x"))
+		return FALSE;
+
+	if (!(machdep->flags & KSYMS_START) && STREQ(name, "idmap_pg_dir"))
+		machdep->flags |= KSYMS_START;
+
 	return TRUE;
 }
 
@@ -269,7 +276,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "              kvbase: %lx\n", machdep->kvbase);
-	fprintf(fp, "   identity_map_base: %lx\n", machdep->kvbase);
+	fprintf(fp, "   identity_map_base: %lx\n", machdep->identity_map_base);
 	fprintf(fp, "            pagesize: %d\n", machdep->pagesize);
 	fprintf(fp, "           pageshift: %d\n", machdep->pageshift);
 	fprintf(fp, "            pagemask: %lx\n", (ulong)machdep->pagemask);
@@ -730,7 +737,7 @@ static void
 arm64_stackframe_init(void)
 {
 	long task_struct_thread;
-	long thread_struct_context;
+	long thread_struct_cpu_context;
 	long context_sp, context_pc, context_fp;
 
 	STRUCT_SIZE_INIT(note_buf, "note_buf_t");
@@ -744,10 +751,10 @@ arm64_stackframe_init(void)
 		symbol_value("__exception_text_end");
 
 	task_struct_thread = MEMBER_OFFSET("task_struct", "thread");
-	thread_struct_context = MEMBER_OFFSET("thread_struct", "context");
+	thread_struct_cpu_context = MEMBER_OFFSET("thread_struct", "cpu_context");
 
 	if ((task_struct_thread == INVALID_OFFSET) ||
-	    (thread_struct_context == INVALID_OFFSET)) {
+	    (thread_struct_cpu_context == INVALID_OFFSET)) {
 		error(INFO, 
 		    "cannot determine task_struct.thread.context offset\n");
 		return;
@@ -788,11 +795,11 @@ arm64_stackframe_init(void)
 		return;
 	}
 	ASSIGN_OFFSET(task_struct_thread_context_sp) =
-		task_struct_thread + thread_struct_context + context_sp;
+		task_struct_thread + thread_struct_cpu_context + context_sp;
 	ASSIGN_OFFSET(task_struct_thread_context_fp) =
-		task_struct_thread + thread_struct_context + context_fp;
+		task_struct_thread + thread_struct_cpu_context + context_fp;
 	ASSIGN_OFFSET(task_struct_thread_context_pc) =
-		task_struct_thread + thread_struct_context + context_pc;
+		task_struct_thread + thread_struct_cpu_context + context_pc;
 }
 
 static int arm64_eframe_search(struct bt_info *bt)
@@ -1056,7 +1063,7 @@ arm64_translate_pte(ulong pte, void *physaddr, ulonglong unused)
 static ulong
 arm64_vmalloc_start(void)
 {
-	return ARM64_VMALLOC_START;
+	return machdep->machspec->vmalloc_start_addr;
 }
 
 /*
@@ -1168,9 +1175,10 @@ arm64_display_machine_stats(void)
 		fprintf(fp, "    PROCESSOR SPEED: %ld Mhz\n", mhz);
 	fprintf(fp, "                 HZ: %d\n", machdep->hz);
 	fprintf(fp, "          PAGE SIZE: %d\n", PAGESIZE());
-	fprintf(fp, "KERNEL VIRTUAL BASE: %lx\n", ARM64_PAGE_OFFSET);
-	fprintf(fp, "KERNEL VMALLOC BASE: %lx\n", ARM64_VMALLOC_START);
-	fprintf(fp, "KERNEL MODULES BASE: %lx\n", ARM64_MODULES_VADDR);
+	fprintf(fp, "KERNEL VIRTUAL BASE: %lx\n", machdep->machspec->page_offset);
+	fprintf(fp, "KERNEL VMALLOC BASE: %lx\n", machdep->machspec->vmalloc_start_addr);
+	fprintf(fp, "KERNEL MODULES BASE: %lx\n", machdep->machspec->modules_vaddr);
+        fprintf(fp, "KERNEL VMEMMAP BASE: %lx\n", machdep->machspec->vmemmap_vaddr);
 	fprintf(fp, "  KERNEL STACK SIZE: %ld\n", STACKSIZE());
 }
 
@@ -1341,10 +1349,12 @@ arm64_get_kvaddr_ranges(struct vaddr_range *vrp)
 int
 arm64_IS_VMALLOC_ADDR(ulong vaddr)
 {
-        return ((vaddr >= ARM64_VMALLOC_START && vaddr <= ARM64_VMALLOC_END) ||
+	struct machine_specific *ms = machdep->machspec;
+	
+        return ((vaddr >= ms->vmalloc_start_addr && vaddr <= ms->vmalloc_end) ||
                 ((machdep->flags & VMEMMAP) &&
-                 (vaddr >= ARM64_VMEMMAP_VADDR && vaddr <= ARM64_VMEMMAP_END)) ||
-                (vaddr >= ARM64_MODULES_VADDR && vaddr <= ARM64_MODULES_END));
+                 (vaddr >= ms->vmemmap_vaddr && vaddr <= ms->vmemmap_end)) ||
+                (vaddr >= ms->modules_vaddr && vaddr <= ms->modules_end));
 }
 
 #endif  /* ARM64 */
