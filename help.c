@@ -156,6 +156,8 @@ char *program_usage_info[] = {
     "      vm=4l         (4-level page tables)",
     "    ARM:",
     "      phys_base=<physical-address>",
+    "    ARM64:",
+    "      phys_offset=<physical-address>",
     "",
     "  -x     ",
     "    Automatically load extension modules from a particular directory.",

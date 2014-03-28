@@ -433,7 +433,7 @@ arm64_parse_cmdline_args(void)
 					machdep->machspec->phys_offset = value;
 
 					error(NOTE,
-						"setting phys_offset to: 0x%lx\n",
+					    "setting phys_offset to: 0x%lx\n\n",
 						machdep->machspec->phys_offset);
 
 					machdep->flags |= PHYS_OFFSET;
