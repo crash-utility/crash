@@ -2806,6 +2806,9 @@ struct arm64_pt_regs {
         u64 syscallno;
 };
 
+/* AArch32 CPSR bits */
+#define PSR_MODE32_BIT          0x00000010
+
 #define TIF_SIGPENDING  (0)
 #define display_idt_table() \
         error(FATAL, "-d option is not applicable to ARM64 architecture\n")

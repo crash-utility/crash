@@ -38,11 +38,12 @@ static void arm64_stackframe_init(void);
 static int arm64_eframe_search(struct bt_info *);
 static int arm64_in_exception_text(ulong);
 static void arm64_back_trace_cmd(struct bt_info *);
-static void arm64_print_stackframe_entry(struct bt_info *, int, struct arm64_stackframe *);
+static int arm64_print_stackframe_entry(struct bt_info *, int, struct arm64_stackframe *);
 static int arm64_unwind_frame(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_dumpfile_stackframe(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_stackframe(struct bt_info *, struct arm64_stackframe *);
 static void arm64_get_stack_frame(struct bt_info *, ulong *, ulong *);
+static void arm64_print_exception_frame(struct bt_info *, ulong, int);
 static int arm64_translate_pte(ulong, void *, ulonglong);
 static ulong arm64_vmalloc_start(void);
 static int arm64_is_task_addr(ulong);
@@ -816,7 +817,11 @@ arm64_in_exception_text(ulong ptr)
                (ptr < ms->__exception_text_end));
 }
 
-static void 
+#define BACKTRACE_CONTINUE        (1)
+#define BACKTRACE_COMPLETE_KERNEL (2)
+#define BACKTRACE_COMPLETE_USER   (3)
+
+static int 
 arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackframe *frame)
 {
 	char *name, *name_plus_offset;
@@ -842,33 +847,43 @@ arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackfr
 		fprintf(fp, " [%s]", lm->mod_name);
 
 	fprintf(fp, "\n");
+
+	if (STREQ(name, "start_kernel") || STREQ(name, "secondary_start_kernel") ||
+	    STREQ(name, "kthread") || STREQ(name, "kthreadd"))
+		return BACKTRACE_COMPLETE_KERNEL;
+
+	return BACKTRACE_CONTINUE;
 }
 
 static int arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 {
-        unsigned long high, low, fp;
+	unsigned long high, low, fp;
 	unsigned long stack_mask;
 	
 	stack_mask = (unsigned long)(ARM64_STACK_SIZE) - 1;
 	fp = frame->fp;
 
-        low  = frame->sp;
+	low  = frame->sp;
 	high = (low + stack_mask) & ~(stack_mask);
 
-        if (fp < low || fp > high || fp & 0xf)
-                return FALSE;
+	if (fp < low || fp > high || fp & 0xf)
+		return FALSE;
 
-        frame->sp = fp + 0x10;
-        frame->fp = *(unsigned long *)(fp);
-        frame->pc = *(unsigned long *)(fp + 8);
+	frame->sp = fp + 0x10;
+	frame->fp = GET_STACK_ULONG(fp);
+	frame->pc = GET_STACK_ULONG(fp + 8);
 
-        return TRUE;
+	return TRUE;
 }
+
+#define KERNEL_MODE (1)
+#define USER_MODE   (2)
 
 static void arm64_back_trace_cmd(struct bt_info *bt)
 {
 	struct arm64_stackframe stackframe;
 	int level;
+	ulong exception_frame;
 
 	if (BT_REFERENCE_CHECK(bt))
 		option_not_supported('R');
@@ -882,20 +897,43 @@ static void arm64_back_trace_cmd(struct bt_info *bt)
 	stackframe.pc = bt->instptr;
 	stackframe.fp = bt->frameptr;
 
-	level = 0;
+	level = exception_frame = 0;
         while (1) {
 		bt->instptr = stackframe.pc;
 
-		arm64_print_stackframe_entry(bt, level, &stackframe);
+		switch (arm64_print_stackframe_entry(bt, level, &stackframe))
+		{
+		case BACKTRACE_COMPLETE_KERNEL:
+			return;
+		case BACKTRACE_COMPLETE_USER:
+			goto complete_user;
+		case BACKTRACE_CONTINUE:
+			break;
+		}
+
+		if (exception_frame) {
+			arm64_print_exception_frame(bt, exception_frame, 
+				KERNEL_MODE);
+			exception_frame = 0;
+		}
 
                 if (!arm64_unwind_frame(bt, &stackframe))
                         break;
 
-        	if (arm64_in_exception_text(bt->instptr))
-			fprintf(fp, "TBD: dump exception frame: pt_regs @ stackframe.sp\n");
+        	if (arm64_in_exception_text(bt->instptr)) {
+			if (stackframe.fp)
+				exception_frame = stackframe.fp - SIZE(pt_regs);
+		}
 
 		level++;
         }
+
+	if (is_kernel_thread(bt->tc->task)) 
+		return;
+
+complete_user:
+	exception_frame = bt->stacktop - 304;
+	arm64_print_exception_frame(bt, exception_frame, USER_MODE);
 }
 
 static int
@@ -955,6 +993,76 @@ arm64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 	if (spp)
 		*spp = stackframe.sp;
 }
+
+static void
+arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode)
+{
+	int i, c, top_reg;
+	struct arm64_pt_regs *regs;
+	struct syment *sp;
+	ulong LR, SP, offset;
+
+	regs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(pt_regs))];
+
+	if ((mode == USER_MODE) && (regs->pstate & PSR_MODE32_BIT)) {
+		LR = regs->regs[14];
+		SP = regs->regs[13];
+		top_reg = 12;
+	} else {
+		LR = regs->regs[30];
+		SP = regs->sp;
+		top_reg = 29;
+	}
+
+	fprintf(fp, "    PC: %lx  ", (ulong)regs->pc);
+	if (is_kernel_text(regs->pc)) {
+		fprintf(fp, "[");
+		if ((sp = value_search(regs->pc, &offset))) {
+			fprintf(fp, "%s", sp->name);
+			if (offset)
+				fprintf(fp, (*gdb_output_radix == 16) ?
+					"+0x%lx" : "+%ld", offset);
+		} else
+			fprintf(fp, "unknown or invalid address");
+		fprintf(fp, "]");
+	}
+
+	if (mode == KERNEL_MODE)
+		fprintf(fp, "\n    ");
+
+	fprintf(fp, "LR: %lx  ", LR);
+	if (is_kernel_text(LR)) {
+		fprintf(fp, "[");
+		if ((sp = value_search(LR, &offset))) {
+			fprintf(fp, "%s", sp->name);
+			if (offset)
+				fprintf(fp, (*gdb_output_radix == 16) ?
+					"+0x%lx" : "+%ld", offset);
+		} else
+			fprintf(fp, "unknown or invalid address");
+		fprintf(fp, "]");
+	}
+	if (mode == KERNEL_MODE)
+		fprintf(fp, "\n    ");
+
+	fprintf(fp, "SP: %lx  PSTATE: %lx %s\n    ",
+		SP, (ulong)regs->pstate,
+		regs->pstate & PSR_MODE32_BIT ?
+		"[32-bit]" : "");
+
+        for (i = top_reg, c = 1; i >= 0; c++, i--) {
+                fprintf(fp, "%sX%d: %016lx ", 
+			i < 10 ? " " : "",
+			i, (ulong)regs->regs[i]);
+                if ((i == 0) || ((c % 3) == 0))
+                        fprintf(fp, "\n    ");
+        }
+
+	if (top_reg == 29)
+		fprintf(fp, "ORIG_X0: %lx  SYSCALLNO: %lx\n",
+		(ulong)regs->orig_x0, (ulong)regs->syscallno);
+}
+
 
 /*
  *  Translate a PTE, returning TRUE if the page is present.
