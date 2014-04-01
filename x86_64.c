@@ -6006,6 +6006,12 @@ x86_64_calc_phys_base(void)
 			}
 		}
 
+		if ((pc->flags2 & QEMU_MEM_DUMP) && !x86_64_virt_phys_base())
+			error(WARNING,
+			    "cannot determine physical base address:"
+			    " defaulting to %lx\n\n",
+			      	machdep->machspec->phys_base);
+
 		return;
 	}
 
