@@ -997,10 +997,13 @@ arm64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 static void
 arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode)
 {
-	int i, c, top_reg;
+	int i, r, rows, top_reg, is_64_bit;
 	struct arm64_pt_regs *regs;
 	struct syment *sp;
 	ulong LR, SP, offset;
+
+	if (CRASHDEBUG(1))
+		fprintf(fp, "pt_regs: %lx\n", pt_regs);
 
 	regs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(pt_regs))];
 
@@ -1008,59 +1011,76 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode)
 		LR = regs->regs[14];
 		SP = regs->regs[13];
 		top_reg = 12;
+		is_64_bit = FALSE;
+		rows = 4;
 	} else {
 		LR = regs->regs[30];
 		SP = regs->sp;
 		top_reg = 29;
+		is_64_bit = TRUE;
+		rows = 3;
 	}
 
-	fprintf(fp, "    PC: %lx  ", (ulong)regs->pc);
-	if (is_kernel_text(regs->pc)) {
-		fprintf(fp, "[");
-		if ((sp = value_search(regs->pc, &offset))) {
-			fprintf(fp, "%s", sp->name);
+	switch (mode) {
+	case USER_MODE: 
+		if (is_64_bit)
+			fprintf(fp, 
+			    "     PC: %016lx   LR: %016lx   SP: %016lx\n    ",
+				(ulong)regs->pc, LR, SP);
+		else
+			fprintf(fp, 
+			    "     PC: %08lx  LR: %08lx  SP: %08lx  PSTATE: %08lx\n    ",
+				(ulong)regs->pc, LR, SP, (ulong)regs->pstate);
+		break;
+
+	case KERNEL_MODE:
+		fprintf(fp, "     PC: %016lx  ", (ulong)regs->pc);
+		if (is_kernel_text(regs->pc) &&
+		    (sp = value_search(regs->pc, &offset))) {
+			fprintf(fp, "[%s", sp->name);
 			if (offset)
 				fprintf(fp, (*gdb_output_radix == 16) ?
-					"+0x%lx" : "+%ld", offset);
+				    "+0x%lx" : "+%ld", 
+					offset);
+			fprintf(fp, "]\n");
 		} else
-			fprintf(fp, "unknown or invalid address");
-		fprintf(fp, "]");
-	}
+			fprintf(fp, "[unknown or invalid address]\n");
 
-	if (mode == KERNEL_MODE)
-		fprintf(fp, "\n    ");
-
-	fprintf(fp, "LR: %lx  ", LR);
-	if (is_kernel_text(LR)) {
-		fprintf(fp, "[");
-		if ((sp = value_search(LR, &offset))) {
-			fprintf(fp, "%s", sp->name);
+		fprintf(fp, "     LR: %016lx  ", LR);
+		if (is_kernel_text(LR) &&
+		    (sp = value_search(LR, &offset))) {
+			fprintf(fp, "[%s", sp->name);
 			if (offset)
 				fprintf(fp, (*gdb_output_radix == 16) ?
-					"+0x%lx" : "+%ld", offset);
+				    "+0x%lx" : "+%ld", 
+					offset);
+			fprintf(fp, "]\n");
 		} else
-			fprintf(fp, "unknown or invalid address");
-		fprintf(fp, "]");
+			fprintf(fp, "[unknown or invalid address]\n");
+
+		fprintf(fp, "     SP: %016lx  PSTATE: %08lx\n    ", 
+			SP, (ulong)regs->pstate);
+		break;
 	}
-	if (mode == KERNEL_MODE)
-		fprintf(fp, "\n    ");
 
-	fprintf(fp, "SP: %lx  PSTATE: %lx %s\n    ",
-		SP, (ulong)regs->pstate,
-		regs->pstate & PSR_MODE32_BIT ?
-		"[32-bit]" : "");
+	for (i = top_reg, r = 1; i >= 0; r++, i--) {
+		fprintf(fp, "%sX%d: ", 
+			i < 10 ? " " : "", i);
+		fprintf(fp, is_64_bit ? "%016lx" : "%08lx",
+			(ulong)regs->regs[i]);
+		if ((i == 0) || ((r % rows) == 0))
+			fprintf(fp, "\n    ");
+		else
+			fprintf(fp, "%s", is_64_bit ? "  " : " "); 
+	}
 
-        for (i = top_reg, c = 1; i >= 0; c++, i--) {
-                fprintf(fp, "%sX%d: %016lx ", 
-			i < 10 ? " " : "",
-			i, (ulong)regs->regs[i]);
-                if ((i == 0) || ((c % 3) == 0))
-                        fprintf(fp, "\n    ");
-        }
-
-	if (top_reg == 29)
-		fprintf(fp, "ORIG_X0: %lx  SYSCALLNO: %lx\n",
-		(ulong)regs->orig_x0, (ulong)regs->syscallno);
+	if (is_64_bit) {
+		fprintf(fp, "ORIG_X0: %016lx  SYSCALLNO: %lx",
+			(ulong)regs->orig_x0, (ulong)regs->syscallno);
+		if (mode == USER_MODE)
+			fprintf(fp, "  PSTATE: %08lx", (ulong)regs->pstate);
+		fprintf(fp, "\n");
+	}
 }
 
 
