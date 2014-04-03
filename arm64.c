@@ -897,6 +897,12 @@ arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackfr
 
 	fprintf(fp, "\n");
 
+	if (bt->flags & BT_LINE_NUMBERS) {
+		get_line_number(frame->pc, buf, FALSE);
+		if (strlen(buf))
+			fprintf(fp, "    %s\n", buf);
+	}
+
 	if (STREQ(name, "start_kernel") || STREQ(name, "secondary_start_kernel") ||
 	    STREQ(name, "kthread") || STREQ(name, "kthreadd"))
 		return BACKTRACE_COMPLETE_KERNEL;
@@ -1047,6 +1053,7 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode)
 	struct arm64_pt_regs *regs;
 	struct syment *sp;
 	ulong LR, SP, offset;
+	char buf[BUFSIZE];
 
 	if (CRASHDEBUG(1))
 		fprintf(fp, "pt_regs: %lx\n", pt_regs);
@@ -1126,6 +1133,12 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode)
 		if (mode == USER_MODE)
 			fprintf(fp, "  PSTATE: %08lx", (ulong)regs->pstate);
 		fprintf(fp, "\n");
+	}
+
+	if (is_kernel_text(regs->pc) && (bt->flags & BT_LINE_NUMBERS)) {
+		get_line_number(regs->pc, buf, FALSE);
+		if (strlen(buf))
+			fprintf(fp, "    %s\n", buf);
 	}
 }
 
