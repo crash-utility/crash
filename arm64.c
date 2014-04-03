@@ -803,9 +803,58 @@ arm64_stackframe_init(void)
 		task_struct_thread + thread_struct_cpu_context + context_pc;
 }
 
+#define KERNEL_MODE (1)
+#define USER_MODE   (2)
+
+#define USER_EFRAME_OFFSET (304)
+
+/*
+ * PSR bits
+ */
+#define PSR_MODE_EL0t   0x00000000
+#define PSR_MODE_EL1t   0x00000004
+#define PSR_MODE_EL1h   0x00000005
+#define PSR_MODE_EL2t   0x00000008
+#define PSR_MODE_EL2h   0x00000009
+#define PSR_MODE_EL3t   0x0000000c
+#define PSR_MODE_EL3h   0x0000000d
+#define PSR_MODE_MASK   0x0000000f
+
 static int arm64_eframe_search(struct bt_info *bt)
 {
-	return (NOT_IMPLEMENTED(FATAL));
+	ulong ptr, count;
+        struct arm64_pt_regs *regs;
+
+	count = 0;
+	for (ptr = bt->stackbase; ptr < bt->stacktop - SIZE(pt_regs); ptr++) {
+        	regs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(ptr))];
+
+		if (INSTACK(regs->sp, bt) && INSTACK(regs->regs[29], bt) && 
+		    !(regs->pstate & (0xffffffff00000000ULL | PSR_MODE32_BIT)) &&
+		    is_kernel_text(regs->pc) &&
+		    is_kernel_text(regs->regs[30])) {
+			switch (regs->pstate & PSR_MODE_MASK)
+			{
+			case PSR_MODE_EL1t:
+			case PSR_MODE_EL1h:
+				fprintf(fp, 
+				    "\nKERNEL-MODE EXCEPTION FRAME AT: %lx\n", ptr); 
+				arm64_print_exception_frame(bt, ptr, KERNEL_MODE);
+				count++;
+				break;
+			}
+		}
+	}
+
+	if (is_kernel_thread(bt->tc->task))
+		return count;
+
+	ptr = bt->stacktop - USER_EFRAME_OFFSET;
+	fprintf(fp, "%sUSER-MODE EXCEPTION FRAME AT: %lx\n", 
+		count++ ? "\n" : "", ptr); 
+	arm64_print_exception_frame(bt, ptr, USER_MODE);
+
+	return count;
 }
 
 static int
@@ -876,9 +925,6 @@ static int arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame
 	return TRUE;
 }
 
-#define KERNEL_MODE (1)
-#define USER_MODE   (2)
-
 static void arm64_back_trace_cmd(struct bt_info *bt)
 {
 	struct arm64_stackframe stackframe;
@@ -932,7 +978,7 @@ static void arm64_back_trace_cmd(struct bt_info *bt)
 		return;
 
 complete_user:
-	exception_frame = bt->stacktop - 304;
+	exception_frame = bt->stacktop - USER_EFRAME_OFFSET;
 	arm64_print_exception_frame(bt, exception_frame, USER_MODE);
 }
 
