@@ -3816,6 +3816,7 @@ x86_64_exception_frame(ulong flags, ulong kvaddr, char *local,
 	char *pt_regs_buf;
 	long verified;
 	long err;
+	char buf[BUFSIZE];
 
         ms = machdep->machspec;
 
@@ -3998,6 +3999,12 @@ x86_64_exception_frame(ulong flags, ulong kvaddr, char *local,
 			r13, r14, r15);
 		fprintf(ofp, "    ORIG_RAX: %016lx  CS: %04lx  SS: %04lx\n", 
 			orig_rax, cs, ss);
+
+		if (!(cs & 3) && sp && (bt->flags & BT_LINE_NUMBERS)) {
+			get_line_number(rip, buf, FALSE);
+			if (strlen(buf))
+				fprintf(ofp, "    %s\n", buf);
+		}
 
 		if (!verified && CRASHDEBUG((pc->flags & RUNTIME) ? 0 : 1))
 			error(WARNING, "possibly bogus exception frame\n");
