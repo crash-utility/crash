@@ -3818,7 +3818,8 @@ x86_64_exception_frame(ulong flags, ulong kvaddr, char *local,
 	long err;
 	char buf[BUFSIZE];
 
-        ms = machdep->machspec;
+	ms = machdep->machspec;
+	sp = NULL;
 
 	if (!(machdep->flags & PT_REGS_INIT) || (flags == EFRAME_INIT)) {
 		err = 0;
