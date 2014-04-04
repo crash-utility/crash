@@ -39,6 +39,7 @@ static int arm64_eframe_search(struct bt_info *);
 static int arm64_in_exception_text(ulong);
 static void arm64_back_trace_cmd(struct bt_info *);
 static int arm64_print_stackframe_entry(struct bt_info *, int, struct arm64_stackframe *);
+static void arm64_display_full_frame(struct bt_info *, ulong);
 static int arm64_unwind_frame(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_dumpfile_stackframe(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_stackframe(struct bt_info *, struct arm64_stackframe *);
@@ -904,6 +905,11 @@ arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackfr
                                 value_to_symstr(frame->pc, buf, bt->radix);
         }
 
+	if (bt->flags & BT_FULL) {
+		arm64_display_full_frame(bt, frame->sp);
+		bt->frameptr = frame->sp;
+	}
+
         fprintf(fp, "%s#%d [%8lx] %s at %lx", level < 10 ? " " : "", level,
                 frame->sp, name_plus_offset ? name_plus_offset : name, frame->pc);
 
@@ -923,6 +929,36 @@ arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackfr
 		return BACKTRACE_COMPLETE_KERNEL;
 
 	return BACKTRACE_CONTINUE;
+}
+
+static void
+arm64_display_full_frame(struct bt_info *bt, ulong sp)
+{
+	int i, u_idx;
+	ulong *up;
+	ulong words, addr;
+	char buf[BUFSIZE];
+
+	if (bt->frameptr == sp)
+		return;
+
+	if (!INSTACK(sp, bt) || !INSTACK(bt->frameptr, bt))
+		return;
+
+	words = (sp - bt->frameptr) / sizeof(ulong);
+
+	addr = bt->frameptr;
+	u_idx = (bt->frameptr - bt->stackbase)/sizeof(ulong);
+	for (i = 0; i < words; i++, u_idx++) {
+		if (!(i & 1)) 
+			fprintf(fp, "%s    %lx: ", i ? "\n" : "", addr);
+
+		up = (ulong *)(&bt->stackbuf[u_idx*sizeof(ulong)]);
+		fprintf(fp, "%s ", format_stack_entry(bt, buf, *up, 0));
+
+		addr += sizeof(ulong);
+	}
+	fprintf(fp, "\n");
 }
 
 static int arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
