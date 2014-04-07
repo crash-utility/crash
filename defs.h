@@ -2688,7 +2688,7 @@ typedef signed int s32;
 /*
  * 2-levels / 64K pages
  */
-#define PTRS_PER_PGD_L2_64K  (1024)
+#define PTRS_PER_PGD_L2_64K  (8192)
 #define PTRS_PER_PTE_L2_64K  (8192)
 #define PGDIR_SHIFT_L2_64K   (29)
 #define PGDIR_SIZE_L2_64K    ((1UL) << PGDIR_SHIFT_L2_64K)
