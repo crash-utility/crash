@@ -2665,9 +2665,9 @@ struct load_module {
 #define PAGEBASE(X)     (((ulong)(X)) & (ulong)machdep->pagemask)
 
 /*
- * 40-bit physical address supported.  (512GB)
+ * 48-bit physical address supported. 
  */
-#define PHYS_MASK_SHIFT   (40)
+#define PHYS_MASK_SHIFT   (48)
 #define PHYS_MASK         (((1UL) << PHYS_MASK_SHIFT) - 1)
 
 typedef signed int s32;
