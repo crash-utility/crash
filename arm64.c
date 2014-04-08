@@ -569,6 +569,7 @@ arm64_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbos
 	}
 
 	kernel_pgd = vt->kernel_pgd[0];
+	*paddr = 0;
 
 	switch (machdep->flags & (VM_L2_64K|VM_L3_4K))
 	{
@@ -588,6 +589,8 @@ arm64_uvtop(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, int verbos
 
         readmem(tc->mm_struct + OFFSET(mm_struct_pgd), KVADDR,
                 &user_pgd, sizeof(long), "user pgd", FAULT_ON_ERROR);
+
+	*paddr = 0;
 
 	switch (machdep->flags & (VM_L2_64K|VM_L3_4K))
 	{
@@ -639,6 +642,8 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 			arm64_translate_pte(pte_val, 0, 0);
 		}
 	} else {
+		if (IS_UVADDR(vaddr, NULL))
+			*paddr = pte_val;
 		if (verbose) {
 			fprintf(fp, "\n");
 			arm64_translate_pte(pte_val, 0, 0);
@@ -714,6 +719,8 @@ arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 			arm64_translate_pte(pte_val, 0, 0);
 		}
 	} else {
+		if (IS_UVADDR(vaddr, NULL))
+			*paddr = pte_val;
 		if (verbose) {
 			fprintf(fp, "\n");
 			arm64_translate_pte(pte_val, 0, 0);
