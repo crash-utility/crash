@@ -75,10 +75,10 @@ arm64_init(int when)
 	case PRE_SYMTAB:
 		machdep->machspec = &arm64_machine_specific;
 		machdep->process_elf_notes = process_elf64_notes;
+		machdep->verify_symbol = arm64_verify_symbol;
 		if (pc->flags & KERNEL_DEBUG_QUERY)
 			return;
 		machdep->verify_paddr = generic_verify_paddr;
-		machdep->verify_symbol = arm64_verify_symbol;
 		if (machdep->cmdline_args[0])
 			arm64_parse_cmdline_args();
 		break;
