@@ -3483,7 +3483,10 @@ read_proc_kcore(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 	 *  and for lowmem access for 32-bit architectures.
 	 */
 	offset = UNINITIALIZED;
-	kvaddr = (ulong)paddr | machdep->kvbase;
+	if (machine_type("ARM64"))
+		kvaddr =  PTOV((ulong)paddr);
+	else
+		kvaddr = (ulong)paddr | machdep->kvbase;
 	readcnt = cnt;
 
 	switch (pkd->flags & (KCORE_ELF32|KCORE_ELF64)) 
