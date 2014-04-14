@@ -603,6 +603,12 @@ arm64_uvtop(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, int verbos
 	}
 }
 
+#define PMD_TYPE_MASK   3
+#define PMD_TYPE_SECT   1
+#define PMD_TYPE_TABLE  2
+#define SECTION_PAGE_MASK_2MB    (~((MEGABYTES(2))-1))
+#define SECTION_PAGE_MASK_512MB  (~((MEGABYTES(512))-1))
+
 static int 
 arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 {
@@ -625,6 +631,16 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	 * #define __PAGETABLE_PUD_FOLDED 
 	 * #define __PAGETABLE_PMD_FOLDED 
 	 */
+
+	if ((pgd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
+		ulong sectionbase = pgd_val & SECTION_PAGE_MASK_512MB;
+		if (verbose) {
+			fprintf(fp, "  PAGE: %lx  (512MB)\n\n", sectionbase);
+			arm64_translate_pte(pgd_val, 0, 0);
+		}
+		*paddr = sectionbase + (vaddr & ~SECTION_PAGE_MASK_512MB);
+		return TRUE;
+	}
 
 	pte_base = (ulong *)PTOV(pgd_val & PHYS_MASK & (s32)machdep->pagemask);
 	FILL_PTBL(pte_base, KVADDR, PTRS_PER_PTE_L2_64K * sizeof(ulong));
@@ -655,11 +671,6 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 no_page:
 	return FALSE;
 }
-
-#define PMD_TYPE_MASK   3
-#define PMD_TYPE_SECT   1
-#define PMD_TYPE_TABLE  2
-#define SECTION_PAGE_MASK (~((MEGABYTES(2))-1))
 
 static int 
 arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
@@ -694,12 +705,12 @@ arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		goto no_page;
 
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = pmd_val & SECTION_PAGE_MASK;
+		ulong sectionbase = pmd_val & SECTION_PAGE_MASK_2MB;
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (2MB)\n\n", sectionbase);
 			arm64_translate_pte(pmd_val, 0, 0);
 		}
-		*paddr = sectionbase + (vaddr & ~SECTION_PAGE_MASK);
+		*paddr = sectionbase + (vaddr & ~SECTION_PAGE_MASK_2MB);
 		return TRUE;
 	}
 
