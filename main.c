@@ -1601,6 +1601,7 @@ dump_program_context(void)
 	fprintf(fp, "            scope: %lx %s\n", pc->scope,
 		pc->scope ? "" : "(not set)");
 	fprintf(fp, "   nr_hash_queues: %ld\n", pc->nr_hash_queues);
+	fprintf(fp, "  read_vmcoreinfo: %lx\n", (ulong)pc->read_vmcoreinfo);
 }
 
 char *

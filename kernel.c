@@ -8881,7 +8881,7 @@ hypervisor_init(void)
  *  data alone without the vmlinux file.
  */
 void
-get_log_from_vmcoreinfo(char *file, char *(*vmcoreinfo_read_string)(const char *))
+get_log_from_vmcoreinfo(char *file)
 {
 	char *string;
 	char buf[BUFSIZE];
@@ -8894,7 +8894,7 @@ get_log_from_vmcoreinfo(char *file, char *(*vmcoreinfo_read_string)(const char *
 	vmc->log_SIZE = vmc->log_ts_nsec_OFFSET = vmc->log_len_OFFSET =
 	vmc->log_text_len_OFFSET = vmc->log_dict_len_OFFSET = -1;
 
-	if ((string = vmcoreinfo_read_string("OSRELEASE"))) {
+	if ((string = pc->read_vmcoreinfo("OSRELEASE"))) {
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OSRELEASE: %s\n", string);
 		strcpy(buf, string);
@@ -8923,7 +8923,7 @@ get_log_from_vmcoreinfo(char *file, char *(*vmcoreinfo_read_string)(const char *
 	} else
 		error(FATAL, "VMCOREINFO: cannot determine kernel version\n");
 
-	if ((string = vmcoreinfo_read_string("PAGESIZE"))) {
+	if ((string = pc->read_vmcoreinfo("PAGESIZE"))) {
 		machdep->pagesize = atoi(string);
 		machdep->pageoffset = machdep->pagesize - 1;
 		if (CRASHDEBUG(1))
@@ -8932,120 +8932,120 @@ get_log_from_vmcoreinfo(char *file, char *(*vmcoreinfo_read_string)(const char *
 	} else
 		error(FATAL, "VMCOREINFO: cannot determine page size\n");
 
-	if ((string = vmcoreinfo_read_string("SYMBOL(log_buf)"))) {
+	if ((string = pc->read_vmcoreinfo("SYMBOL(log_buf)"))) {
 		vmc->log_buf_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SYMBOL(log_buf): %lx\n", 
 				vmc->log_buf_SYMBOL);
 		free(string);
 	}
-	if ((string = vmcoreinfo_read_string("SYMBOL(log_end)"))) {
+	if ((string = pc->read_vmcoreinfo("SYMBOL(log_end)"))) {
 		vmc->log_end_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SYMBOL(log_end): %lx\n", 
 				vmc->log_end_SYMBOL);
 		free(string);
 	} 
-	if ((string = vmcoreinfo_read_string("SYMBOL(log_buf_len)"))) {
+	if ((string = pc->read_vmcoreinfo("SYMBOL(log_buf_len)"))) {
 		vmc->log_buf_len_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SYMBOL(log_buf_len): %lx\n", 
 				vmc->log_buf_len_SYMBOL);
 		free(string);
 	} 
-	if ((string = vmcoreinfo_read_string("SYMBOL(logged_chars)"))) {
+	if ((string = pc->read_vmcoreinfo("SYMBOL(logged_chars)"))) {
 		vmc->logged_chars_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SYMBOL(logged_chars): %lx\n", 
 				vmc->logged_chars_SYMBOL);
 		free(string);
 	} 
-	if ((string = vmcoreinfo_read_string("SYMBOL(log_first_idx)"))) {
+	if ((string = pc->read_vmcoreinfo("SYMBOL(log_first_idx)"))) {
 		vmc->log_first_idx_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SYMBOL(log_first_idx): %lx\n", 
 				vmc->log_first_idx_SYMBOL);
 		free(string);
 	} 
-	if ((string = vmcoreinfo_read_string("SYMBOL(log_next_idx)"))) {
+	if ((string = pc->read_vmcoreinfo("SYMBOL(log_next_idx)"))) {
 		vmc->log_next_idx_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SYMBOL(log_next_idx): %lx\n", 
 				vmc->log_next_idx_SYMBOL);
 		free(string);
 	} 
-	if ((string = vmcoreinfo_read_string("SYMBOL(phys_base)"))) {
+	if ((string = pc->read_vmcoreinfo("SYMBOL(phys_base)"))) {
 		vmc->phys_base_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SYMBOL(phys_base): %lx\n", 
 				vmc->phys_base_SYMBOL);
 		free(string);
 	} 
-	if ((string = vmcoreinfo_read_string("SYMBOL(_stext)"))) {
+	if ((string = pc->read_vmcoreinfo("SYMBOL(_stext)"))) {
 		vmc->_stext_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SYMBOL(_stext): %lx\n", 
 				vmc->_stext_SYMBOL);
 		free(string);
 	} 
-	if ((string = vmcoreinfo_read_string("OFFSET(log.ts_nsec)"))) {
+	if ((string = pc->read_vmcoreinfo("OFFSET(log.ts_nsec)"))) {
 		vmc->log_ts_nsec_OFFSET = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OFFSET(log.ts_nsec): %ld\n", 
 				vmc->log_ts_nsec_OFFSET);
 		free(string);
-	} else if ((string = vmcoreinfo_read_string("OFFSET(printk_log.ts_nsec)"))) {
+	} else if ((string = pc->read_vmcoreinfo("OFFSET(printk_log.ts_nsec)"))) {
 		vmc->log_ts_nsec_OFFSET = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OFFSET(printk_log.ts_nsec): %ld\n", 
 				vmc->log_ts_nsec_OFFSET);
 		free(string);
 	}
-	if ((string = vmcoreinfo_read_string("OFFSET(log.len)"))) {
+	if ((string = pc->read_vmcoreinfo("OFFSET(log.len)"))) {
 		vmc->log_len_OFFSET = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OFFSET(log.len): %ld\n", 
 				vmc->log_len_OFFSET);
 		free(string);
-	} else if ((string = vmcoreinfo_read_string("OFFSET(printk_log.len)"))) {
+	} else if ((string = pc->read_vmcoreinfo("OFFSET(printk_log.len)"))) {
 		vmc->log_len_OFFSET = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OFFSET(printk_log.len): %ld\n", 
 				vmc->log_len_OFFSET);
 		free(string);
 	}
-	if ((string = vmcoreinfo_read_string("OFFSET(log.text_len)"))) {
+	if ((string = pc->read_vmcoreinfo("OFFSET(log.text_len)"))) {
 		vmc->log_text_len_OFFSET = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OFFSET(log.text_len): %ld\n", 
 				vmc->log_text_len_OFFSET);
 		free(string);
-	} else if ((string = vmcoreinfo_read_string("OFFSET(printk_log.text_len)"))) {
+	} else if ((string = pc->read_vmcoreinfo("OFFSET(printk_log.text_len)"))) {
 		vmc->log_text_len_OFFSET = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OFFSET(printk_log.text_len): %ld\n", 
 				vmc->log_text_len_OFFSET);
 		free(string);
 	}
-	if ((string = vmcoreinfo_read_string("OFFSET(log.dict_len)"))) {
+	if ((string = pc->read_vmcoreinfo("OFFSET(log.dict_len)"))) {
 		vmc->log_dict_len_OFFSET = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OFFSET(log.dict_len): %ld\n", 
 				vmc->log_dict_len_OFFSET);
 		free(string);
-	} else if ((string = vmcoreinfo_read_string("OFFSET(printk_log.dict_len)"))) {
+	} else if ((string = pc->read_vmcoreinfo("OFFSET(printk_log.dict_len)"))) {
 		vmc->log_dict_len_OFFSET = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OFFSET(printk_log.dict_len): %ld\n", 
 				vmc->log_dict_len_OFFSET);
 		free(string);
 	}
-	if ((string = vmcoreinfo_read_string("SIZE(log)"))) {
+	if ((string = pc->read_vmcoreinfo("SIZE(log)"))) {
 		vmc->log_SIZE = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SIZE(log): %ld\n", vmc->log_SIZE);
 		free(string);
-	} else if ((string = vmcoreinfo_read_string("SIZE(printk_log)"))) {
+	} else if ((string = pc->read_vmcoreinfo("SIZE(printk_log)"))) {
 		vmc->log_SIZE = dtol(string, RETURN_ON_ERROR, NULL);
 		if (CRASHDEBUG(1))
 			fprintf(fp, "SIZE(printk_log): %ld\n", vmc->log_SIZE);

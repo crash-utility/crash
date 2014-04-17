@@ -514,6 +514,7 @@ struct program_context {
 	void *cmd_cleanup_arg;          /* optional cleanup function argument */
 	ulong scope;			/* optional text context address */
 	ulong nr_hash_queues;		/* hash queue head count */
+	char *(*read_vmcoreinfo)(const char *);
 };
 
 #define READMEM  pc->readmem
@@ -4797,7 +4798,7 @@ int get_cpus_possible(void);
 int get_highest_cpu_online(void);
 int get_highest_cpu_present(void);
 int get_cpus_to_display(void);
-void get_log_from_vmcoreinfo(char *file, char *(*)(const char *));
+void get_log_from_vmcoreinfo(char *file);
 int in_cpu_map(int, int);
 void paravirt_init(void);
 void print_stack_text_syms(struct bt_info *, ulong, ulong);

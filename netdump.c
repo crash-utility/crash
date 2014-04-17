@@ -399,6 +399,8 @@ is_netdump(char *file, ulong source_query)
 	if (CRASHDEBUG(1))
 		netdump_memory_dump(fp);
 
+	pc->read_vmcoreinfo = vmcoreinfo_read_string;
+
 	if ((source_query == KDUMP_LOCAL) && 
 	    (pc->flags2 & GET_OSRELEASE))
 		kdump_get_osrelease();
@@ -409,7 +411,7 @@ is_netdump(char *file, ulong source_query)
 		pc->readmem = read_kdump;
 		nd->flags |= KDUMP_LOCAL;
 		pc->flags |= KDUMP;
-		get_log_from_vmcoreinfo(file, vmcoreinfo_read_string);
+		get_log_from_vmcoreinfo(file);
 	}
 
 	/*

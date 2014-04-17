@@ -839,11 +839,13 @@ is_diskdump(char *file)
 	dd->flags |= SNAPPY_SUPPORTED;
 #endif
 
+	pc->read_vmcoreinfo = vmcoreinfo_read_string;
+
 	if ((pc->flags2 & GET_LOG) && KDUMP_CMPRS_VALID()) {
 		pc->dfd = dd->dfd;
 		pc->readmem = read_diskdump;
 		pc->flags |= DISKDUMP;
-		get_log_from_vmcoreinfo(file, vmcoreinfo_read_string);
+		get_log_from_vmcoreinfo(file);
 	}
 
 	/*
