@@ -27,6 +27,7 @@ static void store_symbols(bfd *, int, void *, long, unsigned int);
 static void store_sysmap_symbols(void);
 static ulong relocate(ulong, char *, int);
 static int relocate_force(ulong, char *);
+static void kaslr_init(void);
 static ulong symbol_value_from_proc_kallsyms(char *);
 static void strip_module_symbol_end(char *s);
 static int compare_syms(const void *, const void *);
@@ -228,6 +229,8 @@ symtab_init(void)
 	sort_y = bfd_make_empty_symbol(st->bfd);
 	if (sort_x == NULL || sort_y == NULL)
 		error(FATAL, "bfd_make_empty_symbol() failed\n");
+
+	kaslr_init();
 
 	gnu_qsort(st->bfd, minisyms, symcount, size, sort_x, sort_y);
 
@@ -558,18 +561,69 @@ strip_symbol_end(const char *name, char *buf)
 }
 
 /*
+ *  Gather the relevant information from the dumpfile or live system
+ *  and determine whether to derive the KASLR offset.
+ *
+ *  Setting st->_stext_vmlinux to UNINITIALIZED will trigger the
+ *  search for "_stext" from the vmlinux file during the initial
+ *  symbol sort operation.
+ *
+ *  Setting RELOC_AUTO will ensure that derive_kaslr_offset() is
+ *  called after the sorting operation has captured the vmlinux
+ *  file's "_stext" symbol value -- which it will compare to the 
+ *  relocated "_stext" value found in either a dumpfile's vmcoreinfo
+ *  or in /proc/kallsyms on a live system.
+ *
+ *  Setting KASLR_CHECK will trigger a search for "randomize_modules"
+ *  during the initial symbol sort operation, and if found, will
+ *  set (RELOC_AUTO|KASLR).  On live systems, the search is done
+ *  here by checking /proc/kallsyms.
+ */
+static void
+kaslr_init(void)
+{
+	char *string;
+
+	if (!machine_type("X86_64") || (kt->flags & RELOC_SET))
+		return;
+
+	/*
+	 *  --kaslr=auto
+	 */
+	if ((kt->flags2 & (RELOC_AUTO|KASLR)) == (RELOC_AUTO|KASLR))
+		st->_stext_vmlinux = UNINITIALIZED;
+
+	if (ACTIVE() &&   /* Linux 3.15 */
+	    (symbol_value_from_proc_kallsyms("randomize_modules") != BADVAL)) {
+		kt->flags2 |= (RELOC_AUTO|KASLR);
+		st->_stext_vmlinux = UNINITIALIZED;
+	}
+
+	if (KDUMP_DUMPFILE() || DISKDUMP_DUMPFILE()) {
+		if ((string = pc->read_vmcoreinfo("SYMBOL(_stext)"))) {
+			kt->vmcoreinfo._stext_SYMBOL =
+				htol(string, RETURN_ON_ERROR, NULL);
+			free(string);
+		}
+
+		/* Linux 3.14 */
+		if ((string = pc->read_vmcoreinfo("KERNELOFFSET"))) {
+			free(string);
+			kt->flags2 |= KASLR_CHECK;
+			st->_stext_vmlinux = UNINITIALIZED;
+		}
+	}
+}
+
+/*
  * Derives the kernel aslr offset by comparing the _stext symbol from the
- * the vmcore_info in the dump file to the _stext symbol in the vmlinux file.
+ * the vmcoreinfo in the dump file to the _stext symbol in the vmlinux file.
  */
 static void
 derive_kaslr_offset(bfd *abfd, int dynamic, bfd_byte *start, bfd_byte *end,
 		    unsigned int size, asymbol *store)
 {
-	symbol_info syminfo;
-	asymbol *sym;
-	char *name;
 	unsigned long relocate;
-	char buf[BUFSIZE];
 	ulong _stext_relocated;
 
 	if (ACTIVE()) {
@@ -582,27 +636,28 @@ derive_kaslr_offset(bfd *abfd, int dynamic, bfd_byte *start, bfd_byte *end,
 			return;
 	}
 
-	for (; start < end; start += size) {
-		sym = bfd_minisymbol_to_symbol(abfd, dynamic, start, store);
-		if (sym == NULL)
-			error(FATAL, "bfd_minisymbol_to_symbol() failed\n");
-
-		bfd_get_symbol_info(abfd, sym, &syminfo);
-		name = strip_symbol_end(syminfo.name, buf);
-		if (strcmp("_stext", name) == 0) {
-			relocate = syminfo.value - _stext_relocated;
-			/*
-			 * To avoid mistaking an mismatched kernel version with
-			 * a kaslr offset, we make sure that the offset is
-			 * aligned by 0x1000, as it always will be for
-			 * kaslr.
-			 */
-			if ((relocate & 0xFFF) == 0) {
-				kt->relocate = relocate;
-				kt->flags |= RELOC_SET;
-				return;
-			}
+	/*
+	 * To avoid mistaking an mismatched kernel version with
+	 * a kaslr offset, we make sure that the offset is
+	 * aligned by 0x1000, as it always will be for kaslr.
+	 */
+	if (st->_stext_vmlinux && (st->_stext_vmlinux != UNINITIALIZED)) {
+		relocate = st->_stext_vmlinux - _stext_relocated;
+		if (relocate && !(relocate & 0xfff)) {
+			kt->relocate = relocate;
+			kt->flags |= RELOC_SET;
 		}
+	}
+
+	if (CRASHDEBUG(1) && (kt->flags & RELOC_SET)) {
+		fprintf(fp, "KASLR:\n");
+		fprintf(fp, "  _stext from %s: %lx\n", 
+			basename(pc->namelist), st->_stext_vmlinux);
+		fprintf(fp, "  _stext from %s: %lx\n",
+			ACTIVE() ? "/proc/kallsyms" : "vmcoreinfo",
+			_stext_relocated);
+		fprintf(fp, "  relocate: %lx (%ldMB)\n",
+			kt->relocate * -1, (kt->relocate * -1) >> 20);
 	}
 }
 
@@ -902,16 +957,16 @@ symbol_value_from_proc_kallsyms(char *symname)
 	int found;
 
 	if (!file_exists("/proc/kallsyms", NULL)) {
-		error(INFO, 
-		    "cannot determine relocation value: "
-		    "/proc/kallsyms does not exist\n\n");
+		if (CRASHDEBUG(1))
+		    	error(INFO, "cannot determine value of %s: "
+		    		"/proc/kallsyms does not exist\n\n", symname);
 		return BADVAL;
 	}
 
 	if ((kp = fopen("/proc/kallsyms", "r")) == NULL) {
-		error(INFO, 
-		    "cannot determine relocation value: "
-		    "cannot open /proc/kallsyms\n\n");
+		if (CRASHDEBUG(1))
+			error(INFO, "cannot determine value of %s: "
+		    		"cannot open /proc/kallsyms\n\n", symname);
 		return BADVAL;
 	}
 
@@ -2835,6 +2890,14 @@ dump_symbol_table(void)
 
 	fprintf(fp, " first_section_start: %lx\n", st->first_section_start);
 	fprintf(fp, "    last_section_end: %lx\n", st->last_section_end);
+
+	fprintf(fp, "      _stext_vmlinux: %lx ", st->_stext_vmlinux);
+	if (st->_stext_vmlinux == UNINITIALIZED)
+		fprintf(fp, "(UNINITIALIZED)\n");
+	else if (st->_stext_vmlinux == 0)
+		fprintf(fp, "(unused)\n");
+	else
+		fprintf(fp, "\n");
 
         fprintf(fp, "    symval_hash[%d]: %lx\n", SYMVAL_HASH,
                 (ulong)&st->symval_hash[0]);
@@ -11376,6 +11439,20 @@ numeric_forward(const void *P_x, const void *P_y)
   	y = bfd_minisymbol_to_symbol(gnu_sort_bfd, FALSE, P_y, gnu_sort_y);
   	if (x == NULL || y == NULL)
 		error(FATAL, "bfd_minisymbol_to_symbol failed\n");
+
+	if (st->_stext_vmlinux == UNINITIALIZED) {
+		if (STREQ(x->name, "_stext"))
+			st->_stext_vmlinux = valueof(x);
+		else if (STREQ(y->name, "_stext"))
+			st->_stext_vmlinux = valueof(y);
+	}
+	if (kt->flags2 & KASLR_CHECK) {
+		if (STREQ(x->name, "randomize_modules") || 
+		    STREQ(y->name, "randomize_modules")) {
+			kt->flags2 &= ~KASLR_CHECK;
+			kt->flags2 |= (RELOC_AUTO|KASLR);
+		}
+	}
 
   	xs = bfd_get_section(x);
   	ys = bfd_get_section(y);

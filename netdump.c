@@ -118,7 +118,6 @@ is_netdump(char *file, ulong source_query)
         Elf64_Off offset64;
 	ulong tmp_flags;
 	char *tmp_elf_header;
-	char *tmpstring;
 
 	if ((fd = open(file, O_RDWR)) < 0) {
         	if ((fd = open(file, O_RDONLY)) < 0) {
@@ -412,18 +411,6 @@ is_netdump(char *file, ulong source_query)
 		nd->flags |= KDUMP_LOCAL;
 		pc->flags |= KDUMP;
 		get_log_from_vmcoreinfo(file);
-	}
-
-	/*
-	 * We may need the _stext_SYMBOL from the vmcore_info to adjust for
-	 * kaslr and we may not have gotten it elsewhere.
-	 */
-	if (source_query == KDUMP_LOCAL) {
-		if ((tmpstring = vmcoreinfo_read_string("SYMBOL(_stext)"))) {
-			kt->vmcoreinfo._stext_SYMBOL =
-				htol(tmpstring, RETURN_ON_ERROR, NULL);
-			free(tmpstring);
-		}
 	}
 
 	return nd->header_size;

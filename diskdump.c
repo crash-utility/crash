@@ -806,7 +806,6 @@ int
 is_diskdump(char *file)
 {
 	int sz, i;
-	char *tmpstring;
 
 	if (!open_dump_file(file) || !read_dump_header(file))
 		return FALSE;
@@ -846,16 +845,6 @@ is_diskdump(char *file)
 		pc->readmem = read_diskdump;
 		pc->flags |= DISKDUMP;
 		get_log_from_vmcoreinfo(file);
-	}
-
-	/*
-	 * We may need the _stext_SYMBOL from the vmcore_info to adjust for
-	 * kaslr and we may not have gotten it elsewhere.
-	 */
-	if ((tmpstring = vmcoreinfo_read_string("SYMBOL(_stext)"))) {
-		kt->vmcoreinfo._stext_SYMBOL = htol(tmpstring, 
-			RETURN_ON_ERROR, NULL);
-		free(tmpstring);
 	}
 
 	return TRUE;

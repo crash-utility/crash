@@ -5147,6 +5147,8 @@ dump_kernel_table(int verbose)
 		fprintf(fp, "%sRELOC_AUTO", others++ ? "|" : "");
 	if (kt->flags2 & KASLR)
 		fprintf(fp, "%sKASLR", others++ ? "|" : "");
+	if (kt->flags2 & KASLR_CHECK)
+		fprintf(fp, "%sKASLR_CHECK", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
         fprintf(fp, "         stext: %lx\n", kt->stext);

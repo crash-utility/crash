@@ -608,6 +608,7 @@ struct new_utsname {
 /* flags2 */
 #define RELOC_AUTO                  (0x1ULL)
 #define KASLR                       (0x2ULL)
+#define KASLR_CHECK                 (0x4ULL)
 
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
@@ -2430,6 +2431,7 @@ struct symbol_table_data {
 	ulong dwarf_debug_frame_size;
 	ulong first_section_start;
 	ulong last_section_end;
+	ulong _stext_vmlinux;
 };
 
 /* flags for st */
