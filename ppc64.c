@@ -1,7 +1,7 @@
 /* ppc64.c -- core analysis suite
  *
- * Copyright (C) 2004-2013 David Anderson
- * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2014 David Anderson
+ * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2004, 2006 Haren Myneni, IBM Corporation
  *
  * This program is free software; you can redistribute it and/or modify
@@ -2861,16 +2861,18 @@ ppc64_get_cpu_map(void)
 	int map;
 
 	if (cpu_map_addr("possible"))
-		map = POSSIBLE;
+		map = POSSIBLE_MAP;
 	else if (cpu_map_addr("present"))
-		map = PRESENT;
+		map = PRESENT_MAP;
 	else if (cpu_map_addr("online"))
-		map = ONLINE;
+		map = ONLINE_MAP;
+	else if (cpu_map_addr("active"))
+		map = ACTIVE_MAP;
 	else {
 		map = 0;
 		error(FATAL,
-			"PPC64: cannot find 'cpu_possible_map' or\
-			'cpu_present_map' or 'cpu_online_map' symbols\n");
+			"PPC64: cannot find 'cpu_possible_map', "
+			"'cpu_present_map', 'cpu_online_map' or 'cpu_active_map' symbols\n");
 	}
 	return map;
 }
@@ -2911,15 +2913,15 @@ ppc64_init_cpu_info(void)
 	}
 	switch (map)
 	{
-	case POSSIBLE:
+	case POSSIBLE_MAP:
 		if (cpus > kt->cpus) {
 			i = get_highest_cpu_online() + 1;
 			if (i > kt->cpus)
 				kt->cpus = i;
 		}
 		break;
-	case ONLINE:
-	case PRESENT:
+	case ONLINE_MAP:
+	case PRESENT_MAP:
 		kt->cpus = cpus;
 		break;
 	}

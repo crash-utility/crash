@@ -1,8 +1,8 @@
 /* ppc.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2007, 2010-2013 David Anderson
- * Copyright (C) 2002-2007, 2010-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2007, 2010-2014 David Anderson
+ * Copyright (C) 2002-2007, 2010-2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -2036,7 +2036,7 @@ ppc_relocate_nt_prstatus_percpu(void **nt_prstatus_percpu,
 	*num_prstatus_notes = 0;
 	nrcpus = (kt->kernel_NR_CPUS ? kt->kernel_NR_CPUS : NR_CPUS);
 	for (i = 0, j = 0; i < nrcpus; i++) {
-		if (!in_cpu_map(ONLINE, i))
+		if (!in_cpu_map(ONLINE_MAP, i))
 			continue;
 		if (verify_crash_note_in_kernel(i))
 			nt_prstatus_percpu[i] = nt_ptr[j++];

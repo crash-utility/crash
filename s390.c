@@ -1,8 +1,8 @@
 /* s390.c - core analysis suite
  *
  * Copyright (C) 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2006, 2009-2010, 2012-2013 David Anderson
- * Copyright (C) 2002-2006, 2009-2010, 2012-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2006, 2009-2010, 2012-2014 David Anderson
+ * Copyright (C) 2002-2006, 2009-2010, 2012-2014 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2005, 2006, 2010 Michael Holzheu, IBM Corporation
  *
  * This program is free software; you can redistribute it and/or modify
@@ -558,7 +558,7 @@ s390_has_cpu(struct bt_info *bt)
 {
 	int cpu = bt->tc->processor;
 
-	if (is_task_active(bt->task) && (kt->cpu_flags[cpu] & ONLINE))
+	if (is_task_active(bt->task) && (kt->cpu_flags[cpu] & ONLINE_MAP))
 		return TRUE;
 	else
 		return FALSE;
@@ -619,7 +619,7 @@ s390_back_trace_cmd(struct bt_info *bt)
 		error(WARNING,
 		"instruction pointer argument ignored on this architecture!\n");
 	}
-	if (is_task_active(bt->task) && !(kt->cpu_flags[cpu] & ONLINE)) {
+	if (is_task_active(bt->task) && !(kt->cpu_flags[cpu] & ONLINE_MAP)) {
 		fprintf(fp, " CPU offline\n");
 		return;
 	}

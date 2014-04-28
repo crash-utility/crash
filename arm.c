@@ -1518,7 +1518,7 @@ arm_display_machine_stats(void)
 static int
 arm_get_smp_cpus(void)
 {
-	return get_cpus_online();
+	return MAX(get_cpus_active(), get_cpus_online());
 }
 
 /*

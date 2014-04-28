@@ -131,7 +131,7 @@
 #define NR_CPUS  (512)
 #endif
 #ifdef ARM
-#define NR_CPUS  (4)
+#define NR_CPUS  (32)
 #endif
 #ifdef ARM64
 #define NR_CPUS  (4096)   /* TBD */
@@ -658,6 +658,10 @@ struct kernel_table {                   /* kernel data */
 #define PRESENT   (0x2)
 #define ONLINE    (0x4)
 #define NMI       (0x8)
+#define POSSIBLE_MAP (POSSIBLE)
+#define PRESENT_MAP   (PRESENT)
+#define ONLINE_MAP     (ONLINE)
+#define ACTIVE_MAP       (0x10)
 	int BUG_bytes;
 	ulong xen_flags;
 #define WRITABLE_PAGE_TABLES    (0x1)
@@ -4795,6 +4799,7 @@ void set_cpu(int);
 void clear_machdep_cache(void);
 struct stack_hook *gather_text_list(struct bt_info *);
 int get_cpus_online(void);
+int get_cpus_active(void);
 int get_cpus_present(void);
 int get_cpus_possible(void);
 int get_highest_cpu_online(void);

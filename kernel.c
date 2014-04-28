@@ -795,9 +795,10 @@ cpu_maps_init(void)
 		ulong cpu_flag;
 		char *name;
 	} mapinfo[] = {
-		{ POSSIBLE, "possible" },
-		{ PRESENT, "present" },
-		{ ONLINE, "online" },
+		{ POSSIBLE_MAP, "possible" },
+		{ PRESENT_MAP, "present" },
+		{ ONLINE_MAP, "online" },
+		{ ACTIVE_MAP, "active" },
 	};
 
 	if ((len = STRUCT_SIZE("cpumask_t")) < 0)
@@ -864,26 +865,33 @@ in_cpu_map(int map, int cpu)
 
 	switch (map)
 	{
-	case POSSIBLE:
+	case POSSIBLE_MAP:
 		if (!cpu_map_addr("possible")) {
 			error(INFO, "cpu_possible_map does not exist\n");
 			return FALSE;
 		}
-		return (kt->cpu_flags[cpu] & POSSIBLE);
+		return (kt->cpu_flags[cpu] & POSSIBLE_MAP);
 
-	case PRESENT:
+	case PRESENT_MAP:
 		if (!cpu_map_addr("present")) {
 			error(INFO, "cpu_present_map does not exist\n");
 			return FALSE;
 		}
-		return (kt->cpu_flags[cpu] & PRESENT);
+		return (kt->cpu_flags[cpu] & PRESENT_MAP);
 
-	case ONLINE:
+	case ONLINE_MAP:
 		if (!cpu_map_addr("online")) {
 			error(INFO, "cpu_online_map does not exist\n");
 			return FALSE;
 		}
-		return (kt->cpu_flags[cpu] & ONLINE);
+		return (kt->cpu_flags[cpu] & ONLINE_MAP);
+
+	case ACTIVE_MAP:
+		if (!cpu_map_addr("active")) {
+			error(INFO, "cpu_active_map does not exist\n");
+			return FALSE;
+		}
+		return (kt->cpu_flags[cpu] & ACTIVE_MAP);
 	}
 
 	return FALSE;
@@ -5321,7 +5329,7 @@ dump_kernel_table(int verbose)
 	fprintf(fp, "       cpu_possible_map: ");
 	if (cpu_map_addr("possible")) {
 		for (i = 0; i < nr_cpus; i++) {
-			if (kt->cpu_flags[i] & POSSIBLE)
+			if (kt->cpu_flags[i] & POSSIBLE_MAP)
 				fprintf(fp, "%d ", i);
 		}
 		fprintf(fp, "\n");
@@ -5330,7 +5338,7 @@ dump_kernel_table(int verbose)
 	fprintf(fp, "        cpu_present_map: ");
 	if (cpu_map_addr("present")) {
 		for (i = 0; i < nr_cpus; i++) {
-			if (kt->cpu_flags[i] & PRESENT)
+			if (kt->cpu_flags[i] & PRESENT_MAP)
 				fprintf(fp, "%d ", i);
 		}
 		fprintf(fp, "\n");
@@ -5339,12 +5347,22 @@ dump_kernel_table(int verbose)
 	fprintf(fp, "         cpu_online_map: ");
 	if (cpu_map_addr("online")) {
 		for (i = 0; i < nr_cpus; i++) {
-			if (kt->cpu_flags[i] & ONLINE)
+			if (kt->cpu_flags[i] & ONLINE_MAP)
 				fprintf(fp, "%d ", i);
 		}
 		fprintf(fp, "\n");
 	} else
 		fprintf(fp, "(does not exist)\n");
+	fprintf(fp, "         cpu_active_map: ");
+	if (cpu_map_addr("active")) {
+		for (i = 0; i < nr_cpus; i++) {
+			if (kt->cpu_flags[i] & ACTIVE_MAP)
+				fprintf(fp, "%d ", i);
+		}
+		fprintf(fp, "\n");
+	} else
+		fprintf(fp, "(does not exist)\n");
+
 no_cpu_flags:
 	fprintf(fp, "    vmcoreinfo: \n");
 	fprintf(fp, "      log_buf_SYMBOL: %lx\n", kt->vmcoreinfo.log_buf_SYMBOL);
@@ -7970,6 +7988,40 @@ get_highest_cpu_online()
 	FREEBUF(buf);
 
 	return highest;
+}
+
+/*
+ *  If it exists, return the number of cpus in the cpu_active_map.
+ */
+int
+get_cpus_active()
+{
+	int i, len, active;
+	char *buf;
+	ulong *maskptr, addr;
+
+	if (!(addr = cpu_map_addr("active")))
+		return 0;
+
+	len = cpu_map_size("active");
+	buf = GETBUF(len);
+
+	active = 0;
+
+	if (readmem(addr, KVADDR, buf, len,
+		"cpu_active_map", RETURN_ON_ERROR)) {
+
+		maskptr = (ulong *)buf;
+		for (i = 0; i < (len/sizeof(ulong)); i++, maskptr++)
+			active += count_bits_long(*maskptr);
+
+		if (CRASHDEBUG(1))
+			error(INFO, "get_cpus_active: active: %d\n", active);
+	}
+
+	FREEBUF(buf);
+
+	return active;
 }
 
 /*

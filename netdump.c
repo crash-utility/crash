@@ -92,7 +92,7 @@ map_cpus_to_prstatus(void)
 	nrcpus = (kt->kernel_NR_CPUS ? kt->kernel_NR_CPUS : NR_CPUS);
 
 	for (i = 0, j = 0; i < nrcpus; i++) {
-		if (in_cpu_map(ONLINE, i))
+		if (in_cpu_map(ONLINE_MAP, i))
 			nd->nt_prstatus_percpu[i] = nt_ptr[j++];
 	}
 
@@ -769,7 +769,7 @@ get_netdump_panic_task(void)
 		crashing_cpu = -1;
 		if (kernel_symbol_exists("crashing_cpu")) {
 			get_symbol_data("crashing_cpu", sizeof(int), &i);
-			if ((i >= 0) && in_cpu_map(ONLINE, i)) {
+			if ((i >= 0) && in_cpu_map(ONLINE_MAP, i)) {
 				crashing_cpu = i;
 				if (CRASHDEBUG(1))
 					error(INFO, 
