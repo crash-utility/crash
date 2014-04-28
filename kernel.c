@@ -1970,17 +1970,18 @@ void
 cmd_bt(void)
 {
 	int i, c;
-	ulong value;
+	ulong value, *cpus;
         struct task_context *tc;
-	int count, subsequent, active;
+	int subsequent, active, choose_cpu;
 	struct stack_hook hook;
 	struct bt_info bt_info, bt_setup, *bt;
 	struct reference reference;
 	char *refptr;
-	ulong tgid;
+	ulong tgid, task;
+	char arg_buf[BUFSIZE];
 
 	tc = NULL;
-	subsequent = active = count = 0;
+	subsequent = active = choose_cpu = 0;
 	hook.eip = hook.esp = 0;
 	refptr = 0;
 	bt = &bt_info;
@@ -1989,7 +1990,7 @@ cmd_bt(void)
 	if (kt->flags & USE_OLD_BT)
 		bt->flags |= BT_OLD_BACK_TRACE;
 
-        while ((c = getopt(argcnt, args, "D:fFI:S:aloreEgstTdxR:O")) != EOF) {
+        while ((c = getopt(argcnt, args, "D:fFI:S:c:aloreEgstTdxR:O")) != EOF) {
                 switch (c)
 		{
 		case 'f':
@@ -2132,6 +2133,18 @@ cmd_bt(void)
 				    "invalid stack address for this task: 0\n");
 			break;
 
+		case 'c':
+			if (choose_cpu) {
+				error(INFO, "only one -c option allowed\n");
+				argerrs++;
+			} else {
+				choose_cpu = 1;
+				BZERO(arg_buf, BUFSIZE);
+				strncpy(arg_buf, optarg, strlen(optarg));
+				cpus = get_cpumask_buf();
+			}
+			break;
+
 		case 'a':
 			active++;
 			break;
@@ -2221,6 +2234,30 @@ cmd_bt(void)
 #else
 		error(FATAL, XEN_HYPERVISOR_NOT_SUPPORTED);
 #endif
+	}
+
+	if (choose_cpu) {
+		if (LIVE())
+			error(FATAL, 
+			    "-c option not supported on a live system or live dump\n");
+
+		if (bt->flags & BT_THREAD_GROUP)
+			error(FATAL, 
+			    "-c option cannot be used with the -g option\n");
+
+		make_cpumask(arg_buf, cpus, FAULT_ON_ERROR, NULL);
+
+		for (i = 0; i < kt->cpus; i++) {
+			if (NUM_IN_BITMAP(cpus, i)) {
+				if ((task = get_active_task(i)))
+					tc = task_to_context(task);
+				else
+					error(FATAL, "cannot determine active task on cpu %ld\n", i);
+				DO_TASK_BACKTRACE();
+			}
+		}
+		FREEBUF(cpus);
+		return;
 	}
 
 	if (active) {
