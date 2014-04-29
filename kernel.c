@@ -1989,6 +1989,7 @@ cmd_bt(void)
 	char arg_buf[BUFSIZE];
 
 	tc = NULL;
+	cpus = NULL;
 	subsequent = active = choose_cpu = 0;
 	hook.eip = hook.esp = 0;
 	refptr = 0;
