@@ -1,8 +1,8 @@
 /* gdb_interface.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2013 David Anderson
- * Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014 David Anderson
+ * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -788,7 +788,7 @@ cmd_gdb(void)
 	 */
 	if (!is_restricted_command(*argv, FAULT_ON_ERROR)) {
 		if (STREQ(pc->command_line, "gdb")) {
-			strcpy(buf, &pc->orig_line[3]);
+			strcpy(buf, first_space(pc->orig_line));
 			strip_beginning_whitespace(buf);
 		} else
 			strcpy(buf, pc->orig_line);
