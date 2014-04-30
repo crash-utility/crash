@@ -5123,6 +5123,7 @@ struct machine_specific {
 #define VM_XEN_RHEL4 (0x100)
 #define FRAMEPOINTER (0x200)
 #define GART_REGION  (0x400)
+#define NESTED_NMI   (0x800)
 
 #define VM_FLAGS (VM_ORIG|VM_2_6_11|VM_XEN|VM_XEN_RHEL4)
 

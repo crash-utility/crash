@@ -468,6 +468,8 @@ x86_64_init(int when)
 		else
 			x86_64_per_cpu_init();
 		x86_64_ist_init();
+		if (symbol_exists("repeat_nmi"))
+			machdep->flags |= NESTED_NMI;
 		machdep->in_alternate_stack = x86_64_in_alternate_stack;
                 if ((machdep->machspec->irqstack = (char *)
 		    malloc(machdep->machspec->stkinfo.isize)) == NULL)
@@ -609,6 +611,8 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sFRAMEPOINTER", others++ ? "|" : "");
 	if (machdep->flags & GART_REGION)
 		fprintf(fp, "%sGART_REGION", others++ ? "|" : "");
+	if (machdep->flags & NESTED_NMI)
+		fprintf(fp, "%sNESTED_NMI", others++ ? "|" : "");
         fprintf(fp, ")\n");
 
 	fprintf(fp, "             kvbase: %lx\n", machdep->kvbase);
@@ -3009,6 +3013,8 @@ in_exception_stack:
                 }
 
 		stacktop = bt->stacktop - SIZE(pt_regs);
+		if ((machdep->flags & NESTED_NMI) && estack_index == NMI_STACK)
+			stacktop -= 12*sizeof(ulong);
 
 		bt->flags &= ~BT_FRAMESIZE_DISABLE;
 
@@ -3046,21 +3052,37 @@ in_exception_stack:
 		}
 
                 cs = x86_64_exception_frame(EFRAME_PRINT|EFRAME_CS, 0, 
-			bt->stackbuf + (bt->stacktop - bt->stackbase) - 
-			SIZE(pt_regs), bt, ofp);
+			bt->stackbuf + (stacktop - bt->stackbase),
+			bt, ofp);
 
 		if (!BT_REFERENCE_CHECK(bt))
 			fprintf(fp, "--- <%s exception stack> ---\n",
 				x86_64_exception_stacks[estack_index]);
 
-                /* 
-		 *  stack = (unsigned long *) estack_end[-2]; 
+		/*
+		 * Find the CPU-saved, or handler-saved registers
 		 */
 		up = (ulong *)(&bt->stackbuf[bt->stacktop - bt->stackbase]);
-		up -= 2;
-		rsp = bt->stkptr = *up;
-		up -= 3;
-		bt->instptr = *up;  
+		up -= 5;
+		if ((machdep->flags & NESTED_NMI) &&
+		    estack_index == NMI_STACK &&
+		    bt->stkptr <= bt->stacktop - 17*sizeof(ulong)) {
+			up -= 12;
+			/* Copied and saved regs are swapped in pre-3.8 kernels */
+			if (*up == symbol_value("repeat_nmi"))
+				up += 5;
+		}
+
+		/* Registers (as saved by CPU):
+		 *
+		 *   up[4]	SS
+		 *   up[3]	RSP
+		 *   up[2]	RFLAGS
+		 *   up[1]	CS
+		 *   up[0]	RIP
+		 */
+		rsp = bt->stkptr = up[3];
+		bt->instptr = up[0];
 		if (cs & 3)
 			done = TRUE;   /* user-mode exception */
 		else
@@ -3513,27 +3535,46 @@ in_exception_stack:
                 }
 
 		stacktop = bt->stacktop - SIZE(pt_regs);
-		
+		if ((machdep->flags & NESTED_NMI) &&
+		    estack_index == NMI_STACK)
+			stacktop -= 12*sizeof(ulong);
+
 		if (!done) {
 			level = dwarf_backtrace(bt, level, stacktop);
 			done = TRUE;
 		}
 
                 cs = x86_64_exception_frame(EFRAME_PRINT|EFRAME_CS, 0, 
-			bt->stackbuf + (bt->stacktop - bt->stackbase) - 
-			SIZE(pt_regs), bt, ofp);
+			bt->stackbuf + (stacktop - bt->stackbase),
+			bt, ofp);
 
 		if (!BT_REFERENCE_CHECK(bt))
 			fprintf(fp, "--- <exception stack> ---\n");
 
-                /* 
-		 *  stack = (unsigned long *) estack_end[-2]; 
+		/*
+		 * Find the CPU-saved, or handler-saved registers
 		 */
 		up = (ulong *)(&bt->stackbuf[bt->stacktop - bt->stackbase]);
-		up -= 2;
-		rsp = bt->stkptr = *up;
-		up -= 3;
-		bt->instptr = *up;  
+		up -= 5;
+		if ((machdep->flags & NESTED_NMI) &&
+		    estack_index == NMI_STACK &&
+		    bt->stkptr <= bt->stacktop - 17*sizeof(ulong)) {
+			up -= 12;
+			/* Copied and saved regs are swapped in pre-3.8 kernels */
+			if (*up == symbol_value("repeat_nmi"))
+				up += 5;
+		}
+
+		/* Registers (as saved by CPU):
+		 *
+		 *   up[4]	SS
+		 *   up[3]	RSP
+		 *   up[2]	RFLAGS
+		 *   up[1]	CS
+		 *   up[0]	RIP
+		 */
+		rsp = bt->stkptr = up[3];
+		bt->instptr = up[0];
 		if (cs & 3)
 			done = TRUE;   /* user-mode exception */
 		else
