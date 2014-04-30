@@ -84,7 +84,7 @@ main(int argc, char **argv)
                 {
 		case 'v':
 			printf("%s %s\n", basename(argv[0]), 
-				BASELEVEL_REVISION);
+				/* BASELEVEL_REVISION */ "(deprecated)");
 			exit(0);
 
                 case 'd':
