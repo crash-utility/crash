@@ -5578,15 +5578,18 @@ get_cpumask_buf(void)
 int
 make_cpumask(char *s, ulong *mask, int flags, int *errptr)
 {
-	char *p, *q;
+	char *p, *q, *orig;
 	int start, end;
 	int i;
 
 	if (s == NULL) {
 		if (!(flags & QUIET))
-			error(INFO, "received NULL string\n");
+			error(INFO, "make_cpumask: received NULL string\n");
+		orig = NULL;
 		goto make_cpumask_error;
 	}
+
+	orig = strdup(s);
 
 	p = strtok(s, ",");
 	while (p) {
@@ -5605,6 +5608,11 @@ make_cpumask(char *s, ulong *mask, int flags, int *errptr)
 			if (end == -1)
 				end = start;
 		}
+		if ((start < 0) || (start >= kt->cpus) || 
+		    (end < 0) || (end >= kt->cpus)) {
+			error(INFO, "invalid cpu specification: %s\n", orig);
+			goto make_cpumask_error;
+		}
 
 		for (i = start; i <= end; i++)
 			SET_BIT(mask, i);
@@ -5612,9 +5620,13 @@ make_cpumask(char *s, ulong *mask, int flags, int *errptr)
 		p = strtok(s, ",");
 	}
 
+	free(orig);
+
 	return TRUE;
 
 make_cpumask_error:
+	free(orig);
+
 	switch (flags & (FAULT_ON_ERROR|RETURN_ON_ERROR))
 	{
 	case FAULT_ON_ERROR:
