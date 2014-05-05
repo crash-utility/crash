@@ -3175,7 +3175,7 @@ cmd_ptov(void)
 			len = strlen(buf1) + 2;
 	
 			fprintf(fp, "%sPER-CPU OFFSET: %llx\n", 
-				others++ ? "\n" : "", paddr);
+				others++ ? "\n" : "", (ulonglong)paddr);
 			fprintf(fp, "  %s  %s\n",
 		    		mkstring(buf1, len, LJUST, "CPU"),
 		    		mkstring(buf2, VADDR_PRLEN, LJUST, "VIRTUAL"));
