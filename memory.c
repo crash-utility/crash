@@ -3126,17 +3126,20 @@ do_vtop(ulong vaddr, struct task_context *tc, ulong vtop_flags)
 }
 
 /*
- *  Runs PTOV() on the physical address argument.
+ *  Runs PTOV() on the physical address argument or translates
+ *  a per-cpu offset and cpu specifier.
  */
 void
 cmd_ptov(void)
 {
-	int c, unknown;
+	int c, len, unknown;
 	ulong vaddr;
 	physaddr_t paddr, paddr_test;
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
 	int others;
+	char *cpuspec;
+	ulong *cpus;
 
         while ((c = getopt(argcnt, args, "")) != EOF) {
                 switch(c)
@@ -3151,21 +3154,56 @@ cmd_ptov(void)
 		cmd_usage(pc->curcmd, SYNOPSIS);
 
 	others = 0;
+	cpuspec = NULL;
+	cpus = NULL;
+
         while (args[optind]) {
+		cpuspec = strchr(args[optind], ':');
+		if (cpuspec) {
+			*cpuspec++ = NULLCHAR;
+			cpus = get_cpumask_buf();
+			if (STREQ(cpuspec, ""))
+				SET_BIT(cpus, CURRENT_CONTEXT()->processor);
+			else
+				make_cpumask(cpuspec, cpus, FAULT_ON_ERROR, NULL);
+		}
+
 		paddr = htoll(args[optind], FAULT_ON_ERROR, NULL);
-		vaddr = PTOV(paddr);
 
-		unknown = BITS32() && (!kvtop(0, vaddr, &paddr_test, 0) || 
-		    (paddr_test != paddr));
-
-		fprintf(fp, "%s%s  %s\n", others++ ? "\n" : "", 
-		    mkstring(buf1, VADDR_PRLEN, LJUST, "VIRTUAL"),
-		    mkstring(buf2, VADDR_PRLEN, LJUST, "PHYSICAL"));
-		fprintf(fp, "%s  %s\n", unknown ? 
-		    mkstring(buf1, VADDR_PRLEN, LJUST, "unknown") :
-		    mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, MKSTR(vaddr)),
-                    mkstring(buf2, VADDR_PRLEN, LJUST|LONGLONG_HEX, 
-			MKSTR(&paddr)));
+		if (cpuspec) {
+			sprintf(buf1, "[%d]", kt->cpus-1);
+			len = strlen(buf1) + 2;
+	
+			fprintf(fp, "%sPER-CPU OFFSET: %llx\n", 
+				others++ ? "\n" : "", paddr);
+			fprintf(fp, "  %s  %s\n",
+		    		mkstring(buf1, len, LJUST, "CPU"),
+		    		mkstring(buf2, VADDR_PRLEN, LJUST, "VIRTUAL"));
+			for (c = 0; c < kt->cpus; c++) {
+				if (!NUM_IN_BITMAP(cpus, c))
+					continue;
+				vaddr = paddr + kt->__per_cpu_offset[c];
+				sprintf(buf1, "[%d]", c);
+				fprintf(fp, "  %s%lx\n", 
+			    		mkstring(buf2, len, LJUST, buf1),
+					vaddr);
+			}
+			FREEBUF(cpus);
+		} else {
+			vaddr = PTOV(paddr);
+	
+			unknown = BITS32() && (!kvtop(0, vaddr, &paddr_test, 0) || 
+			    (paddr_test != paddr));
+	
+			fprintf(fp, "%s%s  %s\n", others++ ? "\n" : "", 
+			    mkstring(buf1, VADDR_PRLEN, LJUST, "VIRTUAL"),
+			    mkstring(buf2, VADDR_PRLEN, LJUST, "PHYSICAL"));
+			fprintf(fp, "%s  %s\n", unknown ? 
+			    mkstring(buf1, VADDR_PRLEN, LJUST, "unknown") :
+			    mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, MKSTR(vaddr)),
+			    mkstring(buf2, VADDR_PRLEN, LJUST|LONGLONG_HEX, 
+				MKSTR(&paddr)));
+		}
 
 		optind++;
 	}
