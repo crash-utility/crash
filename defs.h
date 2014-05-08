@@ -1086,7 +1086,7 @@ extern struct machdep_table *machdep;
 #define FOREACH_F_FLAG2 (0x10000000)
 
 #define FOREACH_PS_EXCLUSIVE \
-  (FOREACH_g_FLAG|FOREACH_a_FLAG|FOREACH_t_FLAG|FOREACH_c_FLAG|FOREACH_p_FLAG|FOREACH_l_FLAG|FOREACH_r_FLAG)
+  (FOREACH_g_FLAG|FOREACH_a_FLAG|FOREACH_t_FLAG|FOREACH_c_FLAG|FOREACH_p_FLAG|FOREACH_l_FLAG|FOREACH_r_FLAG|FOREACH_m_FLAG)
 
 struct foreach_data {
 	ulong flags;
@@ -4075,8 +4075,9 @@ extern long _ZOMBIE_;
 #define PS_GROUP       (0x4000)
 #define PS_BY_REGEX    (0x8000)
 #define PS_NO_HEADER  (0x10000)
+#define PS_MSECS      (0x20000)
 
-#define PS_EXCLUSIVE (PS_TGID_LIST|PS_ARGV_ENVP|PS_TIMES|PS_CHILD_LIST|PS_PPID_LIST|PS_LAST_RUN|PS_RLIMIT)
+#define PS_EXCLUSIVE (PS_TGID_LIST|PS_ARGV_ENVP|PS_TIMES|PS_CHILD_LIST|PS_PPID_LIST|PS_LAST_RUN|PS_RLIMIT|PS_MSECS)
 
 #define MAX_PS_ARGS    (100)   /* maximum command-line specific requests */
 
@@ -4091,6 +4092,7 @@ struct psinfo {
 		regex_t regex;
 	} regex_data[MAX_PS_ARGS];
 	int regexs;
+	ulong *cpus;
 };
 
 #define IS_A_NUMBER(X)      (decimal(X, 0) || hexadecimal(X, 0))
