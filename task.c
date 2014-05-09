@@ -54,6 +54,7 @@ static long rq_idx(int);
 static long cpu_idx(int);
 static void dump_runq(void);
 static void dump_on_rq_timestamp(void);
+static void dump_on_rq_milliseconds(void);
 static void dump_runqueues(void);
 static void dump_prio_array(int, ulong, char *);
 static void dump_task_runq_entry(struct task_context *, int);
@@ -2863,6 +2864,8 @@ cmd_ps(void)
 				argerrs++;
 				break;
 			}
+			if (INVALID_MEMBER(rq_timestamp))
+				option_not_supported(c);
 			if (flag & PS_EXCLUSIVE)
 				error(FATAL, ps_exclusive);
 			flag |= PS_MSECS;
@@ -3270,7 +3273,7 @@ translate_nanoseconds(ulonglong value, char *buf)
 	value = value / 24L;
 	days = value;
 
-	sprintf(buf, "[%3ld %02ld:%02ld:%02ld.%03ld]", 
+	sprintf(buf, "%ld %02ld:%02ld:%02ld.%03ld", 
 		days, hours, mins, secs, ms);
 
 	return buf;
@@ -3283,7 +3286,7 @@ translate_nanoseconds(ulonglong value, char *buf)
 static void
 show_milliseconds(struct task_context *tc, struct psinfo *psi)
 {
-	int i, c, others;
+	int i, c, others, days, max_days;
 	struct task_context *tcp;
 	char format[15];
 	char buf[BUFSIZE];
@@ -3318,6 +3321,9 @@ show_milliseconds(struct task_context *tc, struct psinfo *psi)
 				sizeof(ulonglong), "per-cpu rq clock",
 				FAULT_ON_ERROR);
 
+			translate_nanoseconds(rq_clock, buf);
+			max_days = first_space(buf) - buf;
+
 			tcp = FIRST_CONTEXT();
 			for (i = 0; i < RUNNING_TASKS(); i++, tcp++) {
 				if (tcp->processor != c)
@@ -3325,8 +3331,10 @@ show_milliseconds(struct task_context *tc, struct psinfo *psi)
 				delta = rq_clock - task_last_run(tcp->task);
 				if (delta < 0)
 					delta = 0;
-				fprintf(fp, "%s ", 
-					translate_nanoseconds(delta, buf));
+				translate_nanoseconds(delta, buf);
+				days = first_space(buf) - buf;
+				fprintf(fp, "[%s%s] ", space(max_days - days), 
+					buf);
 				fprintf(fp, "[%s]  ", 
 					task_state_string(tcp->task, 
 						buf, !VERBOSE));
@@ -3341,10 +3349,14 @@ show_milliseconds(struct task_context *tc, struct psinfo *psi)
 		readmem(runq + OFFSET(rq_timestamp), KVADDR, &rq_clock,
 			sizeof(ulonglong), "per-cpu rq clock",
 			FAULT_ON_ERROR);
+		translate_nanoseconds(rq_clock, buf);
+		max_days = first_space(buf) - buf;
 		delta = rq_clock - task_last_run(tc->task);
 		if (delta < 0)
 			delta = 0;
-		fprintf(fp, "%s ", translate_nanoseconds(delta, buf));
+		translate_nanoseconds(delta, buf);
+		days = first_space(buf) - buf;
+		fprintf(fp, "[%s%s] ", space(max_days - days), buf);
 		fprintf(fp, "[%s]  ", task_state_string(tc->task, buf, !VERBOSE));
 		print_task_header(fp, tc, FALSE);
 	} else {
@@ -3361,7 +3373,7 @@ show_milliseconds(struct task_context *tc, struct psinfo *psi)
 			delta = rq_clock - task_last_run(tcp->task);
 			if (delta < 0)
 				delta = 0;
-			fprintf(fp, "%s ", translate_nanoseconds(delta, buf));
+			fprintf(fp, "[%s] ", translate_nanoseconds(delta, buf));
 			fprintf(fp, "[%s]  ", task_state_string(tcp->task, buf, !VERBOSE));
 			print_task_header(fp, tcp, FALSE);
 		}
@@ -5900,6 +5912,10 @@ foreach(struct foreach_data *fd)
 			}
 			if (fd->flags & (FOREACH_l_FLAG|FOREACH_m_FLAG))
 				sort_context_array_by_last_run();
+			if ((fd->flags & FOREACH_m_FLAG) && 
+			    INVALID_MEMBER(rq_timestamp))
+				option_not_supported('m');
+
 			print_header = FALSE;
 			break;
 
@@ -7383,8 +7399,9 @@ cmd_runq(void)
 	int sched_debug = 0;
 	int dump_timestamp_flag = 0;
 	int dump_task_group_flag = 0;
+	int dump_milliseconds_flag = 0;
 
-        while ((c = getopt(argcnt, args, "dtg")) != EOF) {
+        while ((c = getopt(argcnt, args, "dtgm")) != EOF) {
                 switch(c)
                 {
 		case 'd':
@@ -7392,6 +7409,9 @@ cmd_runq(void)
 			break;
 		case 't':
 			dump_timestamp_flag = 1;
+			break;
+		case 'm':
+			dump_milliseconds_flag = 1;
 			break;
 		case 'g':
 			if (INVALID_MEMBER(task_group_cfs_rq) ||
@@ -7412,6 +7432,11 @@ cmd_runq(void)
 
 	if (dump_timestamp_flag) {
                 dump_on_rq_timestamp();
+                return;
+        }
+
+	if (dump_milliseconds_flag) {
+                dump_on_rq_milliseconds();
                 return;
         }
 
@@ -7446,6 +7471,8 @@ dump_on_rq_timestamp(void)
 
 	if (!(rq_sp = per_cpu_symbol_search("per_cpu__runqueues")))
 		error(FATAL, "per-cpu runqueues do not exist\n");
+	if (INVALID_MEMBER(rq_timestamp))
+		option_not_supported('t');
 
 	for (cpu = 0; cpu < kt->cpus; cpu++) {
 		if ((kt->flags & SMP) && (kt->flags &PER_CPU_OFF))
@@ -7482,6 +7509,80 @@ dump_on_rq_timestamp(void)
 		} else
 			fprintf(fp, "\n"); 
 
+	}
+}
+
+/*
+ *  Displays the runqueue and active task timestamps of each cpu.
+ */
+static void
+dump_on_rq_milliseconds(void)
+{
+	ulong runq;
+	char buf[BUFSIZE];
+	struct syment *rq_sp;
+	struct task_context *tc;
+	int cpu, max_indent, indent, max_days, days;
+	long long delta;
+	ulonglong task_timestamp, rq_timestamp;
+
+	if (!(rq_sp = per_cpu_symbol_search("per_cpu__runqueues")))
+		error(FATAL, "per-cpu runqueues do not exist\n");
+	if (INVALID_MEMBER(rq_timestamp))
+		option_not_supported('m');
+
+	if (kt->cpus < 10)
+		max_indent = 1;
+	else if (kt->cpus < 100)
+		max_indent = 2;
+	else if (kt->cpus < 1000)
+		max_indent = 3;
+	else
+		max_indent = 4;
+
+	max_days = days = 0;
+
+	for (cpu = 0; cpu < kt->cpus; cpu++) {
+		if ((kt->flags & SMP) && (kt->flags &PER_CPU_OFF))
+			runq = rq_sp->value + kt->__per_cpu_offset[cpu];
+		else
+			runq = rq_sp->value;
+
+		readmem(runq + OFFSET(rq_timestamp), KVADDR, &rq_timestamp,
+			sizeof(ulonglong), "per-cpu rq timestamp",
+			FAULT_ON_ERROR);
+
+		if (!max_days) {
+			translate_nanoseconds(rq_timestamp, buf);
+			max_days = first_space(buf) - buf;
+		}
+
+		if (cpu < 10)
+			indent = max_indent;
+		else if (cpu < 100)
+			indent = max_indent - 1;
+		else if (cpu < 1000)
+			indent = max_indent - 2;
+		else
+			indent = max_indent - 4;
+
+		if ((tc = task_to_context(tt->active_set[cpu])))
+			task_timestamp = task_last_run(tc->task);
+		else { 
+			fprintf(fp, "%sCPU %d: [unknown]\n", space(indent), cpu);
+			continue;
+		}
+
+		delta = rq_timestamp - task_timestamp;
+		if (delta < 0)
+			delta = 0;
+		translate_nanoseconds(delta, buf);
+		days = first_space(buf) - buf;
+
+		fprintf(fp, 
+		    "%sCPU %d: [%s%s]  PID: %-5ld  TASK: %lx  COMMAND: \"%s\"\n",
+			space(indent), cpu, space(max_days - days), buf, tc->pid,
+			tc->task, tc->comm);
 	}
 }
 
