@@ -5475,7 +5475,7 @@ NULL
 char *help_kmem[] = {
 "kmem",
 "kernel memory",
-"[-f|-F|-p|-c|-C|-i|-s|-S|-v|-V|-n|-z-o] [slab] [[-P] address]\n"
+"[-f|-F|-p|-c|-C|-i|-s|-S|-v|-V|-n|-z|-o|-h] [slab] [[-P] address]\n"
 "       [-g [flags]] [-I slab[,slab]]",
 "  This command displays information about the use of kernel memory.\n",
 "        -f  displays the contents of the system free memory headers.",
@@ -5502,6 +5502,8 @@ char *help_kmem[] = {
 "            values to translate them into kernel virtual addresses.",
 "        -g  displays the enumerator value of all bits in the page structure's",
 "            \"flags\" field.",
+"        -h  display the address of hugepage hstate array entries, along with",
+"            their hugepage size, total and free counts, and name.",
 "     flags  when used with -g, translates all bits in this hexadecimal page",
 "            structure flags value into its enumerator values.",
 "      slab  when used with -s or -S, limits the command to only the slab cache",
@@ -5740,6 +5742,11 @@ char *help_kmem[] = {
 "              NUMA_LOCAL: 63545992",
 "              NUMA_OTHER: 0",
 " ",
+"  Display hugepage hstate information: \n",
+"    %s> kmem -h",
+"         HSTATE        SIZE    FREE   TOTAL  NAME",
+"    ffffffff81f7a800    2MB      10      64  hugepages-2048kB",
+"",
 "  Determine (and verify) the page cache size:\n",
 "    %s> kmem -c",
 "    page_cache_size: 18431 (verified)",

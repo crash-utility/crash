@@ -9226,8 +9226,16 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(file_f_op));
 	fprintf(fp, "             file_private_data: %ld\n",
 		OFFSET(file_private_data));
+
 	fprintf(fp, "                  hstate_order: %ld\n",
 		OFFSET(hstate_order));
+	fprintf(fp, "          hstate_nr_huge_pages: %ld\n",
+		OFFSET(hstate_nr_huge_pages));
+	fprintf(fp, "        hstate_free_huge_pages: %ld\n",
+		OFFSET(hstate_free_huge_pages));
+	fprintf(fp, "                   hstate_name: %ld\n",
+		OFFSET(hstate_name));
+
 	fprintf(fp, "      hugetlbfs_sb_info_hstate: %ld\n",
 		OFFSET(hugetlbfs_sb_info_hstate));
 	fprintf(fp, "                 idr_layer_ary: %ld\n",
