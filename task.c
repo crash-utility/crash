@@ -104,6 +104,7 @@ static void show_milliseconds(struct task_context *, struct psinfo *);
 static char *translate_nanoseconds(ulonglong, char *);
 static int sort_by_last_run(const void *arg1, const void *arg2);
 static void sort_context_array_by_last_run(void);
+static void show_ps_summary(ulong);
 static void irqstacks_init(void);
 
 /*
@@ -2777,7 +2778,14 @@ task_struct_member(struct task_context *tc, unsigned int radix, struct reference
 }
 
 static char *ps_exclusive = 
-    "-a, -t, -c, -p, -g, -l, -m, -L and -r flags are all mutually-exclusive\n";
+    "-a, -t, -c, -p, -g, -l, -m, -L, -S and -r flags are all mutually-exclusive\n";
+
+static void
+check_ps_exclusive(ulong flag, ulong thisflag)
+{
+	if (flag & (PS_EXCLUSIVE & ~thisflag))
+		error(FATAL, ps_exclusive);
+} 
 
 /*
  *  Display ps-like data for all tasks, or as specified by pid, task, or
@@ -2797,7 +2805,7 @@ cmd_ps(void)
 	cpuspec = NULL;
 	flag = 0;
 
-        while ((c = getopt(argcnt, args, "gstcpkuGlmarC:")) != EOF) {
+        while ((c = getopt(argcnt, args, "SgstcpkuGlmarC:")) != EOF) {
                 switch(c)
 		{
 		case 'k':
@@ -2826,32 +2834,27 @@ cmd_ps(void)
 		 *  The a, t, c, p, g, l and r flags are all mutually-exclusive.
 		 */
 		case 'g':
-			if (flag & PS_EXCLUSIVE)
-				error(FATAL, ps_exclusive);
+			check_ps_exclusive(flag, PS_TGID_LIST);
 			flag |= PS_TGID_LIST;
 			break;
 
 		case 'a':
-			if (flag & PS_EXCLUSIVE)
-				error(FATAL, ps_exclusive);
+			check_ps_exclusive(flag, PS_ARGV_ENVP);
 			flag |= PS_ARGV_ENVP;
 			break;
 
 		case 't':
-			if (flag & PS_EXCLUSIVE)
-				error(FATAL, ps_exclusive);
+			check_ps_exclusive(flag, PS_TIMES);
 			flag |= PS_TIMES;
 			break;
 
 		case 'c': 
-			if (flag & PS_EXCLUSIVE)
-				error(FATAL, ps_exclusive);
+			check_ps_exclusive(flag, PS_CHILD_LIST);
 			flag |= PS_CHILD_LIST;
 			break;
 
 		case 'p':
-			if (flag & PS_EXCLUSIVE)
-				error(FATAL, ps_exclusive);
+			check_ps_exclusive(flag, PS_PPID_LIST);
 			flag |= PS_PPID_LIST;
 			break;
 
@@ -2866,8 +2869,7 @@ cmd_ps(void)
 			}
 			if (INVALID_MEMBER(rq_timestamp))
 				option_not_supported(c);
-			if (flag & PS_EXCLUSIVE)
-				error(FATAL, ps_exclusive);
+			check_ps_exclusive(flag, PS_MSECS);
 			flag |= PS_MSECS;
 			break;
 			
@@ -2880,8 +2882,7 @@ cmd_ps(void)
 				argerrs++;
 				break;
 			}
-			if (flag & PS_EXCLUSIVE)
-				error(FATAL, ps_exclusive);
+			check_ps_exclusive(flag, PS_LAST_RUN);
 			flag |= PS_LAST_RUN;
 			break;
 
@@ -2890,9 +2891,13 @@ cmd_ps(void)
 			break;
 
 		case 'r':
-			if (flag & PS_EXCLUSIVE)
-				error(FATAL, ps_exclusive);
+			check_ps_exclusive(flag, PS_RLIMIT);
 			flag |= PS_RLIMIT;
+			break;
+
+		case 'S':
+			check_ps_exclusive(flag, PS_SUMMARY);
+			flag |= PS_SUMMARY;
 			break;
 
 		case 'C':
@@ -2921,6 +2926,9 @@ cmd_ps(void)
 		show_ps(PS_SHOW_ALL|flag, &psinfo);
 		return;
 	}
+
+	if (flag & PS_SUMMARY)
+		error(FATAL, "-S option takes no arguments\n");
 
 	if (psinfo.cpus)
 		error(INFO, 
@@ -3136,6 +3144,11 @@ show_ps(ulong flag, struct psinfo *psi)
 			return;
 		}
 
+		if (flag & PS_SUMMARY) {
+			show_ps_summary(flag);
+			return;
+		}
+
 		if (psi->cpus) {
 			show_ps_data(flag, NULL, psi);
 			return;
@@ -3203,6 +3216,48 @@ show_ps(ulong flag, struct psinfo *psi)
 		}
 	}
 }
+
+static void 
+show_ps_summary(ulong flag)
+{
+	int i, s;
+	struct task_context *tc;
+	char buf[BUFSIZE];
+#define MAX_STATES 20
+	struct ps_state {
+		long cnt;
+		char string[3];
+	} ps_state[MAX_STATES];
+
+	if (flag & (PS_USER|PS_KERNEL|PS_GROUP))
+		error(FATAL, "-S option cannot be used with other options\n");
+
+	for (s = 0; s < MAX_STATES; s++)
+		ps_state[s].cnt = 0;
+
+	tc = FIRST_CONTEXT();
+	for (i = 0; i < RUNNING_TASKS(); i++, tc++) {
+		task_state_string(tc->task, buf, !VERBOSE);
+		for (s = 0; s < MAX_STATES; s++) {
+			if (ps_state[s].cnt && 
+			    STREQ(ps_state[s].string, buf)) {
+				ps_state[s].cnt++;
+				break;
+			}
+			if (ps_state[s].cnt == 0) {
+				strcpy(ps_state[s].string, buf); 
+				ps_state[s].cnt++;
+				break;
+			}
+		}
+	}
+	for (s = 0; s < MAX_STATES; s++) {
+		if (ps_state[s].cnt)
+			fprintf(fp, 
+			    "  %s: %ld\n", ps_state[s].string, ps_state[s].cnt);
+	}
+}
+
 
 /*
  *  Display the task preceded by the last_run stamp and its
