@@ -2437,6 +2437,8 @@ exec_args_input_file(struct command_table_entry *ct, struct args_input_file *aif
 	char *new_args[MAXARGS];
 	char *orig_args[MAXARGS];
 	char orig_line[BUFSIZE];
+	char *save_args[MAXARGS];
+	char save_line[BUFSIZE];
 
 	if ((pc->args_ifile = fopen(aif->fileptr, "r")) == NULL)
 		error(FATAL, "%s: %s\n", aif->fileptr, strerror(errno));
@@ -2447,10 +2449,23 @@ exec_args_input_file(struct command_table_entry *ct, struct args_input_file *aif
 	BCOPY(args, orig_args, sizeof(args));
 	orig_argcnt = argcnt;
 
+	/*
+	 *  Commands cannot be trusted to leave the arguments intact.
+	 *  Stash them here and restore them each time through the loop.
+	 */
+	save_args[0] = save_line;
+	for (i = 0; i < orig_argcnt; i++) {
+		strcpy(save_args[i], orig_args[i]);
+		save_args[i+1] = save_args[i] + strlen(save_args[i]) + 2;
+	}
+
 	while (fgets(buf, BUFSIZE-1, pc->args_ifile)) {
 		clean_line(buf);
 		if ((strlen(buf) == 0) || (buf[0] == '#'))
 			continue;		
+
+		for (i = 1; i < orig_argcnt; i++)
+			strcpy(orig_args[i], save_args[i]);
 
 		if (aif->is_gdb_cmd) {
 			console("(gdb) before: [%s]\n", orig_line);
