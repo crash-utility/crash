@@ -1649,3 +1649,32 @@
  typedef enum bfd_error
  {
    bfd_error_no_error = 0,
+--- gdb-7.6/gdb/symtab.c.orig
++++ gdb-7.6/gdb/symtab.c
+@@ -5405,7 +5405,7 @@ dump_enum(struct type *type, struct gnu_
+ {
+ 	register int i;
+ 	int len;
+-	int lastval;
++	long long lastval;
+ 
+         len = TYPE_NFIELDS (type);
+         lastval = 0;
+@@ -5418,12 +5418,12 @@ dump_enum(struct type *type, struct gnu_
+         for (i = 0; i < len; i++) {
+         	fprintf_filtered(gdb_stdout, "  %s", 
+ 			TYPE_FIELD_NAME (type, i));
+-                if (lastval != TYPE_FIELD_BITPOS (type, i)) {
+-                	fprintf_filtered (gdb_stdout, " = %d",
+-                        	TYPE_FIELD_BITPOS (type, i));
+-                        lastval = TYPE_FIELD_BITPOS (type, i);
++                if (lastval != TYPE_FIELD_ENUMVAL (type, i)) {
++                	fprintf_filtered (gdb_stdout, " = %s",
++                        	plongest(TYPE_FIELD_ENUMVAL (type, i)));
++                        lastval = TYPE_FIELD_ENUMVAL (type, i);
+                 } else
+-                        fprintf_filtered(gdb_stdout, " = %d", lastval);
++                        fprintf_filtered(gdb_stdout, " = %s", plongest(lastval));
+                 fprintf_filtered(gdb_stdout, "\n");
+                 lastval++;
+         }
