@@ -73,6 +73,7 @@ static void dump_variable_length_record_log(int);
 static void hypervisor_init(void);
 static void dump_log_legacy(void);
 static void dump_variable_length_record(void);
+static int is_kpatch(void);
 
 
 /*
@@ -4638,6 +4639,21 @@ cmd_sys(void)
         } while (args[optind]);
 }
 
+static int
+is_kpatch(void)
+{
+	int i;
+	struct load_module *lm;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+		if (STREQ("kpatch", lm->mod_name))
+			return TRUE;
+	}
+
+	return FALSE;
+}
+
 /*
  *  Display system stats at init-time or for the sys command.
  */
@@ -4681,14 +4697,16 @@ display_sys_stats(void)
 		}
 	} else {
         	if (pc->system_map) {
-                	fprintf(fp, "  SYSTEM MAP: %s\n", pc->system_map);
+                	fprintf(fp, "  SYSTEM MAP: %s%s\n", pc->system_map,
+				is_kpatch() ? "  [KPATCH]" : "");
 			fprintf(fp, "DEBUG KERNEL: %s %s\n", 
 					pc->namelist_orig ?
 					pc->namelist_orig : pc->namelist,
 					debug_kernel_version(pc->namelist));
 		} else
-			fprintf(fp, "      KERNEL: %s\n", pc->namelist_orig ? 
-				pc->namelist_orig : pc->namelist);
+			fprintf(fp, "      KERNEL: %s%s\n", pc->namelist_orig ? 
+				pc->namelist_orig : pc->namelist,
+				is_kpatch() ? "  [KPATCH]" : "");
 	}
 
 	if (pc->debuginfo_file) { 
