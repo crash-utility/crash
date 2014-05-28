@@ -4842,7 +4842,8 @@ debug_kernel_version(char *namelist)
 
 	argc = 0;
         while (fgets(buf, BUFSIZE-1, pipe)) {
-                if (!strstr(buf, "Linux version 2."))
+                if (!strstr(buf, "Linux version 2.") &&
+		    !strstr(buf, "Linux version 3."))
                         continue;
 
 		argc = parse_line(buf, arglist); 
