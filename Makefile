@@ -230,10 +230,19 @@ gdb_merge: force
 	  (cd ${GDB}; ./configure ${GDB_CONF_FLAGS} --with-separate-debug-dir=/usr/lib/debug \
 	    --with-bugurl="" --with-expat=no --with-python=no; \
 	  make --no-print-directory CRASH_TARGET=${TARGET}; echo ${TARGET} > crash.target) \
-	else (cd ${GDB}/gdb; make --no-print-directory CRASH_TARGET=${TARGET};); fi
+	else make --no-print-directory rebuild; fi
 	@if [ ! -f ${PROGRAM} ]; then \
 	  echo; echo "${PROGRAM} build failed"; \
 	  echo; exit 1; fi
+
+rebuild:
+	@if [ -f ${GDB}/${GDB}.patch ]; then \
+	  touch ${GDB}/${GDB}.patch; fi
+	@if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ] && \
+	  [ "`sum ${GDB}.patch`" != "`sum ${GDB}/${GDB}.patch`" ]; then \
+	  (patch -N -p0 < ${GDB}.patch; cp ${GDB}.patch ${GDB}; cd ${GDB}; \
+	  make --no-print-directory CRASH_TARGET=${TARGET}) \
+	else (cd ${GDB}/gdb; make --no-print-directory CRASH_TARGET=${TARGET}); fi
 
 gdb_unzip:
 	@rm -f gdb.files
@@ -248,7 +257,7 @@ gdb_unzip:
 
 gdb_patch:
 	if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ]; then \
-		patch -p0 < ${GDB}.patch; fi
+		patch -p0 < ${GDB}.patch; cp ${GDB}.patch ${GDB}; fi
 
 library: make_build_data ${OBJECT_FILES}
 	ar -rs ${PROGRAM}lib.a ${OBJECT_FILES}
