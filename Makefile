@@ -236,7 +236,7 @@ gdb_merge: force
 	  echo; exit 1; fi
 
 rebuild:
-	@if [ -f ${GDB}/${GDB}.patch ]; then \
+	@if [ ! -f ${GDB}/${GDB}.patch ]; then \
 	  touch ${GDB}/${GDB}.patch; fi
 	@if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ] && \
 	  [ "`sum ${GDB}.patch`" != "`sum ${GDB}/${GDB}.patch`" ]; then \
