@@ -8134,7 +8134,7 @@ dump_tasks_in_task_group_cfs_rq(int depth, ulong cfs_rq, int cpu,
 	/*
 	 *  check if "curr" is the task that is current running task
 	 */
-	if (!curr_my_q && (curr - OFFSET(task_struct_se)) == ctc->task) {
+	if (!curr_my_q && ctc && (curr - OFFSET(task_struct_se)) == ctc->task) {
 		/* curr is not in the rb tree, so let's print it here */
 		total++;
 		INDENT(5 + 3 * depth);
