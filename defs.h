@@ -1900,6 +1900,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long hstate_nr_huge_pages;
 	long hstate_free_huge_pages;
 	long hstate_name;
+	long cgroup_kn;
+	long kernfs_node_name;
+	long kernfs_node_parent;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

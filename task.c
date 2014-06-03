@@ -8286,7 +8286,11 @@ task_group_offset_init(void)
 		MEMBER_OFFSET_INIT(task_group_css, "task_group", "css");
 		MEMBER_OFFSET_INIT(cgroup_subsys_state_cgroup,
 			"cgroup_subsys_state", "cgroup");
+
 		MEMBER_OFFSET_INIT(cgroup_dentry, "cgroup", "dentry");
+		MEMBER_OFFSET_INIT(cgroup_kn, "cgroup", "kn");
+		MEMBER_OFFSET_INIT(kernfs_node_name, "kernfs_node", "name");
+		MEMBER_OFFSET_INIT(kernfs_node_parent, "kernfs_node", "parent");
 
 		MEMBER_OFFSET_INIT(task_group_siblings, "task_group", "siblings");
 		MEMBER_OFFSET_INIT(task_group_children, "task_group", "children");
@@ -8667,8 +8671,9 @@ is_task:
 static char *
 get_task_group_name(ulong group)
 {
-	ulong cgroup, dentry, name;
+	ulong cgroup, dentry, kernfs_node, parent, name;
 	char *dentry_buf, *tmp;
+	char buf[BUFSIZE];
 	int len;
 
 	tmp = NULL;
@@ -8678,20 +8683,52 @@ get_task_group_name(ulong group)
 	if (cgroup == 0)
 		return NULL;
 
-	readmem(cgroup + OFFSET(cgroup_dentry), KVADDR, &dentry, sizeof(ulong),
-		"cgroup dentry", FAULT_ON_ERROR);
-	if (dentry == 0)
+	if (VALID_MEMBER(cgroup_dentry)) {
+		readmem(cgroup + OFFSET(cgroup_dentry), KVADDR, &dentry, sizeof(ulong),
+			"cgroup dentry", FAULT_ON_ERROR);
+		if (dentry == 0)
+			return NULL;
+	
+		dentry_buf = GETBUF(SIZE(dentry));
+		readmem(dentry, KVADDR, dentry_buf, SIZE(dentry),
+			"dentry", FAULT_ON_ERROR);
+		len = UINT(dentry_buf + OFFSET(dentry_d_name) + OFFSET(qstr_len));
+		tmp = GETBUF(len + 1);
+		name = ULONG(dentry_buf + OFFSET(dentry_d_name) + OFFSET(qstr_name));
+		readmem(name, KVADDR, tmp, len, "qstr name", FAULT_ON_ERROR);
+	
+		FREEBUF(dentry_buf);
+		return tmp;
+	}
+
+	/*
+	 *  Emulate kernfs_name() and kernfs_name_locked()
+	 */
+	if (INVALID_MEMBER(cgroup_kn) || INVALID_MEMBER(kernfs_node_name) ||
+	    INVALID_MEMBER(kernfs_node_parent))
 		return NULL;
 
-	dentry_buf = GETBUF(SIZE(dentry));
-	readmem(dentry, KVADDR, dentry_buf, SIZE(dentry),
-		"dentry", FAULT_ON_ERROR);
-	len = UINT(dentry_buf + OFFSET(dentry_d_name) + OFFSET(qstr_len));
-	tmp = GETBUF(len + 1);
-	name = ULONG(dentry_buf + OFFSET(dentry_d_name) + OFFSET(qstr_name));
-	readmem(name, KVADDR, tmp, len, "qstr name", FAULT_ON_ERROR);
+	readmem(cgroup + OFFSET(cgroup_kn), KVADDR, &kernfs_node, sizeof(ulong),
+		"cgroup kn", FAULT_ON_ERROR);
+	if (kernfs_node == 0)
+		return NULL;
 
-	FREEBUF(dentry_buf);
+	readmem(kernfs_node + OFFSET(kernfs_node_parent), KVADDR, &parent, 
+		sizeof(ulong), "kernfs_node parent", FAULT_ON_ERROR);
+	if (!parent) {
+		tmp = GETBUF(2);
+		strcpy(tmp, "/");
+		return tmp;
+	}
+
+	readmem(kernfs_node + OFFSET(kernfs_node_name), KVADDR, &name, 
+		sizeof(ulong), "kernfs_node name", FAULT_ON_ERROR);
+	if (!name || !read_string(name, buf, BUFSIZE-1))
+		return NULL;
+
+	tmp = GETBUF(strlen(buf)+1);
+	strcpy(tmp, buf);
+
 	return tmp;
 }
 

@@ -9326,6 +9326,12 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(cgroup_subsys_state_cgroup));
 	fprintf(fp, "                 cgroup_dentry: %ld\n",
 		OFFSET(cgroup_dentry));
+	fprintf(fp, "                     cgroup_kn: %ld\n",
+		OFFSET(cgroup_kn));
+	fprintf(fp, "              kernfs_node_name: %ld\n",
+		OFFSET(kernfs_node_name));
+	fprintf(fp, "            kernfs_node_parent: %ld\n",
+		OFFSET(kernfs_node_parent));
 	fprintf(fp, "              task_group_rt_rq: %ld\n",
 		OFFSET(task_group_rt_rq));
 	fprintf(fp, "                      rt_rq_tg: %ld\n",
