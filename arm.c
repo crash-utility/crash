@@ -83,6 +83,7 @@ static struct arm_pt_regs *panic_task_regs;
 #define PMD_TYPE_MASK   3
 #define PMD_TYPE_SECT   2
 #define PMD_TYPE_TABLE  1
+#define PMD_TYPE_SECT_LPAE 1
 
 static inline ulong *
 pmd_page_addr(ulong pmd)
@@ -219,12 +220,17 @@ arm_init(int when)
 	case PRE_GDB:
 		if ((machdep->pgd = (char *)malloc(PGDIR_SIZE())) == NULL)
 			error(FATAL, "cannot malloc pgd space.");
+		if ((machdep->pmd = (char *)malloc(PMDSIZE())) == NULL)
+			error(FATAL, "cannot malloc pmd space.");
 		if ((machdep->ptbl = (char *)malloc(PAGESIZE())) == NULL)
 			error(FATAL, "cannot malloc ptbl space.");
 
 		/*
-		 * Kernel text starts 16k after PAGE_OFFSET.
+		 * LPAE requires an additional page for the PGD, 
+		 * so PG_DIR_SIZE = 0x5000 for LPAE
 		 */
+		if ((symbol_value("_text") - symbol_value("swapper_pg_dir")) == 0x5000)
+			machdep->flags |= PAE;
 		machdep->kvbase = symbol_value("_stext") & ~KVBASE_MASK;
 		machdep->identity_map_base = machdep->kvbase;
 		machdep->is_kvaddr = arm_is_kvaddr;
@@ -269,9 +275,13 @@ arm_init(int when)
 		if (THIS_KERNEL_VERSION >= LINUX(3,3,0) ||
 		    symbol_exists("idmap_pgd"))
 			machdep->flags |= IDMAP_PGD;
-
-		machdep->section_size_bits = _SECTION_SIZE_BITS;
-		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+		if (machdep->flags & PAE) {
+			machdep->section_size_bits = _SECTION_SIZE_BITS_LPAE;
+			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_LPAE;
+		} else {
+			machdep->section_size_bits = _SECTION_SIZE_BITS;
+			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+		}
 
 		if (symbol_exists("irq_desc"))
 			ARRAY_LENGTH_INIT(machdep->nr_irqs, irq_desc,
@@ -362,6 +372,8 @@ arm_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sPGTABLE_V2", others++ ? "|" : "");
 	if (machdep->flags & IDMAP_PGD)
 		fprintf(fp, "%sIDMAP_PGD", others++ ? "|" : "");
+	if (machdep->flags & PAE)
+		fprintf(fp, "%sPAE", others++ ? "|" : "");
         fprintf(fp, ")\n");
 
 	fprintf(fp, "             kvbase: %lx\n", machdep->kvbase);
@@ -834,24 +846,32 @@ arm_processor_speed(void)
  * is passed in, don't print anything.
  */
 static int
-arm_translate_pte(ulong pte, void *physaddr, ulonglong pae_pte)
+arm_translate_pte(ulong pte, void *physaddr, ulonglong lpae_pte)
 {
 	char ptebuf[BUFSIZE];
 	char physbuf[BUFSIZE];
 	char buf[BUFSIZE];
 	int page_present;
-	ulong paddr;
+	ulonglong paddr;
 	int len1, len2, others;
 
+	if (machdep->flags & PAE) {
+		paddr = LPAE_PAGEBASE(lpae_pte);
+		sprintf(ptebuf, "%llx", lpae_pte);
+		pte = (ulong)lpae_pte;
+	} else {
+		paddr = PAGEBASE(pte);
+		sprintf(ptebuf, "%lx", pte);
+	}
 	page_present = pte_present(pte);
-	paddr = PAGEBASE(pte);
-
 	if (physaddr) {
-		*((ulong *)physaddr) = paddr;
+		if (machdep->flags & PAE)
+			*((ulonglong *)physaddr) = paddr;
+		else
+			*((ulong *)physaddr) = (ulong)paddr;
 		return page_present;
 	}
 
-	sprintf(ptebuf, "%lx", pte);
 	len1 = MAX(strlen(ptebuf), strlen("PTE"));
 	fprintf(fp, "%s  ", mkstring(buf, len1, CENTER | LJUST, "PTE"));
 
@@ -860,7 +880,7 @@ arm_translate_pte(ulong pte, void *physaddr, ulonglong pae_pte)
 		return page_present;
 	}
 
-	sprintf(physbuf, "%lx", paddr);
+	sprintf(physbuf, "%llx", paddr);
 	len2 = MAX(strlen(physbuf), strlen("PHYSICAL"));
 	fprintf(fp, "%s  ", mkstring(buf, len2, CENTER | LJUST, "PHYSICAL"));
 
@@ -1049,6 +1069,90 @@ arm_vtop(ulong vaddr, ulong *pgd, physaddr_t *paddr, int verbose)
 }
 
 /*
+ * Virtual to physical memory translation when "CONFIG_ARM_LPAE=y".
+ * This function will be called by both arm_kvtop() and arm_uvtop().
+ */
+static int
+arm_lpae_vtop(ulong vaddr, ulong *pgd, physaddr_t *paddr, int verbose)
+{
+	char buf[BUFSIZE];
+	physaddr_t page_dir;
+	physaddr_t page_middle;
+	physaddr_t page_table;
+	pgd_t pgd_pmd;
+	pmd_t pmd_pte;
+	pte_t pte;
+
+	if (verbose)
+		fprintf(fp, "PAGE DIRECTORY: %lx\n", (ulong)pgd);
+
+	/*
+	 * pgd_offset(pgd, vaddr)
+	 */
+	page_dir = LPAE_VTOP((ulong)pgd + LPAE_PGD_OFFSET(vaddr) * 8);
+	FILL_PGD_LPAE(LPAE_VTOP(pgd), PHYSADDR, LPAE_PGDIR_SIZE());
+	pgd_pmd = ULONGLONG(machdep->pgd + LPAE_PGDIR_OFFSET(page_dir));
+
+	if (verbose)
+		fprintf(fp, "  PGD: %8llx => %llx\n",
+			(ulonglong)page_dir, pgd_pmd);
+
+	if (!pgd_pmd)
+		return FALSE;
+
+	/*
+	 * pmd_offset(pgd, vaddr)
+	 */
+	page_middle = LPAE_PAGEBASE(pgd_pmd) + LPAE_PMD_OFFSET(vaddr) * 8;
+	FILL_PMD_LPAE(LPAE_PAGEBASE(pgd_pmd), PHYSADDR, LPAE_PMDIR_SIZE());
+	pmd_pte = ULONGLONG(machdep->pmd + LPAE_PMDIR_OFFSET(page_middle));
+
+	if (!pmd_pte)
+		return FALSE;
+
+	if ((pmd_pte & PMD_TYPE_MASK) == PMD_TYPE_SECT_LPAE) {
+		ulonglong sectionbase = LPAE_PAGEBASE(pmd_pte)
+			& LPAE_SECTION_PAGE_MASK;
+
+		if (verbose)
+			fprintf(fp, " PAGE: %8llx  (2MB)\n\n",
+				(ulonglong)sectionbase);
+
+		*paddr = sectionbase + (vaddr & ~LPAE_SECTION_PAGE_MASK);
+		return TRUE;
+	}
+	/*
+	 * pte_offset_map(pmd, vaddr)
+	 */
+	page_table = LPAE_PAGEBASE(pmd_pte) + PTE_OFFSET(vaddr) * 8;
+	FILL_PTBL_LPAE(LPAE_PAGEBASE(pmd_pte), PHYSADDR, LPAE_PTEDIR_SIZE());
+	pte = ULONGLONG(machdep->ptbl + LPAE_PTEDIR_OFFSET(page_table));
+
+	if (verbose) {
+		fprintf(fp, "  PTE: %8llx => %llx\n\n",
+			(ulonglong)page_table, pte);
+	}
+
+	if (!pte_present(pte)) {
+		if (pte && verbose) {
+			fprintf(fp, "\n");
+			arm_translate_pte(0, 0, pte);
+		}
+		return FALSE;
+	}
+
+	*paddr = LPAE_PAGEBASE(pte) + PAGEOFFSET(vaddr);
+
+	if (verbose) {
+		fprintf(fp, " PAGE: %s\n\n",
+			mkstring(buf, VADDR_PRLEN, RJUST | LONG_HEX, 
+			MKSTR(PAGEBASE(pte))));
+		arm_translate_pte(0, 0, pte);
+	}
+	return TRUE;
+}
+
+/*
  * Translates a user virtual address to its physical address. cmd_vtop() sets
  * the verbose flag so that the pte translation gets displayed; all other
  * callers quietly accept the translation.
@@ -1098,6 +1202,9 @@ arm_uvtop(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, int verbose)
 				FAULT_ON_ERROR);
 	}
 
+	if (machdep->flags & PAE)
+		return arm_lpae_vtop(uvaddr, pgd, paddr, verbose);
+
 	return arm_vtop(uvaddr, pgd, paddr, verbose);
 }
 
@@ -1122,6 +1229,10 @@ arm_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbose)
 		if (!verbose)
 			return TRUE;
 	}
+
+	if (machdep->flags & PAE)
+		return arm_lpae_vtop(kvaddr, (ulong *)vt->kernel_pgd[0], 
+			paddr, verbose);
 
 	return arm_vtop(kvaddr, (ulong *)vt->kernel_pgd[0], paddr, verbose);
 }

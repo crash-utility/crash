@@ -2647,6 +2647,80 @@ struct load_module {
 #define _SECTION_SIZE_BITS	28
 #define _MAX_PHYSMEM_BITS	32
 
+/*add for LPAE*/
+typedef unsigned long long u64;
+typedef signed int         s32;
+typedef u64 pgd_t;
+typedef u64 pmd_t;
+typedef u64 pte_t;
+
+#define PMDSIZE()		(PAGESIZE())
+#define LPAE_PGDIR_SHIFT	(30)
+#define LPAE_PMDIR_SHIFT	(21)
+
+#define LPAE_PGD_OFFSET(vaddr)  ((vaddr) >> LPAE_PGDIR_SHIFT)
+#define LPAE_PMD_OFFSET(vaddr)  (((vaddr) >> LPAE_PMDIR_SHIFT) & \
+				((1<<(LPAE_PGDIR_SHIFT-LPAE_PMDIR_SHIFT))-1))
+
+#define _SECTION_SIZE_BITS_LPAE	28
+#define _MAX_PHYSMEM_BITS_LPAE	36
+
+/*
+ * #define PTRS_PER_PTE            512
+ * #define PTRS_PER_PMD            512
+ * #define PTRS_PER_PGD            4
+ *
+ */
+
+#define LPAE_PGDIR_SIZE()	32
+#define LPAE_PGDIR_OFFSET(X)	(((ulong)(X)) & (LPAE_PGDIR_SIZE() - 1))
+
+#define LPAE_PMDIR_SIZE()	4096
+#define LPAE_PMDIR_OFFSET(X)	(((ulong)(X)) & (LPAE_PMDIR_SIZE() - 1))
+
+#define LPAE_PTEDIR_SIZE()	4096
+#define LPAE_PTEDIR_OFFSET(X)	(((ulong)(X)) & (LPAE_PTEDIR_SIZE() - 1))
+
+/*section size for LPAE is 2MiB*/
+#define LPAE_SECTION_PAGE_MASK	(~((MEGABYTES(2))-1))
+
+#define _PHYSICAL_MASK_LPAE         ((1ULL << _MAX_PHYSMEM_BITS_LPAE) - 1)
+#define PAGE_BASE_MASK    ((u64)((s32)machdep->pagemask & _PHYSICAL_MASK_LPAE))
+#define LPAE_PAGEBASE(X)                (((ulonglong)(X)) & PAGE_BASE_MASK)
+
+#define LPAE_VTOP(X) \
+	((unsigned long long)(unsigned long)(X) - \
+			(machdep->kvbase) + (machdep->machspec->phys_base))
+
+#define IS_LAST_PGD_READ_LPAE(pgd)     ((pgd) == \
+					machdep->machspec->last_pgd_read_lpae)
+#define IS_LAST_PMD_READ_LPAE(pmd)     ((pmd) == \
+					machdep->machspec->last_pmd_read_lpae)
+#define IS_LAST_PTBL_READ_LPAE(ptbl)   ((ptbl) == \
+					machdep->machspec->last_ptbl_read_lpae)
+
+#define FILL_PGD_LPAE(PGD, TYPE, SIZE)			                    \
+	if (!IS_LAST_PGD_READ_LPAE(PGD)) {                                  \
+		readmem((ulonglong)(PGD), TYPE, machdep->pgd,               \
+			SIZE, "pmd page", FAULT_ON_ERROR);                   \
+		machdep->machspec->last_pgd_read_lpae \
+						= (ulonglong)(PGD);        \
+	}
+#define FILL_PMD_LPAE(PMD, TYPE, SIZE)			                    \
+	if (!IS_LAST_PMD_READ_LPAE(PMD)) {                                  \
+		readmem((ulonglong)(PMD), TYPE, machdep->pmd,               \
+			SIZE, "pmd page", FAULT_ON_ERROR);                  \
+		machdep->machspec->last_pmd_read_lpae \
+						= (ulonglong)(PMD);        \
+	}
+
+#define FILL_PTBL_LPAE(PTBL, TYPE, SIZE)		          	    \
+	if (!IS_LAST_PTBL_READ_LPAE(PTBL)) {                                \
+		readmem((ulonglong)(PTBL), TYPE, machdep->ptbl,              \
+			SIZE, "page table", FAULT_ON_ERROR);                 \
+		machdep->machspec->last_ptbl_read_lpae \
+						= (ulonglong)(PTBL); 	    \
+	}
 #endif  /* ARM */
 
 #ifndef EM_AARCH64
@@ -4979,6 +5053,9 @@ struct machine_specific {
 	ulong kernel_text_end;
 	ulong exception_text_start;
 	ulong exception_text_end;
+	ulonglong last_pgd_read_lpae;
+	ulonglong last_pmd_read_lpae;
+	ulonglong last_ptbl_read_lpae;
 	struct arm_pt_regs *crash_task_regs;
 	int unwind_index_prel31;
 };
