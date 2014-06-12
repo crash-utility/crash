@@ -1,8 +1,8 @@
 /* 
  * xendump.h
  *
- * Copyright (C) 2006, 2007, 2009, 2010 David Anderson
- * Copyright (C) 2006, 2007, 2009, 2010 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2006, 2007, 2009, 2010, 2014 David Anderson
+ * Copyright (C) 2006, 2007, 2009, 2010, 2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,9 +42,9 @@ struct xen_core_header {
     unsigned int xch_magic;
     unsigned int xch_nr_vcpus;
     unsigned int xch_nr_pages;
-    unsigned long xch_ctxt_offset;
-    unsigned long xch_index_offset;
-    unsigned long xch_pages_offset;
+    off_t xch_ctxt_offset;
+    off_t xch_index_offset;
+    off_t xch_pages_offset;
 };
 
 struct pfn_offset_cache {

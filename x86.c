@@ -4897,7 +4897,7 @@ x86_xendump_p2m_create(struct xendump_data *xd)
 		    "MEMBER_OFFSET(vcpu_guest_context, ctrlreg): %ld\n",
 			ctrlreg_offset);
 
-	offset = (off_t)xd->xc_core.header.xch_ctxt_offset + 
+	offset = xd->xc_core.header.xch_ctxt_offset +
 		(off_t)ctrlreg_offset;
 
 	if (lseek(xd->xfd, offset, SEEK_SET) == -1)
@@ -4997,7 +4997,7 @@ x86_pvops_xendump_p2m_create(struct xendump_data *xd)
 		    "MEMBER_OFFSET(vcpu_guest_context, ctrlreg): %ld\n",
 			ctrlreg_offset);
 
-	offset = (off_t)xd->xc_core.header.xch_ctxt_offset + 
+	offset = xd->xc_core.header.xch_ctxt_offset +
 		(off_t)ctrlreg_offset;
 
 	if (lseek(xd->xfd, offset, SEEK_SET) == -1)
@@ -5369,7 +5369,7 @@ x86_xendump_panic_task(struct xendump_data *xd)
 	    INVALID_MEMBER(cpu_user_regs_esp))
 		return NO_TASK;
 
-        offset = (off_t)xd->xc_core.header.xch_ctxt_offset +
+        offset = xd->xc_core.header.xch_ctxt_offset +
                 (off_t)OFFSET(vcpu_guest_context_user_regs) +
 		(off_t)OFFSET(cpu_user_regs_esp);
 
@@ -5419,7 +5419,7 @@ x86_get_xendump_regs(struct xendump_data *xd, struct bt_info *bt, ulong *eip, ul
             INVALID_MEMBER(cpu_user_regs_esp))
                 goto generic;
 
-        offset = (off_t)xd->xc_core.header.xch_ctxt_offset +
+        offset = xd->xc_core.header.xch_ctxt_offset +
                 (off_t)OFFSET(vcpu_guest_context_user_regs) +
                 (off_t)OFFSET(cpu_user_regs_esp);
         if (lseek(xd->xfd, offset, SEEK_SET) == -1)
@@ -5427,7 +5427,7 @@ x86_get_xendump_regs(struct xendump_data *xd, struct bt_info *bt, ulong *eip, ul
         if (read(xd->xfd, &xesp, sizeof(ulong)) != sizeof(ulong))
                 goto generic;
 
-        offset = (off_t)xd->xc_core.header.xch_ctxt_offset +
+        offset = xd->xc_core.header.xch_ctxt_offset +
                 (off_t)OFFSET(vcpu_guest_context_user_regs) +
                 (off_t)OFFSET(cpu_user_regs_eip);
         if (lseek(xd->xfd, offset, SEEK_SET) == -1)
