@@ -3520,6 +3520,7 @@ int
 select_namelist(char *new)
 {
 	struct stat stat1, stat2;
+	char *namep;
 
 	if (pc->server_namelist) {
         	pc->namelist_debug = new;
@@ -3533,6 +3534,11 @@ select_namelist(char *new)
 
 	if (stat1.st_size > stat2.st_size) {
 		pc->namelist_debug = pc->namelist;
+		if (pc->namelist_orig) {
+			namep = pc->namelist_debug_orig;
+			pc->namelist_debug_orig = pc->namelist_orig;
+			pc->namelist_orig = namep;
+		}
 		pc->namelist = new;		
 	} else if (stat2.st_size > stat1.st_size) 
 		pc->namelist_debug = new;
