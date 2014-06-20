@@ -14245,6 +14245,8 @@ done:
 		    "search_virtual: read %ld (%ld%%) of %ld pages checked in %ld seconds\n", 
 			pages_read, pct, pages_checked, finish - begin);
 	}
+
+	FREEBUF(pagebuf);
 }
 
 
@@ -14334,6 +14336,8 @@ search_physical(struct searchinfo *si)
 		    "search_physical: read %ld (%ld%%) of %ld pages checked in %ld seconds\n", 
 			pages_read, pct, pages_checked, finish - begin);
 	}
+
+	FREEBUF(pagebuf);
 }
 
 
