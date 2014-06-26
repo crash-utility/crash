@@ -4113,6 +4113,17 @@ module_objfile_search(char *modref, char *filename, char *tree)
 		free(namelist);
 	}
 
+	if (!retbuf && is_kpatch()) {
+		sprintf(file, "%s.ko", modref);
+		sprintf(dir, "/usr/lib/kpatch/%s", kt->utsname.release);
+		if (!(retbuf = search_directory_tree(dir, file, 0))) {
+			sprintf(file, "%s.ko.debug", modref);
+			sprintf(dir, "/usr/lib/debug/usr/lib/kpatch/%s", 
+				kt->utsname.release);
+			retbuf = search_directory_tree(dir, file, 0);
+		}
+	}
+
 	return retbuf;
 }
 
