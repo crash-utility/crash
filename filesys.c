@@ -1372,12 +1372,19 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
 	if (flags == 0)
 		fprintf(fp, "%s", mount_hdr);
 
-	if ((flags & MOUNT_PRINT_FILES) &&
-	    (sb_s_files = OFFSET(super_block_s_files)) == INVALID_OFFSET) {
+	sb_s_files = VALID_MEMBER(super_block_s_files) ?
+		OFFSET(super_block_s_files) : INVALID_OFFSET;
+
+	if ((flags & MOUNT_PRINT_FILES) && (sb_s_files == INVALID_OFFSET)) {
 		/*
-		 * No open files list in super_block (2.2).  
-		 * Use inuse_filps list instead.
+		 *  super_block.s_files deprecated
 		 */
+		if (!kernel_symbol_exists("inuse_filps")) 
+			option_not_supported('f');
+		/*
+	  	 * No open files list in super_block (2.2).  
+	  	 * Use inuse_filps list instead.
+	  	 */
 		dentry_list = create_dentry_array(symbol_value("inuse_filps"), 
 			&cnt);
 	}
