@@ -618,7 +618,7 @@ restart:
 		len = bitmap_len;
 		while (len) {
 			bytes_read = read(dd->dfd, bufptr, len);
-			if (bytes_read  < 0) {
+			if (bytes_read <= 0) {
 				error(INFO, "%s: cannot read memory bitmap\n",
 					DISKDUMP_VALID() ? "diskdump"
 					: "compressed kdump");
