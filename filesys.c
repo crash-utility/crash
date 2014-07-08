@@ -1379,8 +1379,11 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
 		/*
 		 *  super_block.s_files deprecated
 		 */
-		if (!kernel_symbol_exists("inuse_filps")) 
+		if (!kernel_symbol_exists("inuse_filps")) {
+			error(INFO, "the super_block.s_files linked list does "
+                                    "not exist in this kernel\n");
 			option_not_supported('f');
+		}
 		/*
 	  	 * No open files list in super_block (2.2).  
 	  	 * Use inuse_filps list instead.
