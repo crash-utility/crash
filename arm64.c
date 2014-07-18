@@ -251,6 +251,9 @@ arm64_verify_symbol(const char *name, ulong value, char type)
 
 	if (STREQ(name, "$d") || STREQ(name, "$x"))
 		return FALSE;
+	
+	if ((type == 'A') && STRNEQ(name, "__crc_"))
+		return FALSE;
 
 	if (!(machdep->flags & KSYMS_START) && STREQ(name, "idmap_pg_dir"))
 		machdep->flags |= KSYMS_START;
