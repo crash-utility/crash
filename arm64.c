@@ -222,7 +222,7 @@ arm64_init(int when)
 		 * of the crash. We need this information to extract correct
 		 * backtraces from the panic task.
 		 */
-		if (!ACTIVE() && !arm64_get_crash_notes())
+		if (!LIVE() && !arm64_get_crash_notes())
 			error(WARNING, "could not retrieve crash_notes\n");
 
 		break;
