@@ -56,6 +56,9 @@ static void arm64_clear_machdep_cache(void);
 static int arm64_in_alternate_stack(int, ulong);
 static int arm64_get_kvaddr_ranges(struct vaddr_range *);
 static int arm64_get_crash_notes(void);
+static void arm64_calc_VA_BITS(void);
+static int arm64_is_uvaddr(ulong, struct task_context *);
+
 
 /*
  * Do all necessary machine-specific setup here. This is called several times
@@ -91,23 +94,26 @@ arm64_init(int when)
 			machdep->pagesize = value / 2;
 		} else
 			machdep->pagesize = memory_page_size();   /* host */
+
 		machdep->pageshift = ffs(machdep->pagesize) - 1;
 		machdep->pageoffset = machdep->pagesize - 1;
 		machdep->pagemask = ~((ulonglong)machdep->pageoffset);
+
+		arm64_calc_VA_BITS();
+		machdep->machspec->page_offset = ARM64_PAGE_OFFSET;
+		machdep->identity_map_base = ARM64_PAGE_OFFSET;
+		machdep->machspec->userspace_top = ARM64_USERSPACE_TOP;
+		machdep->machspec->modules_vaddr = ARM64_MODULES_VADDR;
+		machdep->machspec->modules_end = ARM64_MODULES_END;
+		machdep->machspec->vmalloc_start_addr = ARM64_VMALLOC_START;
+		machdep->machspec->vmalloc_end = ARM64_VMALLOC_END;
+		machdep->kvbase = ARM64_VMALLOC_START;
+		machdep->machspec->vmemmap_vaddr = ARM64_VMEMMAP_VADDR;
+		machdep->machspec->vmemmap_end = ARM64_VMEMMAP_END;
+
 		switch (machdep->pagesize)
 		{
 		case 4096:
-			machdep->machspec->userspace_top = ARM64_USERSPACE_TOP_4K;
-			machdep->machspec->page_offset = ARM64_PAGE_OFFSET_4K;
-			machdep->machspec->vmalloc_start_addr = ARM64_VMALLOC_START_4K;
-			machdep->machspec->vmalloc_end = ARM64_VMALLOC_END_4K;
-			machdep->machspec->vmemmap_vaddr = ARM64_VMEMMAP_VADDR_4K;
-			machdep->machspec->vmemmap_end = ARM64_VMEMMAP_END_4K;
-			machdep->machspec->modules_vaddr = ARM64_MODULES_VADDR_4K;
-			machdep->machspec->modules_end = ARM64_MODULES_END_4K;
-			machdep->kvbase = ARM64_VMALLOC_START_4K;
-			machdep->identity_map_base = ARM64_PAGE_OFFSET_4K; 
-
 			machdep->flags |= VM_L3_4K;
 			machdep->ptrs_per_pgd = PTRS_PER_PGD_L3_4K;
 			if ((machdep->pgd = 
@@ -123,17 +129,6 @@ arm64_init(int when)
 			break;
 
 		case 65536:
-			machdep->machspec->userspace_top = ARM64_USERSPACE_TOP_64K;
-			machdep->machspec->page_offset = ARM64_PAGE_OFFSET_64K;
-			machdep->machspec->vmalloc_start_addr = ARM64_VMALLOC_START_64K;
-			machdep->machspec->vmalloc_end = ARM64_VMALLOC_END_64K;
-			machdep->machspec->vmemmap_vaddr = ARM64_VMEMMAP_VADDR_64K;
-			machdep->machspec->vmemmap_end = ARM64_VMEMMAP_END_64K;
-			machdep->machspec->modules_vaddr = ARM64_MODULES_VADDR_64K;
-			machdep->machspec->modules_end = ARM64_MODULES_END_64K;
-			machdep->kvbase = ARM64_VMALLOC_START_64K;
-			machdep->identity_map_base = ARM64_PAGE_OFFSET_64K; 
-
 			machdep->flags |= VM_L2_64K;
 			machdep->ptrs_per_pgd = PTRS_PER_PGD_L2_64K;
 			if ((machdep->pgd = 
@@ -147,9 +142,10 @@ arm64_init(int when)
 			break;
 
 		default:
-			error(FATAL, "invalid/unknown page size: %d\n", 
+			error(FATAL, "invalid/unsupported page size: %d\n", 
 				machdep->pagesize);
 		}
+
 		machdep->last_pud_read = 0;  /* not used */
 		machdep->last_pgd_read = 0;
 		machdep->last_pmd_read = 0;
@@ -164,7 +160,7 @@ arm64_init(int when)
 		machdep->uvtop = arm64_uvtop;
 		machdep->kvtop = arm64_kvtop;
 		machdep->is_kvaddr = generic_is_kvaddr;
-		machdep->is_uvaddr = generic_is_uvaddr;
+		machdep->is_uvaddr = arm64_is_uvaddr;
 		machdep->eframe_search = arm64_eframe_search;
 		machdep->back_trace = arm64_back_trace_cmd;
 		machdep->in_alternate_stack = arm64_in_alternate_stack;
@@ -318,7 +314,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "            cmd_mach: arm64_cmd_mach()\n");
 	fprintf(fp, "        get_smp_cpus: arm64_get_smp_cpus()\n");
 	fprintf(fp, "           is_kvaddr: generic_is_kvaddr()\n");
-	fprintf(fp, "           is_uvaddr: generic_is_uvaddr()\n");
+	fprintf(fp, "           is_uvaddr: arm64_is_uvaddr()\n");
 	fprintf(fp, "     value_to_symbol: generic_machdep_value_to_symbol()\n");
 	fprintf(fp, "     init_kernel_pgd: arm64_init_kernel_pgd\n");
 	fprintf(fp, "        verify_paddr: generic_verify_paddr()\n");
@@ -359,6 +355,7 @@ arm64_dump_machdep_table(ulong arg)
 	ms = machdep->machspec;
 
 	fprintf(fp, "            machspec: %lx\n", (ulong)ms);
+	fprintf(fp, "               VA_BITS: %ld\n", ms->VA_BITS);
 	fprintf(fp, "         userspace_top: %016lx\n", ms->userspace_top);
 	fprintf(fp, "           page_offset: %016lx\n", ms->page_offset);
 	fprintf(fp, "    vmalloc_start_addr: %016lx\n", ms->vmalloc_start_addr);
@@ -1614,6 +1611,40 @@ arm64_IS_VMALLOC_ADDR(ulong vaddr)
                 ((machdep->flags & VMEMMAP) &&
                  (vaddr >= ms->vmemmap_vaddr && vaddr <= ms->vmemmap_end)) ||
                 (vaddr >= ms->modules_vaddr && vaddr <= ms->modules_end));
+}
+
+static void 
+arm64_calc_VA_BITS(void)
+{
+	int bitval;
+	struct syment *sp;
+
+	if (!(sp = symbol_search("swapper_pg_dir")) &&
+	    !(sp = symbol_search("idmap_pg_dir")) &&
+	    !(sp = symbol_search("_text")) &&
+	    !(sp = symbol_search("stext"))) { 
+		for (sp = st->symtable; sp < st->symend; sp++) {
+			if (highest_bit_long(sp->value) == 63)
+				break;
+		}
+	}
+
+	for (bitval = highest_bit_long(sp->value); bitval; bitval--) {
+		if ((sp->value & (1UL << bitval)) == 0) {
+			machdep->machspec->VA_BITS = bitval + 2;
+			break;
+		}
+	}
+
+	if (CRASHDEBUG(1))
+		fprintf(fp, "VA_BITS: %ld\n", machdep->machspec->VA_BITS);
+
+}
+
+static int
+arm64_is_uvaddr(ulong addr, struct task_context *tc)
+{
+        return (addr < ARM64_USERSPACE_TOP);
 }
 
 #endif  /* ARM64 */

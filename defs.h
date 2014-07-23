@@ -2842,25 +2842,19 @@ typedef signed int s32;
 #define VM_L3_4K      (0x8)
 
 /* 
- * source: Documentation/arm64/memory.txt 
+ * sources: Documentation/arm64/memory.txt 
+ *          arch/arm64/include/asm/memory.h 
+ *          arch/arm64/include/asm/pgtable.h
  */
-#define ARM64_USERSPACE_TOP_4K  (0x0000007fffffffffUL)
-#define ARM64_VMALLOC_START_4K  (0xffffff8000000000UL)
-#define ARM64_VMALLOC_END_4K    (0xffffffbbfffeffffUL)
-#define ARM64_VMEMMAP_VADDR_4K  (0xffffffbc00000000UL)
-#define ARM64_VMEMMAP_END_4K    (0xffffffbdffffffffUL)
-#define ARM64_MODULES_VADDR_4K  (0xffffffbffc000000UL)
-#define ARM64_MODULES_END_4K    (0xffffffbfffffffffUL)
-#define ARM64_PAGE_OFFSET_4K    (0xffffffc000000000UL)
 
-#define ARM64_USERSPACE_TOP_64K  (0x000003ffffffffffUL)
-#define ARM64_VMALLOC_START_64K  (0xfffffc0000000000UL)
-#define ARM64_VMALLOC_END_64K    (0xfffffdfbfffeffffUL)
-#define ARM64_VMEMMAP_VADDR_64K  (0xfffffdfc00000000UL)
-#define ARM64_VMEMMAP_END_64K    (0xfffffdfdffffffffUL)
-#define ARM64_MODULES_VADDR_64K  (0xfffffdfffc000000UL)
-#define ARM64_MODULES_END_64K    (0xfffffdffffffffffUL)
-#define ARM64_PAGE_OFFSET_64K    (0xfffffe0000000000UL)
+#define ARM64_PAGE_OFFSET    ((0xffffffffffffffffUL) << (machdep->machspec->VA_BITS - 1))
+#define ARM64_USERSPACE_TOP  ((1UL) << machdep->machspec->VA_BITS)
+#define ARM64_MODULES_VADDR  (ARM64_PAGE_OFFSET - MEGABYTES(64))
+#define ARM64_MODULES_END    (ARM64_PAGE_OFFSET - 1)
+#define ARM64_VMALLOC_START  ((0xffffffffffffffffUL) << machdep->machspec->VA_BITS)
+#define ARM64_VMALLOC_END    (ARM64_PAGE_OFFSET - 0x400000000UL - KILOBYTES(64) - 1)
+#define ARM64_VMEMMAP_VADDR  ((ARM64_VMALLOC_END+1) + KILOBYTES(64))
+#define ARM64_VMEMMAP_END    (ARM64_VMEMMAP_VADDR + GIGABYTES(8UL) - 1)
 
 #define ARM64_STACK_SIZE   (16384)
 
@@ -2914,6 +2908,7 @@ struct machine_specific {
 	struct arm64_pt_regs *panic_task_regs;
 	ulong pte_protnone;
 	ulong pte_file;
+	ulong VA_BITS;
 };
 
 struct arm64_stackframe {
