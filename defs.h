@@ -1903,6 +1903,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long cgroup_kn;
 	long kernfs_node_name;
 	long kernfs_node_parent;
+	long kmem_cache_cpu_partial;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

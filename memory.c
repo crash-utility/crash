@@ -271,6 +271,7 @@ static long count_partial(ulong, struct meminfo *);
 static ulong get_freepointer(struct meminfo *, void *);
 static int count_free_objects(struct meminfo *, ulong);
 char *is_slab_page(struct meminfo *, char *);
+static void do_cpu_partial_slub(struct meminfo *, int);
 static void do_node_lists_slub(struct meminfo *, ulong, int);
 static int devmem_is_restricted(void);
 static int switch_to_proc_kcore(void);
@@ -392,6 +393,8 @@ vm_init(void)
 	MEMBER_OFFSET_INIT(page_next, "page", "next");
 	if (VALID_MEMBER(page_next)) 
 		MEMBER_OFFSET_INIT(page_prev, "page", "prev");
+	if (INVALID_MEMBER(page_next))
+		ANON_MEMBER_OFFSET_INIT(page_next, "page", "next");
 
 	MEMBER_OFFSET_INIT(page_list, "page", "list");
 	if (VALID_MEMBER(page_list)) {
@@ -675,6 +678,7 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_freelist, "kmem_cache_cpu", "freelist");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_page, "kmem_cache_cpu", "page");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_node, "kmem_cache_cpu", "node");
+		MEMBER_OFFSET_INIT(kmem_cache_cpu_partial, "kmem_cache_cpu", "partial");
 		ANON_MEMBER_OFFSET_INIT(page_inuse, "page", "inuse");
 		ANON_MEMBER_OFFSET_INIT(page_offset, "page", "offset");
 		ANON_MEMBER_OFFSET_INIT(page_slab, "page", "slab");
@@ -17328,6 +17332,34 @@ bailout:
 	return FALSE;
 }
 
+static void
+do_cpu_partial_slub(struct meminfo *si, int cpu)
+{
+	ulong cpu_slab_ptr;
+	void *partial;
+
+	cpu_slab_ptr = ULONG(si->cache_buf + OFFSET(kmem_cache_cpu_slab)) +
+				kt->__per_cpu_offset[cpu];
+	readmem(cpu_slab_ptr + OFFSET(kmem_cache_cpu_partial), KVADDR,
+		&partial, sizeof(void *), "kmem_cache_cpu.partial",
+		RETURN_ON_ERROR);
+
+	fprintf(fp, "CPU %d PARTIAL:\n%s", cpu,
+		partial ? "" : "  (empty)\n");
+
+	/*
+	 * kmem_cache_cpu.partial points to the first page of per cpu partial
+	 * list.
+	 */ 
+	while (partial) {
+		si->slab = (ulong)partial;
+		do_slab_slub(si, VERBOSE);
+
+		readmem((ulong)partial + OFFSET(page_next), KVADDR, &partial,
+			sizeof(void *), "page.next", RETURN_ON_ERROR);
+
+	}
+}
 
 static void
 do_kmem_cache_slub(struct meminfo *si)  
@@ -17341,19 +17373,25 @@ do_kmem_cache_slub(struct meminfo *si)
 	per_cpu = (ulong *)GETBUF(sizeof(ulong) * vt->numnodes);
 
         for (i = 0; i < kt->cpus; i++) {
+		cpu_slab_ptr = ULONG(si->cache_buf + OFFSET(kmem_cache_cpu_slab)) +
+				kt->__per_cpu_offset[i];
+		fprintf(fp, "CPU %d KMEM_CACHE_CPU:\n  %lx\n", i, cpu_slab_ptr);
+
 		cpu_slab_ptr = get_cpu_slab_ptr(si, i, NULL);
 
 		fprintf(fp, "CPU %d SLAB:\n%s", i, 
 			cpu_slab_ptr ? "" : "  (empty)\n");
 
-                if (!cpu_slab_ptr)
-                        continue;
+                if (cpu_slab_ptr) {
+                	if ((n = page_to_nid(cpu_slab_ptr)) >= 0)
+				per_cpu[n]++;
 
-                if ((n = page_to_nid(cpu_slab_ptr)) >= 0)
-			per_cpu[n]++;
+			si->slab = cpu_slab_ptr;
+			do_slab_slub(si, VERBOSE);
+		}
 
-		si->slab = cpu_slab_ptr;
-		do_slab_slub(si, VERBOSE);
+		if (VALID_MEMBER(kmem_cache_cpu_partial))
+			do_cpu_partial_slub(si, i);
 
 		if (received_SIGINT())
 			restart(0);
