@@ -337,7 +337,9 @@ arm_init(int when)
 		 * backtraces from the panic task.
 		 */
 		if (!ACTIVE() && !arm_get_crash_notes())
-			error(WARNING, "could not retrieve crash_notes\n");
+			error(WARNING, 
+			    "cannot retrieve registers for active task%s\n\n",
+				kt->cpus > 1 ? "s" : "");
 
 		if (init_unwind_tables()) {
 			if (CRASHDEBUG(1))
@@ -1314,7 +1316,8 @@ arm_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 		ret = arm_get_frame(bt, &ip, &sp);
 
 	if (!ret) {
-		error(WARNING, "cannot get stackframe for task\n");
+		error(WARNING, "cannot determine starting stack frame for task %lx\n",
+			bt->task);
 		return;
 	}
 

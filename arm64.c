@@ -219,7 +219,9 @@ arm64_init(int when)
 		 * backtraces from the panic task.
 		 */
 		if (!LIVE() && !arm64_get_crash_notes())
-			error(WARNING, "could not retrieve crash_notes\n");
+			error(WARNING, 
+			    "cannot retrieve registers for active task%s\n\n",
+				kt->cpus > 1 ? "s" : "");
 
 		break;
 
@@ -1104,7 +1106,8 @@ arm64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 
 	if (!ret) {
 		error(WARNING, 
-			"cannot get stackframe for task %lx\n", bt->task);
+			"cannot determine starting stack frame for task %lx\n",
+				bt->task);
 		return;
 	}
 
