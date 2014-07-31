@@ -1220,6 +1220,9 @@ dump_Elf32_Ehdr(Elf32_Ehdr *elf)
 	case ELFOSABI_STANDALONE:
 		netdump_print("(ELFOSABI_STANDALONE)\n");
 		break;
+	case ELFOSABI_LINUX:
+		netdump_print("(ELFOSABI_LINUX)\n");
+		break;
         default:
                 netdump_print("(?)\n");
 	}
@@ -1266,6 +1269,9 @@ dump_Elf32_Ehdr(Elf32_Ehdr *elf)
         netdump_print("              e_machine: %d ", elf->e_machine);
 	switch (elf->e_machine) 
 	{
+	case EM_ARM:
+		netdump_print("(EM_ARM)\n");
+		break;
 	case EM_386:
 		netdump_print("(EM_386)\n");
 		break;
@@ -1358,6 +1364,9 @@ dump_Elf64_Ehdr(Elf64_Ehdr *elf)
 	case ELFOSABI_STANDALONE:
 		netdump_print("(ELFOSABI_STANDALONE)\n");
 		break;
+	case ELFOSABI_LINUX:
+		netdump_print("(ELFOSABI_LINUX)\n");
+		break;
         default:
                 netdump_print("(?)\n");
 	}
@@ -1418,6 +1427,12 @@ dump_Elf64_Ehdr(Elf64_Ehdr *elf)
                 break;
 	case EM_S390:
                 netdump_print("(EM_S390)\n");
+                break;
+	case EM_ARM:
+                netdump_print("(EM_ARM)\n");
+                break;
+	case EM_AARCH64:
+                netdump_print("(EM_AARCH64)\n");
                 break;
         default:
                 netdump_print("(unsupported)\n");
