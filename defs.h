@@ -503,6 +503,7 @@ struct program_context {
 #define VMCOREINFO    (0x400ULL)
 #define ALLOW_FP      (0x800ULL)
 #define REM_PAUSED_F (0x1000ULL)
+#define RAMDUMP	(0x2000ULL)
 #define REMOTE_PAUSED() (pc->flags2 & REM_PAUSED_F)
 	char *cleanup;
 	char *namelist_orig;
@@ -5522,6 +5523,18 @@ int write_proc_kcore(int, void *, int, ulong, physaddr_t);
 int kcore_memory_dump(FILE *);
 void dump_registers_for_qemu_mem_dump(void);
 void kdump_backup_region_init(void);
+
+/*
+ * ramdump.c
+ */
+int is_ramdump(char *pattern);
+char *ramdump_to_elf(void);
+void ramdump_elf_output_file(char *opt);
+void ramdump_cleanup(void);
+int read_ramdump(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr);
+void show_ramdump_files(void);
+void dump_ramdump_data(void);
+int is_ramdump_image(void);
 
 /*
  *  diskdump.c

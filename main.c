@@ -86,7 +86,7 @@ main(int argc, char **argv)
 	 */
 	opterr = 0;
 	optind = 0;
-	while((c = getopt_long(argc, argv, "Lkgh::e:i:sSvc:d:tfp:m:x",
+	while((c = getopt_long(argc, argv, "Lkgh::e:i:sSvc:d:tfp:m:xo:",
        		long_options, &option_index)) != -1) {
 		switch (c)
 		{
@@ -387,6 +387,10 @@ main(int argc, char **argv)
 			pc->flags |= PRELOAD_EXTENSIONS;
 			break;
 
+		case 'o':
+			ramdump_elf_output_file(optarg);
+			break;
+
 		default:
 			error(INFO, "invalid option: %s\n",
 				argv[optind-1]);
@@ -401,6 +405,29 @@ main(int argc, char **argv)
 	 *  Take the kernel and dumpfile arguments in either order.
 	 */
 	while (argv[optind]) {
+
+		if (is_ramdump(argv[optind])) {
+			if (pc->flags & MEMORY_SOURCES) {
+				error(INFO,
+					"too many dumpfile arguments\n");
+					program_usage(SHORT_FORM);
+			}
+			pc->dumpfile = ramdump_to_elf();
+			if (is_kdump(pc->dumpfile, KDUMP_LOCAL)) {
+				pc->flags |= KDUMP;
+				if (is_ramdump_image())
+					pc->readmem = read_ramdump;
+				else
+					pc->readmem = read_kdump;
+				pc->writemem = NULL;
+			} else {
+				error(INFO, "malformed ELF file: %s\n",
+					pc->dumpfile);
+				program_usage(SHORT_FORM);
+			}
+			optind++;
+			continue;
+		}
 
 		if (is_remote_daemon(argv[optind])) {
                 	if (pc->flags & DUMPFILE_TYPES) {
@@ -1363,6 +1390,8 @@ dump_program_context(void)
 		fprintf(fp, "%sVMCOREINFO", others++ ? "|" : "");
 	if (pc->flags2 & ALLOW_FP)
 		fprintf(fp, "%sALLOW_FP", others++ ? "|" : "");
+	if (pc->flags2 & RAMDUMP)
+		fprintf(fp, "%sRAMDUMP", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "         namelist: %s\n", pc->namelist);
@@ -1633,6 +1662,8 @@ readmem_function_name(void)
 		return("read_sadump");
 	else if (pc->readmem == read_s390_dumpfile)
 		return("read_s390_dumpfile");
+	else if (pc->readmem == read_ramdump)
+		return("read_ramdump");
 	else
 		return NULL;
 }
@@ -1699,6 +1730,7 @@ clean_exit(int status)
 	if (pc->cleanup && file_exists(pc->cleanup, NULL))
 		unlink(pc->cleanup);
 
+	ramdump_cleanup();
 	exit(status);
 }
 

@@ -7,10 +7,10 @@
 crash \- Analyze Linux crash dump data or a live system
 .SH SYNOPSIS
 .B crash
-[\fIOPTION\fR]... \fINAMELIST MEMORY-IMAGE    (dumpfile form)\fR
+[\fIOPTION\fR]... \fINAMELIST MEMORY-IMAGE[@ADDRESS]    (dumpfile form)\fR
 .br
 .B crash
-[\fIOPTION\fR]... \fI[NAMELIST]               (live system form)\fR
+[\fIOPTION\fR]... \fI[NAMELIST]                         (live system form)\fR
 .SH DESCRIPTION
 .B Crash
 is a tool for interactively analyzing the state of the Linux system
@@ -105,7 +105,7 @@ a
 .I vmlinux 
 file may be compressed in either gzip or bzip2 formats.
 .TP
-.BI MEMORY-IMAGE
+.BI MEMORY-IMAGE[@ADDRESS]
 A kernel core dump file created by the
 .I netdump,
 .I diskdump,
@@ -133,6 +133,14 @@ It is permissible to explicitly enter
 .I /dev/mem
 or 
 .I /proc/kcore.
+
+An @ADDRESS value must be appended to the MEMORY-IMAGE if the dumpfile
+is a raw RAM dumpfile that has no header information describing the file
+contents.  Multiple MEMORY-IMAGE@ADDRESS ordered pairs may be entered,
+with each dumpfile containing a contiguous block of RAM, where the ADDRESS
+value is the physical start address of the block expressed in hexadecimal.
+The physical address value(s) will be used to create a temporary ELF header
+in /var/tmp, which will only exist during the crash session.
 .TP
 .BI mapfile
 If the NAMELIST file is not the same kernel that is
@@ -228,6 +236,12 @@ as the console used for debug messages.
 If a processor's page size cannot be determined by the dumpfile,
 and the processor default cannot be used, use 
 .I page-size.
+.TP
+.BI \-o \ filename
+Only used with the MEMORY-IMAGE@ADDRESS format for raw RAM dumpfiles, 
+specifies a filename of a new ELF vmcore that will be created and used
+as the dumpfile.  It will be saved to allow future use as a standalone
+vmcore, replacing the original raw RAM dumpfile.
 .P
 .B -m \fIoption=value\fR
 .br
