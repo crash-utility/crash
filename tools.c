@@ -1021,7 +1021,7 @@ int
 decimal(char *s, int count)
 {
     	char *p;
-	int cnt;
+	int cnt, digits;
 
 	if (!count) {
 		strip_line_end(s);
@@ -1029,7 +1029,7 @@ decimal(char *s, int count)
 	} else
 		cnt = count;
 
-    	for (p = &s[0]; *p; p++) {
+    	for (p = &s[0], digits = 0; *p; p++) {
 	        switch(*p)
 	        {
 	            case '0':
@@ -1042,6 +1042,7 @@ decimal(char *s, int count)
 	            case '7':
 	            case '8':
 	            case '9':
+			digits++;
 	            case ' ':
 	                break;
 	            default:
@@ -1052,7 +1053,7 @@ decimal(char *s, int count)
 			break;
     	}
 
-    	return TRUE;
+    	return (digits ? TRUE : FALSE);
 }
 
 /*
@@ -1126,7 +1127,7 @@ int
 hexadecimal(char *s, int count)
 {
     	char *p;
-	int cnt;
+	int cnt, digits;
 
 	if (!count) {
 		strip_line_end(s);
@@ -1134,7 +1135,7 @@ hexadecimal(char *s, int count)
 	} else
 		cnt = count;
 
-	for (p = &s[0]; *p; p++) {
+	for (p = &s[0], digits = 0; *p; p++) {
         	switch(*p) 
 		{
 	        case 'a':
@@ -1159,6 +1160,7 @@ hexadecimal(char *s, int count)
 	        case '8':
 	        case '9':
 	        case '0':
+			digits++;
 	        case 'x':
 	        case 'X':
 	                break;
@@ -1176,7 +1178,7 @@ hexadecimal(char *s, int count)
 			break;
     	}
 
-    	return TRUE;
+    	return (digits ? TRUE : FALSE);
 }
 
 /*

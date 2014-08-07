@@ -6757,7 +6757,9 @@ char *input_info[] = {
 "  2. Enter \"r\" followed by the number identifying the desired command.",
 "  3. Enter \"r\" followed by a uniquely-identifying set of characters from",
 "     the beginning of the desired command string.",
-"  4. Recycle back through the command history list by hitting the up-arrow",
+"  4. Enter \"!\" followed by the number identifying the desired command,", 
+"     providing that the number is not a command name in the user's PATH.",
+"  5. Recycle back through the command history list by hitting the up-arrow",
 "     key until the desired command is re-displayed, and then hit <ENTER>.",
 "     If you go too far back, hit the down-arrow key.",
 " ",
@@ -6803,6 +6805,9 @@ char *input_info[] = {
 "not, the command will be passed on to the built-in gdb command for execution.",
 "If an input line starts with \"#\" or \"//\", then the line will be saved",
 "as a comment that is visible when re-cycling through the history list.",
+"",
+"To execute an external shell command, precede the command with an \"!\".",
+"To escape to a shell, enter \"!\" alone.",
 NULL
 };
 

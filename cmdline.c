@@ -21,6 +21,7 @@ static void restore_sanity(void);
 static void restore_ifile_sanity(void);
 static int pseudo_command(char *);
 static void check_special_handling(char *);
+static int is_executable_in_PATH(char *);
 static int is_shell_script(char *);
 static void list_aliases(char *);
 static int allocate_alias(int);
@@ -195,6 +196,29 @@ check_special_handling(char *s)
         }
 }
 
+static int
+is_executable_in_PATH(char *filename)
+{
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char *tok, *path;
+
+        if ((path = getenv("PATH")))
+		strcpy(buf2, path);
+	else
+		return FALSE;
+
+	tok = strtok(buf2, ":");
+	while (tok) {
+		sprintf(buf1, "%s/%s", tok, filename);
+		if (file_exists(buf1, NULL) && 
+		    (access(buf1, X_OK) == 0))
+			return TRUE;
+		tok = strtok(NULL, ":");
+	}
+
+	return FALSE;
+}
 
 /*
  *  At this point the only pseudo commands are the "r" (repeat) and 
@@ -203,9 +227,11 @@ check_special_handling(char *s)
  *    1. an "r" alone, or "!!" along, just means repeat the last command.
  *    2. an "r" followed by a number, means repeat that command from the
  *       history table.
- *    3. an "r" followed by one or more non-decimal characters means to
+ *    3. an "!" followed by a number that is not the name of a command 
+ *       in the user's PATH, means repeat that command from the history table.
+ *    4. an "r" followed by one or more non-decimal characters means to
  *       seek back until a line-beginning match is found. 
- *    4. an "h" alone, or a string beginning with "hi", means history.
+ *    5. an "h" alone, or a string beginning with "hi", means history.
  */
 static int
 pseudo_command(char *input)
@@ -242,6 +268,11 @@ pseudo_command(char *input)
                 goto rerun;
         }
 
+        if ((input[0] == '!') && decimal(&input[1], 0) &&
+	    !is_executable_in_PATH(first_nonspace(&input[1]))) {
+		p = first_nonspace(&input[1]);
+		goto rerun;
+	}
 
 	if (STRNEQ(input, "r ")) {
                 if (!history_offset)
