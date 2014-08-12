@@ -2166,8 +2166,13 @@ readmem(ulonglong addr, int memtype, void *buffer, long size,
                         goto readmem_error;
 
 		case READ_ERROR:
-                        if (PRINT_ERROR_MESSAGE)
-                        	error(INFO, READ_ERRMSG, memtype_string(memtype, 0), addr, type);
+                        if (PRINT_ERROR_MESSAGE) {
+				if ((pc->flags & DEVMEM) && (kt->flags & PRE_KERNEL_INIT) &&
+				    devmem_is_restricted() && switch_to_proc_kcore())
+					return(readmem(addr, memtype, bufptr, size,
+						type, error_handle));
+				error(INFO, READ_ERRMSG, memtype_string(memtype, 0), addr, type);
+			}
                         goto readmem_error;
 
 		case PAGE_EXCLUDED:
@@ -2192,11 +2197,6 @@ readmem_error:
         switch (error_handle)
         {
         case (FAULT_ON_ERROR):
-		if ((pc->flags & DEVMEM) && (kt->flags & PRE_KERNEL_INIT) &&
-		    devmem_is_restricted() && switch_to_proc_kcore())
-			return(readmem(addr, memtype, bufptr, size,
-				type, error_handle));
-		/* FALLTHROUGH */
         case (QUIET|FAULT_ON_ERROR):
                 if (pc->flags & IN_FOREACH)
                         RESUME_FOREACH();
@@ -2386,9 +2386,9 @@ devmem_is_restricted(void)
 
 		if (restricted)
 			error(INFO, 
- 	    		    "\nthis kernel may be configured with CONFIG_STRICT_DEVMEM,"
+ 	    		    "this kernel may be configured with CONFIG_STRICT_DEVMEM,"
 			    " which\n       renders /dev/mem unusable as a live memory "
-			    "source.\n\n");
+			    "source.\n");
 	}
 
 	return restricted;
