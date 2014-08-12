@@ -1,8 +1,8 @@
 /* filesys.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2013 David Anderson
- * Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014 David Anderson
+ * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -3510,6 +3510,11 @@ get_live_memory_source(void)
 					utsname.release, modname2);
 				if (file_exists(buf, &stat1))
 					use_module = TRUE;
+				else {
+					strcat(buf, ".xz");
+					if (file_exists(buf, &stat1))
+						use_module = TRUE;
+				}
 				break;
 			}
 			name = basename(strip_linefeeds(buf));
