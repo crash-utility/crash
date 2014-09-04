@@ -176,7 +176,7 @@ static void do_slab_chain_percpu_v2(long, struct meminfo *);
 static void do_slab_chain_percpu_v2_nodes(long, struct meminfo *);
 static void do_slab_chain_slab_overload_page(long, struct meminfo *);
 static int slab_freelist_index_size(void);
-static void do_slab_slub(struct meminfo *, int);
+static int do_slab_slub(struct meminfo *, int);
 static void do_kmem_cache_slub(struct meminfo *);
 static void save_slab_data(struct meminfo *);
 static int slab_data_saved(struct meminfo *);
@@ -17353,7 +17353,15 @@ do_cpu_partial_slub(struct meminfo *si, int cpu)
 	 */ 
 	while (partial) {
 		si->slab = (ulong)partial;
-		do_slab_slub(si, VERBOSE);
+
+		if (!is_page_ptr(si->slab, NULL)) {
+			error(INFO, "%s: invalid partial list slab pointer: %lx\n",
+				si->curname, si->slab);
+			break;
+		}
+
+		if (!do_slab_slub(si, VERBOSE))
+			break;
 
 		readmem((ulong)partial + OFFSET(page_next), KVADDR, &partial,
 			sizeof(void *), "page.next", RETURN_ON_ERROR);
@@ -17387,7 +17395,8 @@ do_kmem_cache_slub(struct meminfo *si)
 				per_cpu[n]++;
 
 			si->slab = cpu_slab_ptr;
-			do_slab_slub(si, VERBOSE);
+			if (!do_slab_slub(si, VERBOSE))
+				continue;	
 		}
 
 		if (VALID_MEMBER(kmem_cache_cpu_partial))
@@ -17445,27 +17454,27 @@ do_kmem_cache_slub(struct meminfo *si)
 		node, objects, inuse, objects - inuse); \
       }
 
-static void 
+static int
 do_slab_slub(struct meminfo *si, int verbose)
 {
 	physaddr_t paddr; 
 	ulong vaddr, objects_vaddr;
 	ushort inuse, objects; 
 	ulong freelist, cpu_freelist, cpu_slab_ptr;
-	int i, cpu_slab, is_free, node;
+	int i, free_objects, cpu_slab, is_free, node;
 	ulong p, q;
 
 	if (!si->slab) {
 		if (CRASHDEBUG(1))
 			error(INFO, "-S option not supported for CONFIG_SLUB\n");
-		return;
+		return FALSE;
 	}
 
 	if (!page_to_phys(si->slab, &paddr)) {
-		error(WARNING, 
-		    "%lx: cannot tranlate slab page to physical address\n",
-			si->slab);
-		return;
+		error(INFO, 
+		    "%s: invalid slab address: %lx\n",
+			si->curname, si->slab);
+		return FALSE;
 	} 
 
 	node = page_to_nid(si->slab);
@@ -17477,10 +17486,10 @@ do_slab_slub(struct meminfo *si, int verbose)
 
 	if (!readmem(si->slab + OFFSET(page_inuse), KVADDR, &inuse,
 	    sizeof(ushort), "page.inuse", RETURN_ON_ERROR))
-		return;
+		return FALSE;
 	if (!readmem(si->slab + OFFSET(page_freelist), KVADDR, &freelist,
 	    sizeof(void *), "page.freelist", RETURN_ON_ERROR))
-		return;
+		return FALSE;
 	/* 
 	 *  Pre-2.6.27, the object count and order were fixed in the
 	 *  kmem_cache structure.  Now they may change, say if a high
@@ -17493,7 +17502,7 @@ do_slab_slub(struct meminfo *si, int verbose)
 			objects_vaddr += sizeof(ushort);
 		if (!readmem(objects_vaddr, KVADDR, &objects,
 		    sizeof(ushort), "page.objects", RETURN_ON_ERROR))
-			return;
+			return FALSE;
 		/*
 		 *  Strip page.frozen bit.
 		 */
@@ -17511,12 +17520,18 @@ do_slab_slub(struct meminfo *si, int verbose)
 			    "slab objects: %d\n",
 				si->curname, si->slab, 
 				si->objects, objects);
+
+		if (objects == (ushort)(-1)) {
+			error(INFO, "%s: slab: %lx invalid page.objects: -1\n",
+				si->curname, si->slab);
+			return FALSE;
+		}
 	} else
 		objects = (ushort)si->objects;
 
 	if (!verbose) {
 		DUMP_SLAB_INFO_SLUB();
-		return;
+		return TRUE;
 	}
 
 	for (i = 0, cpu_slab = -1; i < kt->cpus; i++) {
@@ -17532,7 +17547,9 @@ do_slab_slub(struct meminfo *si, int verbose)
 			 */
 			if (cpu_freelist)
 				freelist = cpu_freelist;
-			inuse = si->objects - count_free_objects(si, freelist);
+			if ((free_objects = count_free_objects(si, freelist)) < 0)
+				return FALSE;
+			inuse = si->objects - free_objects;
 			break;
 		}
 	}
@@ -17543,7 +17560,7 @@ do_slab_slub(struct meminfo *si, int verbose)
 
 #define PAGE_MAPPING_ANON  1
 
-	if (CRASHDEBUG(1)) {
+	if (CRASHDEBUG(8)) {
 		fprintf(fp, "< SLUB: free list START: >\n");
 		i = 0;
 		for (q = freelist; q; q = get_freepointer(si, (void *)q)) {
@@ -17561,18 +17578,31 @@ do_slab_slub(struct meminfo *si, int verbose)
 	}
 
 	for (p = vaddr; p < vaddr + objects * si->size; p += si->size) {
+		hq_open();
 		is_free = FALSE;
 		for (is_free = 0, q = freelist; q; 
 			q = get_freepointer(si, (void *)q)) {
-			if (q == BADADDR)
-				return;
+
+			if (q == BADADDR) {
+				hq_close();
+				return FALSE;
+			}
 			if (q & PAGE_MAPPING_ANON)
 				break;
 			if (p == q) {
 				is_free = TRUE;
 				break;
 			}
+			if (!hq_enter(q)) {
+				hq_close();
+				error(INFO, 
+				    "%s: slab: %lx duplicate freelist object: %lx\n",
+					si->curname, si->slab, q);
+				return FALSE;
+			}
+
 		}
+		hq_close();
 
 		if (si->flags & ADDRESS_SPECIFIED) {
 			if ((si->spec_addr < p) ||
@@ -17590,6 +17620,8 @@ do_slab_slub(struct meminfo *si, int verbose)
 		fprintf(fp, "\n");
 
 	}
+
+	return TRUE;
 }
 
 static int
@@ -17598,13 +17630,19 @@ count_free_objects(struct meminfo *si, ulong freelist)
 	int c;
 	ulong q;
 
+	hq_open();
 	c = 0;
 	for (q = freelist; q; q = get_freepointer(si, (void *)q)) {
                 if (q & PAGE_MAPPING_ANON)
 			break;
+		if (!hq_enter(q)) {
+			error(INFO, "%s: slab: %lx duplicate freelist object: %lx\n",
+				si->curname, si->slab, q);
+			break;
+		}
                 c++;
 	}
-
+	hq_close();
 	return c;
 }
 
@@ -17616,8 +17654,11 @@ get_freepointer(struct meminfo *si, void *object)
 	
 	vaddr = (ulong)(object + si->slab_offset);
 	if (!readmem(vaddr, KVADDR, &nextfree,
-           sizeof(void *), "get_freepointer", RETURN_ON_ERROR))
+           sizeof(void *), "get_freepointer", QUIET|RETURN_ON_ERROR)) {
+		error(INFO, "%s: slab: %lx invalid freepointer: %lx\n", 
+			si->curname, si->slab, vaddr);
 		return BADADDR;
+	}
 
 	return nextfree;
 }
@@ -17625,7 +17666,7 @@ get_freepointer(struct meminfo *si, void *object)
 static void
 do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 {
-	ulong next, list_head, flags;
+	ulong next, last, list_head, flags;
 	int first;
 
 	if (!node_ptr)
@@ -17640,10 +17681,19 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 		next == list_head ? "  (empty)\n" : "");
 	first = 0;
         while (next != list_head) {
-		si->slab = next - OFFSET(page_lru);
+		si->slab = last = next - OFFSET(page_lru);
 		if (first++ == 0)
 			fprintf(fp, "  %s", slab_hdr);
-		do_slab_slub(si, !VERBOSE);
+
+		if (!is_page_ptr(si->slab, NULL)) {
+			error(INFO, 
+			    "%s: invalid partial list slab pointer: %lx\n", 
+				si->curname, si->slab);
+			return;
+		}
+
+		if (!do_slab_slub(si, !VERBOSE))
+			return;
 		
 		if (received_SIGINT())
 			restart(0);
@@ -17652,11 +17702,15 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
                     "page.lru.next", RETURN_ON_ERROR))
                         return;
 
-		if (!IS_KVADDR(next)) {
-			error(INFO, "%s: partial list: page.lru.next: %lx\n", 
-				si->curname, next);
+		if (!IS_KVADDR(next) || 
+		    ((next != list_head) && 
+		     !is_page_ptr(next - OFFSET(page_lru), NULL))) {
+			error(INFO, 
+			    "%s: partial list slab: %lx invalid page.lru.next: %lx\n", 
+				si->curname, last, next);
 			return;
 		}
+
         }
 
 #define SLAB_STORE_USER (0x00010000UL)
@@ -17680,7 +17734,14 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 		si->slab = next - OFFSET(page_lru);
 		if (first++ == 0)
 			fprintf(fp, "  %s", slab_hdr);
-		do_slab_slub(si, !VERBOSE);
+
+		if (!is_page_ptr(si->slab, NULL)) {
+			error(INFO, "%s: invalid full list slab pointer: %lx\n", 
+				si->curname, si->slab);
+			return;
+		}
+		if (!do_slab_slub(si, !VERBOSE))
+			return;
 
 		if (received_SIGINT())
 			restart(0);
@@ -17690,8 +17751,8 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
                         return;
 
 		if (!IS_KVADDR(next)) {
-			error(INFO, "%s: full list: page.lru.next: %lx\n", 
-				si->curname, next);
+			error(INFO, "%s: full list slab: %lx page.lru.next: %lx\n", 
+				si->curname, si->slab, next);
 			return;
 		}
         }
@@ -17814,7 +17875,7 @@ compound_head(ulong page)
 long 
 count_partial(ulong node, struct meminfo *si)
 {
-	ulong list_head, next;
+	ulong list_head, next, last;
 	short inuse;
 	ulong total_inuse;
 	ulong count = 0;
@@ -17834,9 +17895,12 @@ count_partial(ulong node, struct meminfo *si)
 			hq_close();
 			return -1;
 		}
+		last = next - OFFSET(page_lru);
+
 		if (inuse == -1) {
-			error(INFO, "%s: partial list: page.inuse: -1\n",
-				si->curname);
+			error(INFO, 
+			    "%s: partial list slab: %lx invalid page.inuse: -1\n",
+				si->curname, last);
 			break;
 		}
 		total_inuse += inuse;
@@ -17845,9 +17909,11 @@ count_partial(ulong node, struct meminfo *si)
 			hq_close();
 			return -1;
 		}
-		if (!IS_KVADDR(next)) {
-			error(INFO, "%s: partial list: page.lru.next: %lx\n", 
-				si->curname, next);
+		if (!IS_KVADDR(next) ||
+		    ((next != list_head) && 
+		     !is_page_ptr(next - OFFSET(page_lru), NULL))) {
+			error(INFO, "%s: partial list slab: %lx invalid page.lru.next: %lx\n", 
+				si->curname, last, next);
 			break;
 		}
 
@@ -17861,8 +17927,8 @@ count_partial(ulong node, struct meminfo *si)
 		}
 		if (!hq_enter(next)) {
 			error(INFO, 
-			    "%s: partial list: list corrupt: recurses back onto itself\n",
-				 si->curname);
+			    "%s: partial list slab: %lx duplicate slab entry: %lx\n",
+				 si->curname, last, next);
 			hq_close();
 			return -1;
 		}
