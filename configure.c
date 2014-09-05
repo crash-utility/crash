@@ -227,7 +227,7 @@ struct supported_gdb_version {
 	    "7.6",
 	    "GDB_FILES=${GDB_7.6_FILES}",
 	    "GDB_OFILES=${GDB_7.6_OFILES}",
-	    "GDB_PATCH_FILES=gdb-7.6.patch",
+	    "GDB_PATCH_FILES=gdb-7.6.patch gdb-7.6-ppc64le-support.patch",
 	    "GDB_FLAGS=-DGDB_7_6",
 	    "GPLv3"
 	},
@@ -1261,7 +1261,7 @@ make_spec_file(struct supported_gdb_version *sp)
 	printf("Vendor: Red Hat, Inc.\n");
 	printf("Packager: Dave Anderson <anderson@redhat.com>\n");
 	printf("ExclusiveOS: Linux\n");
-	printf("ExclusiveArch: %%{ix86} alpha ia64 ppc ppc64 ppc64pseries ppc64iseries x86_64 s390 s390x arm aarch64\n");
+	printf("ExclusiveArch: %%{ix86} alpha ia64 ppc ppc64 ppc64pseries ppc64iseries x86_64 s390 s390x arm aarch64 ppc64le\n");
 	printf("Buildroot: %%{_tmppath}/%%{name}-root\n");
 	printf("BuildRequires: ncurses-devel zlib-devel bison\n");
 	printf("Requires: binutils\n");

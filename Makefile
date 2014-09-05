@@ -260,6 +260,9 @@ gdb_unzip:
 gdb_patch:
 	if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ]; then \
 		patch -p0 < ${GDB}.patch; cp ${GDB}.patch ${GDB}; fi
+	if [ "${ARCH}" = "ppc64le" ] && [ -f ${GDB}-ppc64le-support.patch ]; then \
+		patch -d ${GDB} -p1 -F0 < ${GDB}-ppc64le-support.patch ; \
+	fi
 
 library: make_build_data ${OBJECT_FILES}
 	ar -rs ${PROGRAM}lib.a ${OBJECT_FILES}
