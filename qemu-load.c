@@ -437,6 +437,27 @@ cpu_load_seg (FILE *fp, struct qemu_x86_seg *seg, int size)
 	seg->flags = get_be32 (fp);
 }
 
+static bool
+v12_has_xsave_state(FILE *fp)
+{
+	char name[257];
+	bool ret = true;
+	long offset = ftell(fp); // save offset
+
+        /*
+	 * peek into byte stream to check for APIC vmstate
+	 */
+	if (getc(fp) == QEMU_VM_SECTION_FULL) {
+		get_be32(fp); // skip section id
+		get_string(fp, name);
+		if (strcmp(name, "apic") == 0)
+			ret = false;
+	}
+	fseek(fp, offset, SEEK_SET); // restore offset
+
+	return ret;
+}
+
 static uint32_t
 cpu_load (struct qemu_device *d, FILE *fp, int size)
 {
@@ -619,7 +640,7 @@ retry:
 		dx86->kvm.wall_clock_msr = get_be64 (fp);
 	}
 
-	if (version_id >= 12) {
+	if (version_id >= 12 && v12_has_xsave_state(fp)) {
 		dx86->xcr0 = get_be64 (fp);
 		dx86->xstate_bv = get_be64 (fp);
 
