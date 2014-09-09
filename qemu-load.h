@@ -28,7 +28,8 @@ enum qemu_save_section {
   QEMU_VM_SECTION_START,
   QEMU_VM_SECTION_PART,
   QEMU_VM_SECTION_END,
-  QEMU_VM_SECTION_FULL
+  QEMU_VM_SECTION_FULL,
+  QEMU_VM_SUBSECTION
 };
 
 enum qemu_features {
@@ -192,6 +193,9 @@ struct qemu_device_x86 {
 	struct qemu_x86_kvm	kvm;
 	struct qemu_x86_mce	mce;
 	uint64_t		tsc_aux;
+	uint64_t		xcr0;
+	uint64_t		xstate_bv;
+	union qemu_uint128_t	ymmh_regs[16];
 };
 
 struct qemu_timer {

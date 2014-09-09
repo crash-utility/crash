@@ -619,6 +619,14 @@ retry:
 		dx86->kvm.wall_clock_msr = get_be64 (fp);
 	}
 
+	if (version_id >= 12) {
+		dx86->xcr0 = get_be64 (fp);
+		dx86->xstate_bv = get_be64 (fp);
+
+		for (i = 0; i < nregs; i++)
+			get_qemu128 (fp, &dx86->ymmh_regs[i]);
+	}
+
 store:
 	if (!kvmdump_regs_store(d->instance_id, dx86)) {
 		size = 32;
@@ -855,6 +863,10 @@ device_get (const struct qemu_device_loader *devices,
 
 next_device:
 	devp = devices;
+	if (sec == QEMU_VM_SUBSECTION) {
+		get_string(fp, name);
+		goto search_device;
+	}
 	section_id = get_be32 (fp);
 	if (sec != QEMU_VM_SECTION_START &&
 	    sec != QEMU_VM_SECTION_FULL)
@@ -868,6 +880,7 @@ next_device:
 	while (devp->name && strcmp (devp->name, name))
 		devp++;
 	if (!devp->name) {
+search_device:
 		dprintf("device_get: unknown/unsupported: \"%s\"\n", name);
 		if ((next_device_offset = device_search(devices, fp))) {
 			fseek(fp, next_device_offset, SEEK_CUR);
