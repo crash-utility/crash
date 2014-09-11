@@ -762,6 +762,11 @@ struct task_context {                     /* context stored for each task */
 	struct task_context *tc_next;
 };
 
+struct tgid_context {               /* tgid and task stored for each task */
+	ulong tgid;
+	ulong task;
+};
+
 struct task_table {                      /* kernel/local task table data */
 	struct task_context *current;
 	struct task_context *context_array;
@@ -795,6 +800,12 @@ struct task_table {                      /* kernel/local task table data */
 	char *thread_info;
 	char *mm_struct;
 	ulong init_pid_ns;
+	struct tgid_context *tgid_array;
+	struct tgid_context *last_tgid;
+	ulong tgid_searches;
+	ulong tgid_cache_hits;
+	long filepages;
+	long anonpages;
 };
 
 #define TASK_INIT_DONE       (0x1)
@@ -4831,6 +4842,8 @@ ulong generic_get_stackbase(ulong);
 ulong generic_get_stacktop(ulong);
 void dump_task_table(int);
 void sort_context_array(void);
+void sort_tgid_array(void);
+int sort_by_tgid(const void *, const void *);
 int in_irq_ctx(ulonglong, int, ulong);
 
 /*

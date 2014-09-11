@@ -800,6 +800,7 @@ reattempt:
 			} else if (!(pc->flags & MINIMAL_MODE)) {
 				tt->refresh_task_table();
 				sort_context_array();
+				sort_tgid_array();	
 			}
 		}
                 if (!STREQ(pc->curcmd, pc->program_name))

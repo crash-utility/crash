@@ -225,6 +225,7 @@ static int next_module_vaddr(ulong, ulong *);
 static int next_identity_mapping(ulong, ulong *);
 static int vm_area_page_dump(ulong, ulong, ulong, ulong, ulong,
 	struct reference *);
+static void rss_page_types_init(void);
 static int dump_swap_info(ulong, ulong *, ulong *);
 static void swap_info_init(void);
 static char *get_swapdev(ulong, char *);
@@ -1069,6 +1070,8 @@ vm_init(void)
 	kmem_cache_init();
 
 	page_flags_init();
+
+	rss_page_types_init();
 
 	vt->flags |= VM_INIT;
 }
@@ -4076,6 +4079,54 @@ in_user_stack(ulong task, ulong vaddr)
 }
 
 /*
+ * Set the const value of filepages and anonpages 
+ * according to MM_FILEPAGES and MM_ANONPAGES.
+ */
+static void 
+rss_page_types_init(void)
+{
+	long anonpages, filepages;
+
+	if (VALID_MEMBER(mm_struct_rss))
+		return;
+
+	if (VALID_MEMBER(mm_struct_rss_stat)) 
+	{
+		if (!enumerator_value("MM_FILEPAGES", &filepages) ||
+		    !enumerator_value("MM_ANONPAGES", &anonpages)) 
+		{
+			filepages = 0;
+			anonpages = 1;
+		}
+		tt->filepages = filepages;
+		tt->anonpages = anonpages;
+	}
+}
+
+static struct tgid_context *
+tgid_quick_search(ulong tgid)
+{
+	struct tgid_context *last, *next;
+
+	tt->tgid_searches++;
+
+	last = tt->last_tgid;
+	if (tgid == last->tgid) {
+		tt->tgid_cache_hits++;
+		return last;
+	}
+
+	next = last + 1;
+	if ((next < (tt->tgid_array + RUNNING_TASKS())) &&
+ 	    (tgid == next->tgid)) {
+		tt->tgid_cache_hits++;
+		return next;
+	}
+
+	return NULL;
+}
+
+/*
  *  Fill in the task_mem_usage structure with the RSS, virtual memory size,
  *  percent of physical memory being used, and the mm_struct address.
  */
@@ -4112,11 +4163,8 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 		if (VALID_MEMBER(mm_struct_rss_stat)) {
 			long anonpages, filepages;
 
-			if (!enumerator_value("MM_FILEPAGES", &filepages) ||
-			    !enumerator_value("MM_ANONPAGES", &anonpages)) {
-				filepages = 0;
-				anonpages = 1;
-			}
+			anonpages = tt->anonpages;
+			filepages = tt->filepages;
 			rss += LONG(tt->mm_struct +
 				OFFSET(mm_struct_rss_stat) +
 				OFFSET(mm_rss_stat_count) +
@@ -4129,19 +4177,35 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 
 		/* Check whether SPLIT_RSS_COUNTING is enabled */
 		if (VALID_MEMBER(task_struct_rss_stat)) {
-			int i, sync_rss;
-			ulong tgid;
-			struct task_context *tc1;
+			int sync_rss;
+			struct tgid_context tgid, *tgid_array, *tg, *first, *last;
 
-			tgid = task_tgid(task);
+			tgid_array = tt->tgid_array;
+			tgid.tgid = task_tgid(task);
 
-			tc1 = FIRST_CONTEXT();
-			for (i = 0; i < RUNNING_TASKS(); i++, tc1++) {
-				if (task_tgid(tc1->task) != tgid)
-					continue;
+			if (!(tg = tgid_quick_search(tgid.tgid)))
+				tg = (struct tgid_context *)bsearch(&tgid, tgid_array, RUNNING_TASKS(), 
+					sizeof(struct tgid_context), sort_by_tgid);
 
+			if (tg == NULL)
+				error(FATAL, "bsearch for tgid failed: task: %lx tgid: %ld\n", 
+					task, tgid.tgid);
+
+			/* find the first element which has the same tgid */
+			first = tg;
+			while ((first > tgid_array) && ((first - 1)->tgid == first->tgid)) 
+				first--;
+
+			/* find the last element which have same tgid */
+			last = tg;
+			while ((last < (tgid_array + (RUNNING_TASKS() - 1))) && 
+				(last->tgid == (last + 1)->tgid))
+				last++;
+
+			while (first <= last)
+			{
 				/* count 0 -> filepages */
-				if (!readmem(tc1->task +
+				if (!readmem(first->task +
 					OFFSET(task_struct_rss_stat) +
 					OFFSET(task_rss_stat_count), KVADDR,
 					&sync_rss,
@@ -4153,7 +4217,7 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 				rss += sync_rss;
 
 				/* count 1 -> anonpages */
-				if (!readmem(tc1->task +
+				if (!readmem(first->task +
 					OFFSET(task_struct_rss_stat) +
 					OFFSET(task_rss_stat_count) +
 					sizeof(int),
@@ -4164,7 +4228,13 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 						continue;
 
 				rss += sync_rss;
+
+				if(first == last)
+					break;
+				first++;
 			}
+
+			tt->last_tgid = last;
 		}
 
 		/*  

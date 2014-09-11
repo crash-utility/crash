@@ -493,6 +493,7 @@ task_init(void)
 	}
 
 	sort_context_array();
+	sort_tgid_array();
 
 	if (pc->flags & SILENT)
 		initialize_task_state();
@@ -639,6 +640,11 @@ allocate_task_space(int cnt)
                     malloc(cnt * sizeof(struct task_context))))
                         error(FATAL, "cannot malloc context array (%d tasks)",
                                 cnt);
+		if (!(tt->tgid_array = (struct tgid_context *)
+                    malloc(cnt * sizeof(struct tgid_context))))
+                        error(FATAL, "cannot malloc tgid array (%d tasks)",
+                                cnt);
+
 	} else {
                 if (!(tt->task_local = (void *)
 		    realloc(tt->task_local, cnt * sizeof(void *)))) 
@@ -651,6 +657,13 @@ allocate_task_space(int cnt)
 		    cnt * sizeof(struct task_context)))) 
                         error(FATAL,
                             "%scannot realloc context array (%d tasks)",
+	                	(pc->flags & RUNTIME) ? "" : "\n", cnt);
+
+		 if (!(tt->tgid_array = (struct tgid_context *)
+                    realloc(tt->tgid_array, 
+		    cnt * sizeof(struct tgid_context)))) 
+                        error(FATAL,
+                            "%scannot realloc tgid array (%d tasks)",
 	                	(pc->flags & RUNTIME) ? "" : "\n", cnt);
 	}
 }
@@ -2276,13 +2289,14 @@ retry_active:
 static struct task_context *
 store_context(struct task_context *tc, ulong task, char *tp)
 {
-        pid_t *pid_addr;
+        pid_t *pid_addr, *tgid_addr;
         char *comm_addr;
         int *processor_addr;
         ulong *parent_addr;
         ulong *mm_addr;
         int has_cpu;
 	int do_verify;
+	struct tgid_context *tg;
 
 	processor_addr = NULL;
 
@@ -2305,6 +2319,7 @@ store_context(struct task_context *tc, ulong task, char *tp)
 		tc = tt->context_array + tt->running_tasks;
 
         pid_addr = (pid_t *)(tp + OFFSET(task_struct_pid));
+	tgid_addr = (pid_t *)(tp + OFFSET(task_struct_tgid));
         comm_addr = (char *)(tp + OFFSET(task_struct_comm));
 	if (tt->flags & THREAD_INFO) {
 		tc->thread_info = ULONG(tp + OFFSET(task_struct_thread_info));
@@ -2329,6 +2344,14 @@ store_context(struct task_context *tc, ulong task, char *tp)
         tc->mm_struct = *mm_addr;
         tc->task = task;
         tc->tc_next = NULL;
+
+	/*
+	 *  Fill a tgid_context structure with the data from 
+	 *  the incoming task.
+	 */
+	tg = tt->tgid_array + tt->running_tasks;
+	tg->tgid = *tgid_addr;
+	tg->task = task;
 
         if (do_verify && !verify_task(tc, do_verify)) {
 		error(INFO, "invalid task address: %lx\n", tc->task);
@@ -2442,6 +2465,33 @@ sort_context_array_by_last_run(void)
 	qsort((void *)tt->context_array, (size_t)tt->running_tasks,
         	sizeof(struct task_context), sort_by_last_run);
 	set_context(curtask, NO_PID);
+}
+
+/*
+ *  Set the tgid_context array by tgid number.
+ */
+void
+sort_tgid_array(void)
+{
+	if (VALID_MEMBER(mm_struct_rss) || (!VALID_MEMBER(task_struct_rss_stat)))
+		return;
+
+	qsort((void *)tt->tgid_array, (size_t)tt->running_tasks,
+		sizeof(struct tgid_context), sort_by_tgid);
+
+	tt->last_tgid = tt->tgid_array;
+}
+
+int
+sort_by_tgid(const void *arg1, const void *arg2)
+{
+	struct tgid_context *t1, *t2;
+
+	t1 = (struct tgid_context *)arg1;
+	t2 = (struct tgid_context *)arg2;
+
+	return (t1->tgid < t2->tgid ? -1 :
+		t1->tgid == t2->tgid ? 0 : 1);
 }
 
 /*
@@ -6557,6 +6607,7 @@ dump_task_table(int verbose)
 {
 	int i, j, more, nr_cpus;
 	struct task_context *tc;
+	struct tgid_context *tg;
 	char buf[BUFSIZE];
 	int others, wrap, flen;
 
@@ -6577,6 +6628,12 @@ dump_task_table(int verbose)
 		fprintf(fp, "          .tc_next: %lx\n", (ulong)tc->tc_next);
 	}
 	fprintf(fp, "     context_array: %lx\n",  (ulong)tt->context_array);
+	fprintf(fp, "        tgid_array: %lx\n",  (ulong)tt->tgid_array);
+	fprintf(fp, "     tgid_searches: %ld\n",  tt->tgid_searches);
+	fprintf(fp, "   tgid_cache_hits: %ld (%ld%%)\n", tt->tgid_cache_hits,
+		tt->tgid_searches ? 
+		tt->tgid_cache_hits * 100 / tt->tgid_searches : 0);
+	fprintf(fp, "         last_tgid: %lx\n",  (ulong)tt->last_tgid);
 	fprintf(fp, "refresh_task_table: ");
 	if (tt->refresh_task_table == refresh_fixed_task_table)
 		fprintf(fp, "refresh_fixed_task_table()\n");
@@ -6671,6 +6728,8 @@ dump_task_table(int verbose)
 	fprintf(fp, "       task_struct: %lx\n", (ulong)tt->task_struct);
 	fprintf(fp, "         mm_struct: %lx\n", (ulong)tt->mm_struct);
 	fprintf(fp, "       init_pid_ns: %lx\n", tt->init_pid_ns);
+	fprintf(fp, "         filepages: %ld\n", tt->filepages);
+	fprintf(fp, "         anonpages: %ld\n", tt->anonpages);
 
 
 	wrap = sizeof(void *) == SIZEOF_32BIT ? 8 : 4;
@@ -6885,6 +6944,13 @@ dump_task_table(int verbose)
 			fprintf(fp, "[%3d] %08lx %5ld %d %08lx %08lx %s\n",
 				i, tc->task, tc->pid, tc->processor, tc->ptask,
 				(ulong)tc->mm_struct, tc->comm); 
+	}
+
+        fprintf(fp, "\nINDEX       TASK       TGID  (COMM)\n");
+	for (i = 0; i < RUNNING_TASKS(); i++) {
+		tg = &tt->tgid_array[i];
+		tc = task_to_context(tg->task);
+		fprintf(fp, "[%3d] %lx %ld (%s)\n", i, tg->task, tg->tgid, tc->comm);
 	}
 }
 
