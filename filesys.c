@@ -25,6 +25,7 @@ static int find_booted_kernel(void);
 static int find_booted_system_map(void);
 static int verify_utsname(char *);
 static char **build_searchdirs(int, int *);
+static int build_kernel_directory(char *);
 static int redhat_kernel_directory_v1(char *);
 static int redhat_kernel_directory_v2(char *);
 static int redhat_debug_directory(char *);
@@ -393,6 +394,18 @@ build_searchdirs(int create, int *preferred)
 		cnt = DEFAULT_SEARCHDIRS;
 	}
 
+	if (build_kernel_directory(dirbuf)) {
+		if ((searchdirs[cnt] = (char *)
+		    malloc(strlen(dirbuf)+2)) == NULL) {
+			error(INFO,
+			    "/lib/modules/ directory entry malloc: %s\n",
+				strerror(errno));
+		} else {
+			sprintf(searchdirs[cnt], "%s/", dirbuf);
+			cnt++;
+		}
+	}
+
         if (redhat_kernel_directory_v1(dirbuf)) {
                 if ((searchdirs[cnt] = (char *) 
 		    malloc(strlen(dirbuf)+2)) == NULL) {
@@ -447,6 +460,27 @@ build_searchdirs(int create, int *preferred)
 	}
 
 	return searchdirs;
+}
+
+static int
+build_kernel_directory(char *buf)
+{
+	char *p1, *p2;
+
+	if (!strstr(kt->proc_version, "Linux version "))
+		return FALSE;
+
+	BZERO(buf, BUFSIZE);
+	sprintf(buf, "/lib/modules/");
+
+	p1 = &kt->proc_version[strlen("Linux version ")];
+	p2 = &buf[strlen(buf)];
+
+        while (*p1 != ' ')
+                *p2++ = *p1++;
+
+	strcat(buf, "/build");
+	return TRUE;
 }
 
 static int
