@@ -1243,14 +1243,16 @@ s390x_print_lowcore(char* lc, struct bt_info *bt,int show_symbols)
 	fprintf(fp,"  -prefix   : %#010lx\n", tmp[0]);
 	
 	ptr = lc + MEMBER_OFFSET(lc_struct, "cpu_timer_save_area");
-	tmp[0]=UINT(ptr);
-	tmp[1]=UINT(ptr + S390X_WORD_SIZE);
-	fprintf(fp,"  -cpu timer: %#010lx %#010lx\n", tmp[0],tmp[1]);
+	tmp[0]=ULONG(ptr);
+	fprintf(fp,"  -cpu timer: %#018lx\n", tmp[0]);
 
 	ptr = lc + MEMBER_OFFSET(lc_struct, "clock_comp_save_area");
-	tmp[0]=UINT(ptr);
-	tmp[1]=UINT(ptr + S390X_WORD_SIZE);
-	fprintf(fp,"  -clock cmp: %#010lx %#010lx\n", tmp[0], tmp[1]);
+	/*
+	 * Shift clock comparator by 8 because we got bit positions 0-55
+	 * in byte 1 to 8. The first byte is always zero.
+	 */
+	tmp[0]=ULONG(ptr) << 8;
+	fprintf(fp,"  -clock cmp: %#018lx\n", tmp[0]);
 
 	fprintf(fp,"  -general registers:\n");
 	ptr = lc + MEMBER_OFFSET(lc_struct, "gpregs_save_area");
