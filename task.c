@@ -8167,6 +8167,7 @@ dump_tasks_in_task_group_cfs_rq(int depth, ulong cfs_rq, int cpu,
 	int total, i;
 
 	total = 0;
+	curr_my_q = curr = 0;
 
 	if (depth) {
 		readmem(cfs_rq + OFFSET(cfs_rq_tg), KVADDR,

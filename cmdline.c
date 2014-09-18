@@ -199,25 +199,33 @@ check_special_handling(char *s)
 static int
 is_executable_in_PATH(char *filename)
 {
-	char buf1[BUFSIZE];
-	char buf2[BUFSIZE];
+	char *buf1, *buf2;
 	char *tok, *path;
+	int retval;
 
-        if ((path = getenv("PATH")))
+        if ((path = getenv("PATH"))) {
+		buf1 = GETBUF(strlen(path)+1);
+		buf2 = GETBUF(strlen(path)+1);
 		strcpy(buf2, path);
-	else
+	} else
 		return FALSE;
 
+	retval = FALSE;
 	tok = strtok(buf2, ":");
 	while (tok) {
 		sprintf(buf1, "%s/%s", tok, filename);
 		if (file_exists(buf1, NULL) && 
-		    (access(buf1, X_OK) == 0))
-			return TRUE;
+		    (access(buf1, X_OK) == 0)) {
+			retval = TRUE;
+			break;
+		}
 		tok = strtok(NULL, ":");
 	}
 
-	return FALSE;
+	FREEBUF(buf1);
+	FREEBUF(buf2);
+
+	return retval;
 }
 
 /*

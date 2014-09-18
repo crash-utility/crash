@@ -88,7 +88,8 @@ static char *write_elf(Elf64_Phdr *load, Elf64_Ehdr *e_head, size_t data_offset)
 	int fd1, fd2, i, err = 1;
 	char *buf;
 	char *out_elf;
-	size_t rd, len, offset;
+	size_t offset;
+	ssize_t rd, len;
 
 	buf = (char *)malloc(CPY_BUF_SZ);
 
