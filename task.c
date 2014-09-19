@@ -2033,7 +2033,7 @@ do_chained:
 		 *  Use init_pid_ns level 0 (PIDTYPE_PID).
 		 */
 		if (upid_ns != tt->init_pid_ns)
-			continue;
+			goto chain_next;
 
 		pid = upid - OFFSET(pid_numbers);
 
