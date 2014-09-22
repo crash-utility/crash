@@ -190,6 +190,8 @@ void
 arm_init(int when)
 {
 	ulong vaddr;
+	char *string;
+	struct syment *sp;
 
 #if defined(__i386__) || defined(__x86_64__)
 	if (ACTIVE())
@@ -229,8 +231,13 @@ arm_init(int when)
 		 * LPAE requires an additional page for the PGD, 
 		 * so PG_DIR_SIZE = 0x5000 for LPAE
 		 */
-		if ((symbol_value("_text") - symbol_value("swapper_pg_dir")) == 0x5000)
+		if ((string = pc->read_vmcoreinfo("CONFIG_ARM_LPAE"))) {
 			machdep->flags |= PAE;
+			free(string);
+		} else if ((sp = next_symbol("swapper_pg_dir", NULL)) &&
+		         (sp->value - symbol_value("swapper_pg_dir")) == 0x5000)
+                         machdep->flags |= PAE;
+
 		machdep->kvbase = symbol_value("_stext") & ~KVBASE_MASK;
 		machdep->identity_map_base = machdep->kvbase;
 		machdep->is_kvaddr = arm_is_kvaddr;
