@@ -4187,54 +4187,52 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 				tg = (struct tgid_context *)bsearch(&tgid, tgid_array, RUNNING_TASKS(), 
 					sizeof(struct tgid_context), sort_by_tgid);
 
-			if (tg == NULL)
-				error(FATAL, "bsearch for tgid failed: task: %lx tgid: %ld\n", 
-					task, tgid.tgid);
+			if (tg) {
+				/* find the first element which has the same tgid */
+				first = tg;
+				while ((first > tgid_array) && ((first - 1)->tgid == first->tgid)) 
+					first--;
 
-			/* find the first element which has the same tgid */
-			first = tg;
-			while ((first > tgid_array) && ((first - 1)->tgid == first->tgid)) 
-				first--;
+				/* find the last element which have same tgid */
+				last = tg;
+				while ((last < (tgid_array + (RUNNING_TASKS() - 1))) && 
+					(last->tgid == (last + 1)->tgid))
+					last++;
 
-			/* find the last element which have same tgid */
-			last = tg;
-			while ((last < (tgid_array + (RUNNING_TASKS() - 1))) && 
-				(last->tgid == (last + 1)->tgid))
-				last++;
+				while (first <= last)
+				{
+					/* count 0 -> filepages */
+					if (!readmem(first->task +
+						OFFSET(task_struct_rss_stat) +
+						OFFSET(task_rss_stat_count), KVADDR,
+						&sync_rss,
+						sizeof(int),
+						"task_struct rss_stat MM_FILEPAGES",
+						RETURN_ON_ERROR))
+							continue;
 
-			while (first <= last)
-			{
-				/* count 0 -> filepages */
-				if (!readmem(first->task +
-					OFFSET(task_struct_rss_stat) +
-					OFFSET(task_rss_stat_count), KVADDR,
-					&sync_rss,
-					sizeof(int),
-					"task_struct rss_stat MM_FILEPAGES",
-					RETURN_ON_ERROR))
-						continue;
+					rss += sync_rss;
 
-				rss += sync_rss;
+					/* count 1 -> anonpages */
+					if (!readmem(first->task +
+						OFFSET(task_struct_rss_stat) +
+						OFFSET(task_rss_stat_count) +
+						sizeof(int),
+						KVADDR, &sync_rss,
+						sizeof(int),
+						"task_struct rss_stat MM_ANONPAGES",
+						RETURN_ON_ERROR))
+							continue;
 
-				/* count 1 -> anonpages */
-				if (!readmem(first->task +
-					OFFSET(task_struct_rss_stat) +
-					OFFSET(task_rss_stat_count) +
-					sizeof(int),
-					KVADDR, &sync_rss,
-					sizeof(int),
-					"task_struct rss_stat MM_ANONPAGES",
-					RETURN_ON_ERROR))
-						continue;
+					rss += sync_rss;
 
-				rss += sync_rss;
+					if (first == last)
+						break;
+					first++;
+				}
 
-				if(first == last)
-					break;
-				first++;
+				tt->last_tgid = last;
 			}
-
-			tt->last_tgid = last;
 		}
 
 		/*  
