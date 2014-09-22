@@ -78,8 +78,12 @@
 #ifdef __i386__
 #define X86
 #endif
+#ifdef __powerpc64__
+#define PPC64
+#else
 #ifdef __powerpc__
 #define PPC
+#endif
 #endif
 #ifdef __ia64__
 #define IA64
@@ -89,9 +93,6 @@
 #endif
 #ifdef __s390x__
 #define S390X
-#endif
-#ifdef __powerpc64__
-#define PPC64
 #endif
 #ifdef __x86_64__
 #define X86_64
