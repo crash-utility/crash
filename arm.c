@@ -322,6 +322,9 @@ arm_init(int when)
 				   "pr_pid");
 		MEMBER_OFFSET_INIT(elf_prstatus_pr_reg, "elf_prstatus",
 				   "pr_reg");
+	
+		if (!machdep->hz)
+			machdep->hz = 100;
 		break;
 
 	case POST_VM:
