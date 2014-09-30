@@ -4728,6 +4728,7 @@ static long _EXCLUSIVE_ = TASK_STATE_UNINITIALIZED;
 static long _WAKEKILL_ = TASK_STATE_UNINITIALIZED;
 static long _WAKING_ = TASK_STATE_UNINITIALIZED;
 static long _NONINTERACTIVE_ = TASK_STATE_UNINITIALIZED;
+static long _PARKED_ = TASK_STATE_UNINITIALIZED;
 
 #define valid_task_state(X) ((X) != TASK_STATE_UNINITIALIZED)
 
@@ -4797,6 +4798,10 @@ dump_task_states(void)
 				_WAKEKILL_, _WAKEKILL_);
 		}
 	}
+
+	if (valid_task_state(_PARKED_))
+		fprintf(fp, "            PARKED: %3ld (0x%lx)\n", 
+			_PARKED_, _PARKED_);
 }
 
 
@@ -4864,6 +4869,8 @@ old_defaults:
 			_WAKEKILL_ = bitpos;
 		else if (strstr(buf, "(waking)"))
 			_WAKING_ = bitpos;
+		else if (strstr(buf, "(parked)"))
+			_PARKED_ = bitpos;
 
 		if (!bitpos)
 			bitpos = 1;
@@ -4969,6 +4976,11 @@ task_state_string_verbose(ulong task, char *buf)
 		sprintf(&buf[strlen(buf)], "%sTASK_NONINTERACTIVE",
 			count++ ? "|" : "");
 
+	if (state == _PARKED_) {
+		sprintf(buf, "TASK_PARKED");
+		return buf;
+	}
+
 	return buf;
 }
 
@@ -5042,6 +5054,11 @@ task_state_string(ulong task, char *buf, int verbose)
 		sprintf(buf, "DE"); 
 		valid++; 
 		set++;
+	}
+
+	if (state == _PARKED_) {
+		sprintf(buf, "PA"); 
+		valid++;
 	}
 
 	if (valid && exclusive) 
@@ -5680,6 +5697,7 @@ cmd_foreach(void)
 		    STREQ(args[optind], "TR") ||
 		    STREQ(args[optind], "ZO") ||
 		    STREQ(args[optind], "DE") ||
+		    STREQ(args[optind], "PA") ||
 		    STREQ(args[optind], "SW")) {
 
 			if (fd->flags & FOREACH_STATE)
@@ -5700,6 +5718,8 @@ cmd_foreach(void)
 				fd->state = _DEAD_;
 			else if (STREQ(args[optind], "SW"))
 				fd->state = _SWAPPING_;
+			else if (STREQ(args[optind], "PA"))
+				fd->state = _PARKED_;
 			fd->flags |= FOREACH_STATE;
 
 			optind++;
