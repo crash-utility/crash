@@ -5517,12 +5517,12 @@ endian_mismatch(char *file, char dumpfile_endian, ulong query)
 	case ELFDATA2LSB:
 		if (__BYTE_ORDER == __LITTLE_ENDIAN)
 			return FALSE;
-		endian = "big-endian";
+		endian = "little-endian";
 		break;
 	case ELFDATA2MSB:
 		if (__BYTE_ORDER == __BIG_ENDIAN)	
 			return FALSE;
-		endian = "little-endian";
+		endian = "big-endian";
 		break;
 	default:
 		endian = "unknown";	
