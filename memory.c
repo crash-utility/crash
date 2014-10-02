@@ -9187,7 +9187,11 @@ kmem_cache_s_array_nodes:
 		}
 		if (CRASHDEBUG(3))
 			fprintf(fp, "  array limit[%d]: %d\n", i, limit);
-                if (limit > max_limit)
+		if ((unsigned int)limit > INT_MAX)
+			error(INFO, 
+			    "kmem_cache: %lx: invalid array limit[%d]: %d\n",
+				cache, i, limit);
+		else if (limit > max_limit)
                         max_limit = limit;
         }
 
@@ -9219,7 +9223,11 @@ kmem_cache_s_array_nodes:
 					fprintf(fp, 
 					    "  shared node limit[%d]: %d\n", 
 						i, limit);
-				if (limit > max_limit)
+				if ((unsigned int)limit > INT_MAX)
+					error(INFO, 
+					    "kmem_cache: %lx: shared node limit[%d]: %d\n",
+						cache, i, limit);
+				else if (limit > max_limit)
 					max_limit = limit;
 				break;
 			}
