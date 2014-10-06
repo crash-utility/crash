@@ -2261,6 +2261,12 @@ cmd_bt(void)
 
 		for (i = 0; i < kt->cpus; i++) {
 			if (NUM_IN_BITMAP(cpus, i)) {
+				if (hide_offline_cpu(i)) {
+					error(INFO, "%sCPU %d is OFFLINE.\n",
+					      subsequent++ ? "\n" : "", i);
+					continue;
+				}
+
 				if ((task = get_active_task(i)))
 					tc = task_to_context(task);
 				else
@@ -4790,8 +4796,11 @@ display_sys_stats(void)
 				pc->kvmdump_mapfile);
 	}
 	
-	fprintf(fp, "        CPUS: %d\n",
-		machine_type("PPC64") ? get_cpus_to_display() : kt->cpus);
+	if (machine_type("PPC64"))
+		fprintf(fp, "        CPUS: %d\n", get_cpus_to_display());
+	else
+		fprintf(fp, "        CPUS: %d [OFFLINE: %d]\n", kt->cpus,
+			kt->cpus - get_cpus_to_display());
 	if (ACTIVE())
 		get_xtime(&kt->date);
         fprintf(fp, "        DATE: %s\n", 
@@ -5477,6 +5486,10 @@ set_cpu(int cpu)
 	if (cpu >= kt->cpus)
 		error(FATAL, "invalid cpu number: system has only %d cpu%s\n", 
 			kt->cpus, kt->cpus > 1 ? "s" : "");
+
+	if (hide_offline_cpu(cpu))
+		error(FATAL, "invalid cpu number: cpu %d is OFFLINE\n", cpu);
+
 	if ((task = get_active_task(cpu))) 
 		set_context(task, NO_PID);
 	else
@@ -5613,9 +5626,18 @@ cmd_irq(void)
 				SET_BIT(cpus, i);
 		}
 
+		for (i = 0; i < kt->cpus; i++) {
+			if (NUM_IN_BITMAP(cpus, i) && hide_offline_cpu(i))
+				error(INFO, "CPU%d is OFFLINE.\n", i);
+		}
+
 		fprintf(fp, "     ");
 		BZERO(buf, 10);
+
 		for (i = 0; i < kt->cpus; i++) {
+			if (hide_offline_cpu(i))
+				continue;
+
 			if (NUM_IN_BITMAP(cpus, i)) {
 				sprintf(buf, "CPU%d", i);
 				fprintf(fp, "%10s ", buf);
@@ -6413,6 +6435,9 @@ generic_show_interrupts(int irq, ulong *cpus)
 	fprintf(fp, "%3d: ", irq);
 
 	for (i = 0; i < kt->cpus; i++) {
+		if (hide_offline_cpu(i))
+			continue;
+
 		if (NUM_IN_BITMAP(cpus, i))
 			fprintf(fp, "%10u ", kstat_irqs[i]);
 	}
@@ -6736,9 +6761,16 @@ dump_hrtimer_data(void)
 		option_not_supported('r');
 
 	hrtimer_bases = per_cpu_symbol_search("hrtimer_bases");
+
 	for (i = 0; i < kt->cpus; i++) {
 		if (i)
 			fprintf(fp, "\n");
+
+		if (hide_offline_cpu(i)) {
+			fprintf(fp, "CPU: %d  [OFFLINE]\n", i);
+			continue;
+		}
+
 		fprintf(fp, "CPU: %d  ", i);
 		if (VALID_STRUCT(hrtimer_clock_base)) {
 			fprintf(fp, "HRTIMER_CPU_BASE: %lx\n",
@@ -7399,6 +7431,16 @@ dump_timer_data_tvec_bases_v2(void)
 	cpu = 0;
 
 next_cpu:
+	/*
+	 * hide data of offline cpu and goto next cpu
+	 */
+
+	if (hide_offline_cpu(cpu)) {
+	        fprintf(fp, "TVEC_BASES[%d]: [OFFLINE]\n", cpu);
+		if (++cpu < kt->cpus)
+			goto next_cpu;
+	}
+
 
 	count = 0;
 	td = (struct timer_data *)NULL;
@@ -7986,6 +8028,33 @@ get_cpus_online()
 	FREEBUF(buf);
 
 	return online;
+}
+
+/*
+ *  Check whether a cpu is offline
+ */
+int
+check_offline_cpu(int cpu)
+{
+	if (!cpu_map_addr("online"))
+		return FALSE;
+
+	if (in_cpu_map(ONLINE_MAP, cpu))
+		return FALSE;
+
+	return TRUE;
+}
+
+/*
+ *  Check whether the data related to the specified cpu should be hidden.
+ */
+int
+hide_offline_cpu(int cpu)
+{
+	if (!(pc->flags2 & OFFLINE_HIDE))
+		return FALSE;
+
+	return check_offline_cpu(cpu);
 }
 
 /*

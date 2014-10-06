@@ -6147,7 +6147,15 @@ cmd_datatype_common(ulong flags)
 				continue;
 
 			cpuaddr = addr + kt->__per_cpu_offset[c];
-			fprintf(fp, "[%d]: %lx\n", c, cpuaddr);
+
+			fprintf(fp, "[%d]: ", c);
+
+			if (hide_offline_cpu(c)) {
+				fprintf(fp, "[OFFLINE]\n");
+				continue;
+			}
+
+			fprintf(fp, "%lx\n", cpuaddr);
 			do_datatype_addr(dm, cpuaddr , count,
 					 flags, memberlist, argc_members);
 		}
@@ -6839,6 +6847,11 @@ display_per_cpu_info(struct syment *sp, int radix, char *cpuspec)
 		module_symbol(sp->value, NULL, NULL, NULL, *gdb_output_radix);
 
 	for (c = 0; c < kt->cpus; c++) {
+		if (hide_offline_cpu(c)) {
+			fprintf(fp, "cpu %d is OFFLINE\n", c);
+			continue;
+		}
+
 		if (cpus && !NUM_IN_BITMAP(cpus, c))
 			continue;
 		addr = sp->value + kt->__per_cpu_offset[c];

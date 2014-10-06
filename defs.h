@@ -506,6 +506,7 @@ struct program_context {
 #define REM_PAUSED_F (0x1000ULL)
 #define RAMDUMP	(0x2000ULL)
 #define REMOTE_PAUSED() (pc->flags2 & REM_PAUSED_F)
+#define OFFLINE_HIDE (0x4000ULL)
 	char *cleanup;
 	char *namelist_orig;
 	char *namelist_debug_orig;
@@ -4894,6 +4895,8 @@ int get_cpus_online(void);
 int get_cpus_active(void);
 int get_cpus_present(void);
 int get_cpus_possible(void);
+int check_offline_cpu(int);
+int hide_offline_cpu(int);
 int get_highest_cpu_online(void);
 int get_highest_cpu_present(void);
 int get_cpus_to_display(void);

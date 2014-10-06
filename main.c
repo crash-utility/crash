@@ -70,6 +70,7 @@ static struct option long_options[] = {
 	{"dec", 0, 0, 0},
 	{"no_strip", 0, 0, 0},
 	{"hash", required_argument, 0, 0},
+	{"offline", required_argument, 0, 0},
         {0, 0, 0, 0}
 };
 
@@ -279,7 +280,17 @@ main(int argc, char **argv)
 				pc->flags2 |= RADIX_OVERRIDE;
 				pc->output_radix = 10;
 			}
-			
+
+			else if (STREQ(long_options[option_index].name, "offline")) {
+				if (STREQ(optarg, "show"))
+					pc->flags2 &= ~OFFLINE_HIDE;
+				else if (STREQ(optarg, "hide"))
+					pc->flags2 |= OFFLINE_HIDE;
+				else {
+					error(INFO, "invalid --offline argument: %s\n", optarg);
+					program_usage(SHORT_FORM);
+				}
+			}
 
 			else {
 				error(INFO, "internal error: option %s unhandled\n",
@@ -1393,6 +1404,8 @@ dump_program_context(void)
 		fprintf(fp, "%sALLOW_FP", others++ ? "|" : "");
 	if (pc->flags2 & RAMDUMP)
 		fprintf(fp, "%sRAMDUMP", others++ ? "|" : "");
+	if (pc->flags2 & OFFLINE_HIDE)
+		fprintf(fp, "%sOFFLINE_HIDE", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "         namelist: %s\n", pc->namelist);

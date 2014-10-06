@@ -2380,8 +2380,19 @@ display_regs_from_elf_notes(int cpu)
 	Elf64_Nhdr *note64;
 	size_t len;
 	char *user_regs;
+	int c, skipped_count;
 
-	if (cpu >= nd->num_prstatus_notes) {
+	/*
+	 * NT_PRSTATUS notes are only related to online cpus, offline cpus
+	 * should be skipped.
+	 */
+	skipped_count = 0;
+	for (c = 0; c < cpu; c++) {
+		if (check_offline_cpu(c))
+			skipped_count++;
+	}
+
+	if ((cpu - skipped_count) >= nd->num_prstatus_notes) {
 		error(INFO, "registers not collected for cpu %d\n", cpu);
 		return;
 	}
@@ -2488,6 +2499,11 @@ dump_registers_for_elf_dumpfiles(void)
 	}
 
         for (c = 0; c < kt->cpus; c++) {
+		if (check_offline_cpu(c)) {
+			fprintf(fp, "%sCPU %d: [OFFLINE]\n", c ? "\n" : "", c);
+			continue;
+		}
+
                 fprintf(fp, "%sCPU %d:\n", c ? "\n" : "", c);
                 display_regs_from_elf_notes(c);
         }
@@ -3786,7 +3802,12 @@ dump_registers_for_qemu_mem_dump(void)
 
 		if (i)
 			netdump_print("\n");
-		netdump_print("CPU %d:\n", i);
+
+		if (hide_offline_cpu(i)) {
+			netdump_print("CPU %d: [OFFLINE]\n", i);
+			continue;
+		} else
+			netdump_print("CPU %d:\n", i);
 
 		if (CRASHDEBUG(1))
 			netdump_print("  version:%08lx      size:%08lx\n",

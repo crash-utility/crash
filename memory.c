@@ -3192,9 +3192,14 @@ cmd_ptov(void)
 					continue;
 				vaddr = paddr + kt->__per_cpu_offset[c];
 				sprintf(buf1, "[%d]", c);
-				fprintf(fp, "  %s%lx\n", 
-			    		mkstring(buf2, len, LJUST, buf1),
+				fprintf(fp, "  %s%lx",
+					mkstring(buf2, len, LJUST, buf1),
 					vaddr);
+
+				if (hide_offline_cpu(c))
+					fprintf(fp, " [OFFLINE]\n");
+				else
+					fprintf(fp, "\n");
 			}
 			FREEBUF(cpus);
 		} else {
@@ -9175,7 +9180,13 @@ kmem_cache_s_array_nodes:
             "array cache array", RETURN_ON_ERROR))
 		goto bail_out;
 
-	for (i = max_limit = 0; (i < kt->cpus) && cpudata[i]; i++) {
+	for (i = max_limit = 0; i < kt->cpus; i++) {
+		if (check_offline_cpu(i))
+			continue;
+
+		if (!cpudata[i])
+			break;
+
                 if (!readmem(cpudata[i]+OFFSET(array_cache_limit),
                     KVADDR, &limit, sizeof(int),
                     "array cache limit", RETURN_ON_ERROR)) {
@@ -17012,7 +17023,13 @@ dump_per_cpu_offsets(void)
 
 	for (c = 0; c < kt->cpus; c++) {
 		sprintf(buf, "CPU %d", c);
-		fprintf(fp, "%7s: %lx\n", buf, kt->__per_cpu_offset[c]);
+		fprintf(fp, "%7s: %lx", buf, kt->__per_cpu_offset[c]);
+
+		if (hide_offline_cpu(c))
+			fprintf(fp, " [OFFLINE]\n");
+		else
+			fprintf(fp, "\n");
+
 	}
 }
 
@@ -17457,6 +17474,11 @@ do_kmem_cache_slub(struct meminfo *si)
 	per_cpu = (ulong *)GETBUF(sizeof(ulong) * vt->numnodes);
 
         for (i = 0; i < kt->cpus; i++) {
+		if (hide_offline_cpu(i)) {
+			fprintf(fp, "CPU %d [OFFLINE]\n", i);
+			continue;
+		}
+
 		cpu_slab_ptr = ULONG(si->cache_buf + OFFSET(kmem_cache_cpu_slab)) +
 				kt->__per_cpu_offset[i];
 		fprintf(fp, "CPU %d KMEM_CACHE_CPU:\n  %lx\n", i, cpu_slab_ptr);

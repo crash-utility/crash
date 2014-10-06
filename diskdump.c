@@ -2057,7 +2057,11 @@ dump_registers_for_compressed_kdump(void)
 		error(FATAL, "-r option not supported for this dumpfile\n");
 
 	for (c = 0; c < kt->cpus; c++) {
-		fprintf(fp, "%sCPU %d:\n", c ? "\n" : "", c);
+		if (hide_offline_cpu(c)) {
+			fprintf(fp, "%sCPU %d: [OFFLINE]\n", c ? "\n" : "", c);
+			continue;
+		} else
+			fprintf(fp, "%sCPU %d:\n", c ? "\n" : "", c);
 		diskdump_display_regs(c, fp);
 	}
 }

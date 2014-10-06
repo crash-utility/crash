@@ -3093,6 +3093,7 @@ show_ps_data(ulong flag, struct task_context *tc, struct psinfo *psi)
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
 	ulong tgid;
+	int task_active;
 
 	if ((flag & PS_USER) && is_kernel_thread(tc->task))
 		return;
@@ -3153,7 +3154,17 @@ show_ps_data(ulong flag, struct task_context *tc, struct psinfo *psi)
 
 	tm = &task_mem_usage;
 	get_task_mem_usage(tc->task, tm);
-	fprintf(fp, "%s", is_task_active(tc->task) ? "> " : "  ");
+
+	task_active = is_task_active(tc->task);
+
+	if (task_active) {
+		if (hide_offline_cpu(tc->processor))
+			fprintf(fp, "- ");
+		else
+			fprintf(fp, "> ");
+	} else
+		fprintf(fp, "  ");
+
 	fprintf(fp, "%5ld  %5ld  %2s  %s %3s",
 		tc->pid, task_to_pid(tc->ptask),
 		task_cpu(tc->processor, buf2, !VERBOSE),
@@ -3332,8 +3343,14 @@ show_last_run(struct task_context *tc, struct psinfo *psi)
 		for (c = others = 0; c < kt->cpus; c++) {
 			if (!NUM_IN_BITMAP(psi->cpus, c))
 				continue;
-			fprintf(fp, "%sCPU: %d\n", 
+			fprintf(fp, "%sCPU: %d",
 				others++ ? "\n" : "", c);
+			if (hide_offline_cpu(c)) {
+				fprintf(fp, " [OFFLINE]\n");
+				continue;
+			} else
+				fprintf(fp, "\n");
+
 			tcp = FIRST_CONTEXT();
 			for (i = 0; i < RUNNING_TASKS(); i++, tcp++) {
 				if (tcp->processor != c)
@@ -3415,8 +3432,14 @@ show_milliseconds(struct task_context *tc, struct psinfo *psi)
 			if (!NUM_IN_BITMAP(psi->cpus, c))
 				continue;
 
-			fprintf(fp, "%sCPU: %d\n", 
+			fprintf(fp, "%sCPU: %d",
 				others++ ? "\n" : "", c);
+
+			if (hide_offline_cpu(c)) {
+				fprintf(fp, " [OFFLINE]\n");
+				continue;
+			} else
+				fprintf(fp, "\n");
 
 			if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF))
 				runq = rq_sp->value + kt->__per_cpu_offset[c];
@@ -7627,8 +7650,14 @@ dump_on_rq_timestamp(void)
 
                 sprintf(buf, pc->output_radix == 10 ? "%llu" : "%llx",
 			timestamp);
-		fprintf(fp, "%sCPU %d: %s\n", cpu < 10 ? " " : "", 
-			cpu, buf);
+		fprintf(fp, "%sCPU %d: ", cpu < 10 ? " " : "", cpu);
+
+		if (hide_offline_cpu(cpu)) {
+			fprintf(fp, "[OFFLINE]\n");
+			continue;
+		} else
+			fprintf(fp, "%s\n", buf);
+
 		len = strlen(buf);
 
 		if ((tc = task_to_context(tt->active_set[cpu]))){
@@ -7706,6 +7735,11 @@ dump_on_rq_milliseconds(void)
 			indent = max_indent - 2;
 		else
 			indent = max_indent - 4;
+
+		if (hide_offline_cpu(cpu)) {
+			fprintf(fp, "%sCPU %d: [OFFLINE]\n", space(indent), cpu);
+			continue;
+		}
 
 		if ((tc = task_to_context(tt->active_set[cpu])))
 			task_timestamp = task_last_run(tc->task);
@@ -7834,8 +7868,13 @@ dump_runqueues(void)
 				runq = rq_sp->value;
 		}
 
-		fprintf(fp, "%sCPU %d RUNQUEUE: %lx\n", cpu ? "\n" : "", 
-			cpu, runq);
+		fprintf(fp, "%sCPU %d ", cpu ? "\n" : "", cpu);
+
+		if (hide_offline_cpu(cpu)) {
+			fprintf(fp, "[OFFLINE]\n");
+			continue;
+		} else
+			fprintf(fp, "RUNQUEUE: %lx\n", runq);
 
 		fprintf(fp, "  CURRENT: ");
 		if ((tc = task_to_context(tt->active_set[cpu])))
@@ -8290,8 +8329,13 @@ dump_on_rq_tasks(void)
 	}
 
 	for (cpu = 0; cpu < kt->cpus; cpu++) {
+                fprintf(fp, "%sCPU %d", cpu ? "\n" : "", cpu);
 
-                fprintf(fp, "%sCPU %d\n", cpu ? "\n" : "", cpu);
+		if (hide_offline_cpu(cpu)) {
+			fprintf(fp, " [OFFLINE]\n");
+			continue;
+		} else
+			fprintf(fp, "\n");
 
 		tc = FIRST_CONTEXT();
 		tot = 0;
@@ -8424,8 +8468,13 @@ dump_CFS_runqueues(void)
 		else
 			runq = rq_sp->value;
 
-                fprintf(fp, "%sCPU %d RUNQUEUE: %lx\n", cpu ? "\n" : "",
-			cpu, runq);
+                fprintf(fp, "%sCPU %d ", cpu ? "\n" : "", cpu);
+
+		if (hide_offline_cpu(cpu)) {
+			fprintf(fp, "[OFFLINE]\n");
+			continue;
+		} else
+			fprintf(fp, "RUNQUEUE: %lx\n", runq);
 
 		fprintf(fp, "  CURRENT: ");
 		if ((tc = task_to_context(tt->active_set[cpu])))
@@ -8917,7 +8966,14 @@ dump_tasks_by_task_group(void)
 			sizeof(ulong), "task_group rt_rq", FAULT_ON_ERROR);
 		readmem(cfs_rq + cpu * sizeof(ulong), KVADDR, &cfs_rq_p,
 			sizeof(ulong), "task_group cfs_rq", FAULT_ON_ERROR);
-		fprintf(fp, "%sCPU %d\n", cpu ? "\n" : "", cpu);
+		fprintf(fp, "%sCPU %d", cpu ? "\n" : "", cpu);
+
+		if (hide_offline_cpu(cpu)) {
+			fprintf(fp, " [OFFLINE]\n");
+			continue;
+		} else
+			fprintf(fp, "\n");
+
 		fprintf(fp, "  CURRENT: ");
 		if ((tc = task_to_context(tt->active_set[cpu])))
 			fprintf(fp, "PID: %-5ld  TASK: %lx  COMMAND: \"%s\"\n",

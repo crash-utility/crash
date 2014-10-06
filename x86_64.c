@@ -2325,7 +2325,14 @@ x86_64_eframe_search(struct bt_info *bt)
                 	if (ms->stkinfo.ibase[c] == 0)
                         	break;
                                 bt->hp->esp = ms->stkinfo.ibase[c];
-                                fprintf(fp, "CPU %d IRQ STACK:\n", c);
+                                fprintf(fp, "CPU %d IRQ STACK:", c);
+
+				if (hide_offline_cpu(c)) {
+					fprintf(fp, " [OFFLINE]\n\n");
+					continue;
+				} else
+					fprintf(fp, "\n");
+
                                 if ((cnt = x86_64_eframe_search(bt)))
 					fprintf(fp, "\n");
 				else
@@ -2337,8 +2344,15 @@ x86_64_eframe_search(struct bt_info *bt)
                         	if (ms->stkinfo.ebase[c][i] == 0)
                                 	break;
                                 bt->hp->esp = ms->stkinfo.ebase[c][i];
-                                fprintf(fp, "CPU %d %s EXCEPTION STACK:\n", 
+                                fprintf(fp, "CPU %d %s EXCEPTION STACK:",
 					c, x86_64_exception_stacks[i]);
+
+				if (hide_offline_cpu(c)) {
+					fprintf(fp, " [OFFLINE]\n\n");
+					continue;
+				} else
+					fprintf(fp, "\n");
+
                                 if ((cnt = x86_64_eframe_search(bt)))
 					fprintf(fp, "\n");
 				else
@@ -5033,7 +5047,8 @@ x86_64_display_machine_stats(void)
 
 	fprintf(fp, "          MACHINE TYPE: %s\n", uts->machine);
 	fprintf(fp, "           MEMORY SIZE: %s\n", get_memory_size(buf));
-	fprintf(fp, "                  CPUS: %d\n", kt->cpus);
+	fprintf(fp, "                  CPUS: %d [OFFLINE: %d]\n", kt->cpus,
+		kt->cpus - get_cpus_to_display());
 	if (!STREQ(kt->hypervisor, "(undetermined)") &&
 	    !STREQ(kt->hypervisor, "bare hardware"))
 		fprintf(fp, "            HYPERVISOR: %s\n",  kt->hypervisor);
@@ -5057,8 +5072,14 @@ x86_64_display_machine_stats(void)
 	fprintf(fp, "            IRQ STACKS:\n");
 	for (c = 0; c < kt->cpus; c++) {
 		sprintf(buf, "CPU %d", c);
-		fprintf(fp, "%22s: %016lx\n", 
+		
+		fprintf(fp, "%22s: %016lx",
 			buf, machdep->machspec->stkinfo.ibase[c]);
+
+		if (hide_offline_cpu(c))
+			fprintf(fp, " [OFFLINE]\n");
+		else
+			fprintf(fp, "\n");
 	}
 
 	for (i = 0; i < MAX_EXCEPTION_STACKS; i++) {
@@ -5073,8 +5094,14 @@ x86_64_display_machine_stats(void)
 			if (machdep->machspec->stkinfo.ebase[c][i] == 0)
 				break;
 			sprintf(buf, "CPU %d", c);
-			fprintf(fp, "%22s: %016lx\n", 
+
+			fprintf(fp, "%22s: %016lx",
 				buf, machdep->machspec->stkinfo.ebase[c][i]);
+
+			if (hide_offline_cpu(c))
+				fprintf(fp, " [OFFLINE]\n");
+			else
+				fprintf(fp, "\n");
 		}
 	}
 }
@@ -5118,8 +5145,13 @@ x86_64_display_cpu_data(unsigned int radix)
         for (cpu = 0; cpu < cpus; cpu++) {
 		if (boot_cpu)
                 	fprintf(fp, "BOOT CPU:\n");
-		else
-                	fprintf(fp, "%sCPU %d:\n", cpu ? "\n" : "", cpu);
+		else {
+			if (hide_offline_cpu(cpu)) {
+				fprintf(fp, "%sCPU %d: [OFFLINE]\n", cpu ? "\n" : "", cpu);
+				continue;
+			} else
+				fprintf(fp, "%sCPU %d:\n", cpu ? "\n" : "", cpu);
+		}
 
 		if (per_cpu)
 			cpu_data = per_cpu->value + kt->__per_cpu_offset[cpu];

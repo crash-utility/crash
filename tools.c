@@ -2365,6 +2365,26 @@ cmd_set(void)
 					"on" : "off");
 			return;
 
+                } else if (STREQ(args[optind], "offline")) {
+
+                        if (args[optind+1]) {
+                                optind++;
+				if (from_rc_file)
+					already_done();
+                                else if (STREQ(args[optind], "show"))
+                                        pc->flags2 &= ~OFFLINE_HIDE;
+                                else if(STREQ(args[optind], "hide"))
+                                        pc->flags2 |= OFFLINE_HIDE;
+                                else
+                                        goto invalid_set_command;
+                        }
+
+			if (runtime)
+				fprintf(fp, "      offline: %s\n",
+					pc->flags2 & OFFLINE_HIDE ? "hide" : "show");
+
+			return;
+
 		} else if (XEN_HYPER_MODE()) {
 			error(FATAL, "invalid argument for the Xen hypervisor\n");
 		} else if (pc->flags & MINIMAL_MODE) {
@@ -2467,6 +2487,7 @@ show_options(void)
 		fprintf(fp, "(%s)\n", value_to_symstr(pc->scope, buf, 0));
 	else
 		fprintf(fp, "(not set)\n");
+	fprintf(fp, "       offline: %s\n", pc->flags2 & OFFLINE_HIDE ? "hide" : "show");
 }
 
 
