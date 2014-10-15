@@ -1,8 +1,8 @@
 /* x86.c - core analysis suite
  *
  * Portions Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2013 David Anderson
- * Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014 David Anderson
+ * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1581,6 +1581,9 @@ x86_eframe_search(struct bt_info *bt_in)
 
         	for (c = 0; c < NR_CPUS; c++) {
                 	if (tt->hardirq_ctx[c]) {
+				if ((bt->flags & BT_CPUMASK) && 
+				    !(NUM_IN_BITMAP(bt->cpumask, c)))
+					continue;
 				bt->hp->esp = tt->hardirq_ctx[c];
 				fprintf(fp, "CPU %d HARD IRQ STACK:\n", c);
 				if ((cnt = x86_eframe_search(bt)))
@@ -1591,6 +1594,9 @@ x86_eframe_search(struct bt_info *bt_in)
 		}
         	for (c = 0; c < NR_CPUS; c++) {
 			if (tt->softirq_ctx[c]) {
+				if ((bt->flags & BT_CPUMASK) && 
+				    !(NUM_IN_BITMAP(bt->cpumask, c)))
+					continue;
 				bt->hp->esp = tt->softirq_ctx[c];
 				fprintf(fp, "CPU %d SOFT IRQ STACK:\n", c);
 				if ((cnt = x86_eframe_search(bt)))

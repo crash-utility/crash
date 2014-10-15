@@ -1385,6 +1385,9 @@ ppc64_eframe_search(struct bt_info *bt_in)
 
         	for (c = 0; c < NR_CPUS; c++) {
                 	if (tt->hardirq_ctx[c]) {
+				if ((bt->flags & BT_CPUMASK) && 
+				    !(NUM_IN_BITMAP(bt->cpumask, c)))
+					continue;
 				bt->hp->esp = tt->hardirq_ctx[c];
 				fprintf(fp, "CPU %d HARD IRQ STACK:\n", c);
 				if ((cnt = ppc64_eframe_search(bt)))
@@ -1395,6 +1398,9 @@ ppc64_eframe_search(struct bt_info *bt_in)
 		}
         	for (c = 0; c < NR_CPUS; c++) {
 			if (tt->softirq_ctx[c]) {
+				if ((bt->flags & BT_CPUMASK) && 
+				    !(NUM_IN_BITMAP(bt->cpumask, c)))
+					continue;
 				bt->hp->esp = tt->softirq_ctx[c];
 				fprintf(fp, "CPU %d SOFT IRQ STACK:\n", c);
 				if ((cnt = ppc64_eframe_search(bt)))

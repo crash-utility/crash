@@ -2322,6 +2322,9 @@ x86_64_eframe_search(struct bt_info *bt)
         	ms = machdep->machspec;
 
         	for (c = 0; c < kt->cpus; c++) {
+			if ((bt->flags & BT_CPUMASK) && 
+			    !(NUM_IN_BITMAP(bt->cpumask, c)))
+				continue;
                 	if (ms->stkinfo.ibase[c] == 0)
                         	break;
                                 bt->hp->esp = ms->stkinfo.ibase[c];
@@ -2340,6 +2343,9 @@ x86_64_eframe_search(struct bt_info *bt)
                 }
 
         	for (c = 0; c < kt->cpus; c++) {
+			if ((bt->flags & BT_CPUMASK) && 
+			    !(NUM_IN_BITMAP(bt->cpumask, c)))
+				continue;
                 	for (i = 0; i < MAX_EXCEPTION_STACKS; i++) {
                         	if (ms->stkinfo.ebase[c][i] == 0)
                                 	break;

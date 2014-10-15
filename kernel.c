@@ -1983,7 +1983,7 @@ cmd_bt(void)
 	int i, c;
 	ulong value, *cpus;
         struct task_context *tc;
-	int subsequent, active, choose_cpu;
+	int subsequent, active;
 	struct stack_hook hook;
 	struct bt_info bt_info, bt_setup, *bt;
 	struct reference reference;
@@ -1993,7 +1993,7 @@ cmd_bt(void)
 
 	tc = NULL;
 	cpus = NULL;
-	subsequent = active = choose_cpu = 0;
+	subsequent = active = 0;
 	hook.eip = hook.esp = 0;
 	refptr = 0;
 	bt = &bt_info;
@@ -2146,11 +2146,11 @@ cmd_bt(void)
 			break;
 
 		case 'c':
-			if (choose_cpu) {
+			if (bt->flags & BT_CPUMASK) {
 				error(INFO, "only one -c option allowed\n");
 				argerrs++;
 			} else {
-				choose_cpu = 1;
+				bt->flags |= BT_CPUMASK;				
 				BZERO(arg_buf, BUFSIZE);
 				strncpy(arg_buf, optarg, strlen(optarg));
 				cpus = get_cpumask_buf();
@@ -2212,6 +2212,10 @@ cmd_bt(void)
 	if (bt->flags & BT_EFRAME_SEARCH2) {
                	tc = CURRENT_CONTEXT();  /* borrow stack */
                 BT_SETUP(tc);
+		if (bt->flags & BT_CPUMASK) {
+			make_cpumask(arg_buf, cpus, FAULT_ON_ERROR, NULL);
+			bt->cpumask = cpus;
+		}
                 back_trace(bt);
                 return;
 	}
@@ -2248,7 +2252,7 @@ cmd_bt(void)
 #endif
 	}
 
-	if (choose_cpu) {
+	if (bt->flags & BT_CPUMASK) {
 		if (LIVE())
 			error(FATAL, 
 			    "-c option not supported on a live system or live dump\n");
@@ -2831,6 +2835,7 @@ dump_bt_info(struct bt_info *bt, char *where)
 	fprintf(fp, "   eframe_ip: %lx\n", bt->eframe_ip);
 	fprintf(fp, "       debug: %lx\n", bt->debug);
 	fprintf(fp, "       radix: %ld\n", bt->radix);
+	fprintf(fp, "     cpumask: %lx\n", (ulong)bt->cpumask);
 }
 
 /*

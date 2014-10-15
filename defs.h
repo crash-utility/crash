@@ -890,6 +890,7 @@ struct bt_info {
         ulong debug;
 	ulong eframe_ip;
 	ulong radix;
+	ulong *cpumask;
 };
 
 #define STACK_OFFSET_TYPE(OFF) \
@@ -4959,6 +4960,7 @@ ulong cpu_map_addr(const char *type);
 #define BT_KERNEL_SPACE    (0x200000000000ULL)
 #define BT_FULL_SYM_SLAB2  (0x400000000000ULL)
 #define BT_EFRAME_TARGET   (0x800000000000ULL)
+#define BT_CPUMASK        (0x1000000000000ULL)
 #define BT_SYMBOL_OFFSET   (BT_SYMBOLIC_ARGS)
 
 #define BT_REF_HEXVAL         (0x1)
