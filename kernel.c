@@ -4798,9 +4798,14 @@ display_sys_stats(void)
 	
 	if (machine_type("PPC64"))
 		fprintf(fp, "        CPUS: %d\n", get_cpus_to_display());
-	else
-		fprintf(fp, "        CPUS: %d [OFFLINE: %d]\n", kt->cpus,
-			kt->cpus - get_cpus_to_display());
+	else {
+		fprintf(fp, "        CPUS: %d", kt->cpus);
+		if (kt->cpus - get_cpus_to_display())
+			fprintf(fp, " [OFFLINE: %d]", 
+				kt->cpus - get_cpus_to_display());
+		fprintf(fp, "\n");
+	}
+
 	if (ACTIVE())
 		get_xtime(&kt->date);
         fprintf(fp, "        DATE: %s\n", 

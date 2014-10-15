@@ -5047,8 +5047,12 @@ x86_64_display_machine_stats(void)
 
 	fprintf(fp, "          MACHINE TYPE: %s\n", uts->machine);
 	fprintf(fp, "           MEMORY SIZE: %s\n", get_memory_size(buf));
-	fprintf(fp, "                  CPUS: %d [OFFLINE: %d]\n", kt->cpus,
-		kt->cpus - get_cpus_to_display());
+	fprintf(fp, "                  CPUS: %d", kt->cpus);
+	if (kt->cpus - get_cpus_to_display())
+		fprintf(fp, " [OFFLINE: %d]\n",
+			kt->cpus - get_cpus_to_display());
+	else
+		fprintf(fp, "\n");
 	if (!STREQ(kt->hypervisor, "(undetermined)") &&
 	    !STREQ(kt->hypervisor, "bare hardware"))
 		fprintf(fp, "            HYPERVISOR: %s\n",  kt->hypervisor);
