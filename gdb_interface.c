@@ -24,8 +24,8 @@ int get_frame_offset(ulong);
 
 int *gdb_output_format;
 unsigned int *gdb_print_max;
-int *gdb_prettyprint_structs;
-int *gdb_prettyprint_arrays;
+int *gdb_prettyformat_structs;
+int *gdb_prettyformat_arrays;
 int *gdb_repeat_count_threshold;
 int *gdb_stop_print_at_null;
 unsigned int *gdb_output_radix;
@@ -142,10 +142,22 @@ gdb_session_init(void)
 		gdb_user_print_option_address("output_format");
 	gdb_print_max = (unsigned int *)
 		gdb_user_print_option_address("print_max");
-	gdb_prettyprint_structs = (int *)
-		gdb_user_print_option_address("prettyprint_structs");
-	gdb_prettyprint_arrays = (int *)
-		gdb_user_print_option_address("prettyprint_arrays");
+
+	/* gdb 7.7 renamed prettyprint to prettyformat */
+	gdb_prettyformat_structs = (int *)
+		gdb_user_print_option_address("prettyformat_structs");
+	if (!gdb_prettyformat_structs) {
+		gdb_prettyformat_structs = (int *)
+			gdb_user_print_option_address("prettyprint_structs");
+	}
+
+	gdb_prettyformat_arrays = (int *)
+		gdb_user_print_option_address("prettyformat_arrays");
+	if (!gdb_prettyformat_arrays) {
+		gdb_prettyformat_arrays = (int *)
+			gdb_user_print_option_address("prettyprint_arrays");
+	}
+
 	gdb_repeat_count_threshold = (int *)
 		gdb_user_print_option_address("repeat_count_threshold");
 	gdb_stop_print_at_null = (int *)
@@ -174,7 +186,7 @@ gdb_session_init(void)
 		*gdb_output_format = 0;
 	}
 		
-	*gdb_prettyprint_structs = 1;
+	*gdb_prettyformat_structs = 1;
 	*gdb_repeat_count_threshold = 0x7fffffff;
 	*gdb_print_max = 256;
 
@@ -368,8 +380,8 @@ gdb_interface(struct gnu_request *req)
 void
 dump_gdb_data(void)
 {
-        fprintf(fp, "    prettyprint_arrays: %d\n", *gdb_prettyprint_arrays);
-        fprintf(fp, "   prettyprint_structs: %d\n", *gdb_prettyprint_structs);
+        fprintf(fp, "    prettyformat_arrays: %d\n", *gdb_prettyformat_arrays);
+        fprintf(fp, "   prettyformat_structs: %d\n", *gdb_prettyformat_structs);
         fprintf(fp, "repeat_count_threshold: %x\n", *gdb_repeat_count_threshold);
 	fprintf(fp, "    stop_print_at_null: %d\n", *gdb_stop_print_at_null);
 	fprintf(fp, "             print_max: %d\n", *gdb_print_max);
@@ -566,7 +578,7 @@ restore_gdb_sanity(void)
                 *gdb_output_format = (*gdb_output_radix == 10) ? 0 : 'x';
         }
 
-        *gdb_prettyprint_structs = 1;   /* these may piss somebody off... */
+        *gdb_prettyformat_structs = 1;   /* these may piss somebody off... */
 	*gdb_repeat_count_threshold = 0x7fffffff;
 
 	error_hook = NULL;
