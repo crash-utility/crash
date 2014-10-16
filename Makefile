@@ -108,6 +108,9 @@ DAEMON_OBJECT_FILES=remote_daemon.o va_server.o va_server_v1.o \
 GDB_7.6_FILES=
 GDB_7.6_OFILES=${GDB}/gdb/symtab.o
 
+GDB_7.8_FILES=
+GDB_7.8_OFILES=${GDB}/gdb/symtab.o
+
 # 
 # GDB_FLAGS is passed up from the gdb Makefile.
 #

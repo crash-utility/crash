@@ -18,6 +18,42 @@
 static ulong gdb_merge_flags = 0;
 #define KERNEL_SYMBOLS_PATCHED (0x1)
 
+#ifndef BMSYMBOL_VALUE_ADDRESS
+#define BMSYMBOL_VALUE_ADDRESS(a) SYMBOL_VALUE_ADDRESS(a.minsym)
+#endif
+
+#ifndef MSYMBOL_LINKAGE_NAME
+#define MSYMBOL_LINKAGE_NAME(msym) SYMBOL_LINKAGE_NAME(msym)
+#endif
+
+#ifndef SET_MSYMBOL_VALUE_ADDRESS
+#define SET_MSYMBOL_VALUE_ADDRESS(msym, addr) \
+do { \
+	SYMBOL_VALUE_ADDRESS(msym) = addr; \
+} while (0)
+#endif
+
+#ifdef GDB_7_6
+#define prettyformat_structs prettyprint_structs
+#define prettyformat_arrays prettyprint_arrays
+#define objfile_name(objfile) ((objfile)->name)
+
+/* gdb 7.8 returns a bound_minimal_symbol. We can fake it here. */
+static struct bound_minimal_symbol
+bound_lookup_minimal_symbol(const char *name, const char *sfile,
+			    struct objfile *objf)
+{
+	struct bound_minimal_symbol bmsym = {
+		.objfile = objf,
+	};
+
+	bmsym.minsym = lookup_minimal_symbol(name, sfile, objf);
+
+	return bmsym;
+}
+#define lookup_minimal_symbol(a,b,c) bound_lookup_minimal_symbol(a,b,c)
+#endif
+
 #undef STREQ
 #define STREQ(A, B)      (A && B && (strcmp(A, B) == 0))
 /*
@@ -315,8 +351,8 @@ gdb_delete_symbol_file(struct gnu_request *req)
         register struct objfile *objfile;
 
         ALL_OBJFILES(objfile) {
-                if (STREQ(objfile->name, req->name) ||
-		    same_file(objfile->name, req->name)) {
+                if (STREQ(objfile_name(objfile), req->name) ||
+		    same_file(objfile_name(objfile), req->name)) {
                 	free_objfile(objfile);
 			break;
                 }
@@ -325,7 +361,7 @@ gdb_delete_symbol_file(struct gnu_request *req)
 	if (gdb_CRASHDEBUG(2)) {
 		fprintf_filtered(gdb_stdout, "current object files:\n");
 		ALL_OBJFILES(objfile)
-			fprintf_filtered(gdb_stdout, "  %s\n", objfile->name);
+			fprintf_filtered(gdb_stdout, "  %s\n", objfile_name(objfile));
 	}
 }
 
@@ -397,7 +433,7 @@ gdb_add_symbol_file(struct gnu_request *req)
        	execute_command(req->buf, FALSE);
 
         ALL_OBJFILES(objfile) {
-		if (same_file(objfile->name, lm->mod_namelist)) {
+		if (same_file(objfile_name(objfile), lm->mod_namelist)) {
                         loaded_objfile = objfile;
 			break;
 		}
@@ -423,7 +459,7 @@ gdb_patch_symbol_values(struct gnu_request *req)
 
 	ALL_MSYMBOLS (objfile, msymbol)
 	{
-		req->name = (char *)msymbol->ginfo.name;
+		req->name = (char *)MSYMBOL_LINKAGE_NAME(msymbol);
 		if (!patch_kernel_symbol(req, msymbol)) {
 			req->flags |= GNU_COMMAND_FAILED;
 			break;
@@ -442,7 +478,7 @@ extern void gdb_patch_minsymbol_address(struct minimal_symbol *msym,
 void gdb_patch_minsymbol_address(struct minimal_symbol *msym,
 				 unsigned long addr)
 {
-	SYMBOL_VALUE_ADDRESS(msym) = addr;
+	SET_MSYMBOL_VALUE_ADDRESS(msym, addr);
 }
 
 static void
@@ -493,21 +529,21 @@ gdb_debug_command(struct gnu_request *req)
 void
 gdb_bait_and_switch(char *name, struct symbol *sym)
 {
-	struct minimal_symbol *msym;
+	struct bound_minimal_symbol msym;
 	struct block *block;
 
 	if (!(gdb_merge_flags & KERNEL_SYMBOLS_PATCHED))
 		return;
 
 	msym = lookup_minimal_symbol(name, NULL, symfile_objfile);
-	if (!msym)
+	if (!msym.minsym)
 		return;
 
-	if (sym->aclass == LOC_BLOCK) {
+	if (SYMBOL_CLASS(sym) == LOC_BLOCK) {
 		block = (struct block *)SYMBOL_BLOCK_VALUE(sym);
-		BLOCK_START(block) = SYMBOL_VALUE_ADDRESS(msym);
+		BLOCK_START(block) = BMSYMBOL_VALUE_ADDRESS(msym);
 	} else
-		SYMBOL_VALUE_ADDRESS(sym) = SYMBOL_VALUE_ADDRESS(msym);
+		SYMBOL_VALUE_ADDRESS(sym) = BMSYMBOL_VALUE_ADDRESS(msym);
 }
 
 #include "valprint.h"
@@ -523,10 +559,12 @@ get_user_print_option_address(struct gnu_request *req)
                 req->addr = (ulong)&user_print_options.output_format;
         if (strcmp(req->name, "print_max") == 0)
                 req->addr = (ulong)&user_print_options.print_max;
-        if (strcmp(req->name, "prettyprint_structs") == 0)
-                req->addr = (ulong)&user_print_options.prettyprint_structs;
-        if (strcmp(req->name, "prettyprint_arrays") == 0)
-                req->addr = (ulong)&user_print_options.prettyprint_arrays;
+        if (strcmp(req->name, "prettyformat_structs") == 0 ||
+            strcmp(req->name, "prettyprint_structs") == 0)
+                req->addr = (ulong)&user_print_options.prettyformat_structs;
+        if (strcmp(req->name, "prettyformat_arrays") == 0 ||
+            strcmp(req->name, "prettyprint_arrays") == 0)
+                req->addr = (ulong)&user_print_options.prettyformat_arrays;
         if (strcmp(req->name, "repeat_count_threshold") == 0)
                 req->addr = (ulong)&user_print_options.repeat_count_threshold;
         if (strcmp(req->name, "stop_print_at_null") == 0)

@@ -1331,7 +1331,7 @@
  # your system doesn't have fcntl.h in /usr/include (which is where it
  # should be according to Posix).
 -DEFS = @DEFS@
-+DEFS = -DCRASH_MERGE @DEFS@
++DEFS = -DCRASH_MERGE -DGDB_7_6 @DEFS@
  GDB_CFLAGS = -I. -I$(srcdir) -I$(srcdir)/common -I$(srcdir)/config \
  	-DLOCALEDIR="\"$(localedir)\"" $(DEFS)
  

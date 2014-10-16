@@ -180,6 +180,15 @@ struct supported_gdb_version {
 	    "GDB_FLAGS=-DGDB_7_6",
 	    "GPLv3"
 	},
+	{
+	    "GDB=gdb-7.8",
+	    "7.8",
+	    "GDB_FILES=${GDB_7.8_FILES}",
+	    "GDB_OFILES=${GDB_7.8_OFILES}",
+	    "GDB_PATCH_FILES=gdb-7.8.patch",
+	    "GDB_FLAGS=-DGDB_7_8",
+	    "GPLv3"
+	},
 };
 
 struct supported_gdb_version *default_gdb = &supported_gdb_versions[0];
