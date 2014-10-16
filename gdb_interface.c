@@ -68,11 +68,7 @@ gdb_main_loop(int argc, char **argv)
 	}
 
         optind = 0;
-#if defined(GDB_6_0) || defined(GDB_6_1)
-        command_loop_hook = main_loop;
-#else
 	deprecated_command_loop_hook = main_loop;
-#endif
         gdb_main_entry(argc, argv);
 }
 
@@ -82,11 +78,6 @@ gdb_main_loop(int argc, char **argv)
 void
 update_gdb_hooks(void)
 {
-#if defined(GDB_6_0) || defined(GDB_6_1)
-	command_loop_hook = pc->flags & VERSION_QUERY ?
-        	exit_after_gdb_info : main_loop;
-	target_new_objfile_hook = NULL;
-#endif
 #if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
 	deprecated_command_loop_hook = pc->flags & VERSION_QUERY ?
 		exit_after_gdb_info : main_loop;
@@ -117,11 +108,7 @@ void
 display_gdb_banner(void)
 {
 	optind = 0;
-#if defined(GDB_6_0) || defined(GDB_6_1)
-        command_loop_hook = exit_after_gdb_info;
-#else
         deprecated_command_loop_hook = exit_after_gdb_info;
-#endif
 	args[0] = "gdb";
 	args[1] = "-version";
 	gdb_main_entry(2, args);
@@ -173,15 +160,6 @@ gdb_session_init(void)
 	/*
 	 *  Set up pointers to gdb variables.
 	 */
-#if defined(GDB_6_0) || defined(GDB_6_1)
-	gdb_output_format = &output_format;
-	gdb_print_max = &print_max;
-	gdb_prettyprint_structs = &prettyprint_structs;
-	gdb_prettyprint_arrays = &prettyprint_arrays;
-	gdb_repeat_count_threshold = &repeat_count_threshold;
-	gdb_stop_print_at_null = &stop_print_at_null;
-	gdb_output_radix = &output_radix;
-#else
 	gdb_output_format = (int *) 
 		gdb_user_print_option_address("output_format");
 	gdb_print_max = (unsigned int *)
@@ -196,7 +174,7 @@ gdb_session_init(void)
 		gdb_user_print_option_address("stop_print_at_null");
 	gdb_output_radix = (unsigned int *)
 		gdb_user_print_option_address("output_radix");
-#endif
+
 	/*
          *  If the output radix is set via the --hex or --dec command line
 	 *  option, then pc->output_radix will be non-zero; otherwise use 
@@ -496,7 +474,7 @@ dump_gnu_request(struct gnu_request *req, int in_gdb)
 		console("name: %lx ", (ulong)req->name);
 	console("length: %ld ", req->length);
         console("typecode: %d\n", req->typecode);
-#if defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0)
+#if defined(GDB_7_0)
 	console("typename: %s\n", req->typename);
 #else
 	console("type_name: %s\n", req->type_name);

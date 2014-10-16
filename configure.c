@@ -158,8 +158,6 @@ void add_extra_lib(char *);
  *  unless overridden.
  */
 
-#define GDB_6_0   (1)
-#define GDB_6_1   (2)
 #define GDB_7_0   (3)
 #define GDB_7_3_1 (4)
 #define GDB_7_6   (5)
@@ -179,22 +177,8 @@ struct supported_gdb_version {
 	{
 	},
 	{ 
-	    "GDB=gdb-6.0",
-	    "6.0",
-	    "GDB_FILES=${GDB_6.0_FILES}",
-	    "GDB_OFILES=${GDB_6.0_OFILES}",
-	    "GDB_PATCH_FILES=",
-	    "GDB_FLAGS=-DGDB_6_0",
-	    "GPLv2"
 	},
 	{
-	    "GDB=gdb-6.1",
-	    "6.1",
-	    "GDB_FILES=${GDB_6.1_FILES}",
-	    "GDB_OFILES=${GDB_6.1_OFILES}",
-	    "GDB_PATCH_FILES=gdb-6.1.patch",
-	    "GDB_FLAGS=-DGDB_6_1",
-	    "GPLv2"
 	},
 	{
 	    "GDB=gdb-7.0",
@@ -1367,18 +1351,6 @@ setup_gdb_defaults(void)
 		/*
 		 *  Simple override.
 		 */
-		if (strcmp(buf, "6.0") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_6_0];
-			fprintf(stderr, ".gdb configuration: %s\n\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
-		if (strcmp(buf, "6.1") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_6_1];
-			fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
 		if (strcmp(buf, "7.0") == 0) {
 			fclose(fp);
 			sp = &supported_gdb_versions[GDB_7_0];

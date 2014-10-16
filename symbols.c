@@ -4494,13 +4494,12 @@ value_search(ulong value, ulong *offset)
  
         for ( ; sp < st->symend; sp++) {
                 if (value == sp->value) {
-#if !defined(GDB_6_0) && !defined(GDB_6_1)
 			if (STRNEQ(sp->name, ".text.")) {
 				spnext = sp+1;
 				if (spnext->value == value)
 					sp = spnext;
 			}
-#endif
+
                         if (offset) 
 				*offset = 0;
 
@@ -10550,9 +10549,6 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
 	char section_name[BUFSIZE];
 	ulong section_vaddr;
 
-#if defined(GDB_6_0) || defined(GDB_6_1)
-	return FALSE;
-#endif
 	if (!(st->flags & (MODSECT_VMASK|MODSECT_UNKNOWN))) {
 		STRUCT_SIZE_INIT(module_sect_attr, "module_sect_attr");
 		MEMBER_OFFSET_INIT(module_sect_attrs, 

@@ -36,11 +36,7 @@ static void dump_registers(void);
 #define GPLv2 2
 #define GPLv3 3
 
-#if defined(GDB_6_0) || defined(GDB_6_1)
-static int GPL_version = GPLv2;
-#else
 static int GPL_version = GPLv3;
-#endif
 
 static 
 char *program_usage_info[] = {

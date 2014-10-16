@@ -105,27 +105,6 @@ DAEMON_OBJECT_FILES=remote_daemon.o va_server.o va_server_v1.o \
 	lkcd_common.o lkcd_v1.o lkcd_v2_v3.o lkcd_v5.o lkcd_v7.o lkcd_v8.o \
 	s390_dump.o netdump_daemon.o
 
-GDB_6.0_FILES=${GDB}/gdb/Makefile.in ${GDB}/Makefile.in \
-          ${GDB}/gdb/main.c ${GDB}/gdb/symtab.c ${GDB}/gdb/target.c \
-          ${GDB}/gdb/symfile.c ${GDB}/gdb/elfread.c \
-          ${GDB}/gdb/ui-file.c ${GDB}/gdb/utils.c \
-	  ${GDB}/gdb/ppc-linux-tdep.c ${GDB}/sim/ppc/ppc-instructions \
-	  ${GDB}/bfd/simple.c ${GDB}/include/obstack.h
-GDB_6.0_OFILES=${GDB}/gdb/main.o ${GDB}/gdb/symtab.o \
-          ${GDB}/gdb/target.o ${GDB}/gdb/symfile.o ${GDB}/gdb/elfread.o \
-          ${GDB}/gdb/ui-file.o ${GDB}/gdb/utils.o \
-	  ${GDB}/gdb/ppc-linux-tdep.o ${GDB}/bfd/simple.o
-
-GDB_6.1_FILES=${GDB}/gdb/Makefile.in ${GDB}/Makefile.in \
-          ${GDB}/gdb/main.c ${GDB}/gdb/symtab.c ${GDB}/gdb/target.c \
-          ${GDB}/gdb/symfile.c ${GDB}/gdb/elfread.c \
-          ${GDB}/gdb/ui-file.c ${GDB}/gdb/utils.c ${GDB}/gdb/dwarf2read.c \
-          ${GDB}/include/obstack.h ${GDB}/gdb/ppc-linux-tdep.c
-GDB_6.1_OFILES=${GDB}/gdb/main.o ${GDB}/gdb/symtab.o \
-          ${GDB}/gdb/target.o ${GDB}/gdb/symfile.o ${GDB}/gdb/elfread.o \
-          ${GDB}/gdb/ui-file.o ${GDB}/gdb/utils.o ${GDB}/gdb/dwarf2read.o \
-          ${GDB}/gdb/ppc-linux-tdep.o
-
 GDB_7.0_FILES=
 GDB_7.0_OFILES=${GDB}/gdb/symtab.o
 

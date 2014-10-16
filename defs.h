@@ -2497,11 +2497,7 @@ struct symbol_table_data {
 #define SEC_FOUND       (0x10000)
 
 struct mod_section_data {
-#if defined(GDB_6_0)
-        struct sec *section;
-#else
         struct bfd_section *section;
-#endif
         char name[MAX_MOD_SEC_NAME];
         ulong offset;
         ulong size;
@@ -4017,7 +4013,7 @@ struct gnu_request {
 	char *name;
 	ulong length;
 	int typecode;
-#if defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0)
+#if defined(GDB_7_0)
 	char *typename;
 #else
 	char *type_name;
@@ -4109,10 +4105,8 @@ enum type_code {
   TYPE_CODE_STRUCT,             /* C struct or Pascal record */
   TYPE_CODE_UNION,              /* C union or Pascal variant part */
   TYPE_CODE_ENUM,               /* Enumeration type */
-#if defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
 #if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
   TYPE_CODE_FLAGS,              /* Bit flags type */
-#endif
   TYPE_CODE_FUNC,               /* Function type */
   TYPE_CODE_INT,                /* Integer type */
 
@@ -6012,17 +6006,12 @@ extern unsigned int *gdb_output_radix;
  *  gdb/top.c
  */
 extern void execute_command (char *, int);
-#if defined(GDB_6_0) || defined(GDB_6_1)
-extern void (*command_loop_hook)(void);
-extern void (*error_hook)(void);
-#else
 extern void (*deprecated_command_loop_hook)(void);
 
 /*
  *  gdb/exceptions.c
  */
 extern void (*error_hook)(void);
-#endif
 
 /*
  *  gdb/symtab.c
@@ -6030,25 +6019,9 @@ extern void (*error_hook)(void);
 extern void gdb_command_funnel(struct gnu_request *);
 
 /*
- *  gdb/symfile.c
- */
-#if defined(GDB_6_0) || defined(GDB_6_1)
-struct objfile;
-extern void (*target_new_objfile_hook)(struct objfile *);
-#endif
-
-/*
  *  gdb/valprint.c
  */
 extern unsigned output_radix;
-#if defined(GDB_6_0) || defined(GDB_6_1)
-extern int output_format;
-extern int prettyprint_structs;
-extern int prettyprint_arrays;
-extern int repeat_count_threshold;
-extern unsigned int print_max;
-extern int stop_print_at_null;
-#endif
 
 #ifdef GDB_7_6
 /*
