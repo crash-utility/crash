@@ -2676,6 +2676,8 @@ x86_64_print_stack_entry(struct bt_info *bt, FILE *ofp, int level,
 				break;
 			}
 		}
+		if (x86_64_in_irqstack(bt) && strstr(name, "_interrupt"))
+			eframe_check = 0;
 	}
 
 	if (bt->flags & BT_SCHEDULE)
