@@ -361,7 +361,7 @@
    return lookup_symbol_in_language (name, block, domain,
  				    current_language->la_language,
  				    is_a_field_of_this);
-@@ -5100,3 +5115,662 @@ When enabled, debugging messages are pri
+@@ -5100,3 +5115,668 @@ When enabled, debugging messages are pri
  
    observer_attach_executable_changed (symtab_observer_executable_changed);
  }
@@ -885,32 +885,38 @@
 + *  Walk through all minimal_symbols, patching their values with the
 + *  correct addresses.
 + */
-+static void 
++static void
 +gdb_patch_symbol_values(struct gnu_request *req)
 +{
 +	struct minimal_symbol *msymbol;
 +	struct objfile *objfile;
 +
 +	req->name = PATCH_KERNEL_SYMBOLS_START;
-+	patch_kernel_symbol(req);
++	patch_kernel_symbol(req, NULL);
 +
 +	ALL_MSYMBOLS (objfile, msymbol)
 +	{
 +		req->name = (char *)msymbol->ginfo.name;
-+		req->addr = (ulong)(&SYMBOL_VALUE_ADDRESS(msymbol));
-+		if (!patch_kernel_symbol(req)) {
++		if (!patch_kernel_symbol(req, msymbol)) {
 +			req->flags |= GNU_COMMAND_FAILED;
 +			break;
 +		}
 +	}
 +
 +	req->name = PATCH_KERNEL_SYMBOLS_STOP;
-+	patch_kernel_symbol(req);
++	patch_kernel_symbol(req, NULL);
 +
 +	clear_symtab_users(0);
 +	gdb_merge_flags |= KERNEL_SYMBOLS_PATCHED;
 +}
 +
++extern void gdb_patch_minsymbol_address(struct minimal_symbol *msym,
++				        unsigned long addr);
++void gdb_patch_minsymbol_address(struct minimal_symbol *msym,
++				 unsigned long addr)
++{
++	SYMBOL_VALUE_ADDRESS(msym) = addr;
++}
 +static void
 +gdb_get_symbol_type(struct gnu_request *req)
 +{

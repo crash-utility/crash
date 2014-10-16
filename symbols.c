@@ -11704,7 +11704,7 @@ clear_text_value_cache(void)
 #define last_sp addr2
 
 int 
-patch_kernel_symbol(struct gnu_request *req)
+patch_kernel_symbol(struct gnu_request *req, void *msym)
 {
 	int i, c;
 	struct syment *sp_array[1000], *sp;
@@ -11735,14 +11735,14 @@ patch_kernel_symbol(struct gnu_request *req)
                 return TRUE;
         }
 
-	if (!req->name || !req->addr)
+	if (!req->name || !msym)
 		return FALSE;
 
 	sp = (struct syment *)req->last_sp; 
 	sp += sp ? 1 : 0;
 	if (sp && (sp->cnt == 1) && !(sp->flags & SYMBOL_NAME_USED) && 
 	    STREQ(sp->name, req->name)) {
-                *((ulong *)req->addr) = sp->value;
+		gdb_patch_minsymbol_address(msym, sp->value);
                 sp->flags |= SYMBOL_NAME_USED;
                 req->last_sp = (ulong)sp;
 	} else {
@@ -11752,7 +11752,7 @@ patch_kernel_symbol(struct gnu_request *req)
 			return TRUE;
 	
 		case 1: 
-			*((ulong *)req->addr) = sp_array[0]->value;
+			gdb_patch_minsymbol_address(msym, sp_array[0]->value);
 			sp_array[0]->flags |= SYMBOL_NAME_USED;
 			req->last_sp = (ulong)sp_array[0];
 			break;
@@ -11761,7 +11761,8 @@ patch_kernel_symbol(struct gnu_request *req)
 			for (i = 0; i < c; i++) {
 				if (sp_array[i]->flags & SYMBOL_NAME_USED)
 					continue;
-				*((ulong *)req->addr) = sp_array[i]->value;
+				gdb_patch_minsymbol_address(msym,
+							  sp_array[i]->value);
 				sp_array[i]->flags |= SYMBOL_NAME_USED;
 				req->last_sp = (ulong)sp_array[i];
 				break;
