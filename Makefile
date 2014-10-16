@@ -105,48 +105,6 @@ DAEMON_OBJECT_FILES=remote_daemon.o va_server.o va_server_v1.o \
 	lkcd_common.o lkcd_v1.o lkcd_v2_v3.o lkcd_v5.o lkcd_v7.o lkcd_v8.o \
 	s390_dump.o netdump_daemon.o
 
-GDB_5.0_FILES=${GDB}/gdb/Makefile.in \
-	  ${GDB}/gdb/main.c ${GDB}/gdb/symtab.c ${GDB}/gdb/target.c \
-	  ${GDB}/gdb/blockframe.c ${GDB}/gdb/alpha-tdep.c \
-	  ${GDB}/gdb/symfile.c ${GDB}/gdb/elfread.c \
-	  ${GDB}/gdb/ui-file.c ${GDB}/gdb/utils.c ${GDB}/gdb/gnu-regex.c \
-	  ${GDB}/gdb/ppc-linux-nat.c
-GDB_5.0_OFILES=${GDB}/gdb/main.o ${GDB}/gdb/symtab.o ${GDB}/gdb/target.o \
-          ${GDB}/gdb/blockframe.o ${GDB}/gdb/alpha-tdep.o \
-          ${GDB}/gdb/symfile.o ${GDB}/gdb/elfread.o \
-          ${GDB}/gdb/ui-file.o ${GDB}/gdb/utils.o ${GDB}/gdb/gnu-regex.o \
-          ${GDB}/gdb/ppc-linux-nat.o
-
-GDB_5.1_FILES=${GDB}/gdb/Makefile.in \
-	  ${GDB}/gdb/main.c ${GDB}/gdb/symtab.c ${GDB}/gdb/target.c \
-	  ${GDB}/gdb/blockframe.c ${GDB}/gdb/alpha-tdep.c \
-	  ${GDB}/gdb/symfile.c ${GDB}/gdb/elfread.c \
-	  ${GDB}/gdb/ui-file.c ${GDB}/gdb/utils.c  ${GDB}/gdb/gnu-regex.c
-GDB_5.1_OFILES=${GDB}/gdb/main.o ${GDB}/gdb/symtab.o ${GDB}/gdb/target.o \
-          ${GDB}/gdb/blockframe.o ${GDB}/gdb/alpha-tdep.o \
-          ${GDB}/gdb/symfile.o ${GDB}/gdb/elfread.o \
-          ${GDB}/gdb/ui-file.o ${GDB}/gdb/utils.o ${GDB}/gdb/gnu-regex.o
-
-GDB_5.2.1_FILES=${GDB}/gdb/Makefile.in \
-          ${GDB}/gdb/main.c ${GDB}/gdb/symtab.c ${GDB}/gdb/target.c \
-          ${GDB}/gdb/blockframe.c ${GDB}/gdb/alpha-tdep.c \
-          ${GDB}/gdb/symfile.c ${GDB}/gdb/elfread.c \
-          ${GDB}/gdb/ui-file.c ${GDB}/gdb/utils.c
-GDB_5.2.1_OFILES=${GDB}/gdb/main.o ${GDB}/gdb/symtab.o ${GDB}/gdb/target.o \
-          ${GDB}/gdb/blockframe.o ${GDB}/gdb/alpha-tdep.o \
-          ${GDB}/gdb/symfile.o ${GDB}/gdb/elfread.o \
-          ${GDB}/gdb/ui-file.o ${GDB}/gdb/utils.o 
-
-GDB_5.3post-0.20021129.36rh_FILES=${GDB}/gdb/Makefile.in \
-          ${GDB}/gdb/main.c ${GDB}/gdb/symtab.c ${GDB}/gdb/target.c \
-          ${GDB}/gdb/frame.c ${GDB}/gdb/alpha-tdep.c \
-          ${GDB}/gdb/symfile.c ${GDB}/gdb/elfread.c \
-          ${GDB}/gdb/ui-file.c ${GDB}/gdb/utils.c ${GDB}/gdb/dwarf2read.c
-GDB_5.3post-0.20021129.36rh_OFILES=${GDB}/gdb/main.o ${GDB}/gdb/symtab.o \
-          ${GDB}/gdb/target.o ${GDB}/gdb/frame.o ${GDB}/gdb/alpha-tdep.o \
-          ${GDB}/gdb/symfile.o ${GDB}/gdb/elfread.o ${GDB}/gdb/ui-file.o \
-          ${GDB}/gdb/utils.o ${GDB}/gdb/dwarf2read.o
-
 GDB_6.0_FILES=${GDB}/gdb/Makefile.in ${GDB}/Makefile.in \
           ${GDB}/gdb/main.c ${GDB}/gdb/symtab.c ${GDB}/gdb/target.c \
           ${GDB}/gdb/symfile.c ${GDB}/gdb/elfread.c \

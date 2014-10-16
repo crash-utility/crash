@@ -6002,11 +6002,9 @@ foreach(struct foreach_data *fd)
 				error(INFO, "line numbers are not available\n");
 				fd->flags &= ~FOREACH_l_FLAG;
 			}
-#ifndef GDB_5_3
                         if ((fd->flags & FOREACH_g_FLAG))
                                 error(FATAL,
 				    "bt -g option is not supported when issued from foreach\n");
-#endif
 			bt = &bt_info;
 			break;
 
@@ -6180,10 +6178,6 @@ foreach(struct foreach_data *fd)
 					bt->flags |= BT_OLD_BACK_TRACE;
                                 if (fd->flags & FOREACH_e_FLAG)
                                         bt->flags |= BT_EFRAME_SEARCH;
-#ifdef GDB_5_3
-                                if (fd->flags & FOREACH_g_FLAG)
-                                        bt->flags |= BT_USE_GDB;
-#endif
                                 if (fd->flags & FOREACH_l_FLAG) 
                                         bt->flags |= BT_LINE_NUMBERS;
                                 if (fd->flags & FOREACH_f_FLAG) 

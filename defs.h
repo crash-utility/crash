@@ -2421,11 +2421,7 @@ struct symbol_namespace {
 
 struct symbol_table_data {
 	ulong flags;
-#ifdef GDB_5_3
-	struct _bfd *bfd;
-#else
 	struct bfd *bfd;
-#endif
 	struct sec *sections;
 	struct syment *symtable;
 	struct syment *symend;
@@ -2501,7 +2497,7 @@ struct symbol_table_data {
 #define SEC_FOUND       (0x10000)
 
 struct mod_section_data {
-#if defined(GDB_5_3) || defined(GDB_6_0)
+#if defined(GDB_6_0)
         struct sec *section;
 #else
         struct bfd_section *section;
@@ -4021,7 +4017,7 @@ struct gnu_request {
 	char *name;
 	ulong length;
 	int typecode;
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) 
+#if defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0)
 	char *typename;
 #else
 	char *type_name;
@@ -4113,7 +4109,7 @@ enum type_code {
   TYPE_CODE_STRUCT,             /* C struct or Pascal record */
   TYPE_CODE_UNION,              /* C union or Pascal variant part */
   TYPE_CODE_ENUM,               /* Enumeration type */
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
+#if defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
 #if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
   TYPE_CODE_FLAGS,              /* Bit flags type */
 #endif
@@ -6016,7 +6012,7 @@ extern unsigned int *gdb_output_radix;
  *  gdb/top.c
  */
 extern void execute_command (char *, int);
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
+#if defined(GDB_6_0) || defined(GDB_6_1)
 extern void (*command_loop_hook)(void);
 extern void (*error_hook)(void);
 #else
@@ -6045,7 +6041,7 @@ extern void (*target_new_objfile_hook)(struct objfile *);
  *  gdb/valprint.c
  */
 extern unsigned output_radix;
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
+#if defined(GDB_6_0) || defined(GDB_6_1)
 extern int output_format;
 extern int prettyprint_structs;
 extern int prettyprint_arrays;
@@ -6074,20 +6070,9 @@ extern void do_cleanups(void *);
 extern char *version;
 
 /*
- *  gdb/disasm.c
- */
-#ifdef GDB_5_3
-extern int gdb_disassemble_from_exec;
-#endif
-
-/*
  *  readline/readline.c
  */
-#ifdef GDB_5_3
-extern char *readline(char *);
-#else
 extern char *readline(const char *);
-#endif
 extern int rl_editing_mode;
 
 /*
@@ -6099,11 +6084,7 @@ extern int history_offset;
  *  external gdb routines
  */
 extern int gdb_main_entry(int, char **);
-#ifdef GDB_5_3
-extern unsigned long calc_crc32(unsigned long, unsigned char *, size_t);
-#else
 extern unsigned long gnu_debuglink_crc32 (unsigned long, unsigned char *, size_t);
-#endif
 extern int have_partial_symbols(void); 
 extern int have_full_symbols(void);
 

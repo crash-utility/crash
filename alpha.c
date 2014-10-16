@@ -751,6 +751,7 @@ try_closest:
 static void
 alpha_frame_offset(struct gnu_request *req, ulong alt_pc)
 {
+	static int gdb_frame_offset_warnings = 10;
 	uint *ip, ival;
 	ulong value;
 
@@ -796,15 +797,11 @@ alpha_frame_offset(struct gnu_request *req, ulong alt_pc)
 	}
 
 use_gdb:
-#ifndef GDB_5_3
-{
-	static int gdb_frame_offset_warnings = 10;
 
 	if (gdb_frame_offset_warnings-- > 0)
 		error(WARNING, 
 	        "GNU_ALPHA_FRAME_OFFSET functionality not ported to gdb\n");
-}
-#endif
+
 	req->command = GNU_ALPHA_FRAME_OFFSET;
 	if (alt_pc) {
 		ulong pc_save;

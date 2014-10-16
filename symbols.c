@@ -430,16 +430,12 @@ separate_debug_file_exists(const char *name, unsigned long crc, int *exists)
 
 	*exists = TRUE;
   	while ((count = read(fd, buffer, sizeof(buffer))) > 0)
-#ifdef GDB_5_3
-    		file_crc = calc_crc32(file_crc, buffer, count);
-#else
 #ifdef GDB_7_6
     		file_crc = bfd_calc_gnu_debuglink_crc32(file_crc, 
 			(unsigned char *)buffer, count);
 #else
     		file_crc = gnu_debuglink_crc32(file_crc, 
 			(unsigned char *)buffer, count);
-#endif
 #endif
 
   	close (fd);
@@ -3613,11 +3609,7 @@ not_system_map:
 static int
 is_bfd_format(char *filename) 
 {
-#ifdef GDB_5_3
-        struct _bfd *bfd;
-#else
         struct bfd *bfd;
-#endif
         char **matching;
 
         if ((bfd = bfd_openr(filename, NULL)) == NULL) 
@@ -3635,11 +3627,7 @@ is_bfd_format(char *filename)
 static int
 is_binary_stripped(char *filename)
 {
-#ifdef GDB_5_3
-        struct _bfd *bfd;
-#else
         struct bfd *bfd;
-#endif
 	int number_of_symbols;
 
 	if ((bfd = bfd_openr(filename, NULL)) == NULL) {
@@ -4506,7 +4494,7 @@ value_search(ulong value, ulong *offset)
  
         for ( ; sp < st->symend; sp++) {
                 if (value == sp->value) {
-#if !defined(GDB_5_3) && !defined(GDB_6_0) && !defined(GDB_6_1)
+#if !defined(GDB_6_0) && !defined(GDB_6_1)
 			if (STRNEQ(sp->name, ".text.")) {
 				spnext = sp+1;
 				if (spnext->value == value)
@@ -10562,7 +10550,7 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
 	char section_name[BUFSIZE];
 	ulong section_vaddr;
 
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
+#if defined(GDB_6_0) || defined(GDB_6_1)
 	return FALSE;
 #endif
 	if (!(st->flags & (MODSECT_VMASK|MODSECT_UNKNOWN))) {

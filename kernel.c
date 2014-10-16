@@ -2073,11 +2073,7 @@ cmd_bt(void)
 			break;
 
 		case 'g':
-#ifdef GDB_5_3
-			bt->flags |= BT_USE_GDB;
-#else
 			bt->flags |= BT_THREAD_GROUP;
-#endif
 			break;
 
 		case 'x':
