@@ -158,8 +158,6 @@ void add_extra_lib(char *);
  *  unless overridden.
  */
 
-#define GDB_7_0   (3)
-#define GDB_7_3_1 (4)
 #define GDB_7_6   (5)
 #define SUPPORTED_GDB_VERSIONS (GDB_7_6 + 1)
 
@@ -181,22 +179,8 @@ struct supported_gdb_version {
 	{
 	},
 	{
-	    "GDB=gdb-7.0",
-	    "7.0",
-	    "GDB_FILES=${GDB_7.0_FILES}",
-	    "GDB_OFILES=${GDB_7.0_OFILES}",
-	    "GDB_PATCH_FILES=gdb-7.0.patch",
-	    "GDB_FLAGS=-DGDB_7_0",
-	    "GPLv3"
 	},
 	{
-	    "GDB=gdb-7.3.1",
-	    "7.3.1",
-	    "GDB_FILES=${GDB_7.3.1_FILES}",
-	    "GDB_OFILES=${GDB_7.3.1_OFILES}",
-	    "GDB_PATCH_FILES=gdb-7.3.1.patch",
-	    "GDB_FLAGS=-DGDB_7_3_1",
-	    "GPLv3"
 	},
 	{
 	    "GDB=gdb-7.6",
@@ -1351,18 +1335,6 @@ setup_gdb_defaults(void)
 		/*
 		 *  Simple override.
 		 */
-		if (strcmp(buf, "7.0") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_7_0];
-			fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
-		if (strcmp(buf, "7.3.1") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_7_3_1];
-			fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
 		if (strcmp(buf, "7.6") == 0) {
 			fclose(fp);
 			sp = &supported_gdb_versions[GDB_7_6];

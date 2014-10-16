@@ -4013,11 +4013,7 @@ struct gnu_request {
 	char *name;
 	ulong length;
 	int typecode;
-#if defined(GDB_7_0)
-	char *typename;
-#else
 	char *type_name;
-#endif
 	char *target_typename;
 	ulong target_length;
 	int target_typecode;
@@ -4105,7 +4101,6 @@ enum type_code {
   TYPE_CODE_STRUCT,             /* C struct or Pascal record */
   TYPE_CODE_UNION,              /* C union or Pascal variant part */
   TYPE_CODE_ENUM,               /* Enumeration type */
-#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
   TYPE_CODE_FLAGS,              /* Bit flags type */
   TYPE_CODE_FUNC,               /* Function type */
   TYPE_CODE_INT,                /* Integer type */
@@ -4127,7 +4122,6 @@ enum type_code {
   /* 
    *  NOTE: the remainder of the type codes are not list or used here...
    */
-#endif
 };
 
 #define PF_EXITING 0x00000004  /* getting shut down */
@@ -6023,19 +6017,12 @@ extern void gdb_command_funnel(struct gnu_request *);
  */
 extern unsigned output_radix;
 
-#ifdef GDB_7_6
 /*
  *  gdb/cleanups.c
  */
 struct cleanup;
 extern struct cleanup *all_cleanups(void);
 extern void do_cleanups(struct cleanup *);
-#else
-/*
- *  gdb/utils.c
- */
-extern void do_cleanups(void *);
-#endif
 
 /*
  *  gdb/version.c

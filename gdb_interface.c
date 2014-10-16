@@ -78,10 +78,8 @@ gdb_main_loop(int argc, char **argv)
 void
 update_gdb_hooks(void)
 {
-#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
 	deprecated_command_loop_hook = pc->flags & VERSION_QUERY ?
 		exit_after_gdb_info : main_loop;
-#endif
 }
 
 void
@@ -474,11 +472,7 @@ dump_gnu_request(struct gnu_request *req, int in_gdb)
 		console("name: %lx ", (ulong)req->name);
 	console("length: %ld ", req->length);
         console("typecode: %d\n", req->typecode);
-#if defined(GDB_7_0)
-	console("typename: %s\n", req->typename);
-#else
 	console("type_name: %s\n", req->type_name);
-#endif
 	console("target_typename: %s\n", req->target_typename);
 	console("target_length: %ld ", req->target_length);
 	console("target_typecode: %d ", req->target_typecode);
@@ -906,11 +900,7 @@ gdb_error_hook(void)
 			gdb_command_string(pc->cur_gdb_cmd, buf1, TRUE), buf2);
 	}
 
-#ifdef GDB_7_6
 	do_cleanups(all_cleanups()); 
-#else
-	do_cleanups(NULL); 
-#endif
 
 	longjmp(pc->gdb_interface_env, 1);
 }

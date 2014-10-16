@@ -17,10 +17,8 @@
 
 #include "defs.h"
 #include <elf.h>
-#ifdef GDB_7_6
 #define __CONFIG_H__ 1
 #include "config.h"
-#endif
 #include "bfd.h"
 
 static void store_symbols(bfd *, int, void *, long, unsigned int);
@@ -430,13 +428,8 @@ separate_debug_file_exists(const char *name, unsigned long crc, int *exists)
 
 	*exists = TRUE;
   	while ((count = read(fd, buffer, sizeof(buffer))) > 0)
-#ifdef GDB_7_6
     		file_crc = bfd_calc_gnu_debuglink_crc32(file_crc, 
 			(unsigned char *)buffer, count);
-#else
-    		file_crc = gnu_debuglink_crc32(file_crc, 
-			(unsigned char *)buffer, count);
-#endif
 
   	close (fd);
 

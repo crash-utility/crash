@@ -105,12 +105,6 @@ DAEMON_OBJECT_FILES=remote_daemon.o va_server.o va_server_v1.o \
 	lkcd_common.o lkcd_v1.o lkcd_v2_v3.o lkcd_v5.o lkcd_v7.o lkcd_v8.o \
 	s390_dump.o netdump_daemon.o
 
-GDB_7.0_FILES=
-GDB_7.0_OFILES=${GDB}/gdb/symtab.o
-
-GDB_7.3.1_FILES=
-GDB_7.3.1_OFILES=${GDB}/gdb/symtab.o
-
 GDB_7.6_FILES=
 GDB_7.6_OFILES=${GDB}/gdb/symtab.o
 
