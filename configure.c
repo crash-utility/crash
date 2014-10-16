@@ -57,6 +57,10 @@
 #include <unistd.h>
 #include <ctype.h>
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
+#endif
+
 struct supported_gdb_version;
 void build_configure(struct supported_gdb_version *);
 void release_configure(char *, struct supported_gdb_version *);
@@ -158,11 +162,6 @@ void add_extra_lib(char *);
  *  unless overridden.
  */
 
-#define GDB_7_6   (5)
-#define SUPPORTED_GDB_VERSIONS (GDB_7_6 + 1)
-
-int default_gdb = GDB_7_6;
-
 struct supported_gdb_version {
 	char *GDB;
 	char *GDB_VERSION_IN;
@@ -171,17 +170,7 @@ struct supported_gdb_version {
 	char *GDB_PATCH_FILES;
 	char *GDB_FLAGS;
 	char *GPL;
-} supported_gdb_versions[SUPPORTED_GDB_VERSIONS] = {
-	{
-	},
-	{ 
-	},
-	{
-	},
-	{
-	},
-	{
-	},
+} supported_gdb_versions[] = {
 	{
 	    "GDB=gdb-7.6",
 	    "7.6",
@@ -192,6 +181,8 @@ struct supported_gdb_version {
 	    "GPLv3"
 	},
 };
+
+struct supported_gdb_version *default_gdb = &supported_gdb_versions[0];
 
 #define DAEMON  0x1
 #define QUIET   0x2
@@ -1327,6 +1318,8 @@ setup_gdb_defaults(void)
 	}
 
         while (fgets(inbuf, 512, fp)) {
+		int i;
+
 		strip_linefeeds(inbuf);
 		strip_beginning_whitespace(inbuf);
 
@@ -1335,13 +1328,19 @@ setup_gdb_defaults(void)
 		/*
 		 *  Simple override.
 		 */
-		if (strcmp(buf, "7.6") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_7_6];
-			fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
 
+		for (i = 0; i < ARRAY_SIZE(supported_gdb_versions); i++) {
+			struct supported_gdb_version *vers;
+			vers = &supported_gdb_versions[i];
+
+			if (strcmp(buf, vers->GDB_VERSION_IN) == 0) {
+				fclose(fp);
+				sp = vers;
+				fprintf(stderr, ".gdb configuration: %s\n",
+					sp->GDB_VERSION_IN);
+				return store_gdb_defaults(sp);
+			}
+		}
         }
 	
 	fclose(fp);
@@ -1354,7 +1353,7 @@ struct supported_gdb_version *
 store_gdb_defaults(struct supported_gdb_version *sp)
 {
 	if (!sp)
-		sp = &supported_gdb_versions[default_gdb];
+		sp = default_gdb;
 	else
 		fprintf(stderr, "WARNING: \"make clean\" may be required before rebuilding\n\n");
 
