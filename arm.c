@@ -1642,7 +1642,12 @@ arm_display_machine_stats(void)
 static int
 arm_get_smp_cpus(void)
 {
-	return MAX(get_cpus_active(), get_cpus_online());
+	int cpus;
+	
+	if ((cpus = get_cpus_present()))
+		return cpus;
+	else
+		return MAX(get_cpus_online(), get_highest_cpu_online()+1);
 }
 
 /*
