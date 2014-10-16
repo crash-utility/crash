@@ -279,6 +279,33 @@
  }
  
  /* Return the source_verbose global variable to its previous state
+--- gdb-7.6.orig/gdb/cli/cli-interp.c
++++ gdb-7.6/gdb/cli/cli-interp.c
+@@ -230,3 +230,24 @@ _initialize_cli_interp (void)
+
+   interp_add (cli_interp);
+ }
++
++extern void main_loop(void *);
++extern initialize_file_ftype _initialize_crash_interp;
++void
++_initialize_crash_interp (void)
++{
++	struct interp *command_interp;
++	static struct interp_procs crash_procs = {
++		.init_proc    = cli_interpreter_init,
++		.resume_proc  = cli_interpreter_resume,
++		.suspend_proc = cli_interpreter_suspend,
++		.exec_proc    = cli_interpreter_exec,
++		.ui_out_proc  = cli_ui_out,
++		.set_logging_proc = NULL,
++		.command_loop_proc = main_loop,
++	};
++
++	command_interp = interp_new("crash-command", &crash_procs);
++
++	interp_add(command_interp);
++}
 --- gdb-7.6/gdb/psymtab.c.orig
 +++ gdb-7.6/gdb/psymtab.c
 @@ -305,10 +305,14 @@ find_pc_sect_psymtab (struct objfile *ob
@@ -1222,20 +1249,6 @@
        exit (0);
      }
  
-@@ -853,6 +853,13 @@ captured_main (void *data)
-       }
-   }
- 
-+#ifdef CRASH_MERGE
-+{
-+	extern void update_gdb_hooks(void);
-+	update_gdb_hooks();
-+}
-+#endif
-+
-   /* FIXME: cagney/2003-02-03: The big hack (part 2 of 2) that lets
-      GDB retain the old MI1 interpreter startup behavior.  Output the
-      copyright message after the interpreter is installed when it is
 @@ -880,7 +887,11 @@ captured_main (void *data)
       processed; it sets global parameters, which are independent of
       what file you are debugging or what directory you are in.  */
@@ -1316,7 +1329,7 @@
 +  args.argc = argc;
 +  args.argv = argv;
 +  args.use_windows = 0;
-+  args.interpreter_p = INTERP_CONSOLE;
++  args.interpreter_p = "crash-command";
 +  return gdb_main (&args);
 +}
 +#endif

@@ -17,7 +17,7 @@
 
 #include "defs.h"
 
-static void exit_after_gdb_info(void);
+static void exit_after_gdb_info(void *ignore);
 static int is_restricted_command(char *, ulong);
 static void strip_redirection(char *);
 int get_frame_offset(ulong);
@@ -68,18 +68,7 @@ gdb_main_loop(int argc, char **argv)
 	}
 
         optind = 0;
-	deprecated_command_loop_hook = main_loop;
         gdb_main_entry(argc, argv);
-}
-
-/*
- *  Update any hooks that gdb has set.
- */
-void
-update_gdb_hooks(void)
-{
-	deprecated_command_loop_hook = pc->flags & VERSION_QUERY ?
-		exit_after_gdb_info : main_loop;
 }
 
 void
@@ -99,24 +88,15 @@ gdb_readnow_warning(void)
 
 /*
  *  Used only by the -v command line option, get gdb to initialize itself
- *  with no arguments, print its version and GPL paragraph, and then call
- *  back to exit_after_gdb_info().
+ *  with no arguments, print its version and GPL paragraph, and then exit out.
  */
 void
 display_gdb_banner(void)
 {
 	optind = 0;
-        deprecated_command_loop_hook = exit_after_gdb_info;
 	args[0] = "gdb";
 	args[1] = "-version";
 	gdb_main_entry(2, args);
-}
-
-static void
-exit_after_gdb_info(void)
-{
-        fprintf(fp, "\n");
-        clean_exit(0);
 }
 
 /* 

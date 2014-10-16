@@ -4274,7 +4274,7 @@ void cmd_ipcs(void);         /* ipcs.c */
 /*
  *  main.c
  */
-void main_loop(void);
+void main_loop(void *);
 void exec_command(void);
 struct command_table_entry *get_command_table_entry(char *);
 void program_usage(int);
