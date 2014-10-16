@@ -3469,7 +3469,7 @@ monitor_memory(long *freemem_pages,
  *  Determine whether two filenames reference the same file.
  */
 int
-same_file(char *f1, char *f2)
+same_file(const char *f1, const char *f2)
 {
 	struct stat stat1, stat2;
 

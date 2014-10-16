@@ -4675,7 +4675,7 @@ int file_dump(ulong, ulong, ulong, int, int);
 #define DUMP_DENTRY_ONLY 4
 #define DUMP_EMPTY_FILE  8
 #endif  /* !GDB_COMMON */
-int same_file(char *, char *);
+int same_file(const char *, const char *);
 #ifndef GDB_COMMON
 int cleanup_memory_driver(void);
 
