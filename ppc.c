@@ -267,7 +267,7 @@ ppc_probe_base_platform(void)
 	int i;
 
 	if(!try_get_symbol_data("powerpc_base_platform", sizeof(ulong), &ptr) ||
-		read_string(ptr, platform_name, MAX_PLATFORM_LEN - 1) == 0)
+		mem_read_string(ptr, platform_name, MAX_PLATFORM_LEN - 1) == 0)
 		/* Let us fallback to default definitions */
 		strcpy(platform_name, "(unknown)");
 
@@ -731,7 +731,7 @@ ppc_processor_speed(void)
 				FAULT_ON_ERROR);
 			
 			if(type != 0) {
-				len = read_string(type, str_buf, 
+				len = mem_read_string(type, str_buf,
 					sizeof(str_buf));
 
 				if(len && (strcasecmp(str_buf, "cpu") == 0))
@@ -755,7 +755,7 @@ ppc_processor_speed(void)
 					sizeof(ulong), "property name",
 					FAULT_ON_ERROR);
 				
-				len = read_string(name, str_buf, 
+				len = mem_read_string(name, str_buf,
 					sizeof(str_buf));
 
 				if (len && (strcasecmp(str_buf, 
@@ -1561,7 +1561,7 @@ static void ppc_dump_irq(int irq)
 		/* typename */
 		readmem(ctl + OFFSET(hw_interrupt_type_typename), KVADDR, &addr,
 			sizeof(ulong), "typename pointer", FAULT_ON_ERROR);
-		len = read_string(addr, typename, 32);
+		len = mem_read_string(addr, typename, 32);
 		
 		if(len)
 			fprintf(fp, "         typename: %08lx  \"%s\"\n", 
@@ -1675,7 +1675,7 @@ static void ppc_dump_irq(int irq)
 		/* name */
 		readmem(action + OFFSET(irqaction_name), KVADDR, &addr,
 			sizeof(ulong), "action name", FAULT_ON_ERROR);
-		len = read_string(addr, typename, 32);
+		len = mem_read_string(addr, typename, 32);
 		
 		if(len)
 			fprintf(fp, "             name: %08lx  \"%s\"\n", 

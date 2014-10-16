@@ -5952,7 +5952,7 @@ page_flags_init_from_pageflag_names(void)
 			break;
 		}
 
-		if (!read_string((ulong)name, namebuf, BUFSIZE-1)) {
+		if (!mem_read_string((ulong)name, namebuf, BUFSIZE-1)) {
 			error(INFO, "failed to read pageflag_names entry\n",
 				i, name, mask);
 			goto pageflags_fail;
@@ -6814,7 +6814,7 @@ dump_free_pages_zones_v1(struct meminfo *fi)
 	        	readmem(node_zones+OFFSET(zone_struct_name), KVADDR, 
 				&value, sizeof(void *), 
 				"node_zones name", FAULT_ON_ERROR);
-	                if (read_string(value, buf, BUFSIZE-1))
+	                if (mem_read_string(value, buf, BUFSIZE-1))
 	                	fprintf(fp, "%-9s ", buf);
 			else
 				fprintf(fp, "(unknown) ");
@@ -7100,7 +7100,7 @@ dump_free_pages_zones_v2(struct meminfo *fi)
 				readmem(node_zones+OFFSET(zone_name), KVADDR,
 					&value, sizeof(void *),
 					"node_zones name", FAULT_ON_ERROR);
-				if (read_string(value, buf, BUFSIZE-1) &&
+				if (mem_read_string(value, buf, BUFSIZE-1) &&
 				    STREQ(buf, "HighMem"))
 					vt->ZONE_HIGHMEM = i;
 
@@ -7147,7 +7147,7 @@ dump_free_pages_zones_v2(struct meminfo *fi)
 	        	readmem(node_zones+OFFSET(zone_name), KVADDR, 
 				&value, sizeof(void *), 
 				"node_zones name", FAULT_ON_ERROR);
-	                if (read_string(value, buf, BUFSIZE-1))
+	                if (mem_read_string(value, buf, BUFSIZE-1))
 	                	fprintf(fp, "%-9s ", buf);
 			else
 				fprintf(fp, "(unknown) ");
@@ -7418,7 +7418,7 @@ dump_zone_page_usage(void)
                         readmem(node_zones+OFFSET(zone_struct_name), KVADDR,
                                 &value, sizeof(void *),
                                 "node_zones name", FAULT_ON_ERROR);
-                        if (read_string(value, buf1, BUFSIZE-1))
+                        if (mem_read_string(value, buf1, BUFSIZE-1))
                                 sprintf(namebuf, "%-8s", buf1);
                         else
                                 sprintf(namebuf, "(unknown)");
@@ -8390,7 +8390,7 @@ dump_page_lists(struct meminfo *mi)
                         	readmem(node_zones+OFFSET(zone_struct_name), 
 					KVADDR, &value, sizeof(void *),
                                 	"zone_struct name", FAULT_ON_ERROR);
-                        	if (!read_string(value, buf, BUFSIZE-1))
+				if (!mem_read_string(value, buf, BUFSIZE-1))
                                 	sprintf(buf, "(unknown) ");
 
                 		if (mi->flags & VERBOSE) {
@@ -8500,7 +8500,7 @@ is_kmem_cache_addr(ulong vaddr, char *kbuf)
 				readmem(cache+name_offset, KVADDR, kbuf, vt->kmem_cache_namelen, "name array", FAULT_ON_ERROR);
 	                } else {
 				readmem(cache+name_offset, KVADDR, &name, sizeof(name), "name", FAULT_ON_ERROR);
-	                        if (!read_string(name, kbuf, BUFSIZE-1)) {
+				if (!mem_read_string(name, kbuf, BUFSIZE-1)) {
 					if (vt->flags & 
 					  (PERCPU_KMALLOC_V1|PERCPU_KMALLOC_V2))
 	                                	error(WARNING,
@@ -8577,7 +8577,7 @@ kmem_cache_list(void)
 				vt->kmem_cache_namelen);
 	        } else {
 			name = ULONG(cache_buf + name_offset);
-	                if (!read_string(name, buf, BUFSIZE-1)) {
+			if (!mem_read_string(name, buf, BUFSIZE-1)) {
 				if (vt->flags & 
 				    (PERCPU_KMALLOC_V1|PERCPU_KMALLOC_V2))
 	                               	error(WARNING,
@@ -9452,7 +9452,7 @@ dump_kmem_cache(struct meminfo *si)
 		} else {
 			name = ULONG(si->cache_buf + 
 				OFFSET(kmem_cache_s_c_name));
-                	if (!read_string(name, buf, BUFSIZE-1)) {
+			if (!mem_read_string(name, buf, BUFSIZE-1)) {
 				error(WARNING, 
 			      "cannot read kmem_cache_s.c_name string at %lx\n",
 					name);
@@ -9661,7 +9661,7 @@ dump_kmem_cache_percpu_v1(struct meminfo *si)
                 	readmem(si->cache+OFFSET(kmem_cache_s_name), 
 				KVADDR, &name, sizeof(ulong),
                         	"name", FAULT_ON_ERROR);
-                	if (!read_string(name, buf, BUFSIZE-1)) {
+			if (!mem_read_string(name, buf, BUFSIZE-1)) {
 				error(WARNING, 
 			      "cannot read kmem_cache_s.name string at %lx\n",
 					name);
@@ -9905,7 +9905,7 @@ dump_kmem_cache_percpu_v2(struct meminfo *si)
                 	readmem(si->cache+OFFSET(kmem_cache_s_name), 
 				KVADDR, &name, sizeof(ulong),
                         	"name", FAULT_ON_ERROR);
-                	if (!read_string(name, buf, BUFSIZE-1)) {
+			if (!mem_read_string(name, buf, BUFSIZE-1)) {
 				error(WARNING, 
 			      "cannot read kmem_cache_s.name string at %lx\n",
 					name);
@@ -12822,14 +12822,14 @@ phys_to_page(physaddr_t phys, ulong *pp)
  *  for handling it. 
  */
 int
-read_string(ulong kvaddr, char *buf, int maxlen)
+mem_read_string(ulong kvaddr, char *buf, int maxlen)
 {
 	int i;
 
         BZERO(buf, maxlen);
 
 	readmem(kvaddr, KVADDR, buf, maxlen,
-	    "read_string characters", QUIET|RETURN_ON_ERROR);
+	    "mem_read_string characters", QUIET|RETURN_ON_ERROR);
 
 	for (i = 0; i < maxlen; i++) {
 		if (buf[i] == NULLCHAR) {
@@ -15415,7 +15415,7 @@ dump_memory_nodes(int initialize)
                 	readmem(node_zones+OFFSET_OPTION(zone_struct_name,
 				zone_name), KVADDR, &value, sizeof(void *),
                         	"zone[_struct] name", FAULT_ON_ERROR);
-                	if (!read_string(value, buf1, BUFSIZE-1))
+			if (!mem_read_string(value, buf1, BUFSIZE-1))
                         	sprintf(buf1, "(unknown) ");
 			if (VALID_STRUCT(zone_struct)) {
 				if (VALID_MEMBER(zone_struct_zone_start_paddr))
@@ -15613,7 +15613,7 @@ dump_zone_stats(void)
 			value1 = ULONG(zonebuf + 
 				OFFSET_OPTION(zone_struct_name, zone_name));
 
-                        if (!read_string(value1, buf1, BUFSIZE-1))
+                        if (!mem_read_string(value1, buf1, BUFSIZE-1))
                                 sprintf(buf1, "(unknown) ");
 
 			if (VALID_MEMBER(zone_struct_size))
@@ -17137,7 +17137,7 @@ kmem_cache_list_common(void)
 			KVADDR, &name, sizeof(char *),
 			"kmem_cache.name", FAULT_ON_ERROR);
 
-		if (!read_string(name, buf, BUFSIZE-1))
+		if (!mem_read_string(name, buf, BUFSIZE-1))
 			sprintf(buf, "(unknown)\n");
 		
 		fprintf(fp, "%s\n", buf);
@@ -17239,7 +17239,7 @@ dump_kmem_cache_slub(struct meminfo *si)
 			goto next_cache;
 
 		name = ULONG(si->cache_buf + OFFSET(kmem_cache_name)); 
-		if (!read_string(name, buf, BUFSIZE-1))
+		if (!mem_read_string(name, buf, BUFSIZE-1))
 			sprintf(buf, "(unknown)");
 		if (reqname) {
 			if (!STREQ(reqname, buf))
@@ -17876,7 +17876,7 @@ is_kmem_cache_addr_common(ulong vaddr, char *kbuf)
 		    "kmem_cache.name", RETURN_ON_ERROR))
 			break;
 
-                if (!read_string(name, kbuf, BUFSIZE-1))
+                if (!mem_read_string(name, kbuf, BUFSIZE-1))
 			sprintf(kbuf, "(unknown)");
 
 		found = TRUE;
@@ -18073,7 +18073,7 @@ is_slab_page(struct meminfo *si, char *buf)
 			    "kmem_cache.name", QUIET|RETURN_ON_ERROR))
 				goto bailout;
 
-			if (!read_string(name, buf, BUFSIZE-1))
+			if (!mem_read_string(name, buf, BUFSIZE-1))
 				goto bailout;
 
 			retval = buf;
@@ -18217,7 +18217,7 @@ get_kmem_cache_by_name(char *request)
 			KVADDR, &name, sizeof(char *),
 			"kmem_cache.name", FAULT_ON_ERROR);
 
-                if (!read_string(name, buf, BUFSIZE-1))
+                if (!mem_read_string(name, buf, BUFSIZE-1))
 			continue;
 
                 if (STREQ(buf, request)) {

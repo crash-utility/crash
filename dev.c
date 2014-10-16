@@ -182,7 +182,7 @@ dump_chrdevs(ulong flags)
 
 		fprintf(fp, " %3d      ", i);
 		if (cp->name) {
-                	if (read_string(cp->name, buf, BUFSIZE-1))
+			if (mem_read_string(cp->name, buf, BUFSIZE-1))
                         	fprintf(fp, "%-11s ", buf);
                 	else
                         	fprintf(fp, "%-11s ", "(unknown)");
@@ -230,7 +230,7 @@ char_device_struct:
 			break;
 		case TYPE_CODE_PTR:
 		default:
-			if (!name || !read_string(name, buf, BUFSIZE-1))
+			if (!name || !mem_read_string(name, buf, BUFSIZE-1))
 				break;
 		}
 
@@ -301,7 +301,8 @@ char_device_struct:
 				break;
 			case TYPE_CODE_PTR:
 			default:
-				if (!name || !read_string(name, buf, BUFSIZE-1))
+				if (!name ||
+				    !mem_read_string(name, buf, BUFSIZE-1))
 					sprintf(buf, "(unknown)");
 				break;
 			}
@@ -455,7 +456,7 @@ dump_blkdevs(ulong flags)
 
 		fprintf(fp, " %3d      ", i);
                 if (bp->name) {
-                        if (read_string(bp->name, buf, BUFSIZE-1))
+                        if (mem_read_string(bp->name, buf, BUFSIZE-1))
                                 fprintf(fp, "%-11s ", buf);
                         else
                                 fprintf(fp, "%-11s ", "(unknown)");
@@ -840,7 +841,7 @@ ioport_list:
 		end += start;
 		fprintf(fp, "%04lx-%04lx  ", start, end);
 		name = ULONG(resource_buf + OFFSET(resource_entry_t_name));
-                if (!read_string(name, buf1, BUFSIZE-1))
+                if (!mem_read_string(name, buf1, BUFSIZE-1))
                         sprintf(buf1, "(unknown)");
 
 		if (wrap + strlen(buf1) <= 80)
@@ -932,7 +933,7 @@ do_resource_list(ulong first_entry, char *resource_buf, int size)
                 child = ULONG(resource_buf + OFFSET(resource_child));
                 sibling = ULONG(resource_buf + OFFSET(resource_sibling));
 
-                if (!read_string(name, buf1, BUFSIZE-1))
+                if (!mem_read_string(name, buf1, BUFSIZE-1))
 			sprintf(buf1, "(unknown)");
 
 		fprintf(fp, fmt, entry, start, end);

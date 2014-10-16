@@ -1077,27 +1077,6 @@
  
    /* Jump to the containing catch_errors() call, communicating REASON
       to that call via setjmp's return value.  Note that REASON can't
---- gdb-7.6/gdb/valprint.h.orig
-+++ gdb-7.6/gdb/valprint.h
-@@ -152,11 +152,17 @@ extern void print_function_pointer_addre
- 					    struct gdbarch *gdbarch,
- 					    CORE_ADDR address,
- 					    struct ui_file *stream);
--
-+#ifdef CRASH_MERGE
-+extern int valprint_read_string (CORE_ADDR addr, int len, int width,
-+			unsigned int fetchlimit,
-+			enum bfd_endian byte_order, gdb_byte **buffer,
-+			int *bytes_read);
-+#else
- extern int read_string (CORE_ADDR addr, int len, int width,
- 			unsigned int fetchlimit,
- 			enum bfd_endian byte_order, gdb_byte **buffer,
- 			int *bytes_read);
-+#endif
- 
- extern void val_print_optimized_out (struct ui_file *stream);
- 
 --- gdb-7.6/gdb/target.c.orig
 +++ gdb-7.6/gdb/target.c
 @@ -1779,6 +1779,13 @@ target_xfer_partial (struct target_ops *
@@ -1338,36 +1317,6 @@
  
  /* Don't use *_filtered for printing help.  We don't want to prompt
     for continue no matter how small the screen or how much we're going
---- gdb-7.6/gdb/valprint.c.orig
-+++ gdb-7.6/gdb/valprint.c
-@@ -1768,8 +1768,13 @@ partial_memory_read (CORE_ADDR memaddr,
-    this function instead?  */
- 
- int
-+#ifdef CRASH_MERGE
-+valprint_read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
-+	     enum bfd_endian byte_order, gdb_byte **buffer, int *bytes_read)
-+#else
- read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
- 	     enum bfd_endian byte_order, gdb_byte **buffer, int *bytes_read)
-+#endif
- {
-   int found_nul;		/* Non-zero if we found the nul char.  */
-   int errcode;			/* Errno returned from bad reads.  */
-@@ -2472,8 +2477,13 @@ val_print_string (struct type *elttype,
-   fetchlimit = (len == -1 ? options->print_max : min (len,
- 						      options->print_max));
- 
-+#ifdef CRASH_MERGE
-+  errcode = valprint_read_string (addr, len, width, fetchlimit, byte_order,
-+			 &buffer, &bytes_read);
-+#else
-   errcode = read_string (addr, len, width, fetchlimit, byte_order,
- 			 &buffer, &bytes_read);
-+#endif
-   old_chain = make_cleanup (xfree, buffer);
- 
-   addr += bytes_read;
 --- gdb-7.6/gdb/Makefile.in.orig
 +++ gdb-7.6/gdb/Makefile.in
 @@ -422,7 +422,7 @@ CONFIG_UNINSTALL = @CONFIG_UNINSTALL@
@@ -1439,20 +1388,6 @@
  
  observer.h: observer.sh doc/observer.texi
  	${srcdir}/observer.sh h ${srcdir}/doc/observer.texi observer.h
---- gdb-7.6/gdb/c-lang.c.orig
-+++ gdb-7.6/gdb/c-lang.c
-@@ -307,7 +307,11 @@ c_get_string (struct value *value, gdb_b
-     {
-       CORE_ADDR addr = value_as_address (value);
- 
-+#ifdef CRASH_MERGE
-+      err = valprint_read_string (addr, *length, width, fetchlimit,
-+#else
-       err = read_string (addr, *length, width, fetchlimit,
-+#endif
- 			 byte_order, buffer, length);
-       if (err)
- 	{
 --- gdb-7.6/readline/rltypedefs.h.orig
 +++ gdb-7.6/readline/rltypedefs.h
 @@ -31,10 +31,10 @@ extern "C" {

@@ -887,7 +887,7 @@ gather_in_memory_unwind_tables(void)
 			goto gather_failed;
 
 		name = ULONG(root_table_buf + OFFSET(unwind_table_name));
-		if (read_string(name, buf, strlen("kernel")+1) && 
+		if (mem_read_string(name, buf, strlen("kernel")+1) &&
 		    STREQ("kernel", buf)) {
 			found++;
 			if (CRASHDEBUG(1))

@@ -4600,7 +4600,7 @@ void clear_vma_cache(void);
 void dump_vma_cache(ulong);
 int is_page_ptr(ulong, physaddr_t *);
 void dump_vm_table(int);
-int read_string(ulong, char *, int);
+int mem_read_string(ulong, char *, int);
 void get_task_mem_usage(ulong, struct task_mem_usage *);
 char *get_memory_size(char *);
 uint64_t generic_memory_size(void);

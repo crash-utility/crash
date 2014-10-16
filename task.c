@@ -4859,7 +4859,7 @@ old_defaults:
 		goto old_defaults;
 	bitpos = 0;
 	for (i = 0; i < len; i++) {
-		if (!read_string(str, buf, BUFSIZE-1))
+		if (!mem_read_string(str, buf, BUFSIZE-1))
 			break;
 
 		if (CRASHDEBUG(3)) 
@@ -5448,7 +5448,7 @@ get_panicmsg(char *buf)
 	msg_found = FALSE;
 
 	if (tt->panicmsg) {
-		read_string(tt->panicmsg, buf, BUFSIZE-1);
+		mem_read_string(tt->panicmsg, buf, BUFSIZE-1);
 		msg_found = TRUE;
 	} else if (LKCD_DUMPFILE()) {
 		get_lkcd_panicmsg(buf);
@@ -8853,7 +8853,7 @@ get_task_group_name(ulong group)
 
 	readmem(kernfs_node + OFFSET(kernfs_node_name), KVADDR, &name, 
 		sizeof(ulong), "kernfs_node name", FAULT_ON_ERROR);
-	if (!name || !read_string(name, buf, BUFSIZE-1))
+	if (!name || !mem_read_string(name, buf, BUFSIZE-1))
 		return NULL;
 
 	tmp = GETBUF(strlen(buf)+1);

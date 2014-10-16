@@ -191,7 +191,7 @@ static struct dminfo_member_entry {
 #define GET_STR(addr, s, m, ret, len) \
 	do { \
 		INIT_MBR_TABLE(s, m); \
-		if (!read_string(addr + mbr_ary[DM_##s##_##m].offset, ret, len - 1)) \
+		if (!mem_read_string(addr + mbr_ary[DM_##s##_##m].offset, ret, len - 1)) \
 			fprintf(fp, "%s\n", MSG("ERROR: GET_STR", #s, #m)); \
 	} while (0)
 
@@ -206,7 +206,7 @@ static struct dminfo_member_entry {
 		readmem(addr + mbr_ary[DM_##s##_##m].offset, KVADDR, &tmp, \
 			mbr_ary[DM_##s##_##m].size, MSG("GET_PTR_STR", #s, #m),\
 			FAULT_ON_ERROR);\
-		if (!read_string(tmp, ret, len - 1)) \
+		if (!mem_read_string(tmp, ret, len - 1)) \
 			fprintf(fp, "%s\n", MSG("ERROR: GET_PTR_STR", #s, #m));\
 	} while (0)
 

@@ -1480,12 +1480,12 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
                         KVADDR, &name, sizeof(void *),
                         "file_system_type name", FAULT_ON_ERROR);
 
-                if (read_string(name, buf1, BUFSIZE-1))
+                if (mem_read_string(name, buf1, BUFSIZE-1))
 			sprintf(buf3, "%-6s ", buf1);
                 else
 			sprintf(buf3, "unknown ");
 
-		if (read_string(devp, buf1, BUFSIZE-1))
+		if (mem_read_string(devp, buf1, BUFSIZE-1))
 			sprintf(buf4, "%s ", 
 				mkstring(buf2, devlen, LJUST, buf1));
 		else
@@ -1498,7 +1498,7 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
 		fprintf(fp, "%s", buf1);
 
 		if (VALID_MEMBER(vfsmount_mnt_dirname)) {
-                	if (read_string(dirp, buf1, BUFSIZE-1))
+			if (mem_read_string(dirp, buf1, BUFSIZE-1))
                         	fprintf(fp, "%-10s\n", buf1);
                 	else
                         	fprintf(fp, "%-10s\n", "(unknown)");
@@ -2711,7 +2711,7 @@ nlm_files_dump(void)
 				"nlm_host h_exportent", FAULT_ON_ERROR);
 			if (!client)
 				continue;
-			if (!read_string(client + OFFSET(svc_client_cl_ident), 
+			if (!mem_read_string(client + OFFSET(svc_client_cl_ident),
 			    buf1, BUFSIZE-1))
 				continue;
 			if (!header_printed) {
@@ -3051,7 +3051,7 @@ get_pathname_component(ulong dentry,
                 	strcpy(pathbuf, dentry_buf + OFFSET(dentry_d_iname));
                 else
                         len = 0;
-        } else if ((read_string(d_name_name, pathbuf, BUFSIZE)) != d_name_len)
+        } else if ((mem_read_string(d_name_name, pathbuf, BUFSIZE)) != d_name_len)
                 len = 0;
 
 	return len;
@@ -4086,7 +4086,7 @@ vfsmount_devname(ulong vfsmnt, char *buf, int maxlen)
 			return buf;
 	}
 
-	if (read_string(devp, buf, BUFSIZE-1))
+	if (mem_read_string(devp, buf, BUFSIZE-1))
 		return buf;
 
 	return buf;

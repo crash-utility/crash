@@ -1356,7 +1356,7 @@ store_module_symbols_v1(ulong total, int mods_installed)
 		size_of_struct = ULONG(modbuf + 
 			OFFSET(module_size_of_struct));
 
-		if (!read_string(mod_name, name, BUFSIZE-1))
+		if (!mem_read_string(mod_name, name, BUFSIZE-1))
 			sprintf(name, "(unknown module)");
 		
 		sprintf(rodata, "__insmod_%s_S.rodata", name); 
@@ -1436,7 +1436,7 @@ store_module_symbols_v1(ulong total, int mods_installed)
 				strcpy(buf1,
 					&strbuf[(ulong)modsym->name - first]);
 			else 
-				read_string((ulong)modsym->name, buf1,
+				mem_read_string((ulong)modsym->name, buf1,
                             		BUFSIZE-1);
 
                 	if (strlen(buf1)) {
@@ -1740,7 +1740,7 @@ store_module_symbols_v2(ulong total, int mods_installed)
 				strcpy(buf1,
 					&strbuf[(ulong)modsym->name - first]);
 			else 
-				read_string((ulong)modsym->name, buf1,
+				mem_read_string((ulong)modsym->name, buf1,
                             		BUFSIZE-1);
 
                 	if (strlen(buf1)) {
@@ -1815,7 +1815,7 @@ store_module_symbols_v2(ulong total, int mods_installed)
 				strcpy(buf1,
 					&strbuf[(ulong)modsym->name - first]);
 			else 
-				read_string((ulong)modsym->name, buf1,
+				mem_read_string((ulong)modsym->name, buf1,
                             		BUFSIZE-1);
 
                 	if (strlen(buf1)) {
@@ -5789,7 +5789,7 @@ dereference_pointer(ulong addr, struct datatype_member *dm, ulong flags)
 			fprintf(pc->saved_fp, "<%s> ", sym);
 		if (!target)
 			fprintf(pc->saved_fp, "NULL\n");
-		else if (!accessible(target) || !read_string(target, buf1, BUFSIZE-1))
+		else if (!accessible(target) || !mem_read_string(target, buf1, BUFSIZE-1))
 			fprintf(pc->saved_fp, "(not accessible)\n");
 		else 
 			fprintf(pc->saved_fp, "\"%s\"\n", buf1);
@@ -10696,7 +10696,7 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
 		}
 	
 		BZERO(section_name, BUFSIZE);
-		if (!read_string(name, section_name, 32)) {
+		if (!mem_read_string(name, section_name, 32)) {
 			done = TRUE;
 			retval = FALSE;
 			continue;
