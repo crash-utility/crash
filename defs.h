@@ -4313,7 +4313,7 @@ void dump_build_data(void);
 #define machdep_init(X) ppc64_init(X)
 #endif
 int clean_exit(int);
-int untrusted_file(FILE *, char *);
+int untrusted_file(FILE *, const char *);
 char *readmem_function_name(void);
 char *writemem_function_name(void);
 

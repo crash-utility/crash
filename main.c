@@ -1784,7 +1784,7 @@ check_xen_hyper(void)
 static char *untrusted_file_list[4] = { 0 };
 
 int
-untrusted_file(FILE *filep, char *filename)
+untrusted_file(FILE *filep, const char *filename)
 {
 	struct stat sbuf;
 	int i;
