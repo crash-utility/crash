@@ -17,6 +17,16 @@
  	./pex-djgpp.$(objext) ./pex-msdos.$(objext)			\
  	 ./pex-unix.$(objext) ./pex-win32.$(objext)			\
  	 ./putenv.$(objext)						\
+--- gdb-7.6/sim/common/gentmap.c.orig
++++ gdb-7.6/sim/common/gentmap.c
+@@ -2,6 +2,7 @@
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ 
+ struct tdefs {
+   char *symbol;
 --- gdb-7.6/opcodes/i386-dis.c.orig
 +++ gdb-7.6/opcodes/i386-dis.c
 @@ -11510,6 +11510,10 @@ print_insn (bfd_vma pc, disassemble_info
