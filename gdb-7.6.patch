@@ -124,19 +124,6 @@
  	  break;
  
        if (cur_sec == NULL)
-@@ -1122,6 +1141,12 @@ symbol_file_add_with_addrs_or_offsets (b
-     error (_("Not confirmed."));
- 
-   objfile = allocate_objfile (abfd, flags | (mainline ? OBJF_MAINLINE : 0));
-+#ifdef CRASH_MERGE
-+  if (add_flags & SYMFILE_MAINLINE) {
-+    extern struct objfile *gdb_kernel_objfile;
-+    gdb_kernel_objfile = objfile;
-+  }
-+#endif
- 
-   if (parent)
-     add_separate_debug_objfile (objfile, parent);
 @@ -1513,6 +1541,15 @@ find_separate_debug_file (const char *di
    if (separate_debug_file_exists (debugfile, crc32, objfile))
      return debugfile;
@@ -377,7 +364,7 @@
    return lookup_symbol_in_language (name, block, domain,
  				    current_language->la_language,
  				    is_a_field_of_this);
-@@ -5100,3 +5115,668 @@ When enabled, debugging messages are pri
+@@ -5100,3 +5115,666 @@ When enabled, debugging messages are pri
  
    observer_attach_executable_changed (symtab_observer_executable_changed);
  }
@@ -405,8 +392,6 @@
 +extern int get_frame_offset(CORE_ADDR);
 +static void gdb_set_crash_block(struct gnu_request *);
 +void gdb_command_funnel(struct gnu_request *);
-+
-+struct objfile *gdb_kernel_objfile = { 0 };
 +
 +static ulong gdb_merge_flags = 0;
 +#define KERNEL_SYMBOLS_PATCHED (0x1)
@@ -985,7 +970,7 @@
 +	struct block *block;
 +
 +	if ((gdb_merge_flags & KERNEL_SYMBOLS_PATCHED) && 
-+	    (msym = lookup_minimal_symbol(name, NULL, gdb_kernel_objfile))) {
++	    (msym = lookup_minimal_symbol(name, NULL, symfile_objfile))) {
 +                if (sym->aclass == LOC_BLOCK) {
 +                        block = (struct block *)SYMBOL_BLOCK_VALUE(sym);
 +                        BLOCK_START(block) = SYMBOL_VALUE_ADDRESS(msym);
