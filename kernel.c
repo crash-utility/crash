@@ -936,7 +936,7 @@ verify_version(void)
 	if (!accessible(linux_banner)) 
 		goto bad_match;
 
-	if (!read_string(linux_banner, buf, BUFSIZE-1))
+	if (!mem_read_string(linux_banner, buf, BUFSIZE-1))
 		error(WARNING, "cannot read linux_banner string\n");
 
 	if (ACTIVE()) {
@@ -1797,7 +1797,7 @@ BUG_x86(void)
 		return 0;
 	}
 
-	if (!read_string(fileptr, buf1, BUFSIZE-1))
+	if (!mem_read_string(fileptr, buf1, BUFSIZE-1))
 		error(WARNING, 
 		    "cannot read BUG (ud2a) encoded filename address: %lx\n",
 			fileptr);
@@ -2073,11 +2073,7 @@ cmd_bt(void)
 			break;
 
 		case 'g':
-#ifdef GDB_5_3
-			bt->flags |= BT_USE_GDB;
-#else
 			bt->flags |= BT_THREAD_GROUP;
-#endif
 			break;
 
 		case 'x':
@@ -3237,7 +3233,7 @@ verify_modules(void)
 						OFFSET(module_name));
 					mod_size = LONG(modbuf + 
 						OFFSET(module_size));
-                			if (!read_string(mod_name, buf, 
+					if (!mem_read_string(mod_name, buf,
 					    BUFSIZE-1) || !STREQ(lm->mod_name, 
 					    buf) || (mod_size != lm->mod_size)){
 						irregularities++;
@@ -3545,7 +3541,7 @@ cmd_mod(void)
 }
 
 int
-check_specified_module_tree(char *module, char *gdb_buffer)
+check_specified_module_tree(const char *module, char *gdb_buffer)
 {
 	char *p1, *treebuf;
 	int retval;
@@ -5881,7 +5877,7 @@ generic_dump_irq(int irq)
 
 	 	fprintf(fp, "         typename: %lx  ", tmp1);
 		BZERO(buf, BUFSIZE);
-        	if (read_string(tmp1, buf, BUFSIZE-1))
+		if (mem_read_string(tmp1, buf, BUFSIZE-1))
 			fprintf(fp, "\"%s\"", buf);
 		fprintf(fp, "\n");
 
@@ -6222,7 +6218,7 @@ do_linked_action:
                         "irqaction name", FAULT_ON_ERROR);
                 fprintf(fp, "             name: %lx  ", tmp1);
                 BZERO(buf, BUFSIZE);
-                if (read_string(tmp1, buf, BUFSIZE-1))
+                if (mem_read_string(tmp1, buf, BUFSIZE-1))
                         fprintf(fp, "\"%s\"", buf);
                 fprintf(fp, "\n");
 
@@ -6279,7 +6275,7 @@ do_linked_action_v2:
 		readmem(action+OFFSET(irqaction_name), KVADDR,
 			&tmp1, sizeof(void *),
 			"irqaction name", FAULT_ON_ERROR);
-		if (read_string(tmp1, buf, BUFSIZE-1))
+		if (mem_read_string(tmp1, buf, BUFSIZE-1))
 			fprintf(fp, "\"%s\"", buf);
 
                 readmem(action+OFFSET(irqaction_next), KVADDR,
@@ -6350,7 +6346,7 @@ generic_get_irq_affinity(int irq)
 		        &name, sizeof(void *),
 		        "irqaction name", FAULT_ON_ERROR);
 		BZERO(buf, BUFSIZE);
-		if (read_string(name, buf, BUFSIZE-1)) {
+		if (mem_read_string(name, buf, BUFSIZE-1)) {
 			if (strlen(name_buf) != 0)
 				strncat(name_buf, ",", 2);
 			strncat(name_buf, buf, strlen(buf));
@@ -6459,7 +6455,7 @@ generic_show_interrupts(int irq, ulong *cpus)
 			        "hw_interrupt_type typename", FAULT_ON_ERROR);
 
 			BZERO(buf, BUFSIZE);
-			if (read_string(tmp, buf, BUFSIZE-1))
+			if (mem_read_string(tmp, buf, BUFSIZE-1))
 				fprintf(fp, "%14s", buf);
 		}
 		else if (VALID_MEMBER(irq_chip_typename)) {
@@ -6468,14 +6464,14 @@ generic_show_interrupts(int irq, ulong *cpus)
 			        "hw_interrupt_type typename", FAULT_ON_ERROR);
 
 			BZERO(buf, BUFSIZE);
-			if (read_string(tmp, buf, BUFSIZE-1))
+			if (mem_read_string(tmp, buf, BUFSIZE-1))
 				fprintf(fp, "%8s", buf);
 			BZERO(buf1, BUFSIZE);
 			if (VALID_MEMBER(irq_desc_t_name))
 				readmem(irq_desc_addr+OFFSET(irq_desc_t_name),
 				        KVADDR,	&tmp1, sizeof(void *),
 				        "irq_desc name", FAULT_ON_ERROR);
-			if (read_string(tmp1, buf1, BUFSIZE-1))
+			if (mem_read_string(tmp1, buf1, BUFSIZE-1))
 				fprintf(fp, "-%-8s", buf1);
 		}
 	}
@@ -6487,7 +6483,7 @@ generic_show_interrupts(int irq, ulong *cpus)
 		        &name, sizeof(void *),
 		        "irqaction name", FAULT_ON_ERROR);
 		BZERO(buf2, BUFSIZE);
-		if (read_string(name, buf2, BUFSIZE-1)) {
+		if (mem_read_string(name, buf2, BUFSIZE-1)) {
 			if (strlen(name_buf) != 0)
 				strncat(name_buf, ",", 2);
 			strncat(name_buf, buf2, strlen(buf2));
@@ -9057,7 +9053,7 @@ hypervisor_init(void)
 	    MEMBER_EXISTS("pv_info", "name") &&
 	    readmem(symbol_value("pv_info") + MEMBER_OFFSET("pv_info", "name"), 
 	    KVADDR, &name, sizeof(char *), "pv_info.name", 
-	    QUIET|RETURN_ON_ERROR) && read_string(name, buf, BUFSIZE-1))
+	    QUIET|RETURN_ON_ERROR) && mem_read_string(name, buf, BUFSIZE-1))
 		kt->hypervisor = strdup(buf);
 	else if (try_get_symbol_data("x86_hyper", sizeof(void *), &x86_hyper)) {
 		if (!x86_hyper)
@@ -9065,7 +9061,7 @@ hypervisor_init(void)
 		else if (MEMBER_EXISTS("hypervisor_x86", "name") &&
 	  	    readmem(x86_hyper + MEMBER_OFFSET("hypervisor_x86", "name"), 
 		    KVADDR, &name, sizeof(char *), "x86_hyper->name", 
-		    QUIET|RETURN_ON_ERROR) && read_string(name, buf, BUFSIZE-1))
+		    QUIET|RETURN_ON_ERROR) && mem_read_string(name, buf, BUFSIZE-1))
 			kt->hypervisor = strdup(buf);
 	} else if (XENDUMP_DUMPFILE() || XEN()) 
 		kt->hypervisor = "Xen";

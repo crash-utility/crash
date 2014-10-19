@@ -488,7 +488,7 @@ static int ftrace_init_current_tracer(void)
 	}
 	
 	read_value(addr, addr, tracer, name);
-	read_string(addr, tmp, 128);
+	mem_read_string(addr, tmp, 128);
 
 	current_tracer_name = strdup(tmp);
 	if (current_tracer_name == NULL)
@@ -888,9 +888,9 @@ static int ftrace_init_event_fields(ulong fields_head, int *pnfields,
 		read_value(size, field, ftrace_event_field, size);
 		read_value(is_signed, field, ftrace_event_field, is_signed);
 
-		if (!read_string(name_addr, field_name, 128))
+		if (!mem_read_string(name_addr, field_name, 128))
 			goto out_fail;
-		if (!read_string(type_addr, field_type, 128))
+		if (!mem_read_string(type_addr, field_type, 128))
 			goto out_fail;
 
 		/* Enlarge fields array when need */
@@ -1008,7 +1008,7 @@ int ftrace_get_event_type_name(ulong call, char *name, int len)
 			"read ftrace_event_call name_addr", RETURN_ON_ERROR))
 		return -1;
 
-	if (!read_string(name_addr, name, len))
+	if (!mem_read_string(name_addr, name, len))
 		return -1;
 
 	return 0;
@@ -1053,7 +1053,7 @@ work:
 			"read ftrace_event_call sys_addr", RETURN_ON_ERROR))
 		return -1;
 
-	if (!read_string(sys_addr, system, len))
+	if (!mem_read_string(sys_addr, system, len))
 		return -1;
 
 	return 0;
@@ -1949,7 +1949,7 @@ static int add_print_address(long address)
 	size_t len;
 	int i;
 
-	len = read_string(address, string, sizeof(string));
+	len = mem_read_string(address, string, sizeof(string));
 	if (!len)
 		return -1;
 

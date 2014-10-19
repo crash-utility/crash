@@ -687,8 +687,12 @@ main(int argc, char **argv)
  *  be called.  This can be avoided by always making gdb ignore SIGINT.
  */
 void
-main_loop(void)
+main_loop(void *ignored)
 {
+	if (pc->flags & VERSION_QUERY) {
+		fprintf(fp, "\n");
+		clean_exit(0);
+	}
 	if (pc->flags2 & ERASEINFO_DATA)
 		error(WARNING, "\n%s:\n         "
 		    "Kernel data has been erased from this dumpfile.  This may "
@@ -1780,7 +1784,7 @@ check_xen_hyper(void)
 static char *untrusted_file_list[4] = { 0 };
 
 int
-untrusted_file(FILE *filep, char *filename)
+untrusted_file(FILE *filep, const char *filename)
 {
 	struct stat sbuf;
 	int i;

@@ -57,6 +57,10 @@
 #include <unistd.h>
 #include <ctype.h>
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
+#endif
+
 struct supported_gdb_version;
 void build_configure(struct supported_gdb_version *);
 void release_configure(char *, struct supported_gdb_version *);
@@ -158,16 +162,6 @@ void add_extra_lib(char *);
  *  unless overridden.
  */
 
-#define GDB_5_3   (0)
-#define GDB_6_0   (1)
-#define GDB_6_1   (2)
-#define GDB_7_0   (3)
-#define GDB_7_3_1 (4)
-#define GDB_7_6   (5)
-#define SUPPORTED_GDB_VERSIONS (GDB_7_6 + 1)
-
-int default_gdb = GDB_7_6;
-
 struct supported_gdb_version {
 	char *GDB;
 	char *GDB_VERSION_IN;
@@ -176,52 +170,7 @@ struct supported_gdb_version {
 	char *GDB_PATCH_FILES;
 	char *GDB_FLAGS;
 	char *GPL;
-} supported_gdb_versions[SUPPORTED_GDB_VERSIONS] = {
-	{
-	    "GDB=gdb-5.3post-0.20021129.36rh",
-	    "Red Hat Linux (5.3post-0.20021129.36rh)",
-	    "GDB_FILES=${GDB_5.3post-0.20021129.36rh_FILES}",	   
-	    "GDB_OFILES=${GDB_5.3post-0.20021129.36rh_OFILES}",
-	    "GDB_PATCH_FILES=",
-	    "GDB_FLAGS=-DGDB_5_3",
-	    "GPLv2"
-	},
-	{ 
-	    "GDB=gdb-6.0",
-	    "6.0",
-	    "GDB_FILES=${GDB_6.0_FILES}",
-	    "GDB_OFILES=${GDB_6.0_OFILES}",
-	    "GDB_PATCH_FILES=",
-	    "GDB_FLAGS=-DGDB_6_0",
-	    "GPLv2"
-	},
-	{
-	    "GDB=gdb-6.1",
-	    "6.1",
-	    "GDB_FILES=${GDB_6.1_FILES}",
-	    "GDB_OFILES=${GDB_6.1_OFILES}",
-	    "GDB_PATCH_FILES=gdb-6.1.patch",
-	    "GDB_FLAGS=-DGDB_6_1",
-	    "GPLv2"
-	},
-	{
-	    "GDB=gdb-7.0",
-	    "7.0",
-	    "GDB_FILES=${GDB_7.0_FILES}",
-	    "GDB_OFILES=${GDB_7.0_OFILES}",
-	    "GDB_PATCH_FILES=gdb-7.0.patch",
-	    "GDB_FLAGS=-DGDB_7_0",
-	    "GPLv3"
-	},
-	{
-	    "GDB=gdb-7.3.1",
-	    "7.3.1",
-	    "GDB_FILES=${GDB_7.3.1_FILES}",
-	    "GDB_OFILES=${GDB_7.3.1_OFILES}",
-	    "GDB_PATCH_FILES=gdb-7.3.1.patch",
-	    "GDB_FLAGS=-DGDB_7_3_1",
-	    "GPLv3"
-	},
+} supported_gdb_versions[] = {
 	{
 	    "GDB=gdb-7.6",
 	    "7.6",
@@ -231,7 +180,18 @@ struct supported_gdb_version {
 	    "GDB_FLAGS=-DGDB_7_6",
 	    "GPLv3"
 	},
+	{
+	    "GDB=gdb-7.8",
+	    "7.8",
+	    "GDB_FILES=${GDB_7.8_FILES}",
+	    "GDB_OFILES=${GDB_7.8_OFILES}",
+	    "GDB_PATCH_FILES=gdb-7.8.patch",
+	    "GDB_FLAGS=-DGDB_7_8",
+	    "GPLv3"
+	},
 };
+
+struct supported_gdb_version *default_gdb = &supported_gdb_versions[0];
 
 #define DAEMON  0x1
 #define QUIET   0x2
@@ -1367,6 +1327,8 @@ setup_gdb_defaults(void)
 	}
 
         while (fgets(inbuf, 512, fp)) {
+		int i;
+
 		strip_linefeeds(inbuf);
 		strip_beginning_whitespace(inbuf);
 
@@ -1375,43 +1337,19 @@ setup_gdb_defaults(void)
 		/*
 		 *  Simple override.
 		 */
-		if (strcmp(buf, "5.3") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_5_3];
-			fprintf(stderr, ".gdb configuration: %s\n\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
-		if (strcmp(buf, "6.0") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_6_0];
-			fprintf(stderr, ".gdb configuration: %s\n\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
-		if (strcmp(buf, "6.1") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_6_1];
-			fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
-		if (strcmp(buf, "7.0") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_7_0];
-			fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
-		if (strcmp(buf, "7.3.1") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_7_3_1];
-			fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
-		if (strcmp(buf, "7.6") == 0) {
-			fclose(fp);
-			sp = &supported_gdb_versions[GDB_7_6];
-			fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
-			return store_gdb_defaults(sp);
-		}
 
+		for (i = 0; i < ARRAY_SIZE(supported_gdb_versions); i++) {
+			struct supported_gdb_version *vers;
+			vers = &supported_gdb_versions[i];
+
+			if (strcmp(buf, vers->GDB_VERSION_IN) == 0) {
+				fclose(fp);
+				sp = vers;
+				fprintf(stderr, ".gdb configuration: %s\n",
+					sp->GDB_VERSION_IN);
+				return store_gdb_defaults(sp);
+			}
+		}
         }
 	
 	fclose(fp);
@@ -1424,7 +1362,7 @@ struct supported_gdb_version *
 store_gdb_defaults(struct supported_gdb_version *sp)
 {
 	if (!sp)
-		sp = &supported_gdb_versions[default_gdb];
+		sp = default_gdb;
 	else
 		fprintf(stderr, "WARNING: \"make clean\" may be required before rebuilding\n\n");
 

@@ -818,7 +818,7 @@ get_device_name(ulong devaddr, char *buf)
                 readmem(devaddr + net->dev_name, KVADDR,
                         &name_addr, sizeof(name_addr), net->dev_name_t,
                         FAULT_ON_ERROR);
-                read_string(name_addr, buf, DEV_NAME_MAX);
+                mem_read_string(name_addr, buf, DEV_NAME_MAX);
                 break;
 	}
 }

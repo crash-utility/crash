@@ -1071,7 +1071,7 @@ ppc64_processor_speed(void)
                                 KVADDR, &type, sizeof(ulong), "node type",
                                 FAULT_ON_ERROR);
                         if(type != 0) {
-                                len = read_string(type, str_buf,
+                                len = mem_read_string(type, str_buf,
                                         sizeof(str_buf));
 
                                 if(len && (strcasecmp(str_buf, "cpu") == 0))
@@ -1095,7 +1095,7 @@ ppc64_processor_speed(void)
                                         sizeof(ulong), "property name",
                                         FAULT_ON_ERROR);
 
-                                len = read_string(name, str_buf,
+                                len = mem_read_string(name, str_buf,
                                         sizeof(str_buf));
 
                                 if (len && (strcasecmp(str_buf,
@@ -2298,7 +2298,7 @@ ppc64_dump_irq(int irq)
                         sizeof(ulong), "typename pointer", FAULT_ON_ERROR);
 
 		fprintf(fp, "         typename: %08lx  ", addr);
-                if (read_string(addr, typename, 32))
+                if (mem_read_string(addr, typename, 32))
                         fprintf(fp, "\"%s\"\n", typename);
 		else
 			fprintf(fp, "\n");
@@ -2412,7 +2412,7 @@ ppc64_dump_irq(int irq)
                         sizeof(ulong), "action name", FAULT_ON_ERROR);
 
 		fprintf(fp, "             name: %08lx  ", addr);
-		if (read_string(addr, typename, 32))
+		if (mem_read_string(addr, typename, 32))
                         fprintf(fp, "\"%s\"\n", typename);
 		else
 			fprintf(fp, "\n");

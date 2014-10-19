@@ -16,6 +16,8 @@
  * GNU General Public License for more details. 
  */
 
+#ifndef _CRASH_DEFS_H_
+#define _CRASH_DEFS_H_
 #ifndef GDB_COMMON
 
 #include <stdio.h>
@@ -2421,11 +2423,7 @@ struct symbol_namespace {
 
 struct symbol_table_data {
 	ulong flags;
-#ifdef GDB_5_3
-	struct _bfd *bfd;
-#else
 	struct bfd *bfd;
-#endif
 	struct sec *sections;
 	struct syment *symtable;
 	struct syment *symend;
@@ -2501,11 +2499,7 @@ struct symbol_table_data {
 #define SEC_FOUND       (0x10000)
 
 struct mod_section_data {
-#if defined(GDB_5_3) || defined(GDB_6_0)
-        struct sec *section;
-#else
         struct bfd_section *section;
-#endif
         char name[MAX_MOD_SEC_NAME];
         ulong offset;
         ulong size;
@@ -4021,11 +4015,7 @@ struct gnu_request {
 	char *name;
 	ulong length;
 	int typecode;
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) 
-	char *typename;
-#else
 	char *type_name;
-#endif
 	char *target_typename;
 	ulong target_length;
 	int target_typecode;
@@ -4088,20 +4078,6 @@ struct gnu_request {
 #define TRUE  (1)
 #define FALSE (0)
 
-#ifdef GDB_COMMON
-/*
- *  function prototypes required by modified gdb source files.
- */
-int console(char *, ...);
-int gdb_CRASHDEBUG(ulong);
-int gdb_readmem_callback(ulong, void *, int, int);
-void patch_load_module(struct objfile *objfile, struct minimal_symbol *msymbol);
-int patch_kernel_symbol(struct gnu_request *);
-struct syment *symbol_search(char *);
-int gdb_line_number_callback(ulong, ulong, ulong);
-int gdb_print_callback(ulong);
-#endif
-
 #ifndef GDB_COMMON
 /*
  *  WARNING: the following type codes are type_code enums from gdb/gdbtypes.h
@@ -4113,10 +4089,7 @@ enum type_code {
   TYPE_CODE_STRUCT,             /* C struct or Pascal record */
   TYPE_CODE_UNION,              /* C union or Pascal variant part */
   TYPE_CODE_ENUM,               /* Enumeration type */
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
-#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
   TYPE_CODE_FLAGS,              /* Bit flags type */
-#endif
   TYPE_CODE_FUNC,               /* Function type */
   TYPE_CODE_INT,                /* Integer type */
 
@@ -4137,7 +4110,6 @@ enum type_code {
   /* 
    *  NOTE: the remainder of the type codes are not list or used here...
    */
-#endif
 };
 
 #define PF_EXITING 0x00000004  /* getting shut down */
@@ -4290,7 +4262,7 @@ void cmd_ipcs(void);         /* ipcs.c */
 /*
  *  main.c
  */
-void main_loop(void);
+void main_loop(void *);
 void exec_command(void);
 struct command_table_entry *get_command_table_entry(char *);
 void program_usage(int);
@@ -4329,7 +4301,6 @@ void dump_build_data(void);
 #define machdep_init(X) ppc64_init(X)
 #endif
 int clean_exit(int);
-int untrusted_file(FILE *, char *);
 char *readmem_function_name(void);
 char *writemem_function_name(void);
 
@@ -4364,7 +4335,6 @@ void exec_args_input_file(struct command_table_entry *, struct args_input_file *
  */
 int __error(int, char *, ...);
 #define error __error               /* avoid conflict with gdb error() */
-int console(char *, ...);
 void create_console_device(char *);
 int console_off(void);
 int console_on(int);
@@ -4485,7 +4455,6 @@ struct rb_node *rb_last(struct rb_root *);
  *  symbols.c 
  */
 void symtab_init(void);
-char *check_specified_kernel_debug_file(void);
 void no_debugging_data(int);
 void get_text_init_space(void);
 int is_kernel_text(ulong);
@@ -4494,7 +4463,6 @@ int is_init_data(ulong value);
 int is_kernel_text_offset(ulong);
 int is_rodata(ulong, struct syment **);
 void datatype_init(void);
-struct syment *symbol_search(char *);
 struct syment *value_search(ulong, ulong *);
 struct syment *value_search_base_kernel(ulong, ulong *);
 struct syment *value_search_module(ulong, ulong *);
@@ -4574,7 +4542,7 @@ int text_value_cache_byte(ulong, unsigned char *);
 void dump_text_value_cache(int);
 void clear_text_value_cache(void);
 void dump_numargs_cache(void);
-int patch_kernel_symbol(struct gnu_request *);
+void gdb_patch_minsymbol_address(void *msym, unsigned long addr);
 struct syment *generic_machdep_value_to_symbol(ulong, ulong *);
 long OFFSET_verify(long, char *, char *, int, char *);
 long SIZE_verify(long, char *, char *, int, char *);
@@ -4616,7 +4584,7 @@ void clear_vma_cache(void);
 void dump_vma_cache(ulong);
 int is_page_ptr(ulong, physaddr_t *);
 void dump_vm_table(int);
-int read_string(ulong, char *, int);
+int mem_read_string(ulong, char *, int);
 void get_task_mem_usage(ulong, struct task_mem_usage *);
 char *get_memory_size(char *);
 uint64_t generic_memory_size(void);
@@ -4690,7 +4658,7 @@ int file_dump(ulong, ulong, ulong, int, int);
 #define DUMP_DENTRY_ONLY 4
 #define DUMP_EMPTY_FILE  8
 #endif  /* !GDB_COMMON */
-int same_file(char *, char *);
+int same_file(const char *, const char *);
 #ifndef GDB_COMMON
 int cleanup_memory_driver(void);
 
@@ -4873,13 +4841,11 @@ void non_matching_kernel(void);
 struct load_module *modref_to_load_module(char *);
 int load_module_symbols_helper(char *);
 void unlink_module(struct load_module *);
-int check_specified_module_tree(char *, char *);
 int is_system_call(char *, ulong);
 void generic_dump_irq(int);
 void generic_get_irq_affinity(int);
 void generic_show_interrupts(int, ulong *);
 int generic_dis_filter(ulong, char *, unsigned int);
-int kernel_BUG_encoding_bytes(void);
 void display_sys_stats(void);
 char *get_uptime(char *, ulonglong *);
 void clone_bt_info(struct bt_info *, struct bt_info *, struct task_context *);
@@ -5991,15 +5957,11 @@ void get_gdb_version(void);
 void gdb_session_init(void);
 void gdb_interface(struct gnu_request *);
 int gdb_pass_through(char *, FILE *, ulong);
-int gdb_readmem_callback(ulong, void *, int, int);
-int gdb_line_number_callback(ulong, ulong, ulong);
-int gdb_print_callback(ulong);
 void gdb_error_hook(void);
 void restore_gdb_sanity(void);
 int is_gdb_command(int, ulong);
 char *gdb_command_string(int, char *, int);
 void dump_gnu_request(struct gnu_request *, int);
-int gdb_CRASHDEBUG(ulong);
 void dump_gdb_data(void);
 void update_gdb_hooks(void);
 void gdb_readnow_warning(void);
@@ -6016,57 +5978,24 @@ extern unsigned int *gdb_output_radix;
  *  gdb/top.c
  */
 extern void execute_command (char *, int);
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
-extern void (*command_loop_hook)(void);
-extern void (*error_hook)(void);
-#else
 extern void (*deprecated_command_loop_hook)(void);
 
 /*
  *  gdb/exceptions.c
  */
 extern void (*error_hook)(void);
-#endif
-
-/*
- *  gdb/symtab.c
- */
-extern void gdb_command_funnel(struct gnu_request *);
-
-/*
- *  gdb/symfile.c
- */
-#if defined(GDB_6_0) || defined(GDB_6_1)
-struct objfile;
-extern void (*target_new_objfile_hook)(struct objfile *);
-#endif
 
 /*
  *  gdb/valprint.c
  */
 extern unsigned output_radix;
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
-extern int output_format;
-extern int prettyprint_structs;
-extern int prettyprint_arrays;
-extern int repeat_count_threshold;
-extern unsigned int print_max;
-extern int stop_print_at_null;
-#endif
 
-#ifdef GDB_7_6
 /*
  *  gdb/cleanups.c
  */
 struct cleanup;
 extern struct cleanup *all_cleanups(void);
 extern void do_cleanups(struct cleanup *);
-#else
-/*
- *  gdb/utils.c
- */
-extern void do_cleanups(void *);
-#endif
 
 /*
  *  gdb/version.c
@@ -6074,20 +6003,9 @@ extern void do_cleanups(void *);
 extern char *version;
 
 /*
- *  gdb/disasm.c
- */
-#ifdef GDB_5_3
-extern int gdb_disassemble_from_exec;
-#endif
-
-/*
  *  readline/readline.c
  */
-#ifdef GDB_5_3
-extern char *readline(char *);
-#else
 extern char *readline(const char *);
-#endif
 extern int rl_editing_mode;
 
 /*
@@ -6099,11 +6017,7 @@ extern int history_offset;
  *  external gdb routines
  */
 extern int gdb_main_entry(int, char **);
-#ifdef GDB_5_3
-extern unsigned long calc_crc32(unsigned long, unsigned char *, size_t);
-#else
 extern unsigned long gnu_debuglink_crc32 (unsigned long, unsigned char *, size_t);
-#endif
 extern int have_partial_symbols(void); 
 extern int have_full_symbols(void);
 
@@ -6112,3 +6026,24 @@ extern int have_full_symbols(void);
 #endif
 
 #endif /* !GDB_COMMON */
+
+/*
+ *  function prototypes required by modified gdb source files.
+ */
+int console(char *, ...);
+int gdb_CRASHDEBUG(ulong);
+int gdb_readmem_callback(ulong, void *, int, int);
+struct objfile;
+struct minimal_symbol;
+void patch_load_module(struct objfile *objfile, struct minimal_symbol *msymbol);
+int patch_kernel_symbol(struct gnu_request *, void *msym);
+struct syment *symbol_search(char *);
+int gdb_line_number_callback(ulong, ulong, ulong);
+int gdb_print_callback(ulong);
+int untrusted_file(FILE *, const char *);
+char *check_specified_kernel_debug_file(void);
+int check_specified_module_tree(const char *, char *);
+void gdb_command_funnel(struct gnu_request *);
+int kernel_BUG_encoding_bytes(void);
+
+#endif /* _CRASH_DEFS_H_ */

@@ -17,14 +17,32 @@
  	./pex-djgpp.$(objext) ./pex-msdos.$(objext)			\
  	 ./pex-unix.$(objext) ./pex-win32.$(objext)			\
  	 ./putenv.$(objext)						\
+--- gdb-7.6/sim/common/gentmap.c.orig
++++ gdb-7.6/sim/common/gentmap.c
+@@ -2,6 +2,7 @@
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ 
+ struct tdefs {
+   char *symbol;
 --- gdb-7.6/opcodes/i386-dis.c.orig
 +++ gdb-7.6/opcodes/i386-dis.c
-@@ -11510,6 +11510,10 @@ print_insn (bfd_vma pc, disassemble_info
+@@ -39,6 +39,8 @@
+ #include "opintl.h"
+ #include "opcode/i386.h"
+ #include "libiberty.h"
++#define GDB_COMMON
++#include "../../defs.h"
+ 
+ #include <setjmp.h>
+ 
+@@ -11510,6 +11510,9 @@ print_insn (bfd_vma pc, disassemble_info
        threebyte = *++codep;
        dp = &dis386_twobyte[threebyte];
        need_modrm = twobyte_has_modrm[*codep];
 +      if (dp->name && ((strcmp(dp->name, "ud2a") == 0) || (strcmp(dp->name, "ud2") == 0))) {
-+        extern int kernel_BUG_encoding_bytes(void);
 +        codep += kernel_BUG_encoding_bytes();
 +      }
        codep++;
@@ -106,29 +124,6 @@
  	  break;
  
        if (cur_sec == NULL)
-@@ -1122,6 +1141,12 @@ symbol_file_add_with_addrs_or_offsets (b
-     error (_("Not confirmed."));
- 
-   objfile = allocate_objfile (abfd, flags | (mainline ? OBJF_MAINLINE : 0));
-+#ifdef CRASH_MERGE
-+  if (add_flags & SYMFILE_MAINLINE) {
-+    extern struct objfile *gdb_kernel_objfile;
-+    gdb_kernel_objfile = objfile;
-+  }
-+#endif
- 
-   if (parent)
-     add_separate_debug_objfile (objfile, parent);
-@@ -1484,6 +1509,9 @@ find_separate_debug_file (const char *di
-   VEC (char_ptr) *debugdir_vec;
-   struct cleanup *back_to;
-   int ix;
-+#ifdef CRASH_MERGE
-+  extern int check_specified_module_tree(char *, char *);
-+#endif
- 
-   /* Set I to max (strlen (canon_dir), strlen (dir)).  */
-   i = strlen (dir);
 @@ -1513,6 +1541,15 @@ find_separate_debug_file (const char *di
    if (separate_debug_file_exists (debugfile, crc32, objfile))
      return debugfile;
@@ -145,13 +140,12 @@
    /* Then try in the global debugfile directories.
  
       Keep backward compatibility so that DEBUG_FILE_DIRECTORY being "" will
-@@ -1583,6 +1620,10 @@ find_separate_debug_file_by_debuglink (s
+@@ -1583,6 +1620,9 @@ find_separate_debug_file_by_debuglink (s
    char *debugfile;
    unsigned long crc32;
    struct cleanup *cleanups;
 +#ifdef CRASH_MERGE
 +  char *name_copy;
-+  extern char *check_specified_kernel_debug_file();
 +#endif
  
    debuglink = get_debug_link_info (objfile, &crc32);
@@ -198,18 +192,16 @@
    return (*objfile->sf->sym_relocate) (objfile, sectp, buf);
 --- gdb-7.6/gdb/cli/cli-cmds.c.orig
 +++ gdb-7.6/gdb/cli/cli-cmds.c
-@@ -466,6 +466,10 @@ show_script_ext_mode (struct ui_file *fi
-    If SEARCH_PATH is non-zero, and the file isn't found in cwd,
-    search for it in the source search path.  */
+@@ -468,7 +468,7 @@ show_script_ext_mode (struct ui_file *fi
  
-+#ifdef CRASH_MERGE
-+static int crash_from_tty = 0;
-+#endif
-+
  int
  find_and_open_script (const char *script_file, int search_path,
- 		      FILE **streamp, char **full_pathp)
-@@ -508,6 +512,32 @@ find_and_open_script (const char *script
+-		      FILE **streamp, char **full_pathp)
++		      FILE **streamp, char **full_pathp, int from_tty)
+ {
+   char *file;
+   int fd;
+@@ -508,6 +512,31 @@ find_and_open_script (const char *script
        return 0;
      }
  
@@ -218,7 +210,7 @@
 +   * Only allow trusted versions of .gdbinit files to be
 +   * sourced during session initialization.
 +   */
-+  if (crash_from_tty == -1)
++  if (from_tty == -1)
 +    {
 +      struct stat statbuf;
 +      FILE *stream = *streamp;
@@ -231,7 +223,6 @@
 +        }
 +      if (statbuf.st_uid != getuid () || (statbuf.st_mode & S_IWOTH))
 +        {
-+          extern void untrusted_file(FILE *, char *);
 +          untrusted_file(NULL, *full_pathp);
 +          fclose (stream);
 +          return 0;
@@ -242,7 +233,15 @@
    return 1;
  }
  
-@@ -566,7 +596,11 @@ source_script_with_search (const char *f
+@@ -585,13 +585,18 @@ source_script_with_search (const char *f
+   if (file == NULL || *file == 0)
+     error (_("source command requires file name of file to source."));
+
+-  if (!find_and_open_script (file, search_path, &stream, &full_path))
++  if (!find_and_open_script (file, search_path, &stream, &full_path,
++			     from_tty))
+     {
+       /* The script wasn't found, or was otherwise inaccessible.
           If the source command was invoked interactively, throw an
  	 error.  Otherwise (e.g. if it was invoked by a script),
  	 silently ignore the error.  */
@@ -254,31 +253,36 @@
  	perror_with_name (file);
        else
  	return;
-@@ -589,7 +623,14 @@ source_script_with_search (const char *f
- void
- source_script (char *file, int from_tty)
- {
-+#ifdef CRASH_MERGE
-+  crash_from_tty = from_tty;
-+#endif
-   source_script_with_search (file, from_tty, 0);
-+#ifdef CRASH_MERGE
-+  crash_from_tty = 0;
-+#endif
-+
+--- gdb-7.6.orig/gdb/cli/cli-interp.c
++++ gdb-7.6/gdb/cli/cli-interp.c
+@@ -230,3 +230,24 @@ _initialize_cli_interp (void)
+
+   interp_add (cli_interp);
  }
- 
- /* Return the source_verbose global variable to its previous state
++
++extern void main_loop(void *);
++extern initialize_file_ftype _initialize_crash_interp;
++void
++_initialize_crash_interp (void)
++{
++	struct interp *command_interp;
++	static struct interp_procs crash_procs = {
++		.init_proc    = cli_interpreter_init,
++		.resume_proc  = cli_interpreter_resume,
++		.suspend_proc = cli_interpreter_suspend,
++		.exec_proc    = cli_interpreter_exec,
++		.ui_out_proc  = cli_ui_out,
++		.set_logging_proc = NULL,
++		.command_loop_proc = main_loop,
++	};
++
++	command_interp = interp_new("crash-command", &crash_procs);
++
++	interp_add(command_interp);
++}
 --- gdb-7.6/gdb/psymtab.c.orig
 +++ gdb-7.6/gdb/psymtab.c
-@@ -305,10 +305,14 @@ find_pc_sect_psymtab (struct objfile *ob
- 		      struct minimal_symbol *msymbol)
- {
-   struct partial_symtab *pst;
-+#ifdef CRASH_MERGE
-+  extern int gdb_line_number_callback(unsigned long, unsigned long, unsigned long);
-+#endif
- 
+@@ -305,6 +305,7 @@ find_pc_sect_psymtab (struct objfile *ob
    /* Try just the PSYMTABS_ADDRMAP mapping first as it has better granularity
       than the later used TEXTLOW/TEXTHIGH one.  */
  
@@ -351,7 +355,7 @@
    return lookup_symbol_in_language (name, block, domain,
  				    current_language->la_language,
  				    is_a_field_of_this);
-@@ -5100,3 +5115,662 @@ When enabled, debugging messages are pri
+@@ -5100,3 +5115,666 @@ When enabled, debugging messages are pri
  
    observer_attach_executable_changed (symtab_observer_executable_changed);
  }
@@ -379,8 +383,6 @@
 +extern int get_frame_offset(CORE_ADDR);
 +static void gdb_set_crash_block(struct gnu_request *);
 +void gdb_command_funnel(struct gnu_request *);
-+
-+struct objfile *gdb_kernel_objfile = { 0 };
 +
 +static ulong gdb_merge_flags = 0;
 +#define KERNEL_SYMBOLS_PATCHED (0x1)
@@ -645,7 +647,7 @@
 +{
 +	register int i;
 +	int len;
-+	int lastval;
++	long long lastval;
 +
 +        len = TYPE_NFIELDS (type);
 +        lastval = 0;
@@ -658,12 +660,12 @@
 +        for (i = 0; i < len; i++) {
 +        	fprintf_filtered(gdb_stdout, "  %s", 
 +			TYPE_FIELD_NAME (type, i));
-+                if (lastval != TYPE_FIELD_BITPOS (type, i)) {
-+                	fprintf_filtered (gdb_stdout, " = %d",
-+                        	TYPE_FIELD_BITPOS (type, i));
-+                        lastval = TYPE_FIELD_BITPOS (type, i);
++                if (lastval != TYPE_FIELD_ENUMVAL (type, i)) {
++                	fprintf_filtered (gdb_stdout, " = %s",
++                        	plongest(TYPE_FIELD_ENUMVAL (type, i)));
++                        lastval = TYPE_FIELD_ENUMVAL (type, i);
 +                } else
-+                        fprintf_filtered(gdb_stdout, " = %d", lastval);
++                        fprintf_filtered(gdb_stdout, " = %s", plongest(lastval));
 +                fprintf_filtered(gdb_stdout, "\n");
 +                lastval++;
 +        }
@@ -875,32 +877,38 @@
 + *  Walk through all minimal_symbols, patching their values with the
 + *  correct addresses.
 + */
-+static void 
++static void
 +gdb_patch_symbol_values(struct gnu_request *req)
 +{
 +	struct minimal_symbol *msymbol;
 +	struct objfile *objfile;
 +
 +	req->name = PATCH_KERNEL_SYMBOLS_START;
-+	patch_kernel_symbol(req);
++	patch_kernel_symbol(req, NULL);
 +
 +	ALL_MSYMBOLS (objfile, msymbol)
 +	{
 +		req->name = (char *)msymbol->ginfo.name;
-+		req->addr = (ulong)(&SYMBOL_VALUE_ADDRESS(msymbol));
-+		if (!patch_kernel_symbol(req)) {
++		if (!patch_kernel_symbol(req, msymbol)) {
 +			req->flags |= GNU_COMMAND_FAILED;
 +			break;
 +		}
 +	}
 +
 +	req->name = PATCH_KERNEL_SYMBOLS_STOP;
-+	patch_kernel_symbol(req);
++	patch_kernel_symbol(req, NULL);
 +
 +	clear_symtab_users(0);
 +	gdb_merge_flags |= KERNEL_SYMBOLS_PATCHED;
 +}
 +
++extern void gdb_patch_minsymbol_address(struct minimal_symbol *msym,
++				        unsigned long addr);
++void gdb_patch_minsymbol_address(struct minimal_symbol *msym,
++				 unsigned long addr)
++{
++	SYMBOL_VALUE_ADDRESS(msym) = addr;
++}
 +static void
 +gdb_get_symbol_type(struct gnu_request *req)
 +{
@@ -953,7 +961,7 @@
 +	struct block *block;
 +
 +	if ((gdb_merge_flags & KERNEL_SYMBOLS_PATCHED) && 
-+	    (msym = lookup_minimal_symbol(name, NULL, gdb_kernel_objfile))) {
++	    (msym = lookup_minimal_symbol(name, NULL, symfile_objfile))) {
 +                if (sym->aclass == LOC_BLOCK) {
 +                        block = (struct block *)SYMBOL_BLOCK_VALUE(sym);
 +                        BLOCK_START(block) = SYMBOL_VALUE_ADDRESS(msym);
@@ -1067,35 +1075,13 @@
  
    /* Jump to the containing catch_errors() call, communicating REASON
       to that call via setjmp's return value.  Note that REASON can't
---- gdb-7.6/gdb/valprint.h.orig
-+++ gdb-7.6/gdb/valprint.h
-@@ -152,11 +152,17 @@ extern void print_function_pointer_addre
- 					    struct gdbarch *gdbarch,
- 					    CORE_ADDR address,
- 					    struct ui_file *stream);
--
-+#ifdef CRASH_MERGE
-+extern int valprint_read_string (CORE_ADDR addr, int len, int width,
-+			unsigned int fetchlimit,
-+			enum bfd_endian byte_order, gdb_byte **buffer,
-+			int *bytes_read);
-+#else
- extern int read_string (CORE_ADDR addr, int len, int width,
- 			unsigned int fetchlimit,
- 			enum bfd_endian byte_order, gdb_byte **buffer,
- 			int *bytes_read);
-+#endif
- 
- extern void val_print_optimized_out (struct ui_file *stream);
- 
 --- gdb-7.6/gdb/target.c.orig
 +++ gdb-7.6/gdb/target.c
-@@ -1779,6 +1779,13 @@ target_xfer_partial (struct target_ops *
+@@ -1779,6 +1779,12 @@ target_xfer_partial (struct target_ops *
  int
  target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len)
  {
 +#ifdef CRASH_MERGE
-+  extern int gdb_readmem_callback(unsigned long, void *, int, int);
 +  if (gdb_readmem_callback(memaddr, (void *)myaddr, len, 0))
 +        return 0;
 +  else
@@ -1104,12 +1090,11 @@
    /* Dispatch to the topmost target, not the flattened current_target.
       Memory accesses check target->to_has_(all_)memory, and the
       flattened target doesn't inherit those.  */
-@@ -1814,6 +1821,13 @@ target_read_stack (CORE_ADDR memaddr, gd
+@@ -1814,6 +1821,12 @@ target_read_stack (CORE_ADDR memaddr, gd
  int
  target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr, ssize_t len)
  {
 +#ifdef CRASH_MERGE
-+  extern int gdb_readmem_callback(unsigned long, void *, int, int);
 +  if (gdb_readmem_callback(memaddr, (void *)myaddr, len, 1))
 +        return 0;
 +  else
@@ -1120,7 +1105,21 @@
       flattened target doesn't inherit those.  */
 --- gdb-7.6/gdb/printcmd.c.orig
 +++ gdb-7.6/gdb/printcmd.c
-@@ -1001,11 +1001,62 @@ print_command_1 (char *exp, int voidprin
+@@ -578,6 +578,13 @@ print_address_symbolic (struct gdbarch *
+   struct cleanup *cleanup_chain = make_cleanup (free_current_contents, &name);
+   make_cleanup (free_current_contents, &filename);
+ 
++#ifdef CRASH_MERGE
++  if (!gdb_print_callback(addr)) {
++	do_cleanups (cleanup_chain);
++	return 0;
++  }
++#endif
++
+   if (build_address_symbolic (gdbarch, addr, do_demangle, &name, &offset,
+ 			      &filename, &line, &unmapped))
+     {
+@@ -1001,11 +1008,62 @@ print_command_1 (char *exp, int voidprin
  }
  
  static void
@@ -1227,20 +1226,6 @@
        exit (0);
      }
  
-@@ -853,6 +853,13 @@ captured_main (void *data)
-       }
-   }
- 
-+#ifdef CRASH_MERGE
-+{
-+	extern void update_gdb_hooks(void);
-+	update_gdb_hooks();
-+}
-+#endif
-+
-   /* FIXME: cagney/2003-02-03: The big hack (part 2 of 2) that lets
-      GDB retain the old MI1 interpreter startup behavior.  Output the
-      copyright message after the interpreter is installed when it is
 @@ -880,7 +887,11 @@ captured_main (void *data)
       processed; it sets global parameters, which are independent of
       what file you are debugging or what directory you are in.  */
@@ -1321,53 +1306,43 @@
 +  args.argc = argc;
 +  args.argv = argv;
 +  args.use_windows = 0;
-+  args.interpreter_p = INTERP_CONSOLE;
++  args.interpreter_p = "crash-command";
 +  return gdb_main (&args);
 +}
 +#endif
  
  /* Don't use *_filtered for printing help.  We don't want to prompt
     for continue no matter how small the screen or how much we're going
---- gdb-7.6/gdb/valprint.c.orig
-+++ gdb-7.6/gdb/valprint.c
-@@ -1768,8 +1768,13 @@ partial_memory_read (CORE_ADDR memaddr,
-    this function instead?  */
- 
- int
-+#ifdef CRASH_MERGE
-+valprint_read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
-+	     enum bfd_endian byte_order, gdb_byte **buffer, int *bytes_read)
-+#else
- read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
- 	     enum bfd_endian byte_order, gdb_byte **buffer, int *bytes_read)
-+#endif
- {
-   int found_nul;		/* Non-zero if we found the nul char.  */
-   int errcode;			/* Errno returned from bad reads.  */
-@@ -2472,8 +2477,13 @@ val_print_string (struct type *elttype,
-   fetchlimit = (len == -1 ? options->print_max : min (len,
- 						      options->print_max));
- 
-+#ifdef CRASH_MERGE
-+  errcode = valprint_read_string (addr, len, width, fetchlimit, byte_order,
-+			 &buffer, &bytes_read);
-+#else
-   errcode = read_string (addr, len, width, fetchlimit, byte_order,
- 			 &buffer, &bytes_read);
-+#endif
-   old_chain = make_cleanup (xfree, buffer);
- 
-   addr += bytes_read;
 --- gdb-7.6/gdb/Makefile.in.orig
 +++ gdb-7.6/gdb/Makefile.in
+@@ -405,8 +405,8 @@ SUBDIR_GDBTK_DEPS = $(LIBGUI) $(TCL_DEPS
+ SUBDIR_GDBTK_LDFLAGS=
+ SUBDIR_GDBTK_CFLAGS= -DGDBTK
+ 
+-CONFIG_OBS= @CONFIG_OBS@
+-CONFIG_SRCS= @CONFIG_SRCS@
++CONFIG_OBS= @CONFIG_OBS@ crash.o
++CONFIG_SRCS= @CONFIG_SRCS@ ../../crash.c
+ CONFIG_DEPS= @CONFIG_DEPS@
+ CONFIG_LDFLAGS = @CONFIG_LDFLAGS@
+ ENABLE_CFLAGS= @ENABLE_CFLAGS@
 @@ -422,7 +422,7 @@ CONFIG_UNINSTALL = @CONFIG_UNINSTALL@
  # It is also possible that you will need to add -I/usr/include/sys if
  # your system doesn't have fcntl.h in /usr/include (which is where it
  # should be according to Posix).
 -DEFS = @DEFS@
-+DEFS = -DCRASH_MERGE @DEFS@
++DEFS = -DCRASH_MERGE -DGDB_7_6 @DEFS@
  GDB_CFLAGS = -I. -I$(srcdir) -I$(srcdir)/common -I$(srcdir)/config \
  	-DLOCALEDIR="\"$(localedir)\"" $(DEFS)
+ 
+@@ -837,7 +837,7 @@ gnulib/import/stddef.in.h gnulib/import/
+ common/common-utils.h common/xml-utils.h common/buffer.h common/ptid.h \
+ common/format.h common/host-defs.h utils.h common/queue.h common/gdb_string.h \
+ common/linux-osdata.h gdb-dlfcn.h auto-load.h probe.h stap-probe.h \
+-gdb_bfd.h sparc-ravenscar-thread.h ppc-ravenscar-thread.h common/linux-btrace.h
++gdb_bfd.h sparc-ravenscar-thread.h ppc-ravenscar-thread.h common/linux-btrace.h crash.h
+ 
+ # Header files that already have srcdir in them, or which are in objdir.
  
 @@ -934,7 +934,7 @@ COMMON_OBS = $(DEPFILES) $(CONFIG_OBS) $
  
@@ -1429,20 +1404,16 @@
  
  observer.h: observer.sh doc/observer.texi
  	${srcdir}/observer.sh h ${srcdir}/doc/observer.texi observer.h
---- gdb-7.6/gdb/c-lang.c.orig
-+++ gdb-7.6/gdb/c-lang.c
-@@ -307,7 +307,11 @@ c_get_string (struct value *value, gdb_b
-     {
-       CORE_ADDR addr = value_as_address (value);
+@@ -1725,6 +1726,9 @@ cli-utils.o: $(srcdir)/cli/cli-utils.c
+ 	$(COMPILE) $(srcdir)/cli/cli-utils.c
+ 	$(POSTCOMPILE)
  
-+#ifdef CRASH_MERGE
-+      err = valprint_read_string (addr, *length, width, fetchlimit,
-+#else
-       err = read_string (addr, *length, width, fetchlimit,
-+#endif
- 			 byte_order, buffer, length);
-       if (err)
- 	{
++crash.o: $(srcdir)/../../crash.c
++	$(COMPILE) $(srcdir)/../../crash.c
++	$(POSTCOMPILE)
+ 
+ #
+ # GDBTK sub-directory
 --- gdb-7.6/readline/rltypedefs.h.orig
 +++ gdb-7.6/readline/rltypedefs.h
 @@ -31,10 +31,10 @@ extern "C" {
@@ -1506,11 +1477,13 @@
  CXXFLAGS = @CXXFLAGS@
 --- gdb-7.6/gdb/defs.h.orig
 +++ gdb-7.6/gdb/defs.h
-@@ -802,4 +802,8 @@ enum block_enum
+@@ -802,4 +802,10 @@ enum block_enum
  
  #include "utils.h"
  
 +#ifdef CRASH_MERGE
++#define GDB_COMMON
++#include "../../defs.h"
 +extern int gdb_main_entry(int, char **);
 +extern void replace_ui_file_FILE(struct ui_file *, FILE *);
 +#endif
@@ -1539,28 +1512,6 @@
  #endif
 --- gdb-7.6/gdb/printcmd.c.orig
 +++ gdb-7.6/gdb/printcmd.c
-@@ -573,11 +573,21 @@ print_address_symbolic (struct gdbarch *
-   int unmapped = 0;
-   int offset = 0;
-   int line = 0;
-+#ifdef CRASH_MERGE
-+  extern int gdb_print_callback(unsigned long);
-+#endif
- 
-   /* Throw away both name and filename.  */
-   struct cleanup *cleanup_chain = make_cleanup (free_current_contents, &name);
-   make_cleanup (free_current_contents, &filename);
- 
-+#ifdef CRASH_MERGE
-+  if (!gdb_print_callback(addr)) {
-+	do_cleanups (cleanup_chain);
-+	return 0;
-+  }
-+#endif
-+
-   if (build_address_symbolic (gdbarch, addr, do_demangle, &name, &offset,
- 			      &filename, &line, &unmapped))
-     {
 --- gdb-7.6/bfd/bfd-in.h.orig
 +++ gdb-7.6/bfd/bfd-in.h
 @@ -294,9 +294,6 @@ typedef struct bfd_section *sec_ptr;
@@ -1651,33 +1602,6 @@
    bfd_error_no_error = 0,
 --- gdb-7.6/gdb/symtab.c.orig
 +++ gdb-7.6/gdb/symtab.c
-@@ -5405,7 +5405,7 @@ dump_enum(struct type *type, struct gnu_
- {
- 	register int i;
- 	int len;
--	int lastval;
-+	long long lastval;
- 
-         len = TYPE_NFIELDS (type);
-         lastval = 0;
-@@ -5418,12 +5418,12 @@ dump_enum(struct type *type, struct gnu_
-         for (i = 0; i < len; i++) {
-         	fprintf_filtered(gdb_stdout, "  %s", 
- 			TYPE_FIELD_NAME (type, i));
--                if (lastval != TYPE_FIELD_BITPOS (type, i)) {
--                	fprintf_filtered (gdb_stdout, " = %d",
--                        	TYPE_FIELD_BITPOS (type, i));
--                        lastval = TYPE_FIELD_BITPOS (type, i);
-+                if (lastval != TYPE_FIELD_ENUMVAL (type, i)) {
-+                	fprintf_filtered (gdb_stdout, " = %s",
-+                        	plongest(TYPE_FIELD_ENUMVAL (type, i)));
-+                        lastval = TYPE_FIELD_ENUMVAL (type, i);
-                 } else
--                        fprintf_filtered(gdb_stdout, " = %d", lastval);
-+                        fprintf_filtered(gdb_stdout, " = %s", plongest(lastval));
-                 fprintf_filtered(gdb_stdout, "\n");
-                 lastval++;
-         }
 --- gdb-7.6/gdb/aarch64-linux-nat.c.orig
 +++ gdb-7.6/gdb/aarch64-linux-nat.c
 @@ -32,6 +32,7 @@
@@ -1688,3 +1612,26 @@
  #include <sys/utsname.h>
  
  #include "gregset.h"
+--- gdb-7.6/gdb/cli/cli-cmds.h.orig
++++ gdb-7.6/gdb/cli/cli-cmds.h
+@@ -122,7 +122,8 @@ extern void source_script (char *, int);
+ /* Exported to objfiles.c.  */
+
+ extern int find_and_open_script (const char *file, int search_path,
+-				 FILE **streamp, char **full_path);
++				 FILE **streamp, char **full_path,
++				 int from_tty);
+
+ /* Command tracing state.  */
+
+--- gdb-7.6/gdb/python/py-auto-load.c.orig
++++ gdb-7.6/gdb/python/py-auto-load.c
+@@ -144,7 +144,7 @@ source_section_scripts (struct objfile *
+ 	}
+
+       opened = find_and_open_script (file, 1 /*search_path*/,
+-				     &stream, &full_path);
++				     &stream, &full_path, 0);
+
+       back_to = make_cleanup (null_cleanup, NULL);
+       if (opened)

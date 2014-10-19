@@ -17,10 +17,8 @@
 
 #include "defs.h"
 #include <elf.h>
-#ifdef GDB_7_6
 #define __CONFIG_H__ 1
 #include "config.h"
-#endif
 #include "bfd.h"
 
 static void store_symbols(bfd *, int, void *, long, unsigned int);
@@ -430,17 +428,8 @@ separate_debug_file_exists(const char *name, unsigned long crc, int *exists)
 
 	*exists = TRUE;
   	while ((count = read(fd, buffer, sizeof(buffer))) > 0)
-#ifdef GDB_5_3
-    		file_crc = calc_crc32(file_crc, buffer, count);
-#else
-#ifdef GDB_7_6
     		file_crc = bfd_calc_gnu_debuglink_crc32(file_crc, 
 			(unsigned char *)buffer, count);
-#else
-    		file_crc = gnu_debuglink_crc32(file_crc, 
-			(unsigned char *)buffer, count);
-#endif
-#endif
 
   	close (fd);
 
@@ -1367,7 +1356,7 @@ store_module_symbols_v1(ulong total, int mods_installed)
 		size_of_struct = ULONG(modbuf + 
 			OFFSET(module_size_of_struct));
 
-		if (!read_string(mod_name, name, BUFSIZE-1))
+		if (!mem_read_string(mod_name, name, BUFSIZE-1))
 			sprintf(name, "(unknown module)");
 		
 		sprintf(rodata, "__insmod_%s_S.rodata", name); 
@@ -1447,7 +1436,7 @@ store_module_symbols_v1(ulong total, int mods_installed)
 				strcpy(buf1,
 					&strbuf[(ulong)modsym->name - first]);
 			else 
-				read_string((ulong)modsym->name, buf1,
+				mem_read_string((ulong)modsym->name, buf1,
                             		BUFSIZE-1);
 
                 	if (strlen(buf1)) {
@@ -1751,7 +1740,7 @@ store_module_symbols_v2(ulong total, int mods_installed)
 				strcpy(buf1,
 					&strbuf[(ulong)modsym->name - first]);
 			else 
-				read_string((ulong)modsym->name, buf1,
+				mem_read_string((ulong)modsym->name, buf1,
                             		BUFSIZE-1);
 
                 	if (strlen(buf1)) {
@@ -1826,7 +1815,7 @@ store_module_symbols_v2(ulong total, int mods_installed)
 				strcpy(buf1,
 					&strbuf[(ulong)modsym->name - first]);
 			else 
-				read_string((ulong)modsym->name, buf1,
+				mem_read_string((ulong)modsym->name, buf1,
                             		BUFSIZE-1);
 
                 	if (strlen(buf1)) {
@@ -3613,11 +3602,7 @@ not_system_map:
 static int
 is_bfd_format(char *filename) 
 {
-#ifdef GDB_5_3
-        struct _bfd *bfd;
-#else
         struct bfd *bfd;
-#endif
         char **matching;
 
         if ((bfd = bfd_openr(filename, NULL)) == NULL) 
@@ -3635,11 +3620,7 @@ is_bfd_format(char *filename)
 static int
 is_binary_stripped(char *filename)
 {
-#ifdef GDB_5_3
-        struct _bfd *bfd;
-#else
         struct bfd *bfd;
-#endif
 	int number_of_symbols;
 
 	if ((bfd = bfd_openr(filename, NULL)) == NULL) {
@@ -4506,13 +4487,12 @@ value_search(ulong value, ulong *offset)
  
         for ( ; sp < st->symend; sp++) {
                 if (value == sp->value) {
-#if !defined(GDB_5_3) && !defined(GDB_6_0) && !defined(GDB_6_1)
 			if (STRNEQ(sp->name, ".text.")) {
 				spnext = sp+1;
 				if (spnext->value == value)
 					sp = spnext;
 			}
-#endif
+
                         if (offset) 
 				*offset = 0;
 
@@ -5809,7 +5789,7 @@ dereference_pointer(ulong addr, struct datatype_member *dm, ulong flags)
 			fprintf(pc->saved_fp, "<%s> ", sym);
 		if (!target)
 			fprintf(pc->saved_fp, "NULL\n");
-		else if (!accessible(target) || !read_string(target, buf1, BUFSIZE-1))
+		else if (!accessible(target) || !mem_read_string(target, buf1, BUFSIZE-1))
 			fprintf(pc->saved_fp, "(not accessible)\n");
 		else 
 			fprintf(pc->saved_fp, "\"%s\"\n", buf1);
@@ -10562,9 +10542,6 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
 	char section_name[BUFSIZE];
 	ulong section_vaddr;
 
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
-	return FALSE;
-#endif
 	if (!(st->flags & (MODSECT_VMASK|MODSECT_UNKNOWN))) {
 		STRUCT_SIZE_INIT(module_sect_attr, "module_sect_attr");
 		MEMBER_OFFSET_INIT(module_sect_attrs, 
@@ -10719,7 +10696,7 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
 		}
 	
 		BZERO(section_name, BUFSIZE);
-		if (!read_string(name, section_name, 32)) {
+		if (!mem_read_string(name, section_name, 32)) {
 			done = TRUE;
 			retval = FALSE;
 			continue;
@@ -11727,7 +11704,7 @@ clear_text_value_cache(void)
 #define last_sp addr2
 
 int 
-patch_kernel_symbol(struct gnu_request *req)
+patch_kernel_symbol(struct gnu_request *req, void *msym)
 {
 	int i, c;
 	struct syment *sp_array[1000], *sp;
@@ -11758,14 +11735,14 @@ patch_kernel_symbol(struct gnu_request *req)
                 return TRUE;
         }
 
-	if (!req->name || !req->addr)
+	if (!req->name || !msym)
 		return FALSE;
 
 	sp = (struct syment *)req->last_sp; 
 	sp += sp ? 1 : 0;
 	if (sp && (sp->cnt == 1) && !(sp->flags & SYMBOL_NAME_USED) && 
 	    STREQ(sp->name, req->name)) {
-                *((ulong *)req->addr) = sp->value;
+		gdb_patch_minsymbol_address(msym, sp->value);
                 sp->flags |= SYMBOL_NAME_USED;
                 req->last_sp = (ulong)sp;
 	} else {
@@ -11775,7 +11752,7 @@ patch_kernel_symbol(struct gnu_request *req)
 			return TRUE;
 	
 		case 1: 
-			*((ulong *)req->addr) = sp_array[0]->value;
+			gdb_patch_minsymbol_address(msym, sp_array[0]->value);
 			sp_array[0]->flags |= SYMBOL_NAME_USED;
 			req->last_sp = (ulong)sp_array[0];
 			break;
@@ -11784,7 +11761,8 @@ patch_kernel_symbol(struct gnu_request *req)
 			for (i = 0; i < c; i++) {
 				if (sp_array[i]->flags & SYMBOL_NAME_USED)
 					continue;
-				*((ulong *)req->addr) = sp_array[i]->value;
+				gdb_patch_minsymbol_address(msym,
+							  sp_array[i]->value);
 				sp_array[i]->flags |= SYMBOL_NAME_USED;
 				req->last_sp = (ulong)sp_array[i];
 				break;

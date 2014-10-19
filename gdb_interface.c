@@ -17,15 +17,15 @@
 
 #include "defs.h"
 
-static void exit_after_gdb_info(void);
+static void exit_after_gdb_info(void *ignore);
 static int is_restricted_command(char *, ulong);
 static void strip_redirection(char *);
 int get_frame_offset(ulong);
 
 int *gdb_output_format;
 unsigned int *gdb_print_max;
-int *gdb_prettyprint_structs;
-int *gdb_prettyprint_arrays;
+int *gdb_prettyformat_structs;
+int *gdb_prettyformat_arrays;
 int *gdb_repeat_count_threshold;
 int *gdb_stop_print_at_null;
 unsigned int *gdb_output_radix;
@@ -68,29 +68,7 @@ gdb_main_loop(int argc, char **argv)
 	}
 
         optind = 0;
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
-        command_loop_hook = main_loop;
-#else
-	deprecated_command_loop_hook = main_loop;
-#endif
         gdb_main_entry(argc, argv);
-}
-
-/*
- *  Update any hooks that gdb has set.
- */
-void
-update_gdb_hooks(void)
-{
-#if defined(GDB_6_0) || defined(GDB_6_1)
-	command_loop_hook = pc->flags & VERSION_QUERY ?
-        	exit_after_gdb_info : main_loop;
-	target_new_objfile_hook = NULL;
-#endif
-#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6)
-	deprecated_command_loop_hook = pc->flags & VERSION_QUERY ?
-		exit_after_gdb_info : main_loop;
-#endif
 }
 
 void
@@ -110,28 +88,15 @@ gdb_readnow_warning(void)
 
 /*
  *  Used only by the -v command line option, get gdb to initialize itself
- *  with no arguments, print its version and GPL paragraph, and then call
- *  back to exit_after_gdb_info().
+ *  with no arguments, print its version and GPL paragraph, and then exit out.
  */
 void
 display_gdb_banner(void)
 {
 	optind = 0;
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
-        command_loop_hook = exit_after_gdb_info;
-#else
-        deprecated_command_loop_hook = exit_after_gdb_info;
-#endif
 	args[0] = "gdb";
 	args[1] = "-version";
 	gdb_main_entry(2, args);
-}
-
-static void
-exit_after_gdb_info(void)
-{
-        fprintf(fp, "\n");
-        clean_exit(0);
 }
 
 /* 
@@ -173,30 +138,33 @@ gdb_session_init(void)
 	/*
 	 *  Set up pointers to gdb variables.
 	 */
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
-	gdb_output_format = &output_format;
-	gdb_print_max = &print_max;
-	gdb_prettyprint_structs = &prettyprint_structs;
-	gdb_prettyprint_arrays = &prettyprint_arrays;
-	gdb_repeat_count_threshold = &repeat_count_threshold;
-	gdb_stop_print_at_null = &stop_print_at_null;
-	gdb_output_radix = &output_radix;
-#else
 	gdb_output_format = (int *) 
 		gdb_user_print_option_address("output_format");
 	gdb_print_max = (unsigned int *)
 		gdb_user_print_option_address("print_max");
-	gdb_prettyprint_structs = (int *)
-		gdb_user_print_option_address("prettyprint_structs");
-	gdb_prettyprint_arrays = (int *)
-		gdb_user_print_option_address("prettyprint_arrays");
+
+	/* gdb 7.7 renamed prettyprint to prettyformat */
+	gdb_prettyformat_structs = (int *)
+		gdb_user_print_option_address("prettyformat_structs");
+	if (!gdb_prettyformat_structs) {
+		gdb_prettyformat_structs = (int *)
+			gdb_user_print_option_address("prettyprint_structs");
+	}
+
+	gdb_prettyformat_arrays = (int *)
+		gdb_user_print_option_address("prettyformat_arrays");
+	if (!gdb_prettyformat_arrays) {
+		gdb_prettyformat_arrays = (int *)
+			gdb_user_print_option_address("prettyprint_arrays");
+	}
+
 	gdb_repeat_count_threshold = (int *)
 		gdb_user_print_option_address("repeat_count_threshold");
 	gdb_stop_print_at_null = (int *)
 		gdb_user_print_option_address("stop_print_at_null");
 	gdb_output_radix = (unsigned int *)
 		gdb_user_print_option_address("output_radix");
-#endif
+
 	/*
          *  If the output radix is set via the --hex or --dec command line
 	 *  option, then pc->output_radix will be non-zero; otherwise use 
@@ -218,12 +186,9 @@ gdb_session_init(void)
 		*gdb_output_format = 0;
 	}
 		
-	*gdb_prettyprint_structs = 1;
+	*gdb_prettyformat_structs = 1;
 	*gdb_repeat_count_threshold = 0x7fffffff;
 	*gdb_print_max = 256;
-#ifdef GDB_5_3
-	gdb_disassemble_from_exec = 0;
-#endif
 
 	pc->flags |= GDB_INIT;   /* set here so gdb_interface will work */
 
@@ -415,8 +380,8 @@ gdb_interface(struct gnu_request *req)
 void
 dump_gdb_data(void)
 {
-        fprintf(fp, "    prettyprint_arrays: %d\n", *gdb_prettyprint_arrays);
-        fprintf(fp, "   prettyprint_structs: %d\n", *gdb_prettyprint_structs);
+        fprintf(fp, "    prettyformat_arrays: %d\n", *gdb_prettyformat_arrays);
+        fprintf(fp, "   prettyformat_structs: %d\n", *gdb_prettyformat_structs);
         fprintf(fp, "repeat_count_threshold: %x\n", *gdb_repeat_count_threshold);
 	fprintf(fp, "    stop_print_at_null: %d\n", *gdb_stop_print_at_null);
 	fprintf(fp, "             print_max: %d\n", *gdb_print_max);
@@ -499,11 +464,7 @@ dump_gnu_request(struct gnu_request *req, int in_gdb)
 		console("name: %lx ", (ulong)req->name);
 	console("length: %ld ", req->length);
         console("typecode: %d\n", req->typecode);
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0)
-	console("typename: %s\n", req->typename);
-#else
 	console("type_name: %s\n", req->type_name);
-#endif
 	console("target_typename: %s\n", req->target_typename);
 	console("target_length: %ld ", req->target_length);
 	console("target_typecode: %d ", req->target_typecode);
@@ -617,7 +578,7 @@ restore_gdb_sanity(void)
                 *gdb_output_format = (*gdb_output_radix == 10) ? 0 : 'x';
         }
 
-        *gdb_prettyprint_structs = 1;   /* these may piss somebody off... */
+        *gdb_prettyformat_structs = 1;   /* these may piss somebody off... */
 	*gdb_repeat_count_threshold = 0x7fffffff;
 
 	error_hook = NULL;
@@ -931,11 +892,7 @@ gdb_error_hook(void)
 			gdb_command_string(pc->cur_gdb_cmd, buf1, TRUE), buf2);
 	}
 
-#ifdef GDB_7_6
 	do_cleanups(all_cleanups()); 
-#else
-	do_cleanups(NULL); 
-#endif
 
 	longjmp(pc->gdb_interface_env, 1);
 }

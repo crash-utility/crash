@@ -36,11 +36,7 @@ static void dump_registers(void);
 #define GPLv2 2
 #define GPLv3 3
 
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
-static int GPL_version = GPLv2;
-#else
 static int GPL_version = GPLv3;
-#endif
 
 static 
 char *program_usage_info[] = {
@@ -1742,11 +1738,7 @@ char *help_bt[] = {
 "   -c cpu  display the stack trace of the active task on one or more CPUs,",
 "           which can be specified using the format \"3\", \"1,8,9\", \"1-23\",",
 "           or \"1,8,9-14\". (only applicable to crash dumps)",
-#ifdef GDB_5_3
-"       -g  use gdb stack trace code. (alpha only)",
-#else
 "       -g  displays the stack traces of all threads in the thread group of",
-#endif
 "           the target task; the thread group leader will be displayed first.",
 "       -r  display raw stack data, consisting of a memory dump of the two",
 "           pages of memory containing the task_union structure.",

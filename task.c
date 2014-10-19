@@ -4859,7 +4859,7 @@ old_defaults:
 		goto old_defaults;
 	bitpos = 0;
 	for (i = 0; i < len; i++) {
-		if (!read_string(str, buf, BUFSIZE-1))
+		if (!mem_read_string(str, buf, BUFSIZE-1))
 			break;
 
 		if (CRASHDEBUG(3)) 
@@ -5448,7 +5448,7 @@ get_panicmsg(char *buf)
 	msg_found = FALSE;
 
 	if (tt->panicmsg) {
-		read_string(tt->panicmsg, buf, BUFSIZE-1);
+		mem_read_string(tt->panicmsg, buf, BUFSIZE-1);
 		msg_found = TRUE;
 	} else if (LKCD_DUMPFILE()) {
 		get_lkcd_panicmsg(buf);
@@ -6002,11 +6002,9 @@ foreach(struct foreach_data *fd)
 				error(INFO, "line numbers are not available\n");
 				fd->flags &= ~FOREACH_l_FLAG;
 			}
-#ifndef GDB_5_3
                         if ((fd->flags & FOREACH_g_FLAG))
                                 error(FATAL,
 				    "bt -g option is not supported when issued from foreach\n");
-#endif
 			bt = &bt_info;
 			break;
 
@@ -6180,10 +6178,6 @@ foreach(struct foreach_data *fd)
 					bt->flags |= BT_OLD_BACK_TRACE;
                                 if (fd->flags & FOREACH_e_FLAG)
                                         bt->flags |= BT_EFRAME_SEARCH;
-#ifdef GDB_5_3
-                                if (fd->flags & FOREACH_g_FLAG)
-                                        bt->flags |= BT_USE_GDB;
-#endif
                                 if (fd->flags & FOREACH_l_FLAG) 
                                         bt->flags |= BT_LINE_NUMBERS;
                                 if (fd->flags & FOREACH_f_FLAG) 
@@ -8859,7 +8853,7 @@ get_task_group_name(ulong group)
 
 	readmem(kernfs_node + OFFSET(kernfs_node_name), KVADDR, &name, 
 		sizeof(ulong), "kernfs_node name", FAULT_ON_ERROR);
-	if (!name || !read_string(name, buf, BUFSIZE-1))
+	if (!name || !mem_read_string(name, buf, BUFSIZE-1))
 		return NULL;
 
 	tmp = GETBUF(strlen(buf)+1);
