@@ -3541,7 +3541,7 @@ cmd_mod(void)
 }
 
 int
-check_specified_module_tree(char *module, char *gdb_buffer)
+check_specified_module_tree(const char *module, char *gdb_buffer)
 {
 	char *p1, *treebuf;
 	int retval;

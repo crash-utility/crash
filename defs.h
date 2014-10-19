@@ -4858,7 +4858,7 @@ void non_matching_kernel(void);
 struct load_module *modref_to_load_module(char *);
 int load_module_symbols_helper(char *);
 void unlink_module(struct load_module *);
-int check_specified_module_tree(char *, char *);
+int check_specified_module_tree(const char *, char *);
 int is_system_call(char *, ulong);
 void generic_dump_irq(int);
 void generic_get_irq_affinity(int);
