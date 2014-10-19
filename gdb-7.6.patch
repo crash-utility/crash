@@ -192,17 +192,15 @@
    return (*objfile->sf->sym_relocate) (objfile, sectp, buf);
 --- gdb-7.6/gdb/cli/cli-cmds.c.orig
 +++ gdb-7.6/gdb/cli/cli-cmds.c
-@@ -466,6 +466,10 @@ show_script_ext_mode (struct ui_file *fi
-    If SEARCH_PATH is non-zero, and the file isn't found in cwd,
-    search for it in the source search path.  */
+@@ -468,7 +468,7 @@ show_script_ext_mode (struct ui_file *fi
  
-+#ifdef CRASH_MERGE
-+static int crash_from_tty = 0;
-+#endif
-+
  int
  find_and_open_script (const char *script_file, int search_path,
- 		      FILE **streamp, char **full_pathp)
+-		      FILE **streamp, char **full_pathp)
++		      FILE **streamp, char **full_pathp, int from_tty)
+ {
+   char *file;
+   int fd;
 @@ -508,6 +512,31 @@ find_and_open_script (const char *script
        return 0;
      }
@@ -212,7 +210,7 @@
 +   * Only allow trusted versions of .gdbinit files to be
 +   * sourced during session initialization.
 +   */
-+  if (crash_from_tty == -1)
++  if (from_tty == -1)
 +    {
 +      struct stat statbuf;
 +      FILE *stream = *streamp;
@@ -235,7 +233,15 @@
    return 1;
  }
  
-@@ -566,7 +596,11 @@ source_script_with_search (const char *f
+@@ -585,13 +585,18 @@ source_script_with_search (const char *f
+   if (file == NULL || *file == 0)
+     error (_("source command requires file name of file to source."));
+
+-  if (!find_and_open_script (file, search_path, &stream, &full_path))
++  if (!find_and_open_script (file, search_path, &stream, &full_path,
++			     from_tty))
+     {
+       /* The script wasn't found, or was otherwise inaccessible.
           If the source command was invoked interactively, throw an
  	 error.  Otherwise (e.g. if it was invoked by a script),
  	 silently ignore the error.  */
@@ -247,21 +253,6 @@
  	perror_with_name (file);
        else
  	return;
-@@ -589,7 +623,14 @@ source_script_with_search (const char *f
- void
- source_script (char *file, int from_tty)
- {
-+#ifdef CRASH_MERGE
-+  crash_from_tty = from_tty;
-+#endif
-   source_script_with_search (file, from_tty, 0);
-+#ifdef CRASH_MERGE
-+  crash_from_tty = 0;
-+#endif
-+
- }
- 
- /* Return the source_verbose global variable to its previous state
 --- gdb-7.6.orig/gdb/cli/cli-interp.c
 +++ gdb-7.6/gdb/cli/cli-interp.c
 @@ -230,3 +230,24 @@ _initialize_cli_interp (void)
@@ -1618,3 +1609,26 @@
  #include <sys/utsname.h>
  
  #include "gregset.h"
+--- gdb-7.6/gdb/cli/cli-cmds.h.orig
++++ gdb-7.6/gdb/cli/cli-cmds.h
+@@ -122,7 +122,8 @@ extern void source_script (char *, int);
+ /* Exported to objfiles.c.  */
+
+ extern int find_and_open_script (const char *file, int search_path,
+-				 FILE **streamp, char **full_path);
++				 FILE **streamp, char **full_path,
++				 int from_tty);
+
+ /* Command tracing state.  */
+
+--- gdb-7.6/gdb/python/py-auto-load.c.orig
++++ gdb-7.6/gdb/python/py-auto-load.c
+@@ -144,7 +144,7 @@ source_section_scripts (struct objfile *
+ 	}
+
+       opened = find_and_open_script (file, 1 /*search_path*/,
+-				     &stream, &full_path);
++				     &stream, &full_path, 0);
+
+       back_to = make_cleanup (null_cleanup, NULL);
+       if (opened)
