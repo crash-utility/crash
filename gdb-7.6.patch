@@ -647,7 +647,7 @@
 +{
 +	register int i;
 +	int len;
-+	int lastval;
++	long long lastval;
 +
 +        len = TYPE_NFIELDS (type);
 +        lastval = 0;
@@ -660,12 +660,12 @@
 +        for (i = 0; i < len; i++) {
 +        	fprintf_filtered(gdb_stdout, "  %s", 
 +			TYPE_FIELD_NAME (type, i));
-+                if (lastval != TYPE_FIELD_BITPOS (type, i)) {
-+                	fprintf_filtered (gdb_stdout, " = %d",
-+                        	TYPE_FIELD_BITPOS (type, i));
-+                        lastval = TYPE_FIELD_BITPOS (type, i);
++                if (lastval != TYPE_FIELD_ENUMVAL (type, i)) {
++                	fprintf_filtered (gdb_stdout, " = %s",
++                        	plongest(TYPE_FIELD_ENUMVAL (type, i)));
++                        lastval = TYPE_FIELD_ENUMVAL (type, i);
 +                } else
-+                        fprintf_filtered(gdb_stdout, " = %d", lastval);
++                        fprintf_filtered(gdb_stdout, " = %s", plongest(lastval));
 +                fprintf_filtered(gdb_stdout, "\n");
 +                lastval++;
 +        }
@@ -1105,7 +1105,21 @@
       flattened target doesn't inherit those.  */
 --- gdb-7.6/gdb/printcmd.c.orig
 +++ gdb-7.6/gdb/printcmd.c
-@@ -1001,11 +1001,62 @@ print_command_1 (char *exp, int voidprin
+@@ -578,6 +578,13 @@ print_address_symbolic (struct gdbarch *
+   struct cleanup *cleanup_chain = make_cleanup (free_current_contents, &name);
+   make_cleanup (free_current_contents, &filename);
+ 
++#ifdef CRASH_MERGE
++  if (!gdb_print_callback(addr)) {
++	do_cleanups (cleanup_chain);
++	return 0;
++  }
++#endif
++
+   if (build_address_symbolic (gdbarch, addr, do_demangle, &name, &offset,
+ 			      &filename, &line, &unmapped))
+     {
+@@ -1001,11 +1008,62 @@ print_command_1 (char *exp, int voidprin
  }
  
  static void
@@ -1301,6 +1315,17 @@
     for continue no matter how small the screen or how much we're going
 --- gdb-7.6/gdb/Makefile.in.orig
 +++ gdb-7.6/gdb/Makefile.in
+@@ -405,8 +405,8 @@ SUBDIR_GDBTK_DEPS = $(LIBGUI) $(TCL_DEPS
+ SUBDIR_GDBTK_LDFLAGS=
+ SUBDIR_GDBTK_CFLAGS= -DGDBTK
+ 
+-CONFIG_OBS= @CONFIG_OBS@
+-CONFIG_SRCS= @CONFIG_SRCS@
++CONFIG_OBS= @CONFIG_OBS@ crash.o
++CONFIG_SRCS= @CONFIG_SRCS@ ../../crash.c
+ CONFIG_DEPS= @CONFIG_DEPS@
+ CONFIG_LDFLAGS = @CONFIG_LDFLAGS@
+ ENABLE_CFLAGS= @ENABLE_CFLAGS@
 @@ -422,7 +422,7 @@ CONFIG_UNINSTALL = @CONFIG_UNINSTALL@
  # It is also possible that you will need to add -I/usr/include/sys if
  # your system doesn't have fcntl.h in /usr/include (which is where it
@@ -1309,6 +1334,15 @@
 +DEFS = -DCRASH_MERGE @DEFS@
  GDB_CFLAGS = -I. -I$(srcdir) -I$(srcdir)/common -I$(srcdir)/config \
  	-DLOCALEDIR="\"$(localedir)\"" $(DEFS)
+ 
+@@ -837,7 +837,7 @@ gnulib/import/stddef.in.h gnulib/import/
+ common/common-utils.h common/xml-utils.h common/buffer.h common/ptid.h \
+ common/format.h common/host-defs.h utils.h common/queue.h common/gdb_string.h \
+ common/linux-osdata.h gdb-dlfcn.h auto-load.h probe.h stap-probe.h \
+-gdb_bfd.h sparc-ravenscar-thread.h ppc-ravenscar-thread.h common/linux-btrace.h
++gdb_bfd.h sparc-ravenscar-thread.h ppc-ravenscar-thread.h common/linux-btrace.h crash.h
+ 
+ # Header files that already have srcdir in them, or which are in objdir.
  
 @@ -934,7 +934,7 @@ COMMON_OBS = $(DEPFILES) $(CONFIG_OBS) $
  
@@ -1370,6 +1404,16 @@
  
  observer.h: observer.sh doc/observer.texi
  	${srcdir}/observer.sh h ${srcdir}/doc/observer.texi observer.h
+@@ -1725,6 +1726,9 @@ cli-utils.o: $(srcdir)/cli/cli-utils.c
+ 	$(COMPILE) $(srcdir)/cli/cli-utils.c
+ 	$(POSTCOMPILE)
+ 
++crash.o: $(srcdir)/../../crash.c
++	$(COMPILE) $(srcdir)/../../crash.c
++	$(POSTCOMPILE)
+ 
+ #
+ # GDBTK sub-directory
 --- gdb-7.6/readline/rltypedefs.h.orig
 +++ gdb-7.6/readline/rltypedefs.h
 @@ -31,10 +31,10 @@ extern "C" {
@@ -1468,20 +1512,6 @@
  #endif
 --- gdb-7.6/gdb/printcmd.c.orig
 +++ gdb-7.6/gdb/printcmd.c
-@@ -573,6 +573,13 @@ print_address_symbolic (struct gdbarch *
-   struct cleanup *cleanup_chain = make_cleanup (free_current_contents, &name);
-   make_cleanup (free_current_contents, &filename);
- 
-+#ifdef CRASH_MERGE
-+  if (!gdb_print_callback(addr)) {
-+	do_cleanups (cleanup_chain);
-+	return 0;
-+  }
-+#endif
-+
-   if (build_address_symbolic (gdbarch, addr, do_demangle, &name, &offset,
- 			      &filename, &line, &unmapped))
-     {
 --- gdb-7.6/bfd/bfd-in.h.orig
 +++ gdb-7.6/bfd/bfd-in.h
 @@ -294,9 +294,6 @@ typedef struct bfd_section *sec_ptr;
@@ -1572,33 +1602,6 @@
    bfd_error_no_error = 0,
 --- gdb-7.6/gdb/symtab.c.orig
 +++ gdb-7.6/gdb/symtab.c
-@@ -5405,7 +5405,7 @@ dump_enum(struct type *type, struct gnu_
- {
- 	register int i;
- 	int len;
--	int lastval;
-+	long long lastval;
- 
-         len = TYPE_NFIELDS (type);
-         lastval = 0;
-@@ -5418,12 +5418,12 @@ dump_enum(struct type *type, struct gnu_
-         for (i = 0; i < len; i++) {
-         	fprintf_filtered(gdb_stdout, "  %s", 
- 			TYPE_FIELD_NAME (type, i));
--                if (lastval != TYPE_FIELD_BITPOS (type, i)) {
--                	fprintf_filtered (gdb_stdout, " = %d",
--                        	TYPE_FIELD_BITPOS (type, i));
--                        lastval = TYPE_FIELD_BITPOS (type, i);
-+                if (lastval != TYPE_FIELD_ENUMVAL (type, i)) {
-+                	fprintf_filtered (gdb_stdout, " = %s",
-+                        	plongest(TYPE_FIELD_ENUMVAL (type, i)));
-+                        lastval = TYPE_FIELD_ENUMVAL (type, i);
-                 } else
--                        fprintf_filtered(gdb_stdout, " = %d", lastval);
-+                        fprintf_filtered(gdb_stdout, " = %s", plongest(lastval));
-                 fprintf_filtered(gdb_stdout, "\n");
-                 lastval++;
-         }
 --- gdb-7.6/gdb/aarch64-linux-nat.c.orig
 +++ gdb-7.6/gdb/aarch64-linux-nat.c
 @@ -32,6 +32,7 @@

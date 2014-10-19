@@ -159,6 +159,7 @@ gdb_merge: force
 	@echo "${LDFLAGS} -lz -ldl -rdynamic" > ${GDB}/gdb/mergelibs
 	@echo "../../${PROGRAM} ../../${PROGRAM}lib.a" > ${GDB}/gdb/mergeobj
 	@rm -f ${PROGRAM}
+	@ln -sf ${GDB}/gdb/ gdb
 	@if [ ! -f ${GDB}/config.status ]; then \
 	  (cd ${GDB}; ./configure ${GDB_CONF_FLAGS} --with-separate-debug-dir=/usr/lib/debug \
 	    --with-bugurl="" --with-expat=no --with-python=no; \

@@ -16,8 +16,8 @@
  * GNU General Public License for more details. 
  */
 
-#ifndef _DEFS_H_
-#define _DEFS_H_
+#ifndef _CRASH_DEFS_H_
+#define _CRASH_DEFS_H_
 #ifndef GDB_COMMON
 
 #include <stdio.h>
@@ -6046,4 +6046,4 @@ int check_specified_module_tree(const char *, char *);
 void gdb_command_funnel(struct gnu_request *);
 int kernel_BUG_encoding_bytes(void);
 
-#endif /* _DEFS_H_ */
+#endif /* _CRASH_DEFS_H_ */
