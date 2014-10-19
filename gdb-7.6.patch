@@ -29,12 +29,20 @@
    char *symbol;
 --- gdb-7.6/opcodes/i386-dis.c.orig
 +++ gdb-7.6/opcodes/i386-dis.c
-@@ -11510,6 +11510,10 @@ print_insn (bfd_vma pc, disassemble_info
+@@ -39,6 +39,8 @@
+ #include "opintl.h"
+ #include "opcode/i386.h"
+ #include "libiberty.h"
++#define GDB_COMMON
++#include "../../defs.h"
+ 
+ #include <setjmp.h>
+ 
+@@ -11510,6 +11510,9 @@ print_insn (bfd_vma pc, disassemble_info
        threebyte = *++codep;
        dp = &dis386_twobyte[threebyte];
        need_modrm = twobyte_has_modrm[*codep];
 +      if (dp->name && ((strcmp(dp->name, "ud2a") == 0) || (strcmp(dp->name, "ud2") == 0))) {
-+        extern int kernel_BUG_encoding_bytes(void);
 +        codep += kernel_BUG_encoding_bytes();
 +      }
        codep++;
@@ -129,16 +137,6 @@
  
    if (parent)
      add_separate_debug_objfile (objfile, parent);
-@@ -1484,6 +1509,9 @@ find_separate_debug_file (const char *di
-   VEC (char_ptr) *debugdir_vec;
-   struct cleanup *back_to;
-   int ix;
-+#ifdef CRASH_MERGE
-+  extern int check_specified_module_tree(char *, char *);
-+#endif
- 
-   /* Set I to max (strlen (canon_dir), strlen (dir)).  */
-   i = strlen (dir);
 @@ -1513,6 +1541,15 @@ find_separate_debug_file (const char *di
    if (separate_debug_file_exists (debugfile, crc32, objfile))
      return debugfile;
@@ -155,13 +153,12 @@
    /* Then try in the global debugfile directories.
  
       Keep backward compatibility so that DEBUG_FILE_DIRECTORY being "" will
-@@ -1583,6 +1620,10 @@ find_separate_debug_file_by_debuglink (s
+@@ -1583,6 +1620,9 @@ find_separate_debug_file_by_debuglink (s
    char *debugfile;
    unsigned long crc32;
    struct cleanup *cleanups;
 +#ifdef CRASH_MERGE
 +  char *name_copy;
-+  extern char *check_specified_kernel_debug_file();
 +#endif
  
    debuglink = get_debug_link_info (objfile, &crc32);
@@ -219,7 +216,7 @@
  int
  find_and_open_script (const char *script_file, int search_path,
  		      FILE **streamp, char **full_pathp)
-@@ -508,6 +512,32 @@ find_and_open_script (const char *script
+@@ -508,6 +512,31 @@ find_and_open_script (const char *script
        return 0;
      }
  
@@ -241,7 +238,6 @@
 +        }
 +      if (statbuf.st_uid != getuid () || (statbuf.st_mode & S_IWOTH))
 +        {
-+          extern void untrusted_file(FILE *, const char *);
 +          untrusted_file(NULL, *full_pathp);
 +          fclose (stream);
 +          return 0;
@@ -308,14 +304,7 @@
 +}
 --- gdb-7.6/gdb/psymtab.c.orig
 +++ gdb-7.6/gdb/psymtab.c
-@@ -305,10 +305,14 @@ find_pc_sect_psymtab (struct objfile *ob
- 		      struct minimal_symbol *msymbol)
- {
-   struct partial_symtab *pst;
-+#ifdef CRASH_MERGE
-+  extern int gdb_line_number_callback(unsigned long, unsigned long, unsigned long);
-+#endif
- 
+@@ -305,6 +305,7 @@ find_pc_sect_psymtab (struct objfile *ob
    /* Try just the PSYMTABS_ADDRMAP mapping first as it has better granularity
       than the later used TEXTLOW/TEXTHIGH one.  */
  
@@ -1112,12 +1101,11 @@
       to that call via setjmp's return value.  Note that REASON can't
 --- gdb-7.6/gdb/target.c.orig
 +++ gdb-7.6/gdb/target.c
-@@ -1779,6 +1779,13 @@ target_xfer_partial (struct target_ops *
+@@ -1779,6 +1779,12 @@ target_xfer_partial (struct target_ops *
  int
  target_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, ssize_t len)
  {
 +#ifdef CRASH_MERGE
-+  extern int gdb_readmem_callback(unsigned long, void *, int, int);
 +  if (gdb_readmem_callback(memaddr, (void *)myaddr, len, 0))
 +        return 0;
 +  else
@@ -1126,12 +1114,11 @@
    /* Dispatch to the topmost target, not the flattened current_target.
       Memory accesses check target->to_has_(all_)memory, and the
       flattened target doesn't inherit those.  */
-@@ -1814,6 +1821,13 @@ target_read_stack (CORE_ADDR memaddr, gd
+@@ -1814,6 +1821,12 @@ target_read_stack (CORE_ADDR memaddr, gd
  int
  target_write_memory (CORE_ADDR memaddr, const gdb_byte *myaddr, ssize_t len)
  {
 +#ifdef CRASH_MERGE
-+  extern int gdb_readmem_callback(unsigned long, void *, int, int);
 +  if (gdb_readmem_callback(memaddr, (void *)myaddr, len, 1))
 +        return 0;
 +  else
@@ -1470,11 +1457,13 @@
  CXXFLAGS = @CXXFLAGS@
 --- gdb-7.6/gdb/defs.h.orig
 +++ gdb-7.6/gdb/defs.h
-@@ -802,4 +802,8 @@ enum block_enum
+@@ -802,4 +802,10 @@ enum block_enum
  
  #include "utils.h"
  
 +#ifdef CRASH_MERGE
++#define GDB_COMMON
++#include "../../defs.h"
 +extern int gdb_main_entry(int, char **);
 +extern void replace_ui_file_FILE(struct ui_file *, FILE *);
 +#endif
@@ -1503,15 +1492,7 @@
  #endif
 --- gdb-7.6/gdb/printcmd.c.orig
 +++ gdb-7.6/gdb/printcmd.c
-@@ -573,11 +573,21 @@ print_address_symbolic (struct gdbarch *
-   int unmapped = 0;
-   int offset = 0;
-   int line = 0;
-+#ifdef CRASH_MERGE
-+  extern int gdb_print_callback(unsigned long);
-+#endif
- 
-   /* Throw away both name and filename.  */
+@@ -573,6 +573,13 @@ print_address_symbolic (struct gdbarch *
    struct cleanup *cleanup_chain = make_cleanup (free_current_contents, &name);
    make_cleanup (free_current_contents, &filename);
  
