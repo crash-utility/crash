@@ -81,6 +81,7 @@ static void dump_vmcoreinfo(FILE *);
 static void dump_nt_prstatus_offset(FILE *);
 static char *vmcoreinfo_read_string(const char *);
 static void diskdump_get_osrelease(void);
+static int valid_note_address(unsigned char *);
 
 /* For split dumpfile */
 static struct diskdump_data **dd_list = NULL;
@@ -1372,10 +1373,10 @@ dump_vmcoreinfo(FILE *fp)
 	fprintf(fp, "                      ");
 	for (i = 0; i < size_vmcoreinfo; i++) {
 		fprintf(fp, "%c", buf[i]);
-		if (buf[i] == '\n')
+		if ((buf[i] == '\n') && ((i+1) != size_vmcoreinfo))
 			fprintf(fp, "                      ");
 	}
-	if (buf[i - 1] != '\n')
+	if (buf[i-1] != '\n')
 		fprintf(fp, "\n");
 err:
 	if (buf)
@@ -1874,8 +1875,20 @@ show_split_dumpfiles(void)
 void *
 diskdump_get_prstatus_percpu(int cpu)
 {
+	int online;
+
 	if ((cpu < 0) || (cpu >= dd->num_prstatus_notes))
 		return NULL;
+
+	/*
+	 * If no cpu mapping was done, then there must be
+	 * a one-to-one relationship between the number
+	 * of online cpus and the number of notes.
+	 */
+        if ((online = get_cpus_online()) && 
+	    (online == kt->cpus) &&
+	    (online != dd->num_prstatus_notes))
+                return NULL;
 
 	return dd->nt_prstatus_percpu[cpu];
 }
@@ -1956,6 +1969,15 @@ diskdump_get_osrelease(void)
 		pc->flags2 &= ~GET_OSRELEASE;
 }
 
+static int
+valid_note_address(unsigned char *offset)
+{
+	if (offset > (dd->notes_buf + dd->sub_header_kdump->size_note))
+		return FALSE;
+	
+	return TRUE;
+}
+
 void
 diskdump_display_regs(int cpu, FILE *ofp)
 {
@@ -1964,9 +1986,9 @@ diskdump_display_regs(int cpu, FILE *ofp)
 	char *user_regs;
 	size_t len;
 
-	if (!diskdump_get_prstatus_percpu(cpu)) {
+	if ((cpu < 0) || (cpu >= dd->num_prstatus_notes)) {
 		error(INFO, "registers not collected for cpu %d\n", cpu);
-		return;
+                return;
 	}
 
 	if (machine_type("X86_64")) {
@@ -1974,6 +1996,10 @@ diskdump_display_regs(int cpu, FILE *ofp)
 		len = sizeof(Elf64_Nhdr);
 		len = roundup(len + note64->n_namesz, 4);
 		len = roundup(len + note64->n_descsz, 4);
+		if (!valid_note_address((unsigned char *)note64 + len)) {
+			error(INFO, "invalid NT_PRSTATUS note for cpu %d\n", cpu);
+			return;
+		}
 		user_regs = (char *)note64 + len - SIZE(user_regs_struct) - sizeof(long);
 		fprintf(ofp,
 		    "    RIP: %016llx  RSP: %016llx  RFLAGS: %08llx\n"
@@ -2012,6 +2038,10 @@ diskdump_display_regs(int cpu, FILE *ofp)
 		len = roundup(len + note64->n_namesz, 4);
 		len = roundup(len + note64->n_descsz, 4);
 //		user_regs = (char *)note64 + len - SIZE(user_regs_struct) - sizeof(long);
+		if (!valid_note_address((unsigned char *)note64 + len)) {
+			error(INFO, "invalid NT_PRSTATUS note for cpu %d\n", cpu);
+			return;
+		}
 		fprintf(ofp, "diskdump_display_regs: ARM64 register dump TBD\n");
 	}
 
@@ -2021,6 +2051,10 @@ diskdump_display_regs(int cpu, FILE *ofp)
 		len = roundup(len + note32->n_namesz, 4);
 		len = roundup(len + note32->n_descsz, 4);
 		user_regs = (char *)note32 + len - SIZE(user_regs_struct) - sizeof(int);
+		if (!valid_note_address((unsigned char *)note32 + len)) {
+			error(INFO, "invalid NT_PRSTATUS note for cpu %d\n", cpu);
+			return;
+		}
 		fprintf(ofp,
 		    "    EAX: %08x  EBX: %08x  ECX: %08x  EDX: %08x\n"
 		    "    ESP: %08x  EIP: %08x  ESI: %08x  EDI: %08x\n"
