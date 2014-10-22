@@ -4115,7 +4115,9 @@ tgid_quick_search(ulong tgid)
 
 	tt->tgid_searches++;
 
-	last = tt->last_tgid;
+	if (!(last = tt->last_tgid))
+		return NULL;
+
 	if (tgid == last->tgid) {
 		tt->tgid_cache_hits++;
 		return last;
