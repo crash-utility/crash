@@ -1095,7 +1095,7 @@ read_diskdump(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 		for (i=0; i<num_dumpfiles; i++) {
 			start_pfn = dd_list[i]->sub_header_kdump->start_pfn_64;
 			end_pfn = dd_list[i]->sub_header_kdump->end_pfn_64;
-			if ((pfn >= start_pfn) && (pfn <= end_pfn))	{
+			if ((pfn >= start_pfn) && (pfn < end_pfn))	{
 				dd = dd_list[i];
 				break;
 			}
