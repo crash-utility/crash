@@ -8731,6 +8731,7 @@ static char *ikconfig[] = {
         "CONFIG_PGTABLE_4",
         "CONFIG_HZ",
 	"CONFIG_DEBUG_BUGVERBOSE",
+	"CONFIG_DEBUG_INFO_REDUCED",
         NULL,
 };
 
@@ -8898,6 +8899,9 @@ again:
 				if (strstr(ln, "CONFIG_DEBUG_BUGVERBOSE") &&
 				    strstr(ln, "not set"))
 					kt->flags |= BUGVERBOSE_OFF;
+				if (strstr(ln, "CONFIG_DEBUG_INFO_REDUCED"))
+					if (CRASHDEBUG(1))
+						error(INFO, "%s\n", ln);
 				continue;
 			}
 
@@ -8945,6 +8949,13 @@ again:
 							error(INFO, 
 							    "CONFIG_HZ: %d\n",
 								machdep->hz);
+
+					} else if (STREQ(ln, "CONFIG_DEBUG_INFO_REDUCED")) {
+						if (STREQ(val, "y")) {
+							error(WARNING, 
+							    "CONFIG_DEBUG_INFO_REDUCED=y\n");
+							no_debugging_data(INFO);
+						}
 					}
 				}
 			}
