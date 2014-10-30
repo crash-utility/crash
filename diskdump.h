@@ -84,6 +84,7 @@ struct kdump_sub_header {
 #define DUMP_DH_COMPRESSED_ZLIB    0x1   /* page is compressed with zlib */
 #define DUMP_DH_COMPRESSED_LZO     0x2   /* page is compressed with lzo */
 #define DUMP_DH_COMPRESSED_SNAPPY  0x4   /* page is compressed with snappy */
+#define DUMP_DH_COMPRESSED_INCOMPLETE  0x8   /* dumpfile is incomplete */
 
 /* descriptor of each page for vmcore */
 typedef struct page_desc {

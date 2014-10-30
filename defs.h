@@ -504,9 +504,11 @@ struct program_context {
 #define VMCOREINFO    (0x400ULL)
 #define ALLOW_FP      (0x800ULL)
 #define REM_PAUSED_F (0x1000ULL)
-#define RAMDUMP	(0x2000ULL)
+#define RAMDUMP	     (0x2000ULL)
 #define REMOTE_PAUSED() (pc->flags2 & REM_PAUSED_F)
-#define OFFLINE_HIDE (0x4000ULL)
+#define OFFLINE_HIDE     (0x4000ULL)
+#define INCOMPLETE_DUMP  (0x8000ULL)
+#define is_incomplete_dump() (pc->flags2 & INCOMPLETE_DUMP)
 	char *cleanup;
 	char *namelist_orig;
 	char *namelist_debug_orig;

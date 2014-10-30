@@ -531,6 +531,7 @@ int
 read_netdump(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 {
 	off_t offset;
+	ssize_t read_ret;
 	struct pt_load_segment *pls;
 	int i;
 
@@ -608,7 +609,25 @@ read_netdump(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 				    "offset: %llx\n", (ulonglong)offset);
 			return SEEK_ERROR;
 		}
-		if (read(nd->ndfd, bufptr, cnt) != cnt) {
+
+		read_ret = read(nd->ndfd, bufptr, cnt);
+		if (read_ret != cnt) {
+			/*
+	 		 *  If the incomplete flag has been set in the header, 
+			 *  first check whether zero_excluded has been set.
+			 */
+			if (is_incomplete_dump() && (read_ret >= 0) &&
+			    (*diskdump_flags & ZERO_EXCLUDED)) {
+				if (CRASHDEBUG(8))
+					fprintf(fp, "read_netdump: zero-fill: "
+					    "addr: %lx paddr: %llx cnt: %d\n",
+						addr + read_ret, 
+						(ulonglong)paddr + read_ret, 
+						cnt - (int)read_ret);
+				bufptr += read_ret;
+				bzero(bufptr, cnt - read_ret);
+				return cnt;
+			}
 			if (CRASHDEBUG(8))
 				fprintf(fp, "read_netdump: READ_ERROR: "
 				    "offset: %llx\n", (ulonglong)offset);
@@ -1288,6 +1307,9 @@ dump_Elf32_Ehdr(Elf32_Ehdr *elf)
         netdump_print("                e_phoff: %lx\n", elf->e_phoff);
         netdump_print("                e_shoff: %lx\n", elf->e_shoff);
         netdump_print("                e_flags: %lx\n", elf->e_flags);
+	if ((elf->e_flags & DUMP_ELF_INCOMPLETE) && 
+	    (DUMPFILE_FORMAT(nd->flags) == KDUMP_ELF32))
+		pc->flags2 |= INCOMPLETE_DUMP;
         netdump_print("               e_ehsize: %x\n", elf->e_ehsize);
         netdump_print("            e_phentsize: %x\n", elf->e_phentsize);
         netdump_print("                e_phnum: %x\n", elf->e_phnum);
@@ -1447,6 +1469,9 @@ dump_Elf64_Ehdr(Elf64_Ehdr *elf)
         netdump_print("                e_phoff: %lx\n", elf->e_phoff);
         netdump_print("                e_shoff: %lx\n", elf->e_shoff);
         netdump_print("                e_flags: %lx\n", elf->e_flags);
+	if ((elf->e_flags & DUMP_ELF_INCOMPLETE) && 
+	    (DUMPFILE_FORMAT(nd->flags) == KDUMP_ELF64))
+		pc->flags2 |= INCOMPLETE_DUMP;
         netdump_print("               e_ehsize: %x\n", elf->e_ehsize);
         netdump_print("            e_phentsize: %x\n", elf->e_phentsize);
         netdump_print("                e_phnum: %x\n", elf->e_phnum);

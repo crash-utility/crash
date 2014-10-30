@@ -694,7 +694,14 @@ main_loop(void)
 		    "Kernel data has been erased from this dumpfile.  This may "
 		    "cause\n         the crash session to fail entirely, may "
                     "cause commands to fail,\n         or may result in "
-		    "unpredictable runtime behavior.\n",
+		    "unpredictable\n         runtime behavior.\n",
+			pc->dumpfile);
+
+	if (pc->flags2 & INCOMPLETE_DUMP)
+		error(WARNING, "\n%s:\n         "
+		    "This dumpfile is incomplete.  This may cause the crash session"
+		    "\n         to fail entirely, may cause commands to fail, or may"
+		    " result in\n         unpredictable runtime behavior.\n",
 			pc->dumpfile);
 
         if (!(pc->flags & GDB_INIT)) {
@@ -1406,6 +1413,8 @@ dump_program_context(void)
 		fprintf(fp, "%sRAMDUMP", others++ ? "|" : "");
 	if (pc->flags2 & OFFLINE_HIDE)
 		fprintf(fp, "%sOFFLINE_HIDE", others++ ? "|" : "");
+	if (pc->flags2 & INCOMPLETE_DUMP)
+		fprintf(fp, "%sINCOMPLETE_DUMP", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "         namelist: %s\n", pc->namelist);

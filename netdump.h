@@ -80,6 +80,8 @@ struct vmcore_data {
 	ulonglong backup_offset;
 };
 
+#define DUMP_ELF_INCOMPLETE  0x1   /* dumpfile is incomplete */
+
 /*
  *  ELF note types for Xen dom0/hypervisor kdumps.
  *  The comments below are from xen/include/public/elfnote.h.

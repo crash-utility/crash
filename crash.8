@@ -395,9 +395,11 @@ for older xendump dumpfiles that did not pass that information in the dumpfile
 header.
 .TP
 .B --zero_excluded
-If a kdump dumpfile has been filtered to exclude various types of non-essential
-pages, any attempt to read them will fail.  With this flag,
-reads from any of those pages will return zero-filled memory.
+If the makedumpfile(8) facility has filtered a compressed kdump dumpfile to
+exclude various types of non-essential pages, or has marked a compressed or
+ELF kdump dumpfile as incomplete due to an ENOSPC or other error during its
+creation, any attempt to read missing pages will fail.  With this flag, reads
+from any of those pages will return zero-filled memory.
 .TP
 .B --no_panic
 Do not attempt to find the task that was running when the kernel crashed.
@@ -859,4 +861,5 @@ provides more complete and accurate documentation than this man page.
 utility.
 .PP
 .BR netdump (8),
-.BR gdb (1)
+.BR gdb (1),
+.BR makedumpfile(8)

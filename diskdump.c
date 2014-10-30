@@ -713,6 +713,10 @@ restart:
 		dd->sub_header_kdump->size_vmcoreinfo)
 		pc->flags2 |= VMCOREINFO;
 
+	if (KDUMP_CMPRS_VALID() && 
+	    (dd->header->status & DUMP_DH_COMPRESSED_INCOMPLETE))
+		pc->flags2 |= INCOMPLETE_DUMP;
+
 	/* For split dumpfile */
 	if (KDUMP_CMPRS_VALID()) {
 		is_split = ((dd->header->header_version >= 2) &&
@@ -994,6 +998,20 @@ cache_page(physaddr_t paddr)
 	/* read page data */
 	if (FLAT_FORMAT()) {
 		if (!read_flattened_format(dd->dfd, pd.offset, dd->compressed_page, pd.size))
+			return READ_ERROR;
+	} else if (is_incomplete_dump() && (0 == pd.offset)) {
+		/*
+		 *  If the incomplete flag has been set in the header, 
+		 *  first check whether zero_excluded has been set.
+		 */
+		if (*diskdump_flags & ZERO_EXCLUDED) {
+			if (CRASHDEBUG(8))
+				fprintf(fp, 
+			    	    "read_diskdump/cache_page: zero-fill: "
+				    "paddr/pfn: %llx/%lx\n", 
+					(ulonglong)paddr, pfn);
+			memset(dd->compressed_page, 0, dd->block_size);
+		} else
 			return READ_ERROR;
 	} else {
 		if (lseek(dd->dfd, pd.offset, SEEK_SET) == failed)
@@ -1578,6 +1596,8 @@ __diskdump_memory_dump(FILE *fp)
 			fprintf(fp, "DUMP_DH_COMPRESSED_LZO");
 		if (dh->status & DUMP_DH_COMPRESSED_SNAPPY)
 			fprintf(fp, "DUMP_DH_COMPRESSED_SNAPPY");
+		if (dh->status & DUMP_DH_COMPRESSED_INCOMPLETE)
+			fprintf(fp, "DUMP_DH_COMPRESSED_INCOMPLETE");
 		break;
 	}
 	fprintf(fp, ")\n");
@@ -1860,13 +1880,17 @@ show_split_dumpfiles(void)
 {
 	int i;
 	struct diskdump_data *ddp;
+	struct disk_dump_header *dh;
 
         for (i = 0; i < num_dumpfiles; i++) {
         	ddp = dd_list[i];
-		fprintf(fp, "%s%s %s", 
+		dh = ddp->header;
+		fprintf(fp, "%s%s%s%s", 
 			i ? "              " : "", 
 			ddp->filename, 
-			is_partial_diskdump() ? "[PARTIAL DUMP]" : "");
+			is_partial_diskdump() ? " [PARTIAL DUMP]" : "",
+			dh->status & DUMP_DH_COMPRESSED_INCOMPLETE ? 
+			" [INCOMPLETE]" : "");
 		if ((i+1) < num_dumpfiles)
 			fprintf(fp, "\n");
 	}

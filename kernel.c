@@ -4790,9 +4790,17 @@ display_sys_stats(void)
 		if (NETDUMP_DUMPFILE() && is_partial_netdump())
 			fprintf(fp, "  [PARTIAL DUMP]");
 
+		if (KDUMP_DUMPFILE() && is_incomplete_dump())
+			fprintf(fp, "  [INCOMPLETE]");
+
 		if (DISKDUMP_DUMPFILE() && !dumpfile_is_split() &&
-		     is_partial_diskdump())
-			fprintf(fp, "  [PARTIAL DUMP]");
+		    (is_partial_diskdump() || is_incomplete_dump())) {
+			fprintf(fp, " %s%s",
+				is_partial_diskdump() ? 
+				" [PARTIAL DUMP]" : "",
+				is_incomplete_dump() ? 
+				" [INCOMPLETE]" : "");
+		}
 
 		fprintf(fp, "\n");
 
