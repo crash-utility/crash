@@ -1,7 +1,9 @@
 /*
  * ramdump.c - core analysis suite
  *
- * Copyright (c) 2014 Vinayak Menon <vinayakm.list@gmail.com>
+ * Copyright (c) 2014  Broadcom Corporation
+ *                     Oza Pawandeep <oza@broadcom.com>
+ *                     Vikram Prakash <vikramp@broadcom.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,7 +15,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * Author: Vinayak Menon <vinayakm.list@gmail.com>
+ * Author: Oza Pawandeep <oza@broadcom.com>
  */
 
 #define _LARGEFILE64_SOURCE 1  /* stat64() */
