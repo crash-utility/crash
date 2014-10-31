@@ -1921,6 +1921,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long kernfs_node_name;
 	long kernfs_node_parent;
 	long kmem_cache_cpu_partial;
+	long kmem_cache_cpu_cache;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2266,6 +2267,7 @@ struct vm_table {                /* kernel VM-related data */
 #define USE_VMAP_AREA         (0x2000000)
 #define PAGEFLAGS             (0x4000000)
 #define SLAB_OVERLOAD_PAGE    (0x8000000)
+#define SLAB_CPU_CACHE       (0x10000000)
 
 #define IS_FLATMEM()		(vt->flags & FLATMEM)
 #define IS_DISCONTIGMEM()	(vt->flags & DISCONTIGMEM)

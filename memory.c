@@ -338,7 +338,7 @@ void
 vm_init(void)
 {
 	char buf[BUFSIZE];
-	int i, len, dimension;
+	int i, len, dimension, nr_node_ids;
 	struct syment *sp_array[2];
 	ulong value1, value2;
 	char *kmem_cache_node_struct, *nodelists_field;
@@ -579,6 +579,8 @@ vm_init(void)
 			MEMBER_OFFSET_INIT(kmem_cache_s_gfporder,  
 				"kmem_cache", "gfporder");
 
+			MEMBER_OFFSET_INIT(kmem_cache_cpu_cache, "kmem_cache", "cpu_cache");
+
 			if (MEMBER_EXISTS("kmem_cache", "lists"))
 				MEMBER_OFFSET_INIT(kmem_cache_s_lists, "kmem_cache", "lists");
 			else if (MEMBER_EXISTS("kmem_cache", "nodelists") ||
@@ -588,11 +590,23 @@ vm_init(void)
 				vt->flags |= PERCPU_KMALLOC_V2_NODES;
 				MEMBER_OFFSET_INIT(kmem_cache_s_lists, "kmem_cache", nodelists_field);
 				if (MEMBER_TYPE("kmem_cache", nodelists_field) == TYPE_CODE_PTR) {
-					int nr_node_ids;
 					/* 
 					 * nodelists now a pointer to an outside array 
 					 */
 					vt->flags |= NODELISTS_IS_PTR;
+					if (kernel_symbol_exists("nr_node_ids")) {
+						get_symbol_data("nr_node_ids", sizeof(int),
+							&nr_node_ids);
+						vt->kmem_cache_len_nodes = nr_node_ids;
+					} else
+						vt->kmem_cache_len_nodes = 1;
+				} else if (VALID_MEMBER(kmem_cache_cpu_cache)) {
+					/*
+					 * commit bf0dea23a9c094ae869a88bb694fbe966671bf6d
+					 * mm/slab: use percpu allocator for cpu cache
+					 */
+					vt->flags |= SLAB_CPU_CACHE;
+					MEMBER_OFFSET_INIT(kmem_cache_node, "kmem_cache", "node");
 					if (kernel_symbol_exists("nr_node_ids")) {
 						get_symbol_data("nr_node_ids", sizeof(int),
 							&nr_node_ids);
@@ -9010,6 +9024,23 @@ kmem_cache_downsize(void)
 			fprintf(fp, "\nkmem_cache_downsize: %ld to %ld\n",
 				STRUCT_SIZE("kmem_cache"), SIZE(kmem_cache_s));
 		return;
+	} else if (vt->flags & SLAB_CPU_CACHE) {
+                if (kernel_symbol_exists("kmem_cache_boot") &&
+                    MEMBER_EXISTS("kmem_cache", "object_size") &&
+                    readmem(symbol_value("kmem_cache_boot") +
+                    MEMBER_OFFSET("kmem_cache", "object_size"),
+                    KVADDR, &object_size, sizeof(int),
+                    "kmem_cache_boot object_size", RETURN_ON_ERROR))
+                        ASSIGN_SIZE(kmem_cache_s) = object_size;
+		else {
+			object_size = OFFSET(kmem_cache_node) +
+				(sizeof(void *) * vt->kmem_cache_len_nodes);
+                        ASSIGN_SIZE(kmem_cache_s) = object_size;
+		}
+		if (CRASHDEBUG(1))
+			fprintf(fp, "\nkmem_cache_downsize: %ld to %ld\n",
+				STRUCT_SIZE("kmem_cache"), SIZE(kmem_cache_s));
+		return;
 	}
 
 	cache_buf = GETBUF(SIZE(kmem_cache_s));
@@ -9102,7 +9133,7 @@ max_cpudata_limit(ulong cache, ulong *cpus)
 	ulong cpudata[NR_CPUS];
 	int limit; 
 	ulong max_limit;
-	ulong shared; 
+	ulong shared, percpu_ptr;
 	ulong *start_address;
 	
 	if (vt->flags & PERCPU_KMALLOC_V2_NODES)
@@ -9177,10 +9208,19 @@ kmem_cache_s_array_nodes:
 	if (CRASHDEBUG(3))
 		fprintf(fp, "kmem_cache: %lx\n", cache);
 
-	if (!readmem(cache+OFFSET(kmem_cache_s_array), KVADDR, &cpudata[0], 
-	    sizeof(ulong) * MIN(NR_CPUS, ARRAY_LENGTH(kmem_cache_s_array)),
-            "array cache array", RETURN_ON_ERROR))
-		goto bail_out;
+	if (vt->flags & SLAB_CPU_CACHE) {
+		if (!readmem(cache+OFFSET(kmem_cache_cpu_cache), KVADDR, &percpu_ptr, 
+		    sizeof(void *), "kmem_cache.cpu_cache", RETURN_ON_ERROR))
+			goto bail_out;
+
+		for (i = 0; i < kt->cpus; i++)
+			cpudata[i] = percpu_ptr + kt->__per_cpu_offset[i];
+	} else {
+		if (!readmem(cache+OFFSET(kmem_cache_s_array), KVADDR, &cpudata[0], 
+		    sizeof(ulong) * MIN(NR_CPUS, ARRAY_LENGTH(kmem_cache_s_array)),
+		    "array cache array", RETURN_ON_ERROR))
+			goto bail_out;
+	}
 
 	for (i = max_limit = 0; i < kt->cpus; i++) {
 		if (check_offline_cpu(i))
@@ -12363,14 +12403,24 @@ gather_cpudata_list_v2_nodes(struct meminfo *si, int index)
         int i, j;
 	int avail;
         ulong cpudata[NR_CPUS];
-	ulong shared;
+	ulong shared, percpu_ptr;
 	ulong *start_address;
 
 	start_address = (ulong *) GETBUF(sizeof(ulong) * vt->kmem_cache_len_nodes);
-        readmem(si->cache+OFFSET(kmem_cache_s_array),
-                KVADDR, &cpudata[0], 
-		sizeof(ulong) * vt->kmem_max_cpus,
-                "array_cache array", FAULT_ON_ERROR);
+
+	if (vt->flags & SLAB_CPU_CACHE) {
+		readmem(si->cache+OFFSET(kmem_cache_cpu_cache), KVADDR, 
+			&percpu_ptr, sizeof(void *), "kmem_cache.cpu_cache", 
+		    	FAULT_ON_ERROR);
+
+		for (i = 0; i < vt->kmem_max_cpus; i++)
+			cpudata[i] = percpu_ptr + kt->__per_cpu_offset[i];
+	} else {
+		readmem(si->cache+OFFSET(kmem_cache_s_array),
+			KVADDR, &cpudata[0], 
+			sizeof(ulong) * vt->kmem_max_cpus,
+			"array_cache array", FAULT_ON_ERROR);
+	}
 
         for (i = 0; (i < vt->kmem_max_cpus) && cpudata[i] && !(index); i++) {
 		if (si->cpudata[i])
@@ -12895,6 +12945,8 @@ dump_vm_table(int verbose)
 		fprintf(fp, "%sKMALLOC_COMMON", others++ ? "|" : "");\
 	if (vt->flags & SLAB_OVERLOAD_PAGE)
 		fprintf(fp, "%sSLAB_OVERLOAD_PAGE", others++ ? "|" : "");\
+	if (vt->flags & SLAB_CPU_CACHE)
+		fprintf(fp, "%sSLAB_CPU_CACHE", others++ ? "|" : "");\
 	if (vt->flags & USE_VMAP_AREA)
 		fprintf(fp, "%sUSE_VMAP_AREA", others++ ? "|" : "");\
 	if (vt->flags & CONFIG_NUMA)
