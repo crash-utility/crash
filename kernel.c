@@ -74,6 +74,7 @@ static void hypervisor_init(void);
 static void dump_log_legacy(void);
 static void dump_variable_length_record(void);
 static int is_kpatch(void);
+static void show_kernel_taints(void);
 
 
 /*
@@ -4620,7 +4621,7 @@ cmd_sys(void)
 
 	sflag = FALSE;
 
-        while ((c = getopt(argcnt, args, "cp:")) != EOF) {
+        while ((c = getopt(argcnt, args, "ctp:")) != EOF) {
                 switch(c)
                 {
 		case 'p':
@@ -4633,6 +4634,10 @@ cmd_sys(void)
 		case 'c':
 			sflag = TRUE;
 			break;
+
+		case 't':
+			show_kernel_taints();
+			return;
 
                 default:
                         argerrs++;
@@ -9491,3 +9496,70 @@ dump_variable_length_record(void)
 
 	hq_close();
 }
+
+static void
+show_kernel_taints(void)
+{
+	int i, bx;
+	uint8_t tnt_bit;
+	char tnt_true, tnt_false;
+	int tnts_len;
+	ulong tnts_addr;
+	ulong tainted_mask, *tainted_mask_ptr;
+	int tainted;
+	struct syment *sp;
+	char buf[BUFSIZE];
+
+	if (!VALID_STRUCT(tnt)) { 
+                STRUCT_SIZE_INIT(tnt, "tnt");
+                MEMBER_OFFSET_INIT(tnt_bit, "tnt", "bit");
+                MEMBER_OFFSET_INIT(tnt_true, "tnt", "true");
+                MEMBER_OFFSET_INIT(tnt_false, "tnt", "false");
+        }
+
+	if (VALID_STRUCT(tnt) && (sp = symbol_search("tnts"))) {
+		tnts_len = get_array_length("tnts", NULL, 0);
+		tnts_addr = sp->value;
+	} else
+		tnts_addr = tnts_len = 0;
+
+	bx = 0;
+	buf[0] = '\0';
+
+	tainted_mask = tainted = 0;
+
+	if (kernel_symbol_exists("tainted_mask")) {
+		get_symbol_data("tainted_mask", sizeof(ulong), &tainted_mask);
+		tainted_mask_ptr = &tainted_mask;
+	} else if (kernel_symbol_exists("tainted")) {
+		get_symbol_data("tainted", sizeof(int), &tainted);
+		fprintf(fp, "TAINTED: %x\n", tainted);
+		return;
+	} else
+		option_not_supported('t');
+
+	for (i = 0; i < (tnts_len * SIZE(tnt)); i += SIZE(tnt)) {
+		readmem((tnts_addr + i) + OFFSET(tnt_bit),
+			KVADDR, &tnt_bit, sizeof(uint8_t), 
+			"tnt bit", FAULT_ON_ERROR);
+
+		if (NUM_IN_BITMAP(tainted_mask_ptr, tnt_bit)) {
+			readmem((tnts_addr + i) + OFFSET(tnt_true),
+				KVADDR, &tnt_true, sizeof(char), 
+				"tnt true", FAULT_ON_ERROR);
+				buf[bx++] = tnt_true;
+		} else {
+			readmem((tnts_addr + i) + OFFSET(tnt_false),
+				KVADDR, &tnt_false, sizeof(char), 
+				"tnt false", FAULT_ON_ERROR);
+			if (tnt_false != ' ' && tnt_false != '-' &&
+			    tnt_false != 'G')
+				buf[bx++] = tnt_false;
+		}
+	}
+
+	buf[bx++] = '\0';
+
+	fprintf(fp, "TAINTED_MASK: %lx  %s\n", tainted_mask, buf);
+}
+
