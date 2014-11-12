@@ -1672,6 +1672,7 @@ __diskdump_memory_dump(FILE *fp)
 #define DL_EXCLUDE_USER_DATA    (0x008) /* Exclude UserProcessData Pages */
 #define DL_EXCLUDE_FREE         (0x010) /* Exclude Free Pages */
 
+			others = 0;
         		if (dump_level & DL_EXCLUDE_ZERO)
                 		fprintf(fp, "%sDUMP_EXCLUDE_ZERO", 
 					others++ ? "|" : "");
