@@ -566,7 +566,8 @@ do_release:
 	.rh_rpm_package crash.8 ${EXTENSION_SOURCE_FILES} ${MEMORY_DRIVER_FILES} | \
 	(cd ./RELDIR/${PROGRAM}-${VERSION}; tar xf -)
 	@cp ${GDB}.tar.gz ./RELDIR/${PROGRAM}-${VERSION}
-	@./${PROGRAM} --no_scroll --no_crashrc -h README > ./RELDIR/${PROGRAM}-${VERSION}/README
+	@./${PROGRAM} --no_scroll --no_crashrc -h README > README
+	@cp README ./RELDIR/${PROGRAM}-${VERSION}/README
 	@(cd ./RELDIR; find . -exec chown root {} ";")
 	@(cd ./RELDIR; find . -exec chgrp root {} ";")
 	@(cd ./RELDIR; find . -exec touch {} ";")
