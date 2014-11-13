@@ -6039,6 +6039,12 @@ x86_64_calc_phys_base(void)
 	if (DISKDUMP_DUMPFILE()) {
 		if (diskdump_phys_base(&phys_base)) {
 			machdep->machspec->phys_base = phys_base;
+			if ((pc->flags2 & QEMU_MEM_DUMP_COMPRESSED) && 
+			    !x86_64_virt_phys_base())
+				error(WARNING,
+				    "cannot determine physical base address:"
+				    " defaulting to %lx\n\n",
+					machdep->machspec->phys_base);
 			if (CRASHDEBUG(1))
 				fprintf(fp, "compressed kdump: phys_base: %lx\n",
 					phys_base);
@@ -6099,7 +6105,7 @@ x86_64_calc_phys_base(void)
 			}
 		}
 
-		if ((pc->flags2 & QEMU_MEM_DUMP) && !x86_64_virt_phys_base())
+		if ((pc->flags2 & QEMU_MEM_DUMP_ELF) && !x86_64_virt_phys_base())
 			error(WARNING,
 			    "cannot determine physical base address:"
 			    " defaulting to %lx\n\n",

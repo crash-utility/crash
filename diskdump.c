@@ -249,11 +249,13 @@ process_elf32_notes(void *note_buf, unsigned long size_note)
 	for (index = 0; index < size_note; index += len) {
 		nt = note_buf + index;
 
-		if(nt->n_type == NT_PRSTATUS) {
+		if (nt->n_type == NT_PRSTATUS) {
 			dd->nt_prstatus_percpu[num] = nt;
 			num++;
 		}
 		len = sizeof(Elf32_Nhdr);
+		if (STRNEQ((char *)nt + len, "QEMU"))
+			pc->flags2 |= QEMU_MEM_DUMP_COMPRESSED;
 		len = roundup(len + nt->n_namesz, 4);
 		len = roundup(len + nt->n_descsz, 4);
 	}
@@ -275,11 +277,13 @@ process_elf64_notes(void *note_buf, unsigned long size_note)
 	for (index = 0; index < size_note; index += len) {
 		nt = note_buf + index;
 
-		if(nt->n_type == NT_PRSTATUS) {
+		if (nt->n_type == NT_PRSTATUS) {
 			dd->nt_prstatus_percpu[num] = nt;
 			num++;
 		}
 		len = sizeof(Elf64_Nhdr);
+		if (STRNEQ((char *)nt + len, "QEMU"))
+			pc->flags2 |= QEMU_MEM_DUMP_COMPRESSED;
 		len = roundup(len + nt->n_namesz, 4);
 		len = roundup(len + nt->n_descsz, 4);
 	}

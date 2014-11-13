@@ -688,7 +688,7 @@ cmd_help(void)
 static void
 dump_registers(void)
 {
-	if (pc->flags2 & QEMU_MEM_DUMP) {
+	if (pc->flags2 & QEMU_MEM_DUMP_ELF) {
 		dump_registers_for_qemu_mem_dump();
 		return;
 	} else if (DISKDUMP_DUMPFILE()) {

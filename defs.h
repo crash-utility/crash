@@ -499,7 +499,7 @@ struct program_context {
 #define FLAT_FORMAT() (pc->flags2 & FLAT)
 #define ELF_NOTES_VALID() (pc->flags2 & ELF_NOTES)
 #define RADIX_OVERRIDE (0x80ULL)
-#define QEMU_MEM_DUMP (0x100ULL)
+#define QEMU_MEM_DUMP_ELF (0x100ULL)
 #define GET_LOG       (0x200ULL)
 #define VMCOREINFO    (0x400ULL)
 #define ALLOW_FP      (0x800ULL)
@@ -509,6 +509,7 @@ struct program_context {
 #define OFFLINE_HIDE     (0x4000ULL)
 #define INCOMPLETE_DUMP  (0x8000ULL)
 #define is_incomplete_dump() (pc->flags2 & INCOMPLETE_DUMP)
+#define QEMU_MEM_DUMP_COMPRESSED (0x10000ULL)
 	char *cleanup;
 	char *namelist_orig;
 	char *namelist_debug_orig;

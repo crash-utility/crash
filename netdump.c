@@ -1883,7 +1883,7 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 			netdump_print("(?)\n");
 
 		if (qemuinfo)
-			pc->flags2 |= QEMU_MEM_DUMP;
+			pc->flags2 |= QEMU_MEM_DUMP_ELF;
 		break;
 
 	case NT_XEN_KDUMP_CR3: 
@@ -2163,7 +2163,7 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
                         netdump_print("(?)\n");
 
 		if (qemuinfo)
-			pc->flags2 |= QEMU_MEM_DUMP;
+			pc->flags2 |= QEMU_MEM_DUMP_ELF;
                 break;
 
 	case NT_XEN_KDUMP_CR3: 
@@ -3939,7 +3939,7 @@ kdump_backup_region_init(void)
 		sd = get_sadump_data();
 		is_32_bit = FALSE;
 		sprintf(typename, "sadump");
-	} else if (pc->flags2 & QEMU_MEM_DUMP) {
+	} else if (pc->flags2 & QEMU_MEM_DUMP_ELF) {
 		vd = get_kdump_vmcore_data();
 		if (vd->flags & KDUMP_ELF32)
 			is_32_bit = TRUE;
@@ -4122,7 +4122,7 @@ kdump_backup_region_init(void)
 					sd->backup_src_start = backup_src_start;
 					sd->backup_src_size = backup_src_size;
 					sd->backup_offset = backup_offset;
-				} else if (pc->flags2 & QEMU_MEM_DUMP) {
+				} else if (pc->flags2 & QEMU_MEM_DUMP_ELF) {
 					vd->flags |= QEMU_MEM_DUMP_KDUMP_BACKUP;
 					vd->backup_src_start = backup_src_start;
 					vd->backup_src_size = backup_src_size;

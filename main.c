@@ -1401,8 +1401,10 @@ dump_program_context(void)
 		fprintf(fp, "%sLIVE_DUMP", others++ ? "|" : "");
 	if (pc->flags2 & RADIX_OVERRIDE)
 		fprintf(fp, "%sRADIX_OVERRIDE", others++ ? "|" : "");
-	if (pc->flags2 & QEMU_MEM_DUMP)
-		fprintf(fp, "%sQEMU_MEM_DUMP", others++ ? "|" : "");
+	if (pc->flags2 & QEMU_MEM_DUMP_ELF)
+		fprintf(fp, "%sQEMU_MEM_DUMP_ELF", others++ ? "|" : "");
+	if (pc->flags2 & QEMU_MEM_DUMP_COMPRESSED)
+		fprintf(fp, "%sQEMU_MEM_DUMP_COMPRESSED", others++ ? "|" : "");
 	if (pc->flags2 & GET_LOG)
 		fprintf(fp, "%sGET_LOG", others++ ? "|" : "");
 	if (pc->flags2 & VMCOREINFO)
