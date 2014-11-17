@@ -57,7 +57,6 @@ static int s390_translate_pte(ulong, void *, ulonglong);
 static ulong s390_processor_speed(void);
 static int s390_eframe_search(struct bt_info *);
 static void s390_back_trace_cmd(struct bt_info *);
-static void s390_dump_irq(int);
 static void s390_get_stack_frame(struct bt_info *, ulong *, ulong *);
 static int s390_dis_filter(ulong, char *, unsigned int);
 static void s390_cmd_mach(void);
@@ -146,9 +145,17 @@ s390_init(int when)
 		break;
 
 	case POST_GDB:
-		machdep->nr_irqs = 0;  /* TBD */
+		if (symbol_exists("irq_desc"))
+			ARRAY_LENGTH_INIT(machdep->nr_irqs, irq_desc,
+				"irq_desc", NULL, 0);
+		else if (kernel_symbol_exists("nr_irqs"))
+			get_symbol_data("nr_irqs", sizeof(unsigned int),
+				&machdep->nr_irqs);
+		else
+			machdep->nr_irqs = 0;
+
 		machdep->vmalloc_start = s390_vmalloc_start;
-		machdep->dump_irq = s390_dump_irq;
+		machdep->dump_irq = generic_dump_irq;
 		if (!machdep->hz)
 			machdep->hz = HZ;
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
@@ -194,7 +201,7 @@ s390_dump_machdep_table(ulong arg)
 	fprintf(fp, "              uvtop: s390_uvtop()\n");
 	fprintf(fp, "              kvtop: s390_kvtop()\n");
 	fprintf(fp, "       get_task_pgd: s390_get_task_pgd()\n");
-	fprintf(fp, "           dump_irq: s390_dump_irq()\n");
+	fprintf(fp, "           dump_irq: generic_dump_irq()\n");
 	fprintf(fp, "    get_stack_frame: s390_get_stack_frame()\n");
 	fprintf(fp, "      get_stackbase: generic_get_stackbase()\n");
 	fprintf(fp, "       get_stacktop: generic_get_stacktop()\n");
@@ -951,15 +958,6 @@ s390_get_stack_frame(struct bt_info *bt, ulong *eip, ulong *esp)
 	       		FAULT_ON_ERROR);
 		*eip=r14 & S390_ADDR_MASK;
 	}
-}
-
-/*
- *  cmd_irq() is not implemented for s390.
- */
-static void 
-s390_dump_irq(int irq)
-{
-	error(FATAL, "s390_dump_irq: TBD\n");
 }
 
 /*

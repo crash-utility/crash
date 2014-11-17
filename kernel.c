@@ -5575,9 +5575,6 @@ cmd_irq(void)
 			return;
 
 		case 'u':
-			if (machine_type("S390") || machine_type("S390X"))
-				command_not_supported();
-
 			pc->curcmd_flags |= IRQ_IN_USE;
 			if (kernel_symbol_exists("no_irq_chip"))
 				pc->curcmd_private = (ulonglong)symbol_value("no_irq_chip");
@@ -5632,9 +5629,6 @@ cmd_irq(void)
 
         if (argerrs)
                 cmd_usage(pc->curcmd, SYNOPSIS);
-
-	if (machine_type("S390") || machine_type("S390X"))
-		command_not_supported();
 
 	if ((nr_irqs = machdep->nr_irqs) == 0)
 		error(FATAL, "cannot determine number of IRQs\n");
