@@ -64,7 +64,7 @@ static int alloc_program_headers(Elf64_Phdr *phdr)
 	unsigned int i;
 	struct stat64 st;
 
-	for (i = 0; i < nodes; i++, phdr++) {
+	for (i = 0; i < nodes; i++) {
 		phdr[i].p_type = PT_LOAD;
 
 		if (0 > stat64(ramdump[i].path, &st)) {
@@ -198,8 +198,8 @@ char *ramdump_to_elf(void)
 		error(FATAL, "ramdump: unsupported machine type: %s\n", 
 			MACHINE_TYPE);
 
-	e_head = (Elf64_Ehdr *)malloc(sizeof(Elf64_Ehdr) +
-		nodes * sizeof(Elf64_Phdr) + CPY_BUF_SZ * 2);
+	e_head = (Elf64_Ehdr *)malloc(sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr) +
+		(nodes * sizeof(Elf64_Phdr)) + (CPY_BUF_SZ * 2));
 	ptr = (char *)e_head;
 	offset = 0;
 
