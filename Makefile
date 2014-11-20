@@ -263,6 +263,9 @@ gdb_patch:
 	if [ "${ARCH}" = "ppc64le" ] && [ -f ${GDB}-ppc64le-support.patch ]; then \
 		patch -d ${GDB} -p1 -F0 < ${GDB}-ppc64le-support.patch ; \
 	fi
+	if [ "${ARCH}" = "x86_64" ] && [ "${TARGET}" = "PPC64" ] && [ -f ${GDB}-ppc64le-support.patch ]; then \
+		patch -d ${GDB} -p1 -F0 < ${GDB}-ppc64le-support.patch ; \
+	fi
 
 library: make_build_data ${OBJECT_FILES}
 	ar -rs ${PROGRAM}lib.a ${OBJECT_FILES}

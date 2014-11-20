@@ -143,6 +143,7 @@ void add_extra_lib(char *);
 #define TARGET_CFLAGS_PPC_ON_PPC64   "TARGET_CFLAGS=-m32 -D_FILE_OFFSET_BITS=64 -fPIC"
 #define TARGET_CFLAGS_ARM64            "TARGET_CFLAGS="
 #define TARGET_CFLAGS_ARM64_ON_X86_64  "TARGET_CFLAGS="
+#define TARGET_CFLAGS_PPC64_ON_X86_64  "TARGET_CFLAGS="
 
 #define GDB_TARGET_DEFAULT        "GDB_CONF_FLAGS="
 #define GDB_TARGET_ARM_ON_X86     "GDB_CONF_FLAGS=--target=arm-elf-linux"
@@ -150,7 +151,8 @@ void add_extra_lib(char *);
 #define GDB_TARGET_X86_ON_X86_64  "GDB_CONF_FLAGS=--target=i686-pc-linux-gnu CFLAGS=-m32"
 #define GDB_TARGET_PPC_ON_PPC64   "GDB_CONF_FLAGS=--target=ppc-elf-linux CFLAGS=-m32"
 #define GDB_TARGET_ARM64_ON_X86_64  "GDB_CONF_FLAGS=--target=aarch64-elf-linux"   /* TBD */
-
+#define GDB_TARGET_PPC64_ON_X86_64  "GDB_CONF_FLAGS=--target=powerpc64le-unknown-linux-gnu"
+     
 /*
  *  The original plan was to allow the use of a particular version
  *  of gdb for a given architecture.  But for practical purposes,
@@ -394,6 +396,12 @@ get_current_configuration(struct supported_gdb_version *sp)
 			 *  Build an ARM64 crash binary on an X86_64 host.
 			 */
 			target_data.target = ARM64;
+		} else if ((target_data.target == X86_64) &&
+			(name_to_target((char *)target_data.target_as_param) == PPC64)) {
+			/*
+			 *  Build a PPC64 little-endian crash binary on an X86_64 host.
+			 */
+			target_data.target = PPC64;
 		} else if ((target_data.target == PPC64) &&
 			(name_to_target((char *)target_data.target_as_param) == PPC)) {
 			/*
@@ -452,6 +460,17 @@ get_current_configuration(struct supported_gdb_version *sp)
 		}
 		if ((target_data.target == ARM64) &&
 		    (target_data.initial_gdb_target != ARM64))
+			arch_mismatch(sp);
+
+		if ((target_data.initial_gdb_target == PPC64) &&
+		    (target_data.target != PPC64)) {
+			if (target_data.target == X86_64) 
+				target_data.target = PPC64;
+			else
+				arch_mismatch(sp);
+		}
+		if ((target_data.target == PPC64) &&
+		    (target_data.initial_gdb_target != PPC64))
 			arch_mismatch(sp);
 
 		if ((target_data.initial_gdb_target == PPC) &&
@@ -640,7 +659,11 @@ build_configure(struct supported_gdb_version *sp)
 		break;
 	case PPC64:
                 target = TARGET_PPC64;
-                target_CFLAGS = TARGET_CFLAGS_PPC64;
+		if (target_data.host == X86_64) {
+			target_CFLAGS = TARGET_CFLAGS_PPC64_ON_X86_64;
+			gdb_conf_flags = GDB_TARGET_PPC64_ON_X86_64;
+		} else
+			target_CFLAGS = TARGET_CFLAGS_PPC64;
                 break;
 	case X86_64:
                 target = TARGET_X86_64;
@@ -1528,6 +1551,10 @@ name_to_target(char *name)
         else if (strncmp(name, "PPC64", strlen("PPC64")) == 0)
                 return PPC64;
         else if (strncmp(name, "ppc64", strlen("ppc64")) == 0)
+                return PPC64;
+        else if (strncmp(name, "ppc64le", strlen("ppc64le")) == 0)
+                return PPC64;
+	else if (strncmp(name, "PPC64LE", strlen("PPC64LE")) == 0)
                 return PPC64;
         else if (strncmp(name, "PPC", strlen("PPC")) == 0)
                 return PPC;

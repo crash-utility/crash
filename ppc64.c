@@ -162,6 +162,10 @@ struct machine_specific book3e_machine_specific = {
 void
 ppc64_init(int when)
 {
+#if defined(__x86_64__)
+        if (ACTIVE())
+                error(FATAL, "compiled for the PPC64 architecture\n");
+#endif
 	switch (when)
 	{
 	case PRE_SYMTAB:
