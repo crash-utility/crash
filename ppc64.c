@@ -418,7 +418,7 @@ ppc64_init(int when)
 		break;
 
 	case LOG_ONLY:
-		machdep->kvbase = kt->vmcoreinfo._stext_SYMBOL;
+		machdep->identity_map_base = kt->vmcoreinfo._stext_SYMBOL;
 		break;
 	}
 }
