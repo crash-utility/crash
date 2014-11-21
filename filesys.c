@@ -48,6 +48,7 @@ static int create_memory_device(dev_t);
 static void *radix_tree_lookup(ulong, ulong, int);
 static int match_file_string(char *, char *, char *);
 static ulong get_root_vfsmount(char *);
+static void check_live_arch_mismatch(void);
 
 
 #define DENTRY_CACHE (20)
@@ -113,6 +114,8 @@ fd_init(void)
 				error(INFO, "namelist argument required\n");
 				program_usage(SHORT_FORM);
 			}
+			if (!pc->dumpfile)
+				check_live_arch_mismatch();
 			if (!find_booted_kernel())
 	                	program_usage(SHORT_FORM);
 		}
@@ -4128,4 +4131,31 @@ get_root_vfsmount(char *file_buf)
 	}
 
 	return vfsmnt;
+}
+
+void
+check_live_arch_mismatch(void)
+{
+	struct utsname utsname;
+
+	if (machine_type("X86") && (uname(&utsname) == 0) &&
+	    STRNEQ(utsname.machine, "x86_64"))
+                error(FATAL, "compiled for the X86 architecture\n");
+
+#if defined(__i386__) || defined(__x86_64__) 
+	if (machine_type("ARM"))
+		error(FATAL, "compiled for the ARM architecture\n");
+#endif
+#ifdef __x86_64__
+	if (machine_type("ARM64"))
+		error(FATAL, "compiled for the ARM64 architecture\n");
+#endif
+#ifdef __x86_64__ 
+	if (machine_type("PPC64"))
+		error(FATAL, "compiled for the PPC64 architecture\n");
+#endif
+#ifdef __powerpc64__
+	if (machine_type("PPC"))
+		error(FATAL, "compiled for the PPC architecture\n");
+#endif
 }
