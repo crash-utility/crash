@@ -483,7 +483,7 @@ task_init(void)
 		tt->this_task = pid_to_task(active_pid);
 	}
 	else {
-		if (KDUMP_DUMPFILE() && !(pc->flags2 & QEMU_MEM_DUMP_ELF))
+		if (KDUMP_DUMPFILE())
 			map_cpus_to_prstatus();
 		else if (ELF_NOTES_VALID() && DISKDUMP_DUMPFILE())
 			map_cpus_to_prstatus_kdump_cmprs();

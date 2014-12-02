@@ -72,6 +72,9 @@ map_cpus_to_prstatus(void)
 	int online, i, j, nrcpus;
 	size_t size;
 
+	if (pc->flags2 & QEMU_MEM_DUMP_ELF)  /* notes exist for all cpus */
+		return;
+
 	if (!(online = get_cpus_online()) || (online == kt->cpus))
 		return;
 
@@ -2398,8 +2401,8 @@ get_regs_from_note(char *note, ulong *ip, ulong *sp)
 	return user_regs;
 }
 
-static void
-display_regs_from_elf_notes(int cpu)
+void
+display_regs_from_elf_notes(int cpu, FILE *ofp)
 {
 	Elf32_Nhdr *note32;
 	Elf64_Nhdr *note64;
@@ -2408,13 +2411,16 @@ display_regs_from_elf_notes(int cpu)
 	int c, skipped_count;
 
 	/*
-	 * NT_PRSTATUS notes are only related to online cpus, offline cpus
-	 * should be skipped.
+	 * Kdump NT_PRSTATUS notes are only related to online cpus, 
+	 * so offline cpus should be skipped.
 	 */
-	skipped_count = 0;
-	for (c = 0; c < cpu; c++) {
-		if (check_offline_cpu(c))
-			skipped_count++;
+	if (pc->flags2 & QEMU_MEM_DUMP_ELF)
+		skipped_count = 0;
+	else {
+		for (c = skipped_count = 0; c < cpu; c++) {
+			if (check_offline_cpu(c))
+				skipped_count++;
+		}
 	}
 
 	if ((cpu - skipped_count) >= nd->num_prstatus_notes) {
@@ -2433,7 +2439,7 @@ display_regs_from_elf_notes(int cpu)
 		len = roundup(len + note64->n_descsz, 4);
 		user_regs = ((char *)note64) + len - SIZE(user_regs_struct) - sizeof(long);
 
-		fprintf(fp,
+		fprintf(ofp,
 		    "    RIP: %016llx  RSP: %016llx  RFLAGS: %08llx\n"
 		    "    RAX: %016llx  RBX: %016llx  RCX: %016llx\n"
 		    "    RDX: %016llx  RSI: %016llx  RDI: %016llx\n"
@@ -2473,7 +2479,7 @@ display_regs_from_elf_notes(int cpu)
 		len = roundup(len + note32->n_descsz, 4);
 		user_regs = ((char *)note32) + len - SIZE(user_regs_struct) - sizeof(long);
 
-		fprintf(fp,
+		fprintf(ofp,
 		    "    EAX: %08x  EBX: %08x  ECX: %08x  EDX: %08x\n"
 		    "    ESP: %08x  EIP: %08x  ESI: %08x  EDI: %08x\n"
 		    "    CS: %04x       DS: %04x       ES: %04x       FS: %04x\n"
@@ -2506,7 +2512,7 @@ display_regs_from_elf_notes(int cpu)
 		len = roundup(len + note64->n_namesz, 4);
 		len = roundup(len + note64->n_descsz, 4);
 //		user_regs = ((char *)note64) + len - SIZE(user_regs_struct) - sizeof(long);
-		fprintf(fp, "display_regs_from_elf_notes: ARM64 register dump TBD\n");
+		fprintf(ofp, "display_regs_from_elf_notes: ARM64 register dump TBD\n");
 	}
 }
 
@@ -2519,7 +2525,7 @@ dump_registers_for_elf_dumpfiles(void)
                 error(FATAL, "-r option not supported for this dumpfile\n");
 
 	if (NETDUMP_DUMPFILE()) {
-                display_regs_from_elf_notes(0);
+                display_regs_from_elf_notes(0, fp);
 		return;
 	}
 
@@ -2530,7 +2536,7 @@ dump_registers_for_elf_dumpfiles(void)
 		}
 
                 fprintf(fp, "%sCPU %d:\n", c ? "\n" : "", c);
-                display_regs_from_elf_notes(c);
+                display_regs_from_elf_notes(c, fp);
         }
 }
 
@@ -2556,7 +2562,8 @@ get_netdump_regs_x86_64(struct bt_info *bt, ulong *ripp, ulong *rspp)
                 bt->flags |= BT_DUMPFILE_SEARCH;
 
 	if (((NETDUMP_DUMPFILE() || KDUMP_DUMPFILE()) &&
-   	      VALID_STRUCT(user_regs_struct) && (bt->task == tt->panic_task)) ||
+   	      VALID_STRUCT(user_regs_struct) && 
+	      ((bt->task == tt->panic_task) || (pc->flags2 & QEMU_MEM_DUMP_ELF))) ||
 	      (KDUMP_DUMPFILE() && (kt->flags & DWARF_UNWIND) && 
 	      (bt->flags & BT_DUMPFILE_SEARCH))) {
 		if (nd->num_prstatus_notes > 1)

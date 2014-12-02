@@ -2963,11 +2963,13 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 			diskdump_display_regs(bt->tc->processor, ofp);
 		else if (SADUMP_DUMPFILE())
 			sadump_display_regs(bt->tc->processor, ofp);
+		else if (pc->flags2 & QEMU_MEM_DUMP_ELF)
+			display_regs_from_elf_notes(bt->tc->processor, ofp);
 		return;
 	} else if ((bt->flags & BT_KERNEL_SPACE) &&
 		   (KVMDUMP_DUMPFILE() ||
 		    (ELF_NOTES_VALID() && DISKDUMP_DUMPFILE()) ||
-		    SADUMP_DUMPFILE())) {
+		    SADUMP_DUMPFILE() || (pc->flags2 & QEMU_MEM_DUMP_ELF))) {
 		fprintf(ofp, "    [exception RIP: ");
 		if ((sp = value_search(bt->instptr, &offset))) {
 			fprintf(ofp, "%s", sp->name);
@@ -2983,6 +2985,9 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 			diskdump_display_regs(bt->tc->processor, ofp);
 		else if (SADUMP_DUMPFILE())
 			sadump_display_regs(bt->tc->processor, ofp);
+		else if (pc->flags2 & QEMU_MEM_DUMP_ELF)
+			display_regs_from_elf_notes(bt->tc->processor, ofp);
+
         } else if (bt->flags & BT_START) {
                 x86_64_print_stack_entry(bt, ofp, level,
                         0, bt->instptr);
@@ -4565,7 +4570,7 @@ skip_stage:
         	*rip = ur_rip;
 		*rsp = ur_rsp;
 		if (is_kernel_text(ur_rip) &&
-		    (INSTACK(ur_rsp, bt) ||
+		    (INSTACK(ur_rsp, bt_in) ||
 		     in_alternate_stack(bt->tc->processor, ur_rsp)))
 			bt_in->flags |= BT_KERNEL_SPACE;
 		if (!is_kernel_text(ur_rip) && in_user_stack(bt->tc->task, ur_rsp))
@@ -4596,14 +4601,14 @@ skip_stage:
 		ur_rip = ULONG(user_regs + OFFSET(user_regs_struct_rip));
 		ur_rsp = ULONG(user_regs + OFFSET(user_regs_struct_rsp));
 		if (!in_alternate_stack(bt->tc->processor, ur_rsp) && 
-		    !stkptr_to_task(bt->task)) {
+		    !stkptr_to_task(ur_rsp)) {
 			if (CRASHDEBUG(1))
 				error(INFO, 
 				    "x86_64_get_dumpfile_stack_frame: "
 				    "ELF mismatch: RSP: %lx task: %lx\n",
 					ur_rsp, bt->task);
 		} else {
-			if (is_kernel_text(ur_rip) && (INSTACK(ur_rsp, bt) || 
+			if (is_kernel_text(ur_rip) && (INSTACK(ur_rsp, bt_in) || 
 			    in_alternate_stack(bt->tc->processor, ur_rsp)))
 				bt_in->flags |= BT_KERNEL_SPACE;
 			if (!is_kernel_text(ur_rip) && in_user_stack(bt->tc->task, ur_rsp))

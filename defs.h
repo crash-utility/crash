@@ -5547,6 +5547,7 @@ int write_proc_kcore(int, void *, int, ulong, physaddr_t);
 int kcore_memory_dump(FILE *);
 void dump_registers_for_qemu_mem_dump(void);
 void kdump_backup_region_init(void);
+void display_regs_from_elf_notes(int, FILE *);
 
 /*
  * ramdump.c

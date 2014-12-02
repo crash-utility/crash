@@ -100,6 +100,9 @@ map_cpus_to_prstatus_kdump_cmprs(void)
 	int online, i, j, nrcpus;
 	size_t size;
 
+	if (pc->flags2 & QEMU_MEM_DUMP_COMPRESSED)  /* notes exist for all cpus */
+		return;
+
 	if (!(online = get_cpus_online()) || (online == kt->cpus))
 		return;
 
