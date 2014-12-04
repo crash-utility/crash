@@ -7988,7 +7988,8 @@ dump_waitq(ulong wq, char *wq_name)
 		readmem(wq_list[i] + task_offset, KVADDR, &task,
 			sizeof(void *), "wait_queue_t.task", FAULT_ON_ERROR);
 
-		if ((tc = task_to_context(task))) {
+		if ((tc = task_to_context(task)) || 
+		    (tc = task_to_context(stkptr_to_task(task)))) {
 			print_task_header(fp, tc, 0);
 		} else {
 			break;
