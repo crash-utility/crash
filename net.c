@@ -1,8 +1,8 @@
 /* net.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2013 David Anderson
- * Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014 David Anderson
+ * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -64,9 +64,9 @@ struct devinfo {
 /* bytes needed for <ip address>:<port> notation */
 #define BYTES_IP_TUPLE	(BYTES_IP_ADDR + BYTES_PORT_NUM + 1)
 
-static void show_net_devices(void);
-static void show_net_devices_v2(void);
-static void show_net_devices_v3(void);
+static void show_net_devices(ulong);
+static void show_net_devices_v2(ulong);
+static void show_net_devices_v3(ulong);
 static void print_neighbour_q(ulong, int);
 static void get_netdev_info(ulong, struct devinfo *);
 static void get_device_name(ulong, char *);
@@ -137,6 +137,8 @@ net_init(void)
 			error(WARNING, 
 				"net_init: unknown device type for net device");
 	}
+	if (VALID_MEMBER(task_struct_nsproxy))
+		MEMBER_OFFSET_INIT(nsproxy_net_ns, "nsproxy", "net_ns");
 
 	if (net->flags & NETDEV_INIT) {
 		MK_TYPE_T(net->dev_name_t, net->netdevice, "name");
@@ -304,7 +306,7 @@ net_init(void)
  * The net command...
  */
 
-#define NETOPTS	  "n:asSR:xd"
+#define NETOPTS	  "N:asSR:xdn"
 #define s_FLAG FOREACH_s_FLAG
 #define S_FLAG FOREACH_S_FLAG
 #define x_FLAG FOREACH_x_FLAG
@@ -324,8 +326,10 @@ void
 cmd_net(void)
 {
 	int c;
-	ulong sflag;
+	ulong sflag, nflag;
 	ulong value;
+	ulong task;
+	struct task_context *tc = NULL;
 	struct in_addr in_addr;
 	struct reference reference, *ref;
 
@@ -333,7 +337,8 @@ cmd_net(void)
 		error(FATAL, "net subsystem not initialized!");
 
 	ref = NULL;
-	sflag = 0;
+	sflag = nflag = 0;
+	task = pid_to_task(0);
 
 	while ((c = getopt(argcnt, args, NETOPTS)) != EOF) {
 		switch (c) {
@@ -351,7 +356,7 @@ cmd_net(void)
 			dump_arp();
 			break;
 
-		case 'n':
+		case 'N':
 			value = stol(optarg, FAULT_ON_ERROR, NULL);
 			in_addr.s_addr = (in_addr_t)value;
 			fprintf(fp, "%s\n", inet_ntoa(in_addr));
@@ -387,6 +392,19 @@ cmd_net(void)
 			sflag |= d_FLAG;
 			break;
 
+		case 'n':
+			nflag = 1;
+			task = CURRENT_TASK();
+			if (args[optind]) {
+				switch (str_to_context(args[optind],
+					 &value, &tc)) {
+				case STR_PID:
+				case STR_TASK:
+					task = tc->task;
+				}
+			}
+			break;
+
 		default:
 			argerrs++;
 			break;
@@ -398,9 +416,12 @@ cmd_net(void)
 
 	if (sflag)
 		dump_sockets(sflag, ref);
-
-	if (argcnt == 1)
-		show_net_devices();
+	else {
+		if ((argcnt == 1) || nflag)
+			show_net_devices(task);
+		else
+			cmd_usage(pc->curcmd, SYNOPSIS);
+	}
 }
 
 /*
@@ -408,17 +429,17 @@ cmd_net(void)
  */
 
 static void
-show_net_devices(void)
+show_net_devices(ulong task)
 {
 	ulong next;
 	long flen;
 	char buf[BUFSIZE];
 
 	if (symbol_exists("dev_base_head")) {
-		show_net_devices_v2();
+		show_net_devices_v2(task);
 		return;
 	} else if (symbol_exists("init_net")) {
-		show_net_devices_v3();
+		show_net_devices_v3(task);
 		return;
 	}
 
@@ -452,7 +473,7 @@ show_net_devices(void)
 }
 
 static void
-show_net_devices_v2(void)
+show_net_devices_v2(ulong task)
 {
 	struct list_data list_data, *ld;
 	char *net_device_buf;
@@ -501,8 +522,9 @@ show_net_devices_v2(void)
 }
 
 static void
-show_net_devices_v3(void)
+show_net_devices_v3(ulong task)
 {
+	ulong nsproxy_p, net_ns_p;
 	struct list_data list_data, *ld;
 	char *net_device_buf;
 	char buf[BUFSIZE];
@@ -523,8 +545,15 @@ show_net_devices_v3(void)
 	ld =  &list_data;
 	BZERO(ld, sizeof(struct list_data));
 	ld->flags |= LIST_ALLOCATE;
-	ld->start = ld->end =
-		 symbol_value("init_net") + OFFSET(net_dev_base_head);
+	if (VALID_MEMBER(nsproxy_net_ns)) {
+		readmem(task + OFFSET(task_struct_nsproxy), KVADDR, &nsproxy_p,
+			sizeof(ulong), "task_struct.nsproxy", FAULT_ON_ERROR);
+		if (!readmem(nsproxy_p + OFFSET(nsproxy_net_ns), KVADDR, &net_ns_p,
+			sizeof(ulong), "nsproxy.net_ns", RETURN_ON_ERROR|QUIET))
+			error(FATAL, "cannot determine net_namespace location!\n");
+	} else
+		net_ns_p = symbol_value("init_net");
+	ld->start = ld->end = net_ns_p + OFFSET(net_dev_base_head);
 	ld->list_head_offset = OFFSET(net_device_dev_list);
 
 	ndevcnt = do_list(ld);

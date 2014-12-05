@@ -9295,6 +9295,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(kern_ipc_perm_seq));
 	fprintf(fp, "                nsproxy_ipc_ns: %ld\n",
 		OFFSET(nsproxy_ipc_ns));
+	fprintf(fp, "                nsproxy_net_ns: %ld\n",
+		OFFSET(nsproxy_net_ns));
 	fprintf(fp, "      shmem_inode_info_swapped: %ld\n",
 		OFFSET(shmem_inode_info_swapped));
 	fprintf(fp, "    shmem_inode_info_vfs_inode: %ld\n",
