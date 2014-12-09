@@ -4527,6 +4527,17 @@ value_search(ulong value, ulong *offset)
 			    (spnext->value == value))
 				sp = spnext;
 
+			/*
+			 *  If any of the special text region starting address 
+			 *  delimiters declared in vmlinux.lds.S match the 
+			 *  first "real" text symbol in the region, return
+			 *  that (next) one instead.
+			 */ 
+			if (strstr_rightmost(sp->name, "_text_start") &&
+			    ((spnext = sp+1) < st->symend) &&
+			    (spnext->value == value))
+				sp = spnext;
+
                         return((struct syment *)sp);
                 }
                 if (sp->value > value) {
