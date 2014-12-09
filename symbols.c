@@ -9430,6 +9430,10 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(ktime_t_sec));
 	fprintf(fp, "                  ktime_t_nsec: %ld\n",
 		OFFSET(ktime_t_nsec));
+	fprintf(fp, "              atomic_t_counter: %ld\n",
+		OFFSET(atomic_t_counter));
+	fprintf(fp, "          percpu_counter_count: %ld\n",
+		OFFSET(percpu_counter_count));
 
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));

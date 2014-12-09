@@ -1924,6 +1924,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long kmem_cache_cpu_partial;
 	long kmem_cache_cpu_cache;
 	long nsproxy_net_ns;
+	long atomic_t_counter;
+	long percpu_counter_count;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

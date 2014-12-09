@@ -264,6 +264,9 @@ kernel_init()
 			&kt->__per_cpu_offset[0]);
                 kt->flags |= PER_CPU_OFF;
 	}
+
+	MEMBER_OFFSET_INIT(percpu_counter_count, "percpu_counter", "count");
+
 	if (STRUCT_EXISTS("runqueue")) {
 		rqstruct = "runqueue";
 		rq_timestamp_name = "timestamp_last_tick";
@@ -382,6 +385,11 @@ kernel_init()
 
 	STRUCT_SIZE_INIT(spinlock_t, "spinlock_t");
 	verify_spinlock();
+
+	if (STRUCT_EXISTS("atomic_t"))
+		if (MEMBER_EXISTS("atomic_t", "counter"))
+			MEMBER_OFFSET_INIT(atomic_t_counter,
+					"atomic_t", "counter");
 
 	STRUCT_SIZE_INIT(list_head, "list_head"); 
 	MEMBER_OFFSET_INIT(list_head_next, "list_head", "next"); 

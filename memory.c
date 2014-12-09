@@ -227,6 +227,7 @@ static int vm_area_page_dump(ulong, ulong, ulong, ulong, ulong,
 	struct reference *);
 static void rss_page_types_init(void);
 static int dump_swap_info(ulong, ulong *, ulong *);
+static int get_hugetlb_total_pages(ulong *);
 static void swap_info_init(void);
 static char *get_swapdev(ulong, char *);
 static void fill_swap_info(ulong);
@@ -390,6 +391,14 @@ vm_init(void)
 	    VALID_MEMBER(vmap_area_vm) &&
 	    kernel_symbol_exists("vmap_area_list"))
 		vt->flags |= USE_VMAP_AREA;
+
+	if (kernel_symbol_exists("hstates")) {
+		STRUCT_SIZE_INIT(hstate, "hstate");
+		MEMBER_OFFSET_INIT(hstate_order, "hstate", "order");
+		MEMBER_OFFSET_INIT(hstate_nr_huge_pages, "hstate", "nr_huge_pages");
+		MEMBER_OFFSET_INIT(hstate_free_huge_pages, "hstate", "free_huge_pages");
+		MEMBER_OFFSET_INIT(hstate_name, "hstate", "name");
+	}
 
 	MEMBER_OFFSET_INIT(page_next, "page", "next");
 	if (VALID_MEMBER(page_next)) 
@@ -5854,20 +5863,13 @@ dump_hstates()
 		option_not_supported('h');
 	}
 
-	if (INVALID_MEMBER(hstate_name)) {
-		STRUCT_SIZE_INIT(hstate, "hstate");
-		MEMBER_OFFSET_INIT(hstate_order, "hstate", "order");
-		MEMBER_OFFSET_INIT(hstate_nr_huge_pages, "hstate", "nr_huge_pages");
-		MEMBER_OFFSET_INIT(hstate_free_huge_pages, "hstate", "free_huge_pages");
-		MEMBER_OFFSET_INIT(hstate_name, "hstate", "name");
-		if (INVALID_SIZE(hstate) ||
-		    INVALID_MEMBER(hstate_order) ||
-		    INVALID_MEMBER(hstate_name) ||
-		    INVALID_MEMBER(hstate_nr_huge_pages) ||
-		    INVALID_MEMBER(hstate_free_huge_pages)) {
-			error(INFO, "hstate structure or members have changed\n");
-			option_not_supported('h');
-		}
+	if (INVALID_SIZE(hstate) ||
+	    INVALID_MEMBER(hstate_order) ||
+	    INVALID_MEMBER(hstate_name) ||
+	    INVALID_MEMBER(hstate_nr_huge_pages) ||
+	    INVALID_MEMBER(hstate_free_huge_pages)) {
+		error(INFO, "hstate structure or members have changed\n");
+		option_not_supported('h');
 	}
 
 	fprintf(fp, "%s", 
@@ -7653,7 +7655,7 @@ bailout:
  *  by /proc/meminfo, and then some...
  */
 
-char *kmeminfo_hdr = "              PAGES        TOTAL      PERCENTAGE\n";
+char *kmeminfo_hdr = "                 PAGES        TOTAL      PERCENTAGE\n";
 
 static void
 dump_kmeminfo(void)
@@ -7670,6 +7672,11 @@ dump_kmeminfo(void)
         ulong freehighmem_pages;
         ulong totallowmem_pages;
         ulong freelowmem_pages;
+	ulong allowed;
+	long committed;
+	ulong overcommit_kbytes = 0;
+	int overcommit_ratio;
+	ulong hugetlb_total_pages;
 	long nr_file_pages, nr_slab;
 	ulong swapper_space_nrpages;
 	ulong pct;
@@ -7720,7 +7727,7 @@ dump_kmeminfo(void)
 	} else 
 		totalram_pages = get_totalram;
 
-	fprintf(fp, "%10s  %7ld  %11s         ----\n", "TOTAL MEM", 
+	fprintf(fp, "%13s  %7ld  %11s         ----\n", "TOTAL MEM", 
 		totalram_pages, pages_to_size(totalram_pages, buf));
 
 	/*
@@ -7731,12 +7738,12 @@ dump_kmeminfo(void)
 	vt->dump_free_pages(&meminfo);
 	freeram_pages = meminfo.retval;
         pct = (freeram_pages * 100)/totalram_pages;
-	fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
+	fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
 		"FREE", freeram_pages, pages_to_size(freeram_pages, buf), pct);
 
 	used_pages = totalram_pages - freeram_pages;
         pct = (used_pages * 100)/totalram_pages;
-        fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
+        fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
 		"USED", used_pages, pages_to_size(used_pages, buf), pct);
 
 	/*
@@ -7745,7 +7752,7 @@ dump_kmeminfo(void)
          *  pages that have a count of greater than 1.
 	 */
         pct = (shared_pages * 100)/totalram_pages;
-        fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
+        fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
 		"SHARED", shared_pages, pages_to_size(shared_pages, buf), pct);
 
 	subtract_buffer_pages = 0;
@@ -7762,7 +7769,7 @@ dump_kmeminfo(void)
 		buffer_pages = 0;
 
         pct = (buffer_pages * 100)/totalram_pages;
-        fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
+        fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
 		"BUFFERS", buffer_pages, pages_to_size(buffer_pages, buf), pct);
 
 	if (CRASHDEBUG(1)) 
@@ -7816,7 +7823,7 @@ dump_kmeminfo(void)
 
 
         pct = (page_cache_size * 100)/totalram_pages;
-        fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
+        fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
 		"CACHED", page_cache_size, 
 		pages_to_size(page_cache_size, buf), pct);
 
@@ -7826,7 +7833,7 @@ dump_kmeminfo(void)
 	 */
 
         pct = (get_slabs * 100)/totalram_pages;
-	fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL MEM\n",
+	fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n",
 		"SLAB", get_slabs, pages_to_size(get_slabs, buf), pct);
 
         if (symbol_exists("totalhigh_pages")) {
@@ -7851,7 +7858,7 @@ dump_kmeminfo(void)
 
 		pct = totalhigh_pages ?
 			(totalhigh_pages * 100)/totalram_pages : 0;
-                fprintf(fp, "\n%10s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
+                fprintf(fp, "\n%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
 			"TOTAL HIGH", totalhigh_pages, 
 			pages_to_size(totalhigh_pages, buf), pct);
 
@@ -7860,19 +7867,19 @@ dump_kmeminfo(void)
 		freehighmem_pages = meminfo.retval;
         	pct = freehighmem_pages ?  
 			(freehighmem_pages * 100)/totalhigh_pages : 0;
-                fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL HIGH\n", 
+                fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL HIGH\n", 
 			"FREE HIGH", freehighmem_pages, 
 			pages_to_size(freehighmem_pages, buf), pct);
 
                 totallowmem_pages = totalram_pages - totalhigh_pages;
 		pct = (totallowmem_pages * 100)/totalram_pages;
-                fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
+                fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
 			"TOTAL LOW", totallowmem_pages, 
 			pages_to_size(totallowmem_pages, buf), pct);
 
                 freelowmem_pages = freeram_pages - freehighmem_pages;
         	pct = (freelowmem_pages * 100)/totallowmem_pages;
-                fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL LOW\n", 
+                fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL LOW\n", 
 			"FREE LOW", freelowmem_pages, 
 			pages_to_size(freelowmem_pages, buf), pct);
         }
@@ -7884,18 +7891,18 @@ dump_kmeminfo(void)
 	if (symbol_exists("swapper_space") || symbol_exists("swapper_spaces")) {
 		if (dump_swap_info(RETURN_ON_ERROR, &totalswap_pages, 
 		    &totalused_pages)) {
-			fprintf(fp, "%10s  %7ld  %11s         ----\n", 
+			fprintf(fp, "%13s  %7ld  %11s         ----\n", 
 				"TOTAL SWAP", totalswap_pages, 
 				pages_to_size(totalswap_pages, buf));
 				pct = totalswap_pages ? (totalused_pages * 100) /
 				totalswap_pages : 100;
-			fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL SWAP\n",
+			fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL SWAP\n",
 				"SWAP USED", totalused_pages,
 				pages_to_size(totalused_pages, buf), pct);
 		 		pct = totalswap_pages ? 
 				((totalswap_pages - totalused_pages) *
 				100) / totalswap_pages : 0;
-			fprintf(fp, "%10s  %7ld  %11s  %3ld%% of TOTAL SWAP\n", 
+			fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL SWAP\n", 
 				"SWAP FREE",
 				totalswap_pages - totalused_pages,
 				pages_to_size(totalswap_pages - totalused_pages, 
@@ -7905,6 +7912,67 @@ dump_kmeminfo(void)
 			    "swap_info[%ld].swap_map at %lx is inaccessible\n",
 				totalused_pages, totalswap_pages);
 	}
+	/*
+	 * Show committed memory
+	 */
+	if (kernel_symbol_exists("sysctl_overcommit_memory")) {
+
+		fprintf(fp, "\n");
+		if (kernel_symbol_exists("sysctl_overcommit_kbytes"))
+			get_symbol_data("sysctl_overcommit_kbytes",
+				sizeof(ulong), &overcommit_kbytes);
+
+		if (overcommit_kbytes)
+			allowed = overcommit_kbytes >>
+				(machdep->pageshift - 10);
+		else {
+			get_symbol_data("sysctl_overcommit_ratio",
+				sizeof(int), &overcommit_ratio);
+
+			if (!get_hugetlb_total_pages(&hugetlb_total_pages))
+				goto bailout;
+
+			allowed = ((totalram_pages - hugetlb_total_pages)
+				* overcommit_ratio / 100);
+		}
+		if (symbol_exists("vm_committed_as")) {
+			if (INVALID_MEMBER(percpu_counter_count))
+				goto bailout;
+
+			readmem(symbol_value("vm_committed_as") +
+				OFFSET(percpu_counter_count),
+				KVADDR, &committed, sizeof(long),
+				"percpu_counter count", FAULT_ON_ERROR);
+
+			/* Ensure always positive */
+			if (committed < 0)
+				committed = 0;
+		} else {
+			if (INVALID_MEMBER(atomic_t_counter))
+				goto bailout;
+
+			readmem(symbol_value("vm_committed_space") +
+				OFFSET(atomic_t_counter), KVADDR,
+				&committed, sizeof(int), 
+				"atomic_t counter", FAULT_ON_ERROR);
+		}
+		allowed += totalswap_pages;
+		fprintf(fp, "%13s  %7ld  %11s         ----\n",
+			"COMMIT LIMIT", allowed,
+			pages_to_size(allowed, buf));
+
+		if (allowed) {
+			pct = committed ? ((committed * 100)
+				/ allowed) : 0;
+			fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL LIMIT\n",
+				"COMMITTED", committed,
+				pages_to_size(committed, buf), pct);
+		} else
+			fprintf(fp, "%13s  %7ld  %11s         ----\n",
+				"COMMITTED", committed,
+				pages_to_size(committed, buf));
+	}
+bailout:
 	dump_zone_page_usage();
 }
 
@@ -14732,6 +14800,51 @@ next_physpage(ulonglong paddr, ulonglong *nextpaddr)
 	}
 
 	return FALSE;
+}
+
+static int
+get_hugetlb_total_pages(ulong *nr_total_pages)
+{
+	ulong hstate_p;
+	int i, len;
+	ulong nr_huge_pages;
+	uint horder;
+
+	*nr_total_pages = 0;
+	if (kernel_symbol_exists("hstates")) {
+
+		if (INVALID_SIZE(hstate) ||
+		    INVALID_MEMBER(hstate_order) ||
+		    INVALID_MEMBER(hstate_nr_huge_pages))
+			return FALSE;
+
+		len = get_array_length("hstates", NULL, 0);
+		hstate_p = symbol_value("hstates");
+
+		for (i = 0; i < len; i++) {
+			hstate_p = hstate_p + (SIZE(hstate) * i);
+
+			readmem(hstate_p + OFFSET(hstate_order),
+				KVADDR, &horder, sizeof(uint),
+				"hstate_order", FAULT_ON_ERROR);
+
+			readmem(hstate_p + OFFSET(hstate_nr_huge_pages),
+				KVADDR, &nr_huge_pages, sizeof(ulong),
+				"hstate_nr_huge_pages", FAULT_ON_ERROR);
+
+			*nr_total_pages += nr_huge_pages * (1 << horder);
+		}
+	} else if (kernel_symbol_exists("nr_huge_pages")) {
+		unsigned long hpage_shift = 21;
+
+		if ((machine_type("X86") && !(machdep->flags & PAE)))
+			hpage_shift = 22;
+		get_symbol_data("nr_huge_pages",
+			sizeof(ulong), &nr_huge_pages);
+		*nr_total_pages = nr_huge_pages * ((1 << hpage_shift) /
+			machdep->pagesize);
+	}
+	return TRUE;
 }
 
 /*
