@@ -8700,8 +8700,7 @@ static char *
 vaddr_to_kmem_cache(ulong vaddr, char *buf, int verbose)
 {
 	physaddr_t paddr;
-	ulong page;
-	ulong cache;
+	ulong page, cache, page_flags;
 
         if (!kvtop(NULL, vaddr, &paddr, 0)) {
 		if (verbose)
@@ -8717,6 +8716,14 @@ vaddr_to_kmem_cache(ulong vaddr, char *buf, int verbose)
 			    "cannot find mem_map page for address: %lx\n", 
 				vaddr);
 		return NULL;
+	}
+
+	if (vt->PG_slab) {
+		readmem(page+OFFSET(page_flags), KVADDR,
+			&page_flags, sizeof(ulong), "page.flags",
+			FAULT_ON_ERROR);
+		if (!(page_flags & (1 << vt->PG_slab)))
+			return NULL;
 	}
 
 	if ((vt->flags & KMALLOC_SLUB) ||
