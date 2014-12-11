@@ -358,6 +358,7 @@ vm_init(void)
 	}
 	MEMBER_OFFSET_INIT(mm_struct_total_vm, "mm_struct", "total_vm");
 	MEMBER_OFFSET_INIT(mm_struct_start_code, "mm_struct", "start_code");
+	MEMBER_OFFSET_INIT(mm_struct_mm_count, "mm_struct", "mm_count");
         MEMBER_OFFSET_INIT(vm_area_struct_vm_mm, "vm_area_struct", "vm_mm");
         MEMBER_OFFSET_INIT(vm_area_struct_vm_next, "vm_area_struct", "vm_next");
         MEMBER_OFFSET_INIT(vm_area_struct_vm_end, "vm_area_struct", "vm_end");
@@ -3311,9 +3312,14 @@ cmd_vm(void)
 	ref = NULL;
 	BZERO(&reference, sizeof(struct reference));
 
-        while ((c = getopt(argcnt, args, "f:pmvR:P:xd")) != EOF) {
+        while ((c = getopt(argcnt, args, "f:pmvR:P:xdM:")) != EOF) {
                 switch(c)
 		{
+		case 'M':
+			pc->curcmd_private = htoll(optarg, FAULT_ON_ERROR, NULL);
+			pc->curcmd_flags |= MM_STRUCT_FORCE;
+			break;
+
 		case 'f':
 			if (flag) 
 				argerrs++;
@@ -3603,6 +3609,44 @@ get_vm_flags(char *vma_buf)
 	return vm_flags;
 }
 
+static void
+vm_cleanup(void *arg)
+{
+	struct task_context *tc;
+
+	pc->cmd_cleanup = NULL;
+	pc->cmd_cleanup_arg = NULL;
+
+	tc = (struct task_context *)arg;
+	tc->mm_struct = 0;
+}
+
+static int
+is_valid_mm(ulong mm)
+{
+	char kbuf[BUFSIZE];
+	char *p;
+	int mm_count;
+
+	if (!(p = vaddr_to_kmem_cache(mm, kbuf, VERBOSE)))
+		goto bailout;
+
+	if (!STRNEQ(p, "mm_struct"))
+		goto bailout;
+
+	readmem(mm + OFFSET(mm_struct_mm_count), KVADDR, &mm_count, sizeof(int),
+		"mm_struct mm_count", FAULT_ON_ERROR);
+
+	if (mm_count == 0)
+		error(FATAL, "stale mm_struct address\n");
+
+	return mm_count;
+
+bailout:
+	error(FATAL, "invalid mm_struct address\n");
+	return 0;
+}
+
 /*
  *  vm_area_dump() primarily does the work for cmd_vm(), but is also called
  *  from IN_TASK_VMA(), do_vtop(), and foreach().  How it behaves depends
@@ -3735,8 +3779,22 @@ vm_area_dump(ulong task, ulong flag, ulong vaddr, struct reference *ref)
 	    !DO_REF_SEARCH(ref)) 
 		PRINT_VM_DATA();
 
-        if (!tm->mm_struct_addr)
-                return (ulong)NULL;
+        if (!tm->mm_struct_addr) {
+		if (pc->curcmd_flags & MM_STRUCT_FORCE) {
+			if (!is_valid_mm(pc->curcmd_private))
+				return (ulong)NULL;
+
+			tc->mm_struct = tm->mm_struct_addr = pc->curcmd_private;
+
+			/*
+			 * tc->mm_struct is changed, use vm_cleanup to
+			 * restore it.
+			 */
+			pc->cmd_cleanup_arg = (void *)tc;
+			pc->cmd_cleanup = vm_cleanup;
+		} else
+			return (ulong)NULL;
+	}
 
 	if (flag & PRINT_MM_STRUCT) {
 		dump_struct("mm_struct", tm->mm_struct_addr, radix);

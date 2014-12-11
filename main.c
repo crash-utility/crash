@@ -1606,6 +1606,8 @@ dump_program_context(void)
 		fprintf(fp, "%sMOD_SECTIONS", others ? "|" : "");
         if (pc->curcmd_flags & MOD_READNOW)
 		fprintf(fp, "%sMOD_READNOW", others ? "|" : "");
+        if (pc->curcmd_flags & MM_STRUCT_FORCE)
+		fprintf(fp, "%sMM_STRUCT_FORCE", others ? "|" : "");
 	fprintf(fp, ")\n");
 	fprintf(fp, "   curcmd_private: %llx\n", pc->curcmd_private); 
 	fprintf(fp, "      cmd_cleanup: %lx\n", (ulong)pc->cmd_cleanup);

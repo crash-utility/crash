@@ -464,6 +464,7 @@ struct program_context {
 #define MEMTYPE_KVADDR   (0x2000)
 #define MOD_SECTIONS     (0x4000)
 #define MOD_READNOW      (0x8000)
+#define MM_STRUCT_FORCE (0x10000)
 	ulonglong curcmd_private;	/* general purpose per-command info */
 	int cur_gdb_cmd;                /* current gdb command */
 	int last_gdb_cmd;               /* previously-executed gdb command */
@@ -1926,6 +1927,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long nsproxy_net_ns;
 	long atomic_t_counter;
 	long percpu_counter_count;
+	long mm_struct_mm_count;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

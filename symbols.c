@@ -8079,6 +8079,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(mm_struct_mmap));
 	fprintf(fp, "                 mm_struct_pgd: %ld\n", 
 		OFFSET(mm_struct_pgd));
+	fprintf(fp, "            mm_struct_mm_count: %ld\n", 
+		OFFSET(mm_struct_mm_count));
 	fprintf(fp, "                 mm_struct_rss: %ld\n", 
 		OFFSET(mm_struct_rss));
 	fprintf(fp, "            mm_struct_anon_rss: %ld\n", 
