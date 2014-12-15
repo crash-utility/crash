@@ -5185,14 +5185,15 @@ struct x86_64_pt_regs_offsets {
 };
 
 #define MAX_EXCEPTION_STACKS 7
-#define NMI_STACK 2    /* ebase[] index to NMI exception stack */
-#define DEBUG_STACK 3  /* ebase[] index to DEBUG exception stack */
+#define NMI_STACK (machdep->machspec->stkinfo.NMI_stack_index)
 
 struct x86_64_stkinfo {
 	ulong ebase[NR_CPUS][MAX_EXCEPTION_STACKS];
 	int esize[MAX_EXCEPTION_STACKS];
 	ulong ibase[NR_CPUS];
 	int isize;
+	int NMI_stack_index;
+	char *exception_stacks[MAX_EXCEPTION_STACKS];
 };
 
 struct machine_specific {
