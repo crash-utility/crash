@@ -2097,6 +2097,12 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 	case NT_S390_PREFIX:
 		netdump_print("(NT_S390_PREFIX)\n");
 		break;
+	case NT_S390_VXRS_LOW:
+		netdump_print("(NT_S390_VXRS_LOW)\n");
+		break;
+	case NT_S390_VXRS_HIGH:
+		netdump_print("(NT_S390_VXRS_HIGH)\n");
+		break;
 	case NT_TASKSTRUCT:
 		netdump_print("(NT_TASKSTRUCT)\n");
 		if (STRNEQ(buf, "SNAP"))

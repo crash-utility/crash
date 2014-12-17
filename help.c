@@ -1742,6 +1742,7 @@ char *help_bt[] = {
 "  trace of the current context will be displayed.\n",
 "       -a  displays the stack traces of the active task on each CPU.",
 "           (only applicable to crash dumps)",
+"       -A  same as -a, but also displays vector registers (S390X only).",
 "   -c cpu  display the stack trace of the active task on one or more CPUs,",
 "           which can be specified using the format \"3\", \"1,8,9\", \"1-23\",",
 "           or \"1,8,9-14\". (only applicable to crash dumps)",

@@ -2011,7 +2011,7 @@ cmd_bt(void)
 	if (kt->flags & USE_OLD_BT)
 		bt->flags |= BT_OLD_BACK_TRACE;
 
-        while ((c = getopt(argcnt, args, "D:fFI:S:c:aloreEgstTdxR:O")) != EOF) {
+	while ((c = getopt(argcnt, args, "D:fFI:S:c:aAloreEgstTdxR:O")) != EOF) {
                 switch (c)
 		{
 		case 'f':
@@ -2166,6 +2166,10 @@ cmd_bt(void)
 			}
 			break;
 
+		case 'A':
+			if (!machine_type("S390X"))
+				option_not_supported(c);
+			bt->flags |= BT_SHOW_ALL_REGS; /* FALLTHROUGH */
 		case 'a':
 			active++;
 			break;
@@ -2294,7 +2298,8 @@ cmd_bt(void)
 	if (active) {
 		if (LIVE())
 			error(FATAL, 
-			    "-a option not supported on a live system or live dump\n");
+			    "-%c option not supported on a live system or live dump\n",
+				bt->flags & BT_SHOW_ALL_REGS ? 'A' : 'a');
 
 		if (bt->flags & BT_THREAD_GROUP)
 			error(FATAL, 

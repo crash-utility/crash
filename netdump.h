@@ -169,6 +169,20 @@ struct xen_kdump_data {
 #define NT_S390_PREFIX 0x305
 #endif
 
+/*
+ * S390 vector registers 0-15 upper half note (16 * u64)
+ */
+#ifndef NT_S390_VXRS_LOW
+#define NT_S390_VXRS_LOW 0x309
+#endif
+
+/*
+ * S390 vector registers 16-31 note (16 * u128)
+ */
+#ifndef NT_S390_VXRS_HIGH
+#define NT_S390_VXRS_HIGH 0x30a
+#endif
+
 #define MAX_KCORE_ELF_HEADER_SIZE (32768)
 
 struct proc_kcore_data {
