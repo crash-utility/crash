@@ -5554,6 +5554,9 @@ int kcore_memory_dump(FILE *);
 void dump_registers_for_qemu_mem_dump(void);
 void kdump_backup_region_init(void);
 void display_regs_from_elf_notes(int, FILE *);
+void display_ELF_note(int, int, void *, FILE *);
+#define PRSTATUS_NOTE (1)
+#define QEMU_NOTE     (2)
 
 /*
  * ramdump.c

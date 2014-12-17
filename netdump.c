@@ -1882,11 +1882,11 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 			netdump_print("(unused)\n");
 			if (note->n_descsz)
 				pc->flags2 |= ERASEINFO_DATA;
+		} if (qemuinfo) {
+			pc->flags2 |= QEMU_MEM_DUMP_ELF;
+			netdump_print("(QEMUCPUState)\n");
 		} else
 			netdump_print("(?)\n");
-
-		if (qemuinfo)
-			pc->flags2 |= QEMU_MEM_DUMP_ELF;
 		break;
 
 	case NT_XEN_KDUMP_CR3: 
@@ -1960,7 +1960,7 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 		uptr = (ulong *)roundup((ulong)uptr, 4);
 
 	if (store && qemuinfo) {
-		for(i=0; i<NR_CPUS; i++) {
+		for(i = 0; i < NR_CPUS; i++) {
 			if (!nd->nt_qemu_percpu[i]) {
 				nd->nt_qemu_percpu[i] = (void *)uptr;
 				nd->num_qemu_notes++;
@@ -1979,6 +1979,14 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
                 }
                 lf = 0;
 	} else {
+		if (nd->ofp && !XEN_CORE_DUMPFILE() && !(pc->flags2 & LIVE_DUMP)) {
+			if (machine_type("X86")) {
+				if (note->n_type == NT_PRSTATUS)
+					display_ELF_note(EM_386, PRSTATUS_NOTE, note, nd->ofp);
+				else if (qemuinfo)
+					display_ELF_note(EM_386, QEMU_NOTE, note, nd->ofp);
+			}
+		}
 		for (i = lf = 0; i < note->n_descsz/sizeof(ulong); i++) {
 			if (((i%4)==0)) {
 				netdump_print("%s                         ", 
@@ -2162,11 +2170,11 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 			netdump_print("(unused)\n");
 			if (note->n_descsz)
 				pc->flags2 |= ERASEINFO_DATA;
+		} else if (qemuinfo) {
+			pc->flags2 |= QEMU_MEM_DUMP_ELF;
+			netdump_print("(QEMUCPUState)\n");
                 } else
                         netdump_print("(?)\n");
-
-		if (qemuinfo)
-			pc->flags2 |= QEMU_MEM_DUMP_ELF;
                 break;
 
 	case NT_XEN_KDUMP_CR3: 
@@ -2258,6 +2266,11 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 	}
 
 	if (BITS32() && (xen_core || (note->n_type == NT_PRSTATUS))) {
+		if (nd->ofp && !XEN_CORE_DUMPFILE() && !(pc->flags2 & LIVE_DUMP)) {
+			if (machine_type("X86") && (note->n_type == NT_PRSTATUS))
+				display_ELF_note(EM_386, PRSTATUS_NOTE, note, nd->ofp);
+		}
+
 		iptr = (int *)uptr;
 		for (i = lf = 0; i < note->n_descsz/sizeof(ulong); i++) {
 			if (((i%4)==0)) {
@@ -2282,6 +2295,14 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 		iptr = (int *)uptr;
 		netdump_print("                         %08lx\n", *iptr); 
 	} else {
+		if (nd->ofp && !XEN_CORE_DUMPFILE() && !(pc->flags2 & LIVE_DUMP)) {
+			if (machine_type("X86_64")) {
+				if (note->n_type == NT_PRSTATUS)
+					display_ELF_note(EM_X86_64, PRSTATUS_NOTE, note, nd->ofp);
+				else if (qemuinfo)
+					display_ELF_note(EM_X86_64, QEMU_NOTE, note, nd->ofp);
+			}
+		}
 		for (i = lf = 0; i < note->n_descsz/sizeof(ulonglong); i++) {
 			if (((i%2)==0)) {
 				netdump_print("%s                         ", 
@@ -2548,6 +2569,294 @@ struct x86_64_user_regs_struct {
         unsigned long fs_base, gs_base;
         unsigned long ds,es,fs,gs;
 };
+
+struct x86_64_prstatus {
+	int si_signo;
+	int si_code;
+	int si_errno;
+	short cursig;
+	unsigned long sigpend;
+	unsigned long sighold;
+	int pid;
+	int ppid;
+	int pgrp;
+	int sid;
+	struct timeval utime;
+	struct timeval stime;
+	struct timeval cutime;
+	struct timeval cstime;
+	struct x86_64_user_regs_struct regs;
+	int fpvalid;
+};
+
+static void
+display_prstatus_x86_64(void *note_ptr, FILE *ofp)
+{
+	struct x86_64_prstatus *pr;
+	Elf64_Nhdr *note;
+	int sp;
+
+	note = (Elf64_Nhdr *)note_ptr;
+	pr = (struct x86_64_prstatus *)(
+		(char *)note + sizeof(Elf64_Nhdr) + note->n_namesz);
+	pr = (struct x86_64_prstatus *)roundup((ulong)pr, 4);
+	sp = nd->num_prstatus_notes ? 25 : 22;
+
+	fprintf(ofp,
+		"%ssi.signo: %d  si.code: %d  si.errno: %d\n"
+		"%scursig: %d  sigpend: %lx  sighold: %lx\n"
+		"%spid: %d  ppid: %d  pgrp: %d  sid:%d\n"
+		"%sutime: %01lld.%06d  stime: %01lld.%06d\n"
+		"%scutime: %01lld.%06d  cstime: %01lld.%06d\n"
+		"%sORIG_RAX: %lx  fpvalid: %d\n"
+		"%s     R15: %016lx  R14: %016lx\n"
+		"%s     R13: %016lx  R12: %016lx\n"
+		"%s     RBP: %016lx  RBX: %016lx\n"
+		"%s     R11: %016lx  R10: %016lx\n"
+		"%s      R9: %016lx   R8: %016lx\n"
+		"%s     RAX: %016lx  RCX: %016lx\n"
+		"%s     RDX: %016lx  RSI: %016lx\n"
+		"%s     RDI: %016lx  RIP: %016lx\n"
+		"%s  RFLAGS: %016lx  RSP: %016lx\n"
+		"%s FS_BASE: %016lx\n"
+		"%s GS_BASE: %016lx\n"
+		"%s      CS: %04lx  SS: %04lx  DS: %04lx\n"
+		"%s      ES: %04lx  FS: %04lx  GS: %04lx\n",
+		space(sp), pr->si_signo, pr->si_code, pr->si_errno,
+		space(sp), pr->cursig, pr->sigpend, pr->sighold,
+		space(sp), pr->pid, pr->ppid, pr->pgrp, pr->sid,
+		space(sp), (long long)pr->utime.tv_sec, (int)pr->utime.tv_usec,
+		(long long)pr->stime.tv_sec, (int)pr->stime.tv_usec,
+		space(sp), (long long)pr->cutime.tv_sec, (int)pr->cutime.tv_usec,
+		(long long)pr->cstime.tv_sec, (int)pr->cstime.tv_usec,
+		space(sp), pr->regs.orig_rax, pr->fpvalid,
+		space(sp), pr->regs.r15, pr->regs.r14,
+		space(sp), pr->regs.r13, pr->regs.r12,
+		space(sp), pr->regs.rbp, pr->regs.rbx,
+		space(sp), pr->regs.r11, pr->regs.r10,
+		space(sp), pr->regs.r9, pr->regs.r8,
+		space(sp), pr->regs.rax, pr->regs.rcx,
+		space(sp), pr->regs.rdx, pr->regs.rsi,
+		space(sp), pr->regs.rdi, pr->regs.rip,
+		space(sp), pr->regs.eflags, pr->regs.rsp,
+		space(sp), pr->regs.fs_base,
+		space(sp), pr->regs.gs_base,
+		space(sp), pr->regs.cs, pr->regs.ss, pr->regs.ds,
+		space(sp), pr->regs.es, pr->regs.fs, pr->regs.gs);
+}
+
+struct x86_user_regs_struct {
+	unsigned long ebx,ecx,edx,esi,edi,ebp,eax;
+	unsigned long ds,es,fs,gs,orig_eax;
+	unsigned long eip,cs,eflags;
+	unsigned long esp,ss;
+};
+
+struct x86_prstatus {
+	int si_signo;
+	int si_code;
+	int si_errno;
+	short cursig;
+	unsigned long sigpend;
+	unsigned long sighold;
+	int pid;
+	int ppid;
+	int pgrp;
+	int sid;
+	struct timeval utime;
+	struct timeval stime;
+	struct timeval cutime;
+	struct timeval cstime;
+	struct x86_user_regs_struct regs;
+	int fpvalid;
+};
+
+static void
+display_prstatus_x86(void *note_ptr, FILE *ofp)
+{
+	struct x86_prstatus *pr;
+	Elf32_Nhdr *note;
+	int sp;
+
+	note = (Elf32_Nhdr *)note_ptr;
+	pr = (struct x86_prstatus *)(
+		(char *)note + sizeof(Elf32_Nhdr) + note->n_namesz);
+	pr = (struct x86_prstatus *)roundup((ulong)pr, 4);
+	sp = nd->num_prstatus_notes ? 25 : 22;
+
+	fprintf(ofp,
+		"%ssi.signo: %d  si.code: %d  si.errno: %d\n"
+		"%scursig: %d  sigpend: %lx  sighold : %lx\n"
+		"%spid: %d  ppid: %d  pgrp: %d  sid: %d\n"
+		"%sutime: %01lld.%06d  stime: %01lld.%06d\n"
+		"%scutime: %01lld.%06d  cstime: %01lld.%06d\n"
+		"%sORIG_EAX: %lx  fpvalid: %d\n"
+		"%s     EBX: %08lx  ECX: %08lx\n"
+		"%s     EDX: %08lx  ESI: %08lx\n"
+		"%s     EDI: %08lx  EBP: %08lx\n"
+		"%s     EAX: %08lx  EIP: %08lx\n"
+		"%s  EFLAGS: %08lx  ESP: %08lx\n"
+		"%s      DS: %04lx  ES: %04lx  FS: %04lx\n"
+		"%s      GS: %04lx  CS: %04lx  SS: %04lx\n",
+		space(sp), pr->si_signo, pr->si_code, pr->si_errno,
+		space(sp), pr->cursig, pr->sigpend, pr->sighold,
+		space(sp), pr->pid, pr->ppid, pr->pgrp, pr->sid,
+		space(sp), (long long)pr->utime.tv_sec, (int)pr->utime.tv_usec,
+		(long long)pr->stime.tv_sec, (int)pr->stime.tv_usec,
+		space(sp), (long long)pr->cutime.tv_sec, (int)pr->cutime.tv_usec,
+		(long long)pr->cstime.tv_sec, (int)pr->cstime.tv_usec,
+		space(sp), pr->regs.orig_eax, pr->fpvalid,
+		space(sp), pr->regs.ebx, pr->regs.ecx,
+		space(sp), pr->regs.edx, pr->regs.esi,
+		space(sp), pr->regs.edi, pr->regs.ebp,
+		space(sp), pr->regs.eax, pr->regs.eip,
+		space(sp), pr->regs.eflags, pr->regs.esp,
+		space(sp), pr->regs.ds, pr->regs.es, pr->regs.fs,
+		space(sp), pr->regs.gs, pr->regs.cs, pr->regs.ss);
+}
+
+static void
+display_qemu_x86_64(void *note_ptr, FILE *ofp)
+{
+	int i, sp;
+	Elf64_Nhdr *note;
+	QEMUCPUState *ptr;
+	QEMUCPUSegment *seg;
+	char *seg_names[] = {"CS", "DS", "ES", "FS", "GS", "SS", "LDT", "TR",
+			     "GDT", "IDT"};
+
+	note = (Elf64_Nhdr *)note_ptr;
+	ptr = (QEMUCPUState *)(
+		(char *)note + sizeof(Elf64_Nhdr) + note->n_namesz);
+	ptr = (QEMUCPUState *)roundup((ulong)ptr, 4);
+	seg = &(ptr->cs);
+	sp = 25;
+
+	fprintf(ofp,
+		"%sversion: %d  size: %d\n"
+		"%sRAX: %016llx     RBX: %016llx\n"
+		"%sRCX: %016llx     RDX: %016llx\n"
+		"%sRSI: %016llx     RDI: %016llx\n"
+		"%sRSP: %016llx     RBP: %016llx\n"
+		"%sRIP: %016llx  RFLAGS: %016llx\n"
+		"%s R8: %016llx      R9: %016llx\n"
+		"%sR10: %016llx     R11: %016llx\n"
+		"%sR12: %016llx     R13: %016llx\n"
+		"%sR14: %016llx     R15: %016llx\n",
+		space(sp), ptr->version, ptr->size,
+		space(sp), (ulonglong)ptr->rax, (ulonglong)ptr->rbx,
+		space(sp), (ulonglong)ptr->rcx, (ulonglong)ptr->rdx,
+		space(sp), (ulonglong)ptr->rsi, (ulonglong)ptr->rdi,
+		space(sp), (ulonglong)ptr->rsp, (ulonglong)ptr->rbp,
+		space(sp), (ulonglong)ptr->rip, (ulonglong)ptr->rflags,
+		space(sp), (ulonglong)ptr->r8, (ulonglong)ptr->r9,
+		space(sp), (ulonglong)ptr->r10, (ulonglong)ptr->r11,
+		space(sp), (ulonglong)ptr->r12, (ulonglong)ptr->r13,
+		space(sp), (ulonglong)ptr->r14, (ulonglong)ptr->r15);
+
+	for (i = 0; i < sizeof(seg_names)/sizeof(seg_names[0]); i++) {
+		fprintf(ofp, "%s%s", space(sp), strlen(seg_names[i]) > 2 ? "" : " ");
+		fprintf(ofp, 
+			"%s: "
+			"selector: %04x  limit: %08x  flags: %08x\n"
+			"%spad: %08x   base: %016llx\n",
+			seg_names[i],
+			seg->selector, seg->limit, seg->flags,
+			space(sp+5), seg->pad, (ulonglong)seg->base);
+		seg++;
+	}
+
+	fprintf(ofp,
+		"%sCR0: %016llx  CR1: %016llx  CR2: %016llx\n"
+		"%sCR3: %016llx  CR4: %016llx\n",
+		space(sp), (ulonglong)ptr->cr[0], (ulonglong)ptr->cr[1], (ulonglong)ptr->cr[2],
+		space(sp), (ulonglong)ptr->cr[3], (ulonglong)ptr->cr[4]);
+}
+
+static void
+display_qemu_x86(void *note_ptr, FILE *ofp)
+{
+	int i, sp;
+	Elf32_Nhdr *note;
+	QEMUCPUState *ptr;
+	QEMUCPUSegment *seg;
+	char *seg_names[] = {"CS", "DS", "ES", "FS", "GS", "SS", "LDT", "TR",
+			     "GDT", "IDT"};
+
+	note = (Elf32_Nhdr *)note_ptr;
+	ptr = (QEMUCPUState *)(
+		(char *)note + sizeof(Elf32_Nhdr) + note->n_namesz);
+	ptr = (QEMUCPUState *)roundup((ulong)ptr, 4);
+	seg = &(ptr->cs);
+	sp = 25; 
+
+	fprintf(ofp,
+		"%sversion: %d  size: %d\n"
+		"%sEAX: %016llx     EBX: %016llx\n"
+		"%sECX: %016llx     EDX: %016llx\n"
+		"%sESI: %016llx     EDI: %016llx\n"
+		"%sESP: %016llx     EBP: %016llx\n"
+		"%sEIP: %016llx  EFLAGS: %016llx\n",
+		space(sp), ptr->version, ptr->size,
+		space(sp), (ulonglong)ptr->rax, (ulonglong)ptr->rbx, 
+		space(sp), (ulonglong)ptr->rcx, (ulonglong)ptr->rdx, 
+		space(sp), (ulonglong)ptr->rsi, (ulonglong)ptr->rdi,
+		space(sp), (ulonglong)ptr->rsp, (ulonglong)ptr->rbp,
+		space(sp), (ulonglong)ptr->rip, (ulonglong)ptr->rflags);
+
+	for(i = 0; i < sizeof(seg_names)/sizeof(seg_names[0]); i++) {
+		fprintf(ofp, "%s%s", space(sp), strlen(seg_names[i]) > 2 ? "" : " ");
+		fprintf(ofp,
+			"%s: "
+			"selector: %04x  limit: %08x  flags: %08x\n"
+			"%spad: %08x   base: %016llx\n",
+			seg_names[i],
+			seg->selector, seg->limit, seg->flags,
+			space(sp+5),
+			seg->pad, (ulonglong)seg->base);
+		seg++;
+	}
+
+	fprintf(ofp,
+		"%sCR0: %016llx  CR1: %016llx  CR2: %016llx\n"
+		"%sCR3: %016llx  CR4: %016llx\n",
+		space(sp), (ulonglong)ptr->cr[0], (ulonglong)ptr->cr[1], (ulonglong)ptr->cr[2],
+		space(sp), (ulonglong)ptr->cr[3], (ulonglong)ptr->cr[4]);
+}
+
+void
+display_ELF_note(int machine, int type, void *note, FILE *ofp)
+{
+	switch (machine)
+	{
+	case EM_386:
+		switch (type)
+		{
+		case PRSTATUS_NOTE:
+			display_prstatus_x86(note, ofp);
+			break;
+		case QEMU_NOTE:
+			display_qemu_x86(note, ofp);
+			break;
+		}
+		break;
+
+	case EM_X86_64:
+		switch (type)
+		{
+		case PRSTATUS_NOTE:
+			display_prstatus_x86_64(note, ofp);
+			break;
+		case QEMU_NOTE:
+			display_qemu_x86_64(note, ofp);
+			break;
+		}
+		break;
+
+	default:
+		return;
+	}
+}
 
 void 
 get_netdump_regs_x86_64(struct bt_info *bt, ulong *ripp, ulong *rspp)
@@ -3829,7 +4138,7 @@ dump_registers_for_qemu_mem_dump(void)
 	fpsave = nd->ofp;
 	nd->ofp = fp;
 
-	for (i=0; i<nd->num_qemu_notes; i++) {
+	for (i = 0; i < nd->num_qemu_notes; i++) {
 		ptr = (QEMUCPUState *)nd->nt_qemu_percpu[i];
 
 		if (i)
@@ -3842,72 +4151,72 @@ dump_registers_for_qemu_mem_dump(void)
 			netdump_print("CPU %d:\n", i);
 
 		if (CRASHDEBUG(1))
-			netdump_print("  version:%08lx      size:%08lx\n",
+			netdump_print("  version:%d  size:%d\n",
 				ptr->version, ptr->size);
-		netdump_print("  rax:%016llx  rbx:%016llx  rcx:%016llx\n",
+		netdump_print("  RAX: %016llx  RBX: %016llx  RCX: %016llx\n",
 			ptr->rax, ptr->rbx, ptr->rcx);
-		netdump_print("  rdx:%016llx  rsi:%016llx  rdi:%016llx\n",
+		netdump_print("  RDX: %016llx  RSI: %016llx  RDI:%016llx\n",
 			ptr->rdx, ptr->rsi, ptr->rdi);
-		netdump_print("  rsp:%016llx  rbp:%016llx  ",
+		netdump_print("  RSP: %016llx  RBP: %016llx  ",
 			ptr->rsp, ptr->rbp);
 	
 		if (DUMPFILE_FORMAT(nd->flags) == KDUMP_ELF64) {
-			netdump_print(" r8:%016llx\n",
+			netdump_print(" R8: %016llx\n",
 				ptr->r8);
-			netdump_print("   r9:%016llx  r10:%016llx  r11:%016llx\n",
+			netdump_print("   R9: %016llx  R10: %016llx  R11: %016llx\n",
 				ptr->r9, ptr->r10, ptr->r11);
-			netdump_print("  r12:%016llx  r13:%016llx  r14:%016llx\n",
+			netdump_print("  R12: %016llx  R13: %016llx  R14: %016llx\n",
 				ptr->r12, ptr->r13, ptr->r14);
-			netdump_print("  r15:%016llx",
+			netdump_print("  R15: %016llx",
 				ptr->r15);
 		} else
                         netdump_print("\n");
 
-		netdump_print("  rip:%016llx  rflags:%08llx\n",
+		netdump_print("  RIP: %016llx  RFLAGS: %08llx\n",
 			ptr->rip, ptr->rflags);
-		netdump_print("  cs:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("   CS: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->cs.selector, ptr->cs.limit, ptr->cs.flags,
 			ptr->cs.pad, ptr->cs.base);
-		netdump_print("  ds:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("   DS: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->ds.selector, ptr->ds.limit, ptr->ds.flags,
 			ptr->ds.pad, ptr->ds.base);
-		netdump_print("  es:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("   ES: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->es.selector, ptr->es.limit, ptr->es.flags,
 			ptr->es.pad, ptr->es.base);
-		netdump_print("  fs:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("   FS: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->fs.selector, ptr->fs.limit, ptr->fs.flags,
 			ptr->fs.pad, ptr->fs.base);
-		netdump_print("  gs:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("   GS: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->gs.selector, ptr->gs.limit, ptr->gs.flags,
 			ptr->gs.pad, ptr->gs.base);
-		netdump_print("  ss:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("   SS: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->ss.selector, ptr->ss.limit, ptr->ss.flags,
 			ptr->ss.pad, ptr->ss.base);
-		netdump_print("  ldt:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("  LDT: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->ldt.selector, ptr->ldt.limit, ptr->ldt.flags,
 			ptr->ldt.pad, ptr->ldt.base);
-		netdump_print("  tr:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("   TR: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->tr.selector, ptr->tr.limit, ptr->tr.flags,
 			ptr->tr.pad, ptr->tr.base);
-		netdump_print("  gdt:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("  GDT: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->gdt.selector, ptr->gdt.limit, ptr->gdt.flags,
 			ptr->gdt.pad, ptr->gdt.base);
-		netdump_print("  idt:\n    selector:%08lx  limit:%08lx  flags:%08lx\n\
-    pad:%08lx  base:%016llx\n",
+		netdump_print("  IDT: selector: %04lx  limit: %08lx  flags: %08lx\n\
+       pad: %08lx   base: %016llx\n",
 			ptr->idt.selector, ptr->idt.limit, ptr->idt.flags,
 			ptr->idt.pad, ptr->idt.base);
-		netdump_print("  cr[0]:%016llx  cr[1]:%016llx  cr[2]:%016llx\n",
+		netdump_print("  CR0: %016llx  CR1: %016llx  CR2: %016llx\n",
 			ptr->cr[0], ptr->cr[1], ptr->cr[2]);
-		netdump_print("  cr[3]:%016llx  cr[4]:%016llx\n",
+		netdump_print("  CR3: %016llx  CR4: %016llx\n",
 			ptr->cr[3], ptr->cr[4]);
 	}
 

@@ -1740,8 +1740,10 @@ __diskdump_memory_dump(FILE *fp)
 			fprintf(fp, "           notes_buf: %lx\n",
 				(ulong)dd->notes_buf);
 			for (i = 0; i < dd->num_prstatus_notes; i++) {
-				fprintf(fp, "            notes[%d]: %lx\n",
+				fprintf(fp, "            notes[%d]: %lx (NT_PRSTATUS)\n",
 					i, (ulong)dd->nt_prstatus_percpu[i]);
+				display_ELF_note(dd->machine_type, PRSTATUS_NOTE,
+					 dd->nt_prstatus_percpu[i], fp);
 			}
 			dump_nt_prstatus_offset(fp);
 		}
