@@ -1095,6 +1095,18 @@ arm_lpae_vtop(ulong vaddr, ulong *pgd, physaddr_t *paddr, int verbose)
 	pmd_t pmd_pte;
 	pte_t pte;
 
+	if (!vt->vmalloc_start) {
+		*paddr = LPAE_VTOP(vaddr);
+		return TRUE;
+	}
+
+	if (!IS_VMALLOC_ADDR(vaddr)) {
+		*paddr = LPAE_VTOP(vaddr);
+		if (!verbose)
+			return TRUE;
+	}
+
+
 	if (verbose)
 		fprintf(fp, "PAGE DIRECTORY: %lx\n", (ulong)pgd);
 
@@ -1231,6 +1243,11 @@ arm_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbose)
 	if (!IS_KVADDR(kvaddr))
 		return FALSE;
 
+	if (machdep->flags & PAE)
+		return arm_lpae_vtop(kvaddr, (ulong *)vt->kernel_pgd[0],
+			paddr, verbose);
+
+
 	if (!vt->vmalloc_start) {
 		*paddr = VTOP(kvaddr);
 		return TRUE;
@@ -1242,9 +1259,6 @@ arm_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbose)
 			return TRUE;
 	}
 
-	if (machdep->flags & PAE)
-		return arm_lpae_vtop(kvaddr, (ulong *)vt->kernel_pgd[0], 
-			paddr, verbose);
 
 	return arm_vtop(kvaddr, (ulong *)vt->kernel_pgd[0], paddr, verbose);
 }
