@@ -1882,7 +1882,7 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 			netdump_print("(unused)\n");
 			if (note->n_descsz)
 				pc->flags2 |= ERASEINFO_DATA;
-		} if (qemuinfo) {
+		} else if (qemuinfo) {
 			pc->flags2 |= QEMU_MEM_DUMP_ELF;
 			netdump_print("(QEMUCPUState)\n");
 		} else
