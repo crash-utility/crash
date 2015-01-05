@@ -2271,10 +2271,14 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 		}
 	}
 
-	if (BITS32() && (xen_core || (note->n_type == NT_PRSTATUS))) {
+	if (BITS32() && (xen_core || (note->n_type == NT_PRSTATUS) || qemuinfo)) {
 		if (nd->ofp && !XEN_CORE_DUMPFILE() && !(pc->flags2 & LIVE_DUMP)) {
-			if (machine_type("X86") && (note->n_type == NT_PRSTATUS))
-				display_ELF_note(EM_386, PRSTATUS_NOTE, note, nd->ofp);
+			if (machine_type("X86")) { 
+				if (note->n_type == NT_PRSTATUS)
+					display_ELF_note(EM_386, PRSTATUS_NOTE, note, nd->ofp);
+				else if (qemuinfo)
+					display_ELF_note(EM_386, QEMU_NOTE, note, nd->ofp);
+			}
 		}
 
 		iptr = (int *)uptr;
