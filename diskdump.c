@@ -7,8 +7,8 @@
  * netdump dumpfiles, the facilities in netdump.c are used.  For
  * compressed dumpfiles, the facilities in this file are used.
  *
- * Copyright (C) 2004-2014 David Anderson
- * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2015 David Anderson
+ * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2005  FUJITSU LIMITED
  * Copyright (C) 2005  NEC Corporation
  *
@@ -54,6 +54,8 @@ struct diskdump_data {
 	unsigned char *notes_buf;	/* copy of elf notes */
 	void	**nt_prstatus_percpu;
 	uint	num_prstatus_notes;
+	void	**nt_qemu_percpu;
+	uint	num_qemu_notes;
 
 	/* page cache */
 	struct page_cache_hdr {		/* header for each cached page */
@@ -78,7 +80,7 @@ ulong *diskdump_flags = &diskdump_data.flags;
 
 static int __diskdump_memory_dump(FILE *);
 static void dump_vmcoreinfo(FILE *);
-static void dump_nt_prstatus_offset(FILE *);
+static void dump_note_offsets(FILE *);
 static char *vmcoreinfo_read_string(const char *);
 static void diskdump_get_osrelease(void);
 static int valid_note_address(unsigned char *);
@@ -101,10 +103,10 @@ map_cpus_to_prstatus_kdump_cmprs(void)
 	size_t size;
 
 	if (pc->flags2 & QEMU_MEM_DUMP_COMPRESSED)  /* notes exist for all cpus */
-		return;
+		goto resize_note_pointers;
 
 	if (!(online = get_cpus_online()) || (online == kt->cpus))
-		return;
+		goto resize_note_pointers;
 
 	if (CRASHDEBUG(1))
 		error(INFO,
@@ -131,6 +133,26 @@ map_cpus_to_prstatus_kdump_cmprs(void)
 	}
 
 	FREEBUF(nt_ptr);
+
+resize_note_pointers:
+	/*
+	 *  For architectures that only utilize the note pointers
+	 *  within this file, resize the arrays accordingly.
+	 */
+	if (machine_type("X86_64") || machine_type("X86") || 
+	    machine_type("ARM64")) {
+		if ((dd->nt_prstatus_percpu = realloc(dd->nt_prstatus_percpu, 
+		    dd->num_prstatus_notes * sizeof(void *))) == NULL)
+			error(FATAL, 
+			    "compressed kdump: cannot realloc NT_PRSTATUS note pointers\n");
+		if (dd->num_qemu_notes) {
+			if  ((dd->nt_qemu_percpu = realloc(dd->nt_qemu_percpu, 
+		    	    dd->num_qemu_notes * sizeof(void *))) == NULL)
+				error(FATAL, 
+				    "compressed kdump: cannot realloc QEMU note pointers\n");
+		} else
+			free(dd->nt_qemu_percpu);
+	}
 }
 
 static void 
@@ -138,7 +160,7 @@ add_diskdump_data(char* name)
 {
 #define DDL_SIZE 16
 	int i;
-	int sz = sizeof(void*);
+	int sz = sizeof(void *);
 	struct diskdump_data *ddp;
 
 	if (dd_list == NULL) {
@@ -247,7 +269,7 @@ process_elf32_notes(void *note_buf, unsigned long size_note)
 	Elf32_Nhdr *nt;
 	size_t index, len = 0;
 	int num = 0;
-
+	int qemu_num = 0;
 
 	for (index = 0; index < size_note; index += len) {
 		nt = note_buf + index;
@@ -257,8 +279,10 @@ process_elf32_notes(void *note_buf, unsigned long size_note)
 			num++;
 		}
 		len = sizeof(Elf32_Nhdr);
-		if (STRNEQ((char *)nt + len, "QEMU"))
-			pc->flags2 |= QEMU_MEM_DUMP_COMPRESSED;
+		if (STRNEQ((char *)nt + len, "QEMU")) {
+			dd->nt_qemu_percpu[qemu_num] = nt;
+			qemu_num++;
+		}
 		len = roundup(len + nt->n_namesz, 4);
 		len = roundup(len + nt->n_descsz, 4);
 	}
@@ -266,6 +290,11 @@ process_elf32_notes(void *note_buf, unsigned long size_note)
 	if (num > 0) {
 		pc->flags2 |= ELF_NOTES;
 		dd->num_prstatus_notes = num;
+	}
+
+	if (qemu_num > 0) {
+		pc->flags2 |= QEMU_MEM_DUMP_COMPRESSED;
+		dd->num_qemu_notes = qemu_num;
 	}
 	return;
 }
@@ -276,6 +305,7 @@ process_elf64_notes(void *note_buf, unsigned long size_note)
 	Elf64_Nhdr *nt;
 	size_t index, len = 0;
 	int num = 0;
+	int qemu_num = 0;
 
 	for (index = 0; index < size_note; index += len) {
 		nt = note_buf + index;
@@ -285,8 +315,11 @@ process_elf64_notes(void *note_buf, unsigned long size_note)
 			num++;
 		}
 		len = sizeof(Elf64_Nhdr);
-		if (STRNEQ((char *)nt + len, "QEMU"))
-			pc->flags2 |= QEMU_MEM_DUMP_COMPRESSED;
+		if (STRNEQ((char *)nt + len, "QEMU")) {
+			dd->nt_qemu_percpu[qemu_num] = nt;
+			qemu_num++;
+		}
+
 		len = roundup(len + nt->n_namesz, 4);
 		len = roundup(len + nt->n_descsz, 4);
 	}
@@ -294,6 +327,11 @@ process_elf64_notes(void *note_buf, unsigned long size_note)
 	if (num > 0) {
 		pc->flags2 |= ELF_NOTES;
 		dd->num_prstatus_notes = num;
+	}
+
+	if (qemu_num > 0) {
+		pc->flags2 |= QEMU_MEM_DUMP_COMPRESSED;
+		dd->num_qemu_notes = qemu_num;
 	}
 	return;
 }
@@ -684,9 +722,13 @@ restart:
 			error(FATAL, "compressed kdump: cannot malloc notes"
 				" buffer\n");
 
-		if ((dd->nt_prstatus_percpu = malloc(NR_CPUS * sizeof(void*))) == NULL)
+		if ((dd->nt_prstatus_percpu = malloc(NR_CPUS * sizeof(void *))) == NULL)
 			error(FATAL, "compressed kdump: cannot malloc pointer"
 				" to NT_PRSTATUS notes\n");
+
+		if ((dd->nt_qemu_percpu = malloc(NR_CPUS * sizeof(void *))) == NULL)
+			error(FATAL, "qemu mem dump compressed: cannot malloc pointer"
+				" to QEMU notes\n");
 
 		if (FLAT_FORMAT()) {
 			if (!read_flattened_format(dd->dfd, offset, dd->notes_buf, size)) {
@@ -777,6 +819,8 @@ err:
 		free(dd->notes_buf);
 	if (dd->nt_prstatus_percpu)
 		free(dd->nt_prstatus_percpu);
+	if (dd->nt_qemu_percpu)
+		free(dd->nt_qemu_percpu);
 
 	dd->flags &= ~(DISKDUMP_LOCAL|KDUMP_CMPRS_LOCAL);
 	pc->flags2 &= ~ELF_NOTES;
@@ -1454,7 +1498,7 @@ err:
 }
 
 static void
-dump_nt_prstatus_offset(FILE *fp)
+dump_note_offsets(FILE *fp)
 {
 	struct kdump_sub_header *sub_header_kdump = dd->sub_header_kdump;
 	size_t size;
@@ -1462,7 +1506,7 @@ dump_nt_prstatus_offset(FILE *fp)
 	Elf32_Nhdr *note32 = NULL;
 	Elf64_Nhdr *note64 = NULL;
 	size_t tot, len = 0;
-	int cnt;
+	int qemu, cnt;
 
 	if (KDUMP_CMPRS_VALID() && !(dd->flags & NO_ELF_NOTES) &&
 	    (dd->header->header_version >= 4) &&
@@ -1471,18 +1515,27 @@ dump_nt_prstatus_offset(FILE *fp)
 		size = sub_header_kdump->size_note;
 		offset = sub_header_kdump->offset_note;
 
-		fprintf(fp, "  NT_PRSTATUS_offset: ");
+		fprintf(fp, "        NOTE offsets: ");
 		for (tot = cnt = 0; tot < size; tot += len) {
+			qemu = FALSE;
 			if (machine_type("X86_64") || machine_type("S390X") ||
 			    machine_type("ARM64")) {
 				note64 = (void *)dd->notes_buf + tot;
 				len = sizeof(Elf64_Nhdr);
+				if (STRNEQ((char *)note64 + len, "QEMU"))
+					qemu = TRUE;
 				len = roundup(len + note64->n_namesz, 4);
 				len = roundup(len + note64->n_descsz, 4);
 
 				if (note64->n_type == NT_PRSTATUS) {
-					fprintf(fp, "%s%lx\n",
-						(tot == 0) ? "" : "                      ",
+					fprintf(fp, "%s%lx (NT_PRSTATUS)\n",
+						tot ? space(22) : "",
+						(ulong)(offset + tot));
+					cnt++;
+				} 
+				if (qemu) {
+					fprintf(fp, "%s%lx (QEMU)\n",
+						tot ? space(22) : "",
 						(ulong)(offset + tot));
 					cnt++;
 				}
@@ -1490,12 +1543,20 @@ dump_nt_prstatus_offset(FILE *fp)
 			} else if (machine_type("X86") || machine_type("PPC")) {
 				note32 = (void *)dd->notes_buf + tot;
 				len = sizeof(Elf32_Nhdr);
+				if (STRNEQ((char *)note32 + len, "QEMU"))
+					qemu = TRUE;
 				len = roundup(len + note32->n_namesz, 4);
 				len = roundup(len + note32->n_descsz, 4);
 
 				if (note32->n_type == NT_PRSTATUS) {
-					fprintf(fp, "%s%lx\n",
-						(tot == 0) ? "" : "                      ",
+					fprintf(fp, "%s%lx (NT_PRSTATUS)\n",
+						tot ? space(22) : "",
+						(ulong)(offset + tot));
+					cnt++;
+				}
+				if (qemu) {
+					fprintf(fp, "%s%lx (QEMU)\n",
+						tot ? space(22) : "",
 						(ulong)(offset + tot));
 					cnt++;
 				}
@@ -1735,17 +1796,25 @@ __diskdump_memory_dump(FILE *fp)
 			fprintf(fp, "           size_note: %lu (0x%lx)\n",
 				dd->sub_header_kdump->size_note,
 				dd->sub_header_kdump->size_note);
-			fprintf(fp, "  num_prstatus_notes: %d\n",
-				dd->num_prstatus_notes);
 			fprintf(fp, "           notes_buf: %lx\n",
 				(ulong)dd->notes_buf);
+			fprintf(fp, "  num_prstatus_notes: %d\n",
+				dd->num_prstatus_notes);
 			for (i = 0; i < dd->num_prstatus_notes; i++) {
 				fprintf(fp, "            notes[%d]: %lx (NT_PRSTATUS)\n",
 					i, (ulong)dd->nt_prstatus_percpu[i]);
 				display_ELF_note(dd->machine_type, PRSTATUS_NOTE,
 					 dd->nt_prstatus_percpu[i], fp);
 			}
-			dump_nt_prstatus_offset(fp);
+			fprintf(fp, "      num_qemu_notes: %d\n",
+				dd->num_qemu_notes);
+			for (i = 0; i < dd->num_qemu_notes; i++) {
+				fprintf(fp, "            notes[%d]: %lx (QEMUCPUState)\n",
+					i, (ulong)dd->nt_qemu_percpu[i]);
+				display_ELF_note(dd->machine_type, QEMU_NOTE,
+					dd->nt_qemu_percpu[i], fp);
+			}
+			dump_note_offsets(fp);
 		}
 		if (dh->header_version >= 5) {
 			fprintf(fp, "    offset_eraseinfo: %llu (0x%llx)\n",

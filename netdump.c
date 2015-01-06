@@ -1,7 +1,7 @@
 /* netdump.c 
  *
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -2740,7 +2740,7 @@ display_qemu_x86_64(void *note_ptr, FILE *ofp)
 		(char *)note + sizeof(Elf64_Nhdr) + note->n_namesz);
 	ptr = (QEMUCPUState *)roundup((ulong)ptr, 4);
 	seg = &(ptr->cs);
-	sp = 25;
+	sp = VMCORE_VALID()? 25 : 22;
 
 	fprintf(ofp,
 		"%sversion: %d  size: %d\n"
@@ -2777,10 +2777,12 @@ display_qemu_x86_64(void *note_ptr, FILE *ofp)
 	}
 
 	fprintf(ofp,
-		"%sCR0: %016llx  CR1: %016llx  CR2: %016llx\n"
-		"%sCR3: %016llx  CR4: %016llx\n",
-		space(sp), (ulonglong)ptr->cr[0], (ulonglong)ptr->cr[1], (ulonglong)ptr->cr[2],
-		space(sp), (ulonglong)ptr->cr[3], (ulonglong)ptr->cr[4]);
+		"%sCR0: %016llx  CR1: %016llx\n"
+		"%sCR2: %016llx  CR3: %016llx\n"
+		"%sCR4: %016llx\n",
+		space(sp), (ulonglong)ptr->cr[0], (ulonglong)ptr->cr[1], 
+		space(sp), (ulonglong)ptr->cr[2], (ulonglong)ptr->cr[3],
+		space(sp), (ulonglong)ptr->cr[4]);
 }
 
 static void
@@ -2798,7 +2800,7 @@ display_qemu_x86(void *note_ptr, FILE *ofp)
 		(char *)note + sizeof(Elf32_Nhdr) + note->n_namesz);
 	ptr = (QEMUCPUState *)roundup((ulong)ptr, 4);
 	seg = &(ptr->cs);
-	sp = 25; 
+	sp = VMCORE_VALID()? 25 : 22;
 
 	fprintf(ofp,
 		"%sversion: %d  size: %d\n"
@@ -2828,10 +2830,12 @@ display_qemu_x86(void *note_ptr, FILE *ofp)
 	}
 
 	fprintf(ofp,
-		"%sCR0: %016llx  CR1: %016llx  CR2: %016llx\n"
-		"%sCR3: %016llx  CR4: %016llx\n",
-		space(sp), (ulonglong)ptr->cr[0], (ulonglong)ptr->cr[1], (ulonglong)ptr->cr[2],
-		space(sp), (ulonglong)ptr->cr[3], (ulonglong)ptr->cr[4]);
+		"%sCR0: %016llx  CR1: %016llx\n"
+		"%sCR2: %016llx  CR3: %016llx\n"
+		"%sCR4: %016llx\n",
+		space(sp), (ulonglong)ptr->cr[0], (ulonglong)ptr->cr[1],
+		space(sp), (ulonglong)ptr->cr[2], (ulonglong)ptr->cr[3],
+		space(sp), (ulonglong)ptr->cr[4]);
 }
 
 void
