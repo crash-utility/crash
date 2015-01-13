@@ -71,7 +71,7 @@
 
 #if !defined(X86) && !defined(X86_64) && !defined(ALPHA) && !defined(PPC) && \
     !defined(IA64) && !defined(PPC64) && !defined(S390) && !defined(S390X) && \
-    !defined(ARM) && !defined(ARM64)
+    !defined(ARM) && !defined(ARM64) && !defined(MIPS)
 #ifdef __alpha__
 #define ALPHA
 #endif
@@ -102,6 +102,9 @@
 #endif
 #ifdef __aarch64__
 #define ARM64
+#endif
+#ifdef __mipsel__
+#define MIPS
 #endif
 #endif
 
@@ -134,6 +137,9 @@
 #endif
 #ifdef ARM64
 #define NR_CPUS  (4096)   /* TBD */
+#endif
+#ifdef MIPS
+#define NR_CPUS  (32)
 #endif
 
 #define BUFSIZE  (1500)
@@ -1928,6 +1934,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long atomic_t_counter;
 	long percpu_counter_count;
 	long mm_struct_mm_count;
+	long task_struct_thread_reg29;
+	long task_struct_thread_reg31;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2945,6 +2953,37 @@ struct arm64_stackframe {
 
 #endif  /* ARM64 */
 
+#ifdef MIPS
+#define _32BIT_
+#define MACHINE_TYPE		"MIPS"
+
+#define PAGEBASE(X)		(((ulong)(X)) & (ulong)machdep->pagemask)
+
+#define PTOV(X)            ((unsigned long)(X) + 0x80000000lu)
+#define VTOP(X)            ((unsigned long)(X) & 0x1ffffffflu)
+
+#define IS_VMALLOC_ADDR(X) (vt->vmalloc_start && (ulong)(X) >= vt->vmalloc_start)
+
+#define DEFAULT_MODULES_VADDR	(machdep->kvbase - 16 * 1024 * 1024)
+#define MODULES_VADDR   	(machdep->machspec->modules_vaddr)
+#define MODULES_END     	(machdep->machspec->modules_end)
+#define VMALLOC_START   	(machdep->machspec->vmalloc_start_addr)
+#define VMALLOC_END     	(machdep->machspec->vmalloc_end)
+
+#define __SWP_TYPE_SHIFT	3
+#define __SWP_TYPE_BITS		6
+#define __SWP_TYPE_MASK		((1 << __SWP_TYPE_BITS) - 1)
+#define __SWP_OFFSET_SHIFT	(__SWP_TYPE_BITS + __SWP_TYPE_SHIFT)
+
+#define SWP_TYPE(entry)		(((entry) >> __SWP_TYPE_SHIFT) & __SWP_TYPE_MASK)
+#define SWP_OFFSET(entry)	((entry) >> __SWP_OFFSET_SHIFT)
+
+#define __swp_type(entry)	SWP_TYPE(entry)
+#define __swp_offset(entry)	SWP_OFFSET(entry)
+
+#define TIF_SIGPENDING		(2)
+#endif  /* MIPS */
+
 #ifdef X86
 #define _32BIT_
 #define MACHINE_TYPE       "X86"
@@ -3802,6 +3841,10 @@ struct efi_memory_desc_t {
 #define MAX_HEXADDR_STRLEN (16)
 #define UVADDR_PRLEN       (10)
 #endif
+#ifdef MIPS
+#define MAX_HEXADDR_STRLEN (8)
+#define UVADDR_PRLEN       (8)
+#endif
 
 #define BADADDR  ((ulong)(-1))
 #define BADVAL   ((ulong)(-1))
@@ -4338,6 +4381,9 @@ void dump_build_data(void);
 #ifdef PPC64
 #define machdep_init(X) ppc64_init(X)
 #endif
+#ifdef MIPS
+#define machdep_init(X) mips_init(X)
+#endif
 int clean_exit(int);
 int untrusted_file(FILE *, char *);
 char *readmem_function_name(void);
@@ -4744,6 +4790,9 @@ void display_help_screen(char *);
 #endif
 #ifdef PPC64
 #define dump_machdep_table(X) ppc64_dump_machdep_table(X)
+#endif
+#ifdef MIPS
+#define dump_machdep_table(X) mips_dump_machdep_table(X)
 #endif
 extern char *help_pointer[];
 extern char *help_alias[];
@@ -5504,6 +5553,66 @@ void s390x_dump_machdep_table(ulong);
         error(FATAL, "-d option is not applicable to S390X architecture\n")
 #define KSYMS_START (0x1)
 #endif
+
+#ifdef MIPS
+void mips_init(int);
+void mips_dump_machdep_table(ulong);
+
+#define display_idt_table() \
+        error(FATAL, "-d option is not applicable to MIPS architecture\n")
+
+struct mips_regset {
+	ulong regs[45];
+};
+
+struct mips_pt_regs {
+        ulong pad0[8];
+        ulong regs[32];
+        ulong cp0_status;
+        ulong hi;
+        ulong lo;
+        ulong cp0_badvaddr;
+        ulong cp0_cause;
+        ulong cp0_epc;
+};
+
+#define KSYMS_START	(0x1)
+#define PHYS_BASE	(0x2)
+
+#define KVBASE_MASK	(0x1ffffff)
+
+struct machine_specific {
+	ulong phys_base;
+	ulong vmalloc_start_addr;
+	ulong modules_vaddr;
+	ulong modules_end;
+
+	ulong _page_present;
+	ulong _page_read;
+	ulong _page_write;
+	ulong _page_accessed;
+	ulong _page_modified;
+	ulong _page_global;
+	ulong _page_valid;
+	ulong _page_no_read;
+	ulong _page_no_exec;
+	ulong _page_dirty;
+
+	ulong _pfn_shift;
+
+#define _PAGE_PRESENT   (machdep->machspec->_page_present)
+#define _PAGE_READ      (machdep->machspec->_page_read)
+#define _PAGE_WRITE     (machdep->machspec->_page_write)
+#define _PAGE_ACCESSED  (machdep->machspec->_page_accessed)
+#define _PAGE_MODIFIED  (machdep->machspec->_page_modified)
+#define _PAGE_GLOBAL    (machdep->machspec->_page_global)
+#define _PAGE_VALID     (machdep->machspec->_page_valid)
+#define _PAGE_NO_READ   (machdep->machspec->_page_no_read)
+#define _PAGE_NO_EXEC   (machdep->machspec->_page_no_exec)
+#define _PAGE_DIRTY     (machdep->machspec->_page_dirty)
+#define _PFN_SHIFT      (machdep->machspec->_pfn_shift)
+};
+#endif /* MIPS */
 
 /*
  *  netdump.c 

@@ -1688,3 +1688,38 @@
  #include <sys/utsname.h>
  
  #include "gregset.h"
+--- gdb-7.6/sim/igen/Makefile.in.orig
++++ gdb-7.6/sim/igen/Makefile.in
+@@ -117,7 +117,7 @@ IGEN_OBJS=\
+ 	gen.o
+ 
+ igen: igen.o $(IGEN_OBJS)
+-	$(CC_FOR_BUILD) $(BUILD_LDFLAGS) -o igen igen.o $(IGEN_OBJS) $(LIBIBERTY_LIB)
++	$(CC_FOR_BUILD) $(BUILD_CFLAGS) $(BUILD_LDFLAGS) -o igen igen.o $(IGEN_OBJS) $(LIBIBERTY_LIB)
+ 
+ igen.o: igen.c misc.h filter_host.h lf.h table.h ld-decode.h ld-cache.h ld-insn.h filter.h gen-model.h gen-itable.h gen-icache.h gen-idecode.h gen-engine.h gen-semantics.h gen-support.h gen.h igen.h 
+ 	$(CC_FOR_BUILD) $(BUILD_CFLAGS) -c $(srcdir)/igen.c
+--- gdb-7.6/sim/mips/cp1.c.orig
++++ gdb-7.6/sim/mips/cp1.c
+@@ -1359,7 +1359,7 @@ fp_rsqrt2(sim_cpu *cpu,
+ /* Conversion operations.  */
+ 
+ uword64
+-convert (sim_cpu *cpu,
++sim_mips_convert (sim_cpu *cpu,
+ 	 address_word cia,
+ 	 int rm,
+ 	 uword64 op,
+--- gdb-7.6/sim/mips/sim-main.h.orig
++++ gdb-7.6/sim/mips/sim-main.h
+@@ -770,8 +770,8 @@ unsigned64 fp_nmadd (SIM_STATE, unsigned64 op1, unsigned64 op2,
+ unsigned64 fp_nmsub (SIM_STATE, unsigned64 op1, unsigned64 op2,
+ 		     unsigned64 op3, FP_formats fmt);
+ #define NegMultiplySub(op1,op2,op3,fmt) fp_nmsub(SIM_ARGS, op1, op2, op3, fmt)
+-unsigned64 convert (SIM_STATE, int rm, unsigned64 op, FP_formats from, FP_formats to);
+-#define Convert(rm,op,from,to) convert (SIM_ARGS, rm, op, from, to)
++unsigned64 sim_mips_convert (SIM_STATE, int rm, unsigned64 op, FP_formats from, FP_formats to);
++#define Convert(rm,op,from,to) sim_mips_convert (SIM_ARGS, rm, op, from, to)
+ unsigned64 convert_ps (SIM_STATE, int rm, unsigned64 op, FP_formats from,
+ 		       FP_formats to);
+ #define ConvertPS(rm,op,from,to) convert_ps (SIM_ARGS, rm, op, from, to)

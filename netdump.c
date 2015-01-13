@@ -34,6 +34,7 @@ static size_t dump_Elf32_Nhdr(Elf32_Off offset, int);
 static void dump_Elf64_Ehdr(Elf64_Ehdr *);
 static void dump_Elf64_Phdr(Elf64_Phdr *, int);
 static size_t dump_Elf64_Nhdr(Elf64_Off offset, int);
+static void get_netdump_regs_32(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_ppc(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_ppc64(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_arm(struct bt_info *, ulong *, ulong *);
@@ -193,6 +194,12 @@ is_netdump(char *file, ulong source_query)
 
 		case EM_PPC:
 			if (machine_type_mismatch(file, "PPC", NULL,
+			    source_query))
+				goto bailout;
+			break;
+
+		case EM_MIPS:
+			if (machine_type_mismatch(file, "MIPS", NULL,
 			    source_query))
 				goto bailout;
 			break;
@@ -1297,6 +1304,9 @@ dump_Elf32_Ehdr(Elf32_Ehdr *elf)
 	case EM_386:
 		netdump_print("(EM_386)\n");
 		break;
+	case EM_MIPS:
+		netdump_print("(EM_MIPS)\n");
+		break;
 	default:
 		netdump_print("(unsupported)\n");
 		break;
@@ -2389,6 +2399,10 @@ get_netdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 		return get_netdump_regs_arm64(bt, eip, esp);
 		break;
 
+	case EM_MIPS:
+		return get_netdump_regs_32(bt, eip, esp);
+		break;
+
 	default:
 		error(FATAL, 
 		   "support for ELF machine type %d not available\n",
@@ -3203,16 +3217,13 @@ next_sysrq:
 }
 
 static void
-get_netdump_regs_ppc(struct bt_info *bt, ulong *eip, ulong *esp)
+get_netdump_regs_32(struct bt_info *bt, ulong *eip, ulong *esp)
 {
 	Elf32_Nhdr *note;
 	size_t len;
 
-	ppc_relocate_nt_prstatus_percpu(nd->nt_prstatus_percpu,
-					&nd->num_prstatus_notes);
-
 	if ((bt->task == tt->panic_task) ||
-		(is_task_active(bt->task) && nd->num_prstatus_notes > 1)) {
+		(is_task_active(bt->task) && nd->num_prstatus_notes)) {
 		/*	
 		 * Registers are saved during the dump process for the 
 		 * panic task. Whereas in kdump, regs are captured for all 
@@ -3241,6 +3252,15 @@ get_netdump_regs_ppc(struct bt_info *bt, ulong *eip, ulong *esp)
 
 no_nt_prstatus_exists:
 	machdep->get_stack_frame(bt, eip, esp);
+}
+
+static void
+get_netdump_regs_ppc(struct bt_info *bt, ulong *eip, ulong *esp)
+{
+	ppc_relocate_nt_prstatus_percpu(nd->nt_prstatus_percpu,
+					&nd->num_prstatus_notes);
+
+	get_netdump_regs_32(bt, eip, esp);
 }
 
 static void

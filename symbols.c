@@ -3236,6 +3236,11 @@ is_kernel(char *file)
 				goto bailout;
 			break;
 
+		case EM_MIPS:
+			if (machine_type_mismatch(file, "MIPS", NULL, 0))
+				goto bailout;
+			break;
+
 		default:
 			if (machine_type_mismatch(file, "(unknown)", NULL, 0))
 				goto bailout;
@@ -7813,6 +7818,10 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(task_struct_thread_esp));
         fprintf(fp, "        task_struct_thread_ksp: %ld\n",
                 OFFSET(task_struct_thread_ksp));
+        fprintf(fp, "      task_struct_thread_reg29: %ld\n",
+                OFFSET(task_struct_thread_reg29));
+        fprintf(fp, "      task_struct_thread_reg31: %ld\n",
+                OFFSET(task_struct_thread_reg31));
 	fprintf(fp, " task_struct_thread_context_fp: %ld\n",
 		OFFSET(task_struct_thread_context_fp));
 	fprintf(fp, " task_struct_thread_context_sp: %ld\n",
