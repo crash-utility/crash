@@ -1,8 +1,8 @@
 /* help.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1283,9 +1283,11 @@ char *help_ps[] = {
 "       -c  display the children of selected, or all, tasks.",
 "       -t  display the task run time, start time, and cumulative user",
 "           and system times.",
-"       -l  display the task last_run or timestamp value, whichever applies,",
-"           of selected, or all, tasks; the list is sorted with the most",
-"           recently-run task (largest last_run/timestamp) shown first,",
+"       -l  display the task's last-run timestamp value, using either the",
+"           task_struct's last_run value, the task_struct's timestamp value",
+"           or the task_struct's sched_entity last_arrival value, whichever",
+"           applies, of selected, or all, tasks; the list is sorted with the",
+"           most recently-run task (with the largest timestamp) shown first,",
 "           followed by the task's current state.",
 "       -m  similar to -l, but the timestamp value is translated into days,",
 "           hours, minutes, seconds, and milliseconds since the task was",
@@ -1452,8 +1454,8 @@ char *help_ps[] = {
 "      UN: 31",
 "      ZO: 1",
 " ",
-"  Show all tasks sorted by their task_struct's last_run or timestamp value,",
-"  whichever applies:\n",
+"  Show all tasks sorted by their task_struct's last_run, timestamp, or", 
+"  sched_entity last_arrival timestamp value, whichever applies:\n",
 "    %s> ps -l",
 "    [20811245123] [IN] PID: 37    TASK: f7153030  CPU: 2  COMMAND: \"events/2\"",
 "    [20811229959] [IN] PID: 1756  TASK: f2a5a570  CPU: 2  COMMAND: \"ntpd\"",
