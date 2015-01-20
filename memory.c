@@ -1,8 +1,8 @@
 /* memory.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -15934,7 +15934,6 @@ dump_zone_stats(void)
 						OFFSET(zone_vm_stat));
 				} else
 					fprintf(fp, "  FREE: %ld\n", value5); 
-				goto next_zone;
 			}
 
 			if (VALID_MEMBER(zone_all_unreclaimable)) {
@@ -15954,7 +15953,7 @@ dump_zone_stats(void)
 			if (VALID_MEMBER(zone_pages_scanned)) {
 				value1 = ULONG(zonebuf + 
 					OFFSET(zone_pages_scanned));
-				fprintf(fp, "PAGES_SCANNED: %ld  ", value1);
+				fprintf(fp, "PAGES_SCANNED: %lu  ", value1);
 			} 
 			fprintf(fp, "\n");
 
