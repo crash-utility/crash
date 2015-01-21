@@ -2970,6 +2970,9 @@ display_prstatus_ppc64(void *note_ptr, FILE *ofp)
 void
 display_ELF_note(int machine, int type, void *note, FILE *ofp)
 {
+	if (note == NULL)
+		return;
+
 	switch (machine)
 	{
 	case EM_386:

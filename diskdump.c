@@ -1801,8 +1801,9 @@ __diskdump_memory_dump(FILE *fp)
 			fprintf(fp, "  num_prstatus_notes: %d\n",
 				dd->num_prstatus_notes);
 			for (i = 0; i < dd->num_prstatus_notes; i++) {
-				fprintf(fp, "            notes[%d]: %lx (NT_PRSTATUS)\n",
-					i, (ulong)dd->nt_prstatus_percpu[i]);
+				fprintf(fp, "            notes[%d]: %lx %s\n",
+					i, (ulong)dd->nt_prstatus_percpu[i],
+					dd->nt_prstatus_percpu[i] ? "(NT_PRSTATUS)" : ""); 
 				display_ELF_note(dd->machine_type, PRSTATUS_NOTE,
 					 dd->nt_prstatus_percpu[i], fp);
 			}
@@ -2089,7 +2090,8 @@ diskdump_display_regs(int cpu, FILE *ofp)
 	char *user_regs;
 	size_t len;
 
-	if ((cpu < 0) || (cpu >= dd->num_prstatus_notes)) {
+	if ((cpu < 0) || (cpu >= dd->num_prstatus_notes) ||
+	    (dd->nt_prstatus_percpu[cpu] == NULL)) {
 		error(INFO, "registers not collected for cpu %d\n", cpu);
                 return;
 	}
