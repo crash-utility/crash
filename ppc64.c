@@ -168,6 +168,10 @@ ppc64_init(int when)
 #endif
 	switch (when)
 	{
+	case SETUP_ENV:
+		machdep->process_elf_notes = process_elf64_notes;
+		break;
+
 	case PRE_SYMTAB:
 		machdep->machspec = &ppc64_machine_specific;
 		machdep->verify_symbol = ppc64_verify_symbol;

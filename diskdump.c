@@ -1519,7 +1519,7 @@ dump_note_offsets(FILE *fp)
 		for (tot = cnt = 0; tot < size; tot += len) {
 			qemu = FALSE;
 			if (machine_type("X86_64") || machine_type("S390X") ||
-			    machine_type("ARM64")) {
+			    machine_type("ARM64") || machine_type("PPC64")) {
 				note64 = (void *)dd->notes_buf + tot;
 				len = sizeof(Elf64_Nhdr);
 				if (STRNEQ((char *)note64 + len, "QEMU"))
@@ -2135,6 +2135,61 @@ diskdump_display_regs(int cpu, FILE *ofp)
 		);
 	}
 
+	if (machine_type("PPC64")) {
+		struct ppc64_elf_prstatus *prs;
+		struct ppc64_pt_regs *pr;
+
+		note64 = dd->nt_prstatus_percpu[cpu];
+		len = sizeof(Elf64_Nhdr);
+		len = roundup(len + note64->n_namesz, 4);
+		len = roundup(len + note64->n_descsz, 4);
+		if (!valid_note_address((unsigned char *)note64 + len)) {
+			error(INFO, "invalid NT_PRSTATUS note for cpu %d\n", cpu);
+			return;
+		}
+
+		prs = (struct ppc64_elf_prstatus *)
+			((char *)note64 + sizeof(Elf64_Nhdr) + note64->n_namesz);
+		prs = (struct ppc64_elf_prstatus *)roundup((ulong)prs, 4);
+		pr = &prs->pr_reg;
+
+		fprintf(ofp, 
+			"     R0: %016lx   R1: %016lx   R2: %016lx\n"
+			"     R3: %016lx   R4: %016lx   R5: %016lx\n"
+			"     R6: %016lx   R7: %016lx   R8: %016lx\n"
+			"     R9: %016lx  R10: %016lx  R11: %016lx\n"
+			"    R12: %016lx  R13: %016lx  R14: %016lx\n"
+			"    R15: %016lx  R16: %016lx  R16: %016lx\n"
+			"    R18: %016lx  R19: %016lx  R20: %016lx\n"
+			"    R21: %016lx  R22: %016lx  R23: %016lx\n"
+			"    R24: %016lx  R25: %016lx  R26: %016lx\n"
+			"    R27: %016lx  R28: %016lx  R29: %016lx\n"
+			"    R30: %016lx  R31: %016lx\n"
+			"      NIP: %016lx     MSR: %016lx\n"
+			"    OGPR3: %016lx     CTR: %016lx\n"  
+			"     LINK: %016lx     XER: %016lx\n"
+			"      CCR: %016lx      MQ: %016lx\n"
+			"     TRAP: %016lx     DAR: %016lx\n"
+			"    DSISR: %016lx  RESULT: %016lx\n",
+			pr->gpr[0], pr->gpr[1], pr->gpr[2],
+			pr->gpr[3], pr->gpr[4], pr->gpr[5],
+			pr->gpr[6], pr->gpr[7], pr->gpr[8],
+			pr->gpr[9], pr->gpr[10], pr->gpr[11],
+			pr->gpr[12], pr->gpr[13], pr->gpr[14],
+			pr->gpr[15], pr->gpr[16], pr->gpr[17],
+			pr->gpr[18], pr->gpr[19], pr->gpr[20],
+			pr->gpr[21], pr->gpr[22], pr->gpr[23],
+			pr->gpr[24], pr->gpr[25], pr->gpr[26],
+			pr->gpr[27], pr->gpr[28], pr->gpr[29],
+			pr->gpr[30], pr->gpr[31],
+			pr->nip, pr->msr, 
+			pr->orig_gpr3, pr->ctr,
+			pr->link, pr->xer,
+			pr->ccr, pr->mq,
+			pr->trap,  pr->dar, 
+			pr->dsisr, pr->result);
+	}
+
 	if (machine_type("ARM64")) {
 		note64 = dd->nt_prstatus_percpu[cpu];
 		len = sizeof(Elf64_Nhdr);
@@ -2190,7 +2245,8 @@ dump_registers_for_compressed_kdump(void)
 	int c;
 
 	if (!KDUMP_CMPRS_VALID() || (dd->header->header_version < 4) ||
-	    !(machine_type("X86") || machine_type("X86_64") || machine_type("ARM64")))
+	    !(machine_type("X86") || machine_type("X86_64") || 
+	      machine_type("ARM64") || machine_type("PPC64")))
 		error(FATAL, "-r option not supported for this dumpfile\n");
 
 	for (c = 0; c < kt->cpus; c++) {

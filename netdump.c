@@ -2322,6 +2322,8 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 				else if (qemuinfo)
 					display_ELF_note(EM_X86_64, QEMU_NOTE, note, nd->ofp);
 			}
+			if (machine_type("PPC64") && (note->n_type == NT_PRSTATUS))
+				display_ELF_note(EM_PPC64, PRSTATUS_NOTE, note, nd->ofp);
 		}
 		for (i = lf = 0; i < note->n_descsz/sizeof(ulonglong); i++) {
 			if (((i%2)==0)) {
@@ -2547,6 +2549,55 @@ display_regs_from_elf_notes(int cpu, FILE *ofp)
 		    UINT(user_regs + OFFSET(user_regs_struct_ebp)),
 		    UINT(user_regs + OFFSET(user_regs_struct_eflags))
 		);
+	} else if (machine_type("PPC64")) {
+		struct ppc64_elf_prstatus *prs;
+		struct ppc64_pt_regs *pr;
+
+		if (nd->num_prstatus_notes > 1)
+			note64 = (Elf64_Nhdr *)nd->nt_prstatus_percpu[cpu];
+		else
+			note64 = (Elf64_Nhdr *)nd->nt_prstatus;
+
+		prs = (struct ppc64_elf_prstatus *)
+			((char *)note64 + sizeof(Elf64_Nhdr) + note64->n_namesz);
+		prs = (struct ppc64_elf_prstatus *)roundup((ulong)prs, 4);
+		pr = &prs->pr_reg;
+
+		fprintf(ofp, 
+			"     R0: %016lx   R1: %016lx   R2: %016lx\n"
+			"     R3: %016lx   R4: %016lx   R5: %016lx\n"
+			"     R6: %016lx   R7: %016lx   R8: %016lx\n"
+			"     R9: %016lx  R10: %016lx  R11: %016lx\n"
+			"    R12: %016lx  R13: %016lx  R14: %016lx\n"
+			"    R15: %016lx  R16: %016lx  R16: %016lx\n"
+			"    R18: %016lx  R19: %016lx  R20: %016lx\n"
+			"    R21: %016lx  R22: %016lx  R23: %016lx\n"
+			"    R24: %016lx  R25: %016lx  R26: %016lx\n"
+			"    R27: %016lx  R28: %016lx  R29: %016lx\n"
+			"    R30: %016lx  R31: %016lx\n"
+			"      NIP: %016lx     MSR: %016lx\n"
+			"    OGPR3: %016lx     CTR: %016lx\n"  
+			"     LINK: %016lx     XER: %016lx\n"
+			"      CCR: %016lx      MQ: %016lx\n"
+			"     TRAP: %016lx     DAR: %016lx\n"
+			"    DSISR: %016lx  RESULT: %016lx\n",
+			pr->gpr[0], pr->gpr[1], pr->gpr[2],
+			pr->gpr[3], pr->gpr[4], pr->gpr[5],
+			pr->gpr[6], pr->gpr[7], pr->gpr[8],
+			pr->gpr[9], pr->gpr[10], pr->gpr[11],
+			pr->gpr[12], pr->gpr[13], pr->gpr[14],
+			pr->gpr[15], pr->gpr[16], pr->gpr[17],
+			pr->gpr[18], pr->gpr[19], pr->gpr[20],
+			pr->gpr[21], pr->gpr[22], pr->gpr[23],
+			pr->gpr[24], pr->gpr[25], pr->gpr[26],
+			pr->gpr[27], pr->gpr[28], pr->gpr[29],
+			pr->gpr[30], pr->gpr[31],
+			pr->nip, pr->msr, 
+			pr->orig_gpr3, pr->ctr,
+			pr->link, pr->xer,
+			pr->ccr, pr->mq,
+			pr->trap,  pr->dar, 
+			pr->dsisr, pr->result);
 	} else if (machine_type("ARM64")) {
 		if (nd->num_prstatus_notes > 1)
                 	note64 = (Elf64_Nhdr *)
@@ -2566,7 +2617,8 @@ dump_registers_for_elf_dumpfiles(void)
 {
         int c;
 
-        if (!(machine_type("X86") || machine_type("X86_64") || machine_type("ARM64")))
+        if (!(machine_type("X86") || machine_type("X86_64") || 
+	    machine_type("ARM64") || machine_type("PPC64")))
                 error(FATAL, "-r option not supported for this dumpfile\n");
 
 	if (NETDUMP_DUMPFILE()) {
@@ -2852,6 +2904,69 @@ display_qemu_x86(void *note_ptr, FILE *ofp)
 		space(sp), (ulonglong)ptr->cr[4]);
 }
 
+static void
+display_prstatus_ppc64(void *note_ptr, FILE *ofp)
+{
+	struct ppc64_elf_prstatus *pr;
+	Elf64_Nhdr *note;
+	int sp;
+
+	note = (Elf64_Nhdr *)note_ptr;
+	pr = (struct ppc64_elf_prstatus *)(
+		(char *)note + sizeof(Elf64_Nhdr) + note->n_namesz);
+	pr = (struct ppc64_elf_prstatus *)roundup((ulong)pr, 4);
+	sp = nd->num_prstatus_notes ? 25 : 22;
+
+	fprintf(ofp,
+		"%ssi.signo: %d  si.code: %d  si.errno: %d\n"
+		"%scursig: %d  sigpend: %lx  sighold: %lx\n"
+		"%spid: %d  ppid: %d  pgrp: %d  sid:%d\n"
+		"%sutime: %01lld.%06d  stime: %01lld.%06d\n"
+		"%scutime: %01lld.%06d  cstime: %01lld.%06d\n"
+		"%s R0: %016lx   R1: %016lx   R2: %016lx\n"
+		"%s R3: %016lx   R4: %016lx   R5: %016lx\n"
+		"%s R6: %016lx   R7: %016lx   R8: %016lx\n"
+		"%s R9: %016lx  R10: %016lx  R11: %016lx\n"
+		"%sR12: %016lx  R13: %016lx  R14: %016lx\n"
+		"%sR15: %016lx  R16: %016lx  R16: %016lx\n"
+		"%sR18: %016lx  R19: %016lx  R20: %016lx\n"
+		"%sR21: %016lx  R22: %016lx  R23: %016lx\n"
+		"%sR24: %016lx  R25: %016lx  R26: %016lx\n"
+		"%sR27: %016lx  R28: %016lx  R29: %016lx\n"
+		"%sR30: %016lx  R31: %016lx\n"
+		"%s  NIP: %016lx     MSR: %016lx\n"
+		"%sOGPR3: %016lx     CTR: %016lx\n"  
+		"%s LINK: %016lx     XER: %016lx\n"
+		"%s  CCR: %016lx      MQ: %016lx\n"
+		"%s TRAP: %016lx     DAR: %016lx\n"
+		"%sDSISR: %016lx  RESULT: %016lx\n",
+		space(sp), pr->pr_info.si_signo, pr->pr_info.si_code, pr->pr_info.si_errno,
+		space(sp), pr->pr_cursig, pr->pr_sigpend, pr->pr_sighold,
+		space(sp), pr->pr_pid, pr->pr_ppid, pr->pr_pgrp, pr->pr_sid,
+		space(sp), (long long)pr->pr_utime.tv_sec, (int)pr->pr_utime.tv_usec,
+		(long long)pr->pr_stime.tv_sec, (int)pr->pr_stime.tv_usec,
+		space(sp), (long long)pr->pr_cutime.tv_sec, (int)pr->pr_cutime.tv_usec,
+		(long long)pr->pr_cstime.tv_sec, (int)pr->pr_cstime.tv_usec,
+		space(sp), pr->pr_reg.gpr[0], pr->pr_reg.gpr[1], pr->pr_reg.gpr[2],
+		space(sp), pr->pr_reg.gpr[3], pr->pr_reg.gpr[4], pr->pr_reg.gpr[5],
+		space(sp), pr->pr_reg.gpr[6], pr->pr_reg.gpr[7], pr->pr_reg.gpr[8],
+		space(sp), pr->pr_reg.gpr[9], pr->pr_reg.gpr[10], pr->pr_reg.gpr[11],
+		space(sp), pr->pr_reg.gpr[12], pr->pr_reg.gpr[13], pr->pr_reg.gpr[14],
+		space(sp), pr->pr_reg.gpr[15], pr->pr_reg.gpr[16], pr->pr_reg.gpr[17],
+		space(sp), pr->pr_reg.gpr[18], pr->pr_reg.gpr[19], pr->pr_reg.gpr[20],
+		space(sp), pr->pr_reg.gpr[21], pr->pr_reg.gpr[22], pr->pr_reg.gpr[23],
+		space(sp), pr->pr_reg.gpr[24], pr->pr_reg.gpr[25], pr->pr_reg.gpr[26],
+		space(sp), pr->pr_reg.gpr[27], pr->pr_reg.gpr[28], pr->pr_reg.gpr[29],
+		space(sp), pr->pr_reg.gpr[30], pr->pr_reg.gpr[31],
+		space(sp), pr->pr_reg.nip, pr->pr_reg.msr, 
+		space(sp), pr->pr_reg.orig_gpr3, pr->pr_reg.ctr,
+		space(sp), pr->pr_reg.link, pr->pr_reg.xer,
+		space(sp), pr->pr_reg.ccr, pr->pr_reg.mq,
+		space(sp), pr->pr_reg.trap,  pr->pr_reg.dar, 
+		space(sp), pr->pr_reg.dsisr, pr->pr_reg.result);
+}
+
+
 void
 display_ELF_note(int machine, int type, void *note, FILE *ofp)
 {
@@ -2877,6 +2992,15 @@ display_ELF_note(int machine, int type, void *note, FILE *ofp)
 			break;
 		case QEMU_NOTE:
 			display_qemu_x86_64(note, ofp);
+			break;
+		}
+		break;
+
+	case EM_PPC64:
+		switch (type)
+		{
+		case PRSTATUS_NOTE:
+			display_prstatus_ppc64(note, ofp);
 			break;
 		}
 		break;

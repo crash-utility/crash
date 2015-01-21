@@ -1,8 +1,8 @@
 /* defs.h - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -5308,7 +5308,7 @@ int dwarf_print_stack_entry(struct bt_info *, int);
 /*
  * ppc64.c
  */
-#ifdef PPC64
+
 /*
  *  This structure was copied from kernel source
  *  in include/asm-ppc/ptrace.h
@@ -5329,6 +5329,31 @@ struct ppc64_pt_regs {
         long dsisr;
         long result;         /* Result of a system call */
 };
+
+struct ppc64_elf_siginfo {
+    int si_signo;
+    int si_code;
+    int si_errno;
+};
+
+struct ppc64_elf_prstatus {
+    struct ppc64_elf_siginfo pr_info;
+    short pr_cursig;
+    unsigned long pr_sigpend;
+    unsigned long pr_sighold;
+    pid_t pr_pid;
+    pid_t pr_ppid;
+    pid_t pr_pgrp;
+    pid_t pr_sid;
+    struct timeval pr_utime;
+    struct timeval pr_stime;
+    struct timeval pr_cutime;
+    struct timeval pr_cstime;
+    struct ppc64_pt_regs pr_reg;
+    int pr_fpvalid;
+};
+
+#ifdef PPC64
 
 struct ppc64_vmemmap {
         unsigned long phys;
