@@ -17149,7 +17149,7 @@ dump_vm_event_state(void)
 			maxlen = len; 
 
 	for (i = 0; i < vt->nr_vm_event_items; i++)
-		fprintf(fp, "%s%s: %ld\n", 
+		fprintf(fp, "%s%s: %lu\n", 
 			space(maxlen - strlen(vt->vm_event_items[i])),
 			vt->vm_event_items[i], cumulative[i]);
 
