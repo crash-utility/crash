@@ -8715,9 +8715,13 @@ dump_RT_prio_array(ulong k_prio_array, char *u_prio_array)
 						&rt_rq_buf[OFFSET(rt_rq_active)]);
 					FREEBUF(rt_rq_buf);
 					continue;
-				} else
-					task_addr -= OFFSET(task_struct_rt);
+				}
 			}
+			if (VALID_MEMBER(task_struct_rt))
+				task_addr -= OFFSET(task_struct_rt);
+			else
+				task_addr -= OFFSET(task_struct_run_list);
+
 			if (!(tc = task_to_context(task_addr)))
 				continue;
 
