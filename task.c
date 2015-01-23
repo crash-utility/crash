@@ -1,8 +1,8 @@
 /* task.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,6 +32,7 @@ static void refresh_hlist_task_table_v3(void);
 static void refresh_active_task_table(void);
 static struct task_context *store_context(struct task_context *, ulong, char *);
 static void refresh_context(ulong, ulong);
+static ulong parent_of(ulong);
 static void parent_list(ulong);
 static void child_list(ulong);
 static void initialize_task_state(void);
@@ -4071,34 +4072,60 @@ compare_start_time(const void *v1, const void *v2)
 		t1->start_time == t2->start_time ? 0 : 1);
 }
 
+static ulong
+parent_of(ulong task)
+{
+	long offset;
+	ulong parent;
+
+        if (VALID_MEMBER(task_struct_parent))
+                offset = OFFSET(task_struct_parent);
+	else
+                offset = OFFSET(task_struct_p_pptr);
+
+	readmem(task+offset, KVADDR, &parent,
+	    sizeof(void *), "task parent", FAULT_ON_ERROR);
+
+	return parent;
+}
+
 /*
  *  Dump the parental hierarchy of a task.
  */
 static void
 parent_list(ulong task)
 {
-	int i, j;
-	int cnt;
-        struct list_data list_data, *ld;
+	int i, j, cnt;
         struct task_context *tc;
+	char *buffer;
+	long reserved;
+	ulong *task_list, child, parent;
 
-	ld = &list_data;
-	BZERO(ld, sizeof(struct list_data));
-        ld->start = task;
-	if (VALID_MEMBER(task_struct_p_pptr))
-        	ld->member_offset = OFFSET(task_struct_p_pptr);
-	else
-		ld->member_offset = OFFSET(task_struct_parent);
+	reserved = 100 * sizeof(ulong);
+	buffer = GETBUF(reserved);
+	task_list = (ulong *)buffer;
+	child = task_list[0] = task;
+	parent = parent_of(child);
+	cnt = 1;
 
-	ld->flags |= LIST_ALLOCATE;
-	cnt = do_list(ld);
+	while (child != parent) {
+		child = task_list[cnt++] = parent;
+		parent = parent_of(child);
+		if (cnt == reserved) {
+			RESIZEBUF(buffer, reserved, reserved * 2);
+			reserved *= 2;
+			task_list = (ulong *)buffer;
+		}
+	}
+
 	for (i = cnt-1, j = 0; i >= 0; i--, j++) {
 		INDENT(j);
-		tc = task_to_context(ld->list_ptr[i]);
+		tc = task_to_context(task_list[i]);
 		if (tc)
 			print_task_header(fp, tc, 0);
 	}
-	FREEBUF(ld->list_ptr);
+
+	FREEBUF(task_list);
 }
 
 /*
