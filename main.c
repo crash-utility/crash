@@ -1,8 +1,8 @@
 /* main.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ static void check_xen_hyper(void);
 static void show_untrusted_files(void);
 static void get_osrelease(char *);
 static void get_log(char *);
+static char *no_vmcoreinfo(const char *);
 
 static struct option long_options[] = {
         {"memory_module", required_argument, 0, 0},
@@ -1055,6 +1056,7 @@ setup_environment(int argc, char **argv)
 	pc->machine_type = MACHINE_TYPE;
 	pc->readmem = read_dev_mem;      /* defaults until argv[] is parsed */
 	pc->writemem = write_dev_mem;
+	pc->read_vmcoreinfo = no_vmcoreinfo;
 	pc->memory_module = NULL;
 	pc->memory_device = MEMORY_DRIVER_DEVICE;
 	machdep->bits = sizeof(long) * 8;
@@ -1876,4 +1878,11 @@ get_log(char *dumpfile)
 		fprintf(fp, "%s: no VMCOREINFO data\n", dumpfile);
 
 	clean_exit(retval);
+}
+
+
+static char *
+no_vmcoreinfo(const char *unused)
+{
+	return NULL;
 }
