@@ -245,6 +245,10 @@ memory_source_init(void)
 			if (!s390_dump_init(pc->dumpfile))
 				error(FATAL, "%s: initialization failed\n",
                                         pc->dumpfile);
+		} else if (pc->flags & VMWARE_VMSS) {
+			if (!vmware_vmss_init(pc->dumpfile, fp))
+				error(FATAL, "%s: initialization failed\n",
+                                        pc->dumpfile);
 		}
 	}
 }

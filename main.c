@@ -337,7 +337,7 @@ main(int argc, char **argv)
 			break;
 
 		case 't':
-			pc->flags |= GET_TIMESTAMP;
+			pc->flags2 |= GET_TIMESTAMP;
 			break;
 
 		case 'i':
@@ -640,6 +640,17 @@ main(int argc, char **argv)
 				pc->dumpfile = argv[optind];
 				pc->readmem = read_sadump;
 				pc->writemem = write_sadump;
+
+			} else if (is_vmware_vmss(argv[optind])) {
+                                if (pc->flags & MEMORY_SOURCES) {
+                                        error(INFO,
+                                            "too many dumpfile arguments\n");
+                                        program_usage(SHORT_FORM);
+                                }
+				pc->flags |= VMWARE_VMSS;
+				pc->dumpfile = argv[optind];
+				pc->readmem = read_vmware_vmss;
+				pc->writemem = write_vmware_vmss;
 
 			} else { 
 				error(INFO, 
@@ -1693,6 +1704,8 @@ readmem_function_name(void)
 		return("read_s390_dumpfile");
 	else if (pc->readmem == read_ramdump)
 		return("read_ramdump");
+	else if (pc->readmem == read_vmware_vmss)
+		return("read_vmware_vmss");
 	else
 		return NULL;
 }
@@ -1726,6 +1739,8 @@ writemem_function_name(void)
 		return("write_sadump");
 	else if (pc->writemem == write_s390_dumpfile)
 		return("write_s390_dumpfile");
+	else if (pc->writemem == write_vmware_vmss)
+		return("write_vmware_vmss");
 	else
 		return NULL;
 }

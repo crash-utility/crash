@@ -16103,6 +16103,10 @@ memory_page_size(void)
 		psz = sadump_page_size();
 		break;
 
+	case VMWARE_VMSS:
+		psz = vmware_vmss_page_size();
+		break;
+
 	default:
 		psz = 0;
 		error(FATAL, "memory_page_size: invalid pc->flags: %lx\n", 

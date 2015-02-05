@@ -204,7 +204,7 @@ struct number_option {
 #define IN_GDB                  (0x20000ULL)
 #define RCLOCAL_IFILE           (0x40000ULL)
 #define RCHOME_IFILE            (0x80000ULL)
-#define GET_TIMESTAMP          (0x100000ULL)
+#define VMWARE_VMSS            (0x100000ULL)
 #define READLINE               (0x200000ULL) 
 #define _SIGINT_               (0x400000ULL)
 #define IN_RESTART             (0x800000ULL)
@@ -253,8 +253,8 @@ struct number_option {
 #define ACTIVE()            (pc->flags & LIVE_SYSTEM)
 #define DUMPFILE()          (!(pc->flags & LIVE_SYSTEM))
 #define LIVE()              (pc->flags2 & LIVE_DUMP || pc->flags & LIVE_SYSTEM)
-#define MEMORY_SOURCES (NETDUMP|KDUMP|MCLXCD|LKCD|DEVMEM|S390D|MEMMOD|DISKDUMP|XENDUMP|CRASHBUILTIN|KVMDUMP|PROC_KCORE|SADUMP)
-#define DUMPFILE_TYPES      (DISKDUMP|NETDUMP|KDUMP|MCLXCD|LKCD|S390D|XENDUMP|KVMDUMP|SADUMP)
+#define MEMORY_SOURCES (NETDUMP|KDUMP|MCLXCD|LKCD|DEVMEM|S390D|MEMMOD|DISKDUMP|XENDUMP|CRASHBUILTIN|KVMDUMP|PROC_KCORE|SADUMP|VMWARE_VMSS)
+#define DUMPFILE_TYPES      (DISKDUMP|NETDUMP|KDUMP|MCLXCD|LKCD|S390D|XENDUMP|KVMDUMP|SADUMP|VMWARE_VMSS)
 #define REMOTE()            (pc->flags2 & REMOTE_DAEMON)
 #define REMOTE_ACTIVE()     (pc->flags & REM_LIVE_SYSTEM) 
 #define REMOTE_DUMPFILE() \
@@ -620,6 +620,7 @@ struct new_utsname {
 #define RELOC_AUTO                  (0x1ULL)
 #define KASLR                       (0x2ULL)
 #define KASLR_CHECK                 (0x4ULL)
+#define GET_TIMESTAMP               (0x8ULL)
 
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
@@ -5854,6 +5855,15 @@ void remote_exit(void);
 int remote_execute(void);
 void remote_clear_pipeline(void);
 int remote_memory_read(int, char *, int, physaddr_t, int);
+
+/*
+ * vmware_vmss.c
+ */
+int is_vmware_vmss(char *filename);
+int vmware_vmss_init(char *filename, FILE *ofp);
+uint vmware_vmss_page_size(void);
+int read_vmware_vmss(int, void *, int, ulong, physaddr_t);
+int write_vmware_vmss(int, void *, int, ulong, physaddr_t);
 
 /*
  *  gnu_binutils.c
