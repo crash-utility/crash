@@ -988,25 +988,63 @@ static void ftrace_destroy_event_types(void)
 	free(ftrace_common_fields);
 }
 
+#define TRACE_EVENT_FL_TRACEPOINT 0x40
+
 static
 int ftrace_get_event_type_name(ulong call, char *name, int len)
 {
 	static int inited;
 	static int name_offset;
+	static int flags_offset;
+	static int tp_name_offset;
+	uint flags;
 
 	ulong name_addr;
 
-	if (!inited) {
-		inited = 1;
-		name_offset = MEMBER_OFFSET("ftrace_event_call", "name");
-	}
+	if (inited)
+		goto work;
 
+	inited = 1;
+	name_offset = MEMBER_OFFSET("ftrace_event_call", "name");
+	if (name_offset >= 0)
+		goto work;
+
+	name_offset = ANON_MEMBER_OFFSET("ftrace_event_call", "name");
+	if (name_offset < 0)
+		return -1;
+
+	flags_offset = MEMBER_OFFSET("ftrace_event_call", "flags");
+	if (flags_offset < 0)
+		return -1;
+
+	tp_name_offset = MEMBER_OFFSET("tracepoint", "name");
+	if (tp_name_offset < 0)
+		return -1;
+
+	inited = 2;
+
+work:
 	if (name_offset < 0)
 		return -1;
 
 	if (!readmem(call + name_offset, KVADDR, &name_addr, sizeof(name_addr),
 			"read ftrace_event_call name_addr", RETURN_ON_ERROR))
 		return -1;
+
+	if (inited == 2) {
+		if (!readmem(call + flags_offset, KVADDR, &flags,
+			     sizeof(flags), "read ftrace_event_call flags",
+			     RETURN_ON_ERROR))
+			return -1;
+
+		if (flags & TRACE_EVENT_FL_TRACEPOINT) {
+			if (!readmem(name_addr + tp_name_offset, KVADDR,
+				     &name_addr, sizeof(name_addr),
+				     "read tracepoint name", RETURN_ON_ERROR))
+				return -1;
+		}
+
+	}
 
 	if (!read_string(name_addr, name, len))
 		return -1;
