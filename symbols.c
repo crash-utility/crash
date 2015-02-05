@@ -3452,7 +3452,8 @@ is_shared_object(char *file)
 		switch (swap16(elf32->e_machine, swap))
 		{
 		case EM_386:
-			if (machine_type("X86") || machine_type("ARM"))
+			if (machine_type("X86") || machine_type("ARM") ||
+			    machine_type("MIPS"))
 				return TRUE;
 			break;
 
@@ -3463,6 +3464,11 @@ is_shared_object(char *file)
 
 		case EM_ARM:
 			if (machine_type("ARM"))
+				return TRUE;
+			break;
+
+		case EM_MIPS:
+			if (machine_type("MIPS"))
 				return TRUE;
 			break;
 
