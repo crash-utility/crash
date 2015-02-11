@@ -1,8 +1,8 @@
 /* net.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -326,7 +326,7 @@ void
 cmd_net(void)
 {
 	int c;
-	ulong sflag, nflag;
+	ulong sflag, nflag, aflag;
 	ulong value;
 	ulong task;
 	struct task_context *tc = NULL;
@@ -337,7 +337,7 @@ cmd_net(void)
 		error(FATAL, "net subsystem not initialized!");
 
 	ref = NULL;
-	sflag = nflag = 0;
+	sflag = nflag = aflag = 0;
 	task = pid_to_task(0);
 
 	while ((c = getopt(argcnt, args, NETOPTS)) != EOF) {
@@ -354,6 +354,7 @@ cmd_net(void)
 
 		case 'a':
 			dump_arp();
+			aflag++;
 			break;
 
 		case 'N':
@@ -414,12 +415,12 @@ cmd_net(void)
 	if (argerrs) 
 		cmd_usage(pc->curcmd, SYNOPSIS);
 
-	if (sflag)
+	if (sflag & (s_FLAG|S_FLAG))
 		dump_sockets(sflag, ref);
 	else {
 		if ((argcnt == 1) || nflag)
 			show_net_devices(task);
-		else
+		else if (!aflag)
 			cmd_usage(pc->curcmd, SYNOPSIS);
 	}
 }
