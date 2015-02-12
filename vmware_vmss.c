@@ -40,6 +40,8 @@ is_vmware_vmss(char *filename)
 		return FALSE;
 	}
 
+	fclose(fp);
+
 	if (hdr.id != CPTDUMP_OLD_MAGIC_NUMBER &&
 	    hdr.id != CPTDUMP_MAGIC_NUMBER &&
 	    hdr.id != CPTDUMP_PARTIAL_MAGIC_NUMBER &&
@@ -252,8 +254,8 @@ vmware_vmss_init(char *filename, FILE *ofp)
 		}
 		strcpy(p, "vmem");
 		if ((fp = fopen(vmem_filename, "r")) == NULL) {
-			free(vmem_filename);
 			error(INFO, LOGPRX"%s: %s\n", vmem_filename, strerror(errno));
+			free(vmem_filename);
 			return FALSE;
 		}
 		vmss.dfp = fp;
