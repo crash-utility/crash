@@ -1,8 +1,8 @@
 /* kernel.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -73,8 +73,8 @@ static void dump_variable_length_record_log(int);
 static void hypervisor_init(void);
 static void dump_log_legacy(void);
 static void dump_variable_length_record(void);
-static int is_kpatch(void);
-static void show_kernel_taints(void);
+static int is_livepatch(void);
+static void show_kernel_taints(char *, int);
 
 
 /*
@@ -4140,7 +4140,7 @@ module_objfile_search(char *modref, char *filename, char *tree)
 		free(namelist);
 	}
 
-	if (!retbuf && is_kpatch()) {
+	if (!retbuf && is_livepatch()) {
 		sprintf(file, "%s.ko", modref);
 		sprintf(dir, "/usr/lib/kpatch/%s", kt->utsname.release);
 		if (!(retbuf = search_directory_tree(dir, file, 0))) {
@@ -4631,6 +4631,7 @@ cmd_sys(void)
 {
         int c, cnt;
 	ulong sflag;
+	char buf[BUFSIZE];
 
 	sflag = FALSE;
 
@@ -4649,7 +4650,7 @@ cmd_sys(void)
 			break;
 
 		case 't':
-			show_kernel_taints();
+			show_kernel_taints(buf, VERBOSE);
 			return;
 
                 default:
@@ -4682,10 +4683,15 @@ cmd_sys(void)
 }
 
 static int
-is_kpatch(void)
+is_livepatch(void)
 {
 	int i;
 	struct load_module *lm;
+	char buf[BUFSIZE];
+
+	show_kernel_taints(buf, !VERBOSE);
+	if (strstr(buf, "K"))  /* TAINT_LIVEPATCH */
+		return TRUE;
 
 	for (i = 0; i < st->mods_installed; i++) {
 		lm = &st->load_modules[i];
@@ -4740,7 +4746,7 @@ display_sys_stats(void)
 	} else {
         	if (pc->system_map) {
                 	fprintf(fp, "  SYSTEM MAP: %s%s\n", pc->system_map,
-				is_kpatch() ? "  [KPATCH]" : "");
+				is_livepatch() ? "  [LIVEPATCH]" : "");
 			fprintf(fp, "DEBUG KERNEL: %s %s\n", 
 					pc->namelist_orig ?
 					pc->namelist_orig : pc->namelist,
@@ -4748,7 +4754,7 @@ display_sys_stats(void)
 		} else
 			fprintf(fp, "      KERNEL: %s%s\n", pc->namelist_orig ? 
 				pc->namelist_orig : pc->namelist,
-				is_kpatch() ? "  [KPATCH]" : "");
+				is_livepatch() ? "  [LIVEPATCH]" : "");
 	}
 
 	if (pc->debuginfo_file) { 
@@ -9506,7 +9512,7 @@ dump_variable_length_record(void)
 }
 
 static void
-show_kernel_taints(void)
+show_kernel_taints(char *buf, int verbose)
 {
 	int i, bx;
 	uint8_t tnt_bit;
@@ -9516,7 +9522,6 @@ show_kernel_taints(void)
 	ulong tainted_mask, *tainted_mask_ptr;
 	int tainted;
 	struct syment *sp;
-	char buf[BUFSIZE];
 
 	if (!VALID_STRUCT(tnt)) { 
                 STRUCT_SIZE_INIT(tnt, "tnt");
@@ -9541,9 +9546,10 @@ show_kernel_taints(void)
 		tainted_mask_ptr = &tainted_mask;
 	} else if (kernel_symbol_exists("tainted")) {
 		get_symbol_data("tainted", sizeof(int), &tainted);
-		fprintf(fp, "TAINTED: %x\n", tainted);
+		if (verbose)
+			fprintf(fp, "TAINTED: %x\n", tainted);
 		return;
-	} else
+	} else if (verbose)
 		option_not_supported('t');
 
 	for (i = 0; i < (tnts_len * SIZE(tnt)); i += SIZE(tnt)) {
@@ -9568,6 +9574,7 @@ show_kernel_taints(void)
 
 	buf[bx++] = '\0';
 
-	fprintf(fp, "TAINTED_MASK: %lx  %s\n", tainted_mask, buf);
+	if (verbose)
+		fprintf(fp, "TAINTED_MASK: %lx  %s\n", tainted_mask, buf);
 }
 
