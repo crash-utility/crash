@@ -1211,7 +1211,8 @@ verify_namelist()
 	sprintf(buffer3, "(unknown)");
         while (fgets(buffer, BUFSIZE-1, pipe)) {
 		if (!strstr(buffer, "Linux version 2.") &&
-		    !strstr(buffer, "Linux version 3."))
+		    !strstr(buffer, "Linux version 3.") &&
+		    !strstr(buffer, "Linux version 4."))
 			continue;
 
                 if (strstr(buffer, kt->proc_version)) {
@@ -4909,7 +4910,8 @@ debug_kernel_version(char *namelist)
 	argc = 0;
         while (fgets(buf, BUFSIZE-1, pipe)) {
                 if (!strstr(buf, "Linux version 2.") &&
-		    !strstr(buf, "Linux version 3."))
+		    !strstr(buf, "Linux version 3.") &&
+		    !strstr(buf, "Linux version 4."))
                         continue;
 
 		argc = parse_line(buf, arglist); 
