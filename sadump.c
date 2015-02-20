@@ -20,6 +20,7 @@
 #include "sadump.h"
 #include <arpa/inet.h> /* htonl, htons */
 #include <elf.h>
+#include <inttypes.h>
 
 enum {
 	failed = -1
@@ -324,6 +325,20 @@ restart:
 	}
 
 	flags |= SADUMP_LOCAL;
+
+	switch (sh->header_version) {
+	case 0:
+		sd->max_mapnr = (uint64_t)sh->max_mapnr;
+		break;
+	default:
+		error(WARNING,
+		      "sadump: unsupported header version: %u\n"
+		      "sadump: assuming header version: 1\n",
+		      sh->header_version);
+	case 1:
+		sd->max_mapnr = sh->max_mapnr_64;
+		break;
+	}
 
 	if (sh->sub_hdr_size > 0) {
 		if (!read_device(&smram_cpu_state_size, sizeof(uint32_t),
@@ -772,7 +787,7 @@ int read_sadump(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 	curpaddr = paddr & ~((physaddr_t)(sd->block_size-1));
 	page_offset = paddr & ((physaddr_t)(sd->block_size-1));
 
-	if ((pfn >= sd->dump_header->max_mapnr) || !page_is_ram(pfn))
+	if ((pfn >= sd->max_mapnr) || !page_is_ram(pfn))
 		return SEEK_ERROR;
 	if (!page_is_dumpable(pfn)) {
 		if (sd->flags & SADUMP_ZERO_EXCLUDED)
@@ -979,6 +994,17 @@ int sadump_memory_dump(FILE *fp)
 	fprintf(fp, "      written_blocks: %u\n", sh->written_blocks);
 	fprintf(fp, "         current_cpu: %u\n", sh->current_cpu);
 	fprintf(fp, "             nr_cpus: %u\n", sh->nr_cpus);
+	if (sh->header_version >= 1) {
+		fprintf(fp,
+			"        max_mapnr_64: %" PRIu64 "\n"
+			" total_ram_blocks_64: %" PRIu64 "\n"
+			"    device_blocks_64: %" PRIu64 "\n"
+			"   written_blocks_64: %" PRIu64 "\n",
+			sh->max_mapnr_64,
+			sh->total_ram_blocks_64,
+			sh->device_blocks_64,
+			sh->written_blocks_64);
+	}
 
 	fprintf(fp, "\n    dump sub heaer: ");
 	if (sh->sub_hdr_size > 0) {
@@ -1556,7 +1582,7 @@ static int block_table_init(void)
 {
 	uint64_t pfn, section, max_section, *block_table;
 
-	max_section = divideup(sd->dump_header->max_mapnr, SADUMP_PF_SECTION_NUM);
+	max_section = divideup(sd->max_mapnr, SADUMP_PF_SECTION_NUM);
 
 	block_table = calloc(sizeof(uint64_t), max_section);
 	if (!block_table) {

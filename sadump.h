@@ -103,6 +103,14 @@ struct sadump_header {
 	uint32_t written_blocks;	/* Number of written blocks */
 	uint32_t current_cpu;	/* CPU# which handles dump */
 	uint32_t nr_cpus;	/* Number of CPUs */
+	/*
+	 * The members from below are supported in header version 1
+	 * and later.
+	 */
+	uint64_t max_mapnr_64;
+	uint64_t total_ram_blocks_64;
+	uint64_t device_blocks_64;
+	uint64_t written_blocks_64;
 };
 
 struct sadump_apic_state {
@@ -209,6 +217,8 @@ struct sadump_data {
 	ulonglong backup_src_start;
 	ulong backup_src_size;
 	ulonglong backup_offset;
+
+	uint64_t max_mapnr;
 };
 
 struct sadump_data *sadump_get_sadump_data(void);
