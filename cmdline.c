@@ -28,6 +28,7 @@ static int allocate_alias(int);
 static int alias_exists(char *);
 static void resolve_aliases(void);
 static int setup_redirect(int);
+int multiple_pipes(char **);
 static int output_command_to_pids(void);
 static void set_my_tty(void);
 static char *signame(int);
@@ -461,7 +462,7 @@ setup_scroll_command(void)
  *  Care is taken to segregate:
  *
  *   1. expressions encompassed by parentheses, or
- *   2. strings encompassed by apostrophes. 
+ *   2. strings encompassed by single or double quotation marks
  *
  *  When either of the above are in affect, no redirection is done.
  *
@@ -504,7 +505,7 @@ setup_redirect(int origin)
 		if (*p == ')')
 			expression = FALSE;
 
-		if (*p == '"')
+		if ((*p == '"') || (*p == '\''))
 			string = !string;
 
 		if (!(expression || string) && 
@@ -546,11 +547,8 @@ setup_redirect(int origin)
 				break;
 			}
 
-			if (strstr(p, "|")) {
-				p = rindex(p, '|') + 1;
-				p = first_nonspace(p);
+			if (multiple_pipes(&p))
 				pc->redirect |= REDIRECT_MULTI_PIPE;
-			}
 
 			strcpy(pc->pipe_command, p);
 			null_first_space(pc->pipe_command);
@@ -657,6 +655,40 @@ setup_redirect(int origin)
 	pc->redirect |= REDIRECT_NOT_DONE;
 
 	return REDIRECT_NOT_DONE;
+}
+
+/*
+ *  Find the last command in an input line that possibly contains 
+ *  multiple pipes.
+ */
+int
+multiple_pipes(char **input)
+{
+	char *p, *found;
+	int quote;
+
+	found = NULL;
+	quote = FALSE;
+
+	for (p = *input; *p; p++) {
+		if ((*p == '\'') || (*p == '"')) {
+			quote = !quote;
+			continue;
+		} else if (quote)
+			continue;
+
+		if (*p == '|') {
+			if (STRNEQ(p, "||"))
+				break;
+                        found = first_nonspace(p+1);
+		}
+	}
+
+	if (found) {
+		*input = found;
+		return TRUE;
+	} else
+		return FALSE;
 }
 
 void
