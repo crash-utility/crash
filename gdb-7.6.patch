@@ -1723,3 +1723,41 @@
  unsigned64 convert_ps (SIM_STATE, int rm, unsigned64 op, FP_formats from,
  		       FP_formats to);
  #define ConvertPS(rm,op,from,to) convert_ps (SIM_ARGS, rm, op, from, to)
+
+--- gdb-7.6/readline/util.c
++++ gdb-7.6/readline/util.c
+@@ -493,10 +493,13 @@ _rl_trace (va_alist)
+ 
+   if (_rl_tracefp == 0)
+     _rl_tropen ();
++  if (!_rl_tracefp)
++    goto out;
+   vfprintf (_rl_tracefp, format, args);
+   fprintf (_rl_tracefp, "\n");
+   fflush (_rl_tracefp);
+ 
++out:
+   va_end (args);
+ }
+ 
+@@ -509,16 +512,17 @@ _rl_tropen ()
+     fclose (_rl_tracefp);
+   sprintf (fnbuf, "/var/tmp/rltrace.%ld", getpid());
+   unlink(fnbuf);
+-  _rl_tracefp = fopen (fnbuf, "w+");
++  _rl_tracefp = fopen (fnbuf, "w+xe");
+   return _rl_tracefp != 0;
+ }
+ 
+ int
+ _rl_trclose ()
+ {
+-  int r;
++  int r = 0;
+ 
+-  r = fclose (_rl_tracefp);
++  if (_rl_tracefp)
++    r = fclose (_rl_tracefp);
+   _rl_tracefp = 0;
+   return r;
+ }
