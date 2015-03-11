@@ -218,7 +218,12 @@ xen_hyper_domain_init(void)
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_is_polling, "domain", "is_polling");
 
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_is_dying, "domain", "is_dying");
+	/*
+	 * With Xen 4.2.5 is_paused_by_controller changed to
+	 * controller_pause_count.
+	 */
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_is_paused_by_controller, "domain", "is_paused_by_controller");
+	XEN_HYPER_MEMBER_OFFSET_INIT(domain_controller_pause_count, "domain", "controller_pause_count");
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_is_shutting_down, "domain", "is_shutting_down");
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_is_shut_down, "domain", "is_shut_down");
 	XEN_HYPER_MEMBER_OFFSET_INIT(domain_vcpu, "domain", "vcpu");
@@ -1269,7 +1274,12 @@ xen_hyper_store_domain_context(struct xen_hyper_domain_context *dc,
 				*(dp + XEN_HYPER_OFFSET(domain_is_polling))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_polling;
 		}
-		if (*(dp + XEN_HYPER_OFFSET(domain_is_paused_by_controller))) {
+		if (XEN_HYPER_VALID_MEMBER(domain_is_paused_by_controller) &&
+			*(dp + XEN_HYPER_OFFSET(domain_is_paused_by_controller))) {
+			dc->domain_flags |= XEN_HYPER_DOMS_ctrl_pause;
+		}
+		if (XEN_HYPER_VALID_MEMBER(domain_controller_pause_count) &&
+			*(dp + XEN_HYPER_OFFSET(domain_controller_pause_count))) {
 			dc->domain_flags |= XEN_HYPER_DOMS_ctrl_pause;
 		}
 		if (*(dp + XEN_HYPER_OFFSET(domain_is_dying))) {

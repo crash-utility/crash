@@ -784,8 +784,11 @@ xen_hyper_dump_xen_hyper_offset_table(char *spec, ulong makestruct)
 	}
 	XEN_HYPER_PRI(fp, len, "domain_is_dying: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_offset_table.domain_is_dying));
+	/* Only one of next both exists but print both, ones value is -1. */
 	XEN_HYPER_PRI(fp, len, "domain_is_paused_by_controller: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_offset_table.domain_is_paused_by_controller));
+	XEN_HYPER_PRI(fp, len, "domain_controller_pause_count: ", buf, flag,
+		(buf, "%ld\n", xen_hyper_offset_table.domain_controller_pause_count));
 	XEN_HYPER_PRI(fp, len, "domain_is_shutting_down: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_offset_table.domain_is_shutting_down));
 	XEN_HYPER_PRI(fp, len, "domain_is_shut_down: ", buf, flag,
