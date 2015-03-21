@@ -1,8 +1,8 @@
 /*
  * arm64.c - core analysis suite
  *
- * Copyright (C) 2012-2014 David Anderson
- * Copyright (C) 2012-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2012-2015 David Anderson
+ * Copyright (C) 2012-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -241,6 +241,9 @@ static int
 arm64_verify_symbol(const char *name, ulong value, char type)
 {
 	if (!name || !strlen(name))
+		return FALSE;
+
+	if (((type == 'A') || (type == 'a')) && (highest_bit_long(value) != 63))
 		return FALSE;
 
 	if ((value == 0) && 
