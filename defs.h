@@ -2887,6 +2887,13 @@ typedef signed int s32;
 #define ARM64_MODULES_VADDR  (ARM64_PAGE_OFFSET - MEGABYTES(64))
 #define ARM64_MODULES_END    (ARM64_PAGE_OFFSET - 1)
 #define ARM64_VMALLOC_START  ((0xffffffffffffffffUL) << machdep->machspec->VA_BITS)
+/*
+ * The following 3 definitions are the original values, but are obsolete
+ * for 3.17 and later kernels because they are now build-time calculations.
+ * They all depend on the kernel's new VMEMMAP_SIZE value, which is dependent
+ * upon the size of struct page.  Accordingly, arm64_calc_virtual_memory_ranges()
+ * determines their values at POST_GDB time.
+ */
 #define ARM64_VMALLOC_END    (ARM64_PAGE_OFFSET - 0x400000000UL - KILOBYTES(64) - 1)
 #define ARM64_VMEMMAP_VADDR  ((ARM64_VMALLOC_END+1) + KILOBYTES(64))
 #define ARM64_VMEMMAP_END    (ARM64_VMEMMAP_VADDR + GIGABYTES(8UL) - 1)

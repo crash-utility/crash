@@ -26,6 +26,7 @@ static struct machine_specific arm64_machine_specific = { 0 };
 static int arm64_verify_symbol(const char *, ulong, char);
 static void arm64_parse_cmdline_args(void);
 static void arm64_calc_phys_offset(void);
+static void arm64_calc_virtual_memory_ranges(void);
 static int arm64_kdump_phys_base(ulong *);
 static ulong arm64_processor_speed(void);
 static void arm64_init_kernel_pgd(void);
@@ -188,6 +189,7 @@ arm64_init(int when)
 		break;
 
 	case POST_GDB:
+		arm64_calc_virtual_memory_ranges();
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
 		if (THIS_KERNEL_VERSION >= LINUX(3,10,0)) {
@@ -279,6 +281,8 @@ arm64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sVM_L2_64K", others++ ? "|" : "");
 	if (machdep->flags & VM_L3_4K)
 		fprintf(fp, "%sVM_L3_4K", others++ ? "|" : "");
+	if (machdep->flags & VMEMMAP)
+		fprintf(fp, "%sVMEMMAP", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "              kvbase: %lx\n", machdep->kvbase);
@@ -368,6 +372,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "         modules_vaddr: %016lx\n", ms->modules_vaddr);
 	fprintf(fp, "           modules_end: %016lx\n", ms->modules_end);
 	fprintf(fp, "         vmemmap_vaddr: %016lx\n", ms->vmemmap_vaddr);
+	fprintf(fp, "           vmemmap_end: %016lx\n", ms->vmemmap_end);
 	fprintf(fp, "           phys_offset: %lx\n", ms->phys_offset);
 	fprintf(fp, "__exception_text_start: %lx\n", ms->__exception_text_start);
 	fprintf(fp, "  __exception_text_end: %lx\n", ms->__exception_text_end);
@@ -1650,6 +1655,57 @@ arm64_calc_VA_BITS(void)
 	if (CRASHDEBUG(1))
 		fprintf(fp, "VA_BITS: %ld\n", machdep->machspec->VA_BITS);
 
+}
+
+/*
+ *  The size and end of the vmalloc range is dependent upon the kernel's
+ *  VMEMMAP_SIZE value, and the vmemmap range is dependent upon the end
+ *  of the vmalloc range as well as the VMEMMAP_SIZE:
+ *
+ *  #define VMEMMAP_SIZE    ALIGN((1UL << (VA_BITS - PAGE_SHIFT)) * sizeof(struct page), PUD_SIZE)
+ *  #define VMALLOC_START   (UL(0xffffffffffffffff) << VA_BITS)
+ *  #define VMALLOC_END     (PAGE_OFFSET - PUD_SIZE - VMEMMAP_SIZE - SZ_64K)
+ *
+ *  Since VMEMMAP_SIZE is dependent upon the size of a struct page,
+ *  the two ranges cannot be determined until POST_GDB.
+ */
+
+#define ALIGN(x, a) __ALIGN_KERNEL((x), (a))
+#define __ALIGN_KERNEL(x, a)            __ALIGN_KERNEL_MASK(x, (typeof(x))(a) - 1)
+#define __ALIGN_KERNEL_MASK(x, mask)    (((x) + (mask)) & ~(mask))
+#define SZ_64K                          0x00010000
+
+static void
+arm64_calc_virtual_memory_ranges(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong vmemmap_start, vmemmap_end, vmemmap_size;
+	ulong vmalloc_end;
+	ulong PUD_SIZE = UNINITIALIZED;
+
+	if (THIS_KERNEL_VERSION < LINUX(3,17,0))  /* use original hardwired values */
+		return;
+
+	STRUCT_SIZE_INIT(page, "page");
+
+        switch (machdep->flags & (VM_L2_64K|VM_L3_4K))
+        {
+        case VM_L2_64K:
+		PUD_SIZE = PGDIR_SIZE_L2_64K;
+		break;
+        case VM_L3_4K:
+		PUD_SIZE = PGDIR_SIZE_L3_4K;
+		break;
+        }
+
+	vmemmap_size = ALIGN((1UL << (ms->VA_BITS - machdep->pageshift)) * SIZE(page), PUD_SIZE);
+	vmalloc_end = (ms->page_offset - PUD_SIZE - vmemmap_size - SZ_64K);
+	vmemmap_start = vmalloc_end + SZ_64K;
+	vmemmap_end = vmemmap_start + vmemmap_size;
+
+	ms->vmalloc_end = vmalloc_end - 1;
+	ms->vmemmap_vaddr = vmemmap_start;
+	ms->vmemmap_end = vmemmap_end - 1;
 }
 
 static int
