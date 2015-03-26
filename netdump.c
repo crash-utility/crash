@@ -28,6 +28,7 @@ static struct xen_kdump_data xen_kdump_data = { 0 };
 static struct proc_kcore_data proc_kcore_data = { 0 };
 static struct proc_kcore_data *pkd = &proc_kcore_data;
 static void netdump_print(char *, ...);
+static size_t resize_elf_header(int, char *, char **, ulong);
 static void dump_Elf32_Ehdr(Elf32_Ehdr *);
 static void dump_Elf32_Phdr(Elf32_Phdr *, int);
 static size_t dump_Elf32_Nhdr(Elf32_Off offset, int);
@@ -115,13 +116,12 @@ is_netdump(char *file, ulong source_query)
 	Elf32_Phdr *load32;
 	Elf64_Ehdr *elf64;
 	Elf64_Phdr *load64;
-	char eheader[MIN_NETDUMP_ELF_HEADER_SIZE];
+	char *eheader;
 	char buf[BUFSIZE];
 	size_t size, len, tot;
         Elf32_Off offset32;
         Elf64_Off offset64;
-	ulong tmp_flags;
-	char *tmp_elf_header;
+	ulong format;
 
 	if ((fd = open(file, O_RDWR)) < 0) {
         	if ((fd = open(file, O_RDONLY)) < 0) {
@@ -132,13 +132,17 @@ is_netdump(char *file, ulong source_query)
 	}
 
 	size = MIN_NETDUMP_ELF_HEADER_SIZE;
+        if ((eheader = (char *)malloc(size)) == NULL) {
+                fprintf(stderr, "cannot malloc minimum ELF header buffer\n");
+                clean_exit(1);
+        }
 
 	if (FLAT_FORMAT()) {
 		if (!read_flattened_format(fd, 0, eheader, size))
 			goto bailout;
 	} else {
 		if (read(fd, eheader, size) != size) {
-			sprintf(buf, "%s: read", file);
+			sprintf(buf, "%s: ELF header read", file);
 			perror(buf);
 			goto bailout;
 		}
@@ -146,7 +150,7 @@ is_netdump(char *file, ulong source_query)
 
 	load32 = NULL;
 	load64 = NULL;
-	tmp_flags = 0;
+	format = 0;
 	elf32 = (Elf32_Ehdr *)&eheader[0];
 	elf64 = (Elf64_Ehdr *)&eheader[0];
 
@@ -216,13 +220,12 @@ is_netdump(char *file, ulong source_query)
 
                 load32 = (Elf32_Phdr *)
                         &eheader[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
-                size = (size_t)load32->p_offset;
 
 		if ((load32->p_offset & (MIN_PAGE_SIZE-1)) ||
 		    (load32->p_align == 0))
-                	tmp_flags |= KDUMP_ELF32;
+			format = KDUMP_ELF32;
 		else
-                	tmp_flags |= NETDUMP_ELF32;
+			format = NETDUMP_ELF32;
 	} else if ((elf64->e_ident[EI_CLASS] == ELFCLASS64) &&
 	    (swap16(elf64->e_type, swap) == ET_CORE) &&
 	    (swap32(elf64->e_version, swap) == EV_CURRENT) &&
@@ -283,12 +286,12 @@ is_netdump(char *file, ulong source_query)
 
                 load64 = (Elf64_Phdr *)
                         &eheader[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
-                size = (size_t)load64->p_offset;
+
 		if ((load64->p_offset & (MIN_PAGE_SIZE-1)) ||
 		    (load64->p_align == 0))
-                	tmp_flags |= KDUMP_ELF64;
+			format = KDUMP_ELF64;
 		else
-                	tmp_flags |= NETDUMP_ELF64;
+			format = NETDUMP_ELF64;
 	} else {
 		if (CRASHDEBUG(2))
 			error(INFO, "%s: not a %s ELF dumpfile\n",
@@ -304,7 +307,7 @@ is_netdump(char *file, ulong source_query)
 		return TRUE;
 	}
 
-	switch (DUMPFILE_FORMAT(tmp_flags))
+	switch (format)
 	{
 	case NETDUMP_ELF32:
 	case NETDUMP_ELF64:
@@ -321,40 +324,18 @@ is_netdump(char *file, ulong source_query)
 			goto bailout;
 	}
 
-	if ((tmp_elf_header = (char *)malloc(size)) == NULL) {
-		fprintf(stderr, "cannot malloc ELF header buffer\n");
-		clean_exit(1);
-	}
-
-	if (FLAT_FORMAT()) {
-		if (!read_flattened_format(fd, 0, tmp_elf_header, size)) {
-			free(tmp_elf_header);
-			goto bailout;
-		}
-	} else {
-		if (lseek(fd, 0, SEEK_SET) != 0) {
-			sprintf(buf, "%s: lseek", file);
-			perror(buf);
-			goto bailout;
-		}
-		if (read(fd, tmp_elf_header, size) != size) {
-			sprintf(buf, "%s: read", file);
-			perror(buf);
-			free(tmp_elf_header);
-			goto bailout;
-		}
-	}
+	if (!(size = resize_elf_header(fd, file, &eheader, format)))
+		goto bailout;
 
 	nd->ndfd = fd;
-	nd->elf_header = tmp_elf_header;
-	nd->flags = tmp_flags;
-	nd->flags |= source_query;
+	nd->elf_header = eheader;
+	nd->flags = format | source_query;
 
-	switch (DUMPFILE_FORMAT(nd->flags))
+	switch (format)
 	{
 	case NETDUMP_ELF32:
 	case KDUMP_ELF32:
-		nd->header_size = load32->p_offset;
+		nd->header_size = size;
         	nd->elf32 = (Elf32_Ehdr *)&nd->elf_header[0];
 		nd->num_pt_load_segments = nd->elf32->e_phnum - 1;
 		if ((nd->pt_load_segments = (struct pt_load_segment *)
@@ -367,7 +348,7 @@ is_netdump(char *file, ulong source_query)
 		    &nd->elf_header[sizeof(Elf32_Ehdr)];
         	nd->load32 = (Elf32_Phdr *)
 		    &nd->elf_header[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
-		if (DUMPFILE_FORMAT(nd->flags) == NETDUMP_ELF32)
+		if (format == NETDUMP_ELF32)
 			nd->page_size = (uint)nd->load32->p_align;
                 dump_Elf32_Ehdr(nd->elf32);
                 dump_Elf32_Phdr(nd->notes32, ELFREAD);
@@ -383,7 +364,7 @@ is_netdump(char *file, ulong source_query)
 
 	case NETDUMP_ELF64:
 	case KDUMP_ELF64:
-                nd->header_size = load64->p_offset;
+                nd->header_size = size;
                 nd->elf64 = (Elf64_Ehdr *)&nd->elf_header[0];
 		nd->num_pt_load_segments = nd->elf64->e_phnum - 1;
                 if ((nd->pt_load_segments = (struct pt_load_segment *)
@@ -396,7 +377,7 @@ is_netdump(char *file, ulong source_query)
                     &nd->elf_header[sizeof(Elf64_Ehdr)];
                 nd->load64 = (Elf64_Phdr *)
                     &nd->elf_header[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
-		if (DUMPFILE_FORMAT(nd->flags) == NETDUMP_ELF64)
+		if (format == NETDUMP_ELF64)
 			nd->page_size = (uint)nd->load64->p_align;
                 dump_Elf64_Ehdr(nd->elf64);
                 dump_Elf64_Phdr(nd->notes64, ELFREAD);
@@ -433,7 +414,127 @@ is_netdump(char *file, ulong source_query)
 
 bailout:
 	close(fd);
+	free(eheader);
 	return FALSE;
+}
+
+/*
+ *  Search through all PT_LOAD segments to determine the
+ *  file offset where the physical memory segment(s) start
+ *  in the vmcore, and consider everything prior to that as
+ *  header contents.
+ */
+
+static size_t
+resize_elf_header(int fd, char *file, char **eheader_ptr, ulong format)
+{
+	int i;
+	char buf[BUFSIZE];
+	char *eheader;
+	Elf32_Ehdr *elf32;
+	Elf32_Phdr *load32;
+	Elf64_Ehdr *elf64;
+	Elf64_Phdr *load64;
+	Elf32_Off p_offset32;
+	Elf64_Off p_offset64;
+	size_t header_size;
+	uint num_pt_load_segments;
+
+	eheader = *eheader_ptr;
+	header_size = num_pt_load_segments = 0;
+	elf32 = (Elf32_Ehdr *)&eheader[0];
+	elf64 = (Elf64_Ehdr *)&eheader[0];
+
+	switch (format)
+	{
+	case NETDUMP_ELF32:
+	case KDUMP_ELF32:
+		num_pt_load_segments = elf32->e_phnum - 1;
+		header_size = sizeof(Elf32_Ehdr) + sizeof(Elf32_Phdr) +
+			(sizeof(Elf32_Phdr) * num_pt_load_segments);
+		break;
+
+	case NETDUMP_ELF64:
+	case KDUMP_ELF64:
+		num_pt_load_segments = elf64->e_phnum - 1;
+		header_size = sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr) +
+			(sizeof(Elf64_Phdr) * num_pt_load_segments);
+		break;
+	}
+
+	if ((eheader = (char *)realloc(eheader, header_size)) == NULL) {
+		fprintf(stderr, "cannot realloc interim ELF header buffer\n");
+		clean_exit(1);
+	} else
+		*eheader_ptr = eheader;
+
+	if (FLAT_FORMAT()) {
+		if (!read_flattened_format(fd, 0, eheader, header_size))
+			return 0;
+	} else {
+		if (lseek(fd, 0, SEEK_SET) != 0) {
+			sprintf(buf, "%s: lseek", file);
+			perror(buf);
+			return 0;
+		}
+		if (read(fd, eheader, header_size) != header_size) {
+			sprintf(buf, "%s: ELF header read", file);
+			perror(buf);
+			return 0;
+		}
+	}
+
+	switch (format)
+	{
+	case NETDUMP_ELF32:
+	case KDUMP_ELF32:
+		load32 = (Elf32_Phdr *)&eheader[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
+		p_offset32 = load32->p_offset;
+		for (i = 0; i < num_pt_load_segments; i++, load32 += 1) {
+			if (load32->p_offset && 
+			    (p_offset32 > load32->p_offset))
+				p_offset32 = load32->p_offset;
+		}
+		header_size = (size_t)p_offset32;
+		break;
+
+	case NETDUMP_ELF64:
+	case KDUMP_ELF64:
+		load64 = (Elf64_Phdr *)&eheader[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
+		p_offset64 = load64->p_offset;
+		for (i = 0; i < num_pt_load_segments; i++, load64 += 1) {
+			if (load64->p_offset &&
+			    (p_offset64 > load64->p_offset))
+				p_offset64 = load64->p_offset;
+		}
+		header_size = (size_t)p_offset64;
+		break;
+	}
+
+	if ((eheader = (char *)realloc(eheader, header_size)) == NULL) {
+		perror("realloc");
+		fprintf(stderr, "cannot realloc resized ELF header buffer\n");
+		clean_exit(1);
+	} else
+		*eheader_ptr = eheader;
+
+	if (FLAT_FORMAT()) {
+		if (!read_flattened_format(fd, 0, eheader, header_size))
+			return 0;
+	} else {
+		if (lseek(fd, 0, SEEK_SET) != 0) {
+			sprintf(buf, "%s: lseek", file);
+			perror(buf);
+			return 0;
+		}
+		if (read(fd, eheader, header_size) != header_size) {
+			sprintf(buf, "%s: ELF header read", file);
+			perror(buf);
+			return 0;
+		}
+	}
+
+	return header_size;
 }
 
 /*
