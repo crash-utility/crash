@@ -82,6 +82,14 @@ struct cptgroupdesc {
 };
 typedef struct cptgroupdesc	cptgroupdesc;
 
+struct memregion {
+   uint32_t startpagenum;
+   uint32_t startppn;
+   uint32_t size;
+};
+typedef struct memregion	memregion;
+
+#define MAX_REGIONS	3
 struct vmssdata {
 	int32_t	cpt64bit;
 	FILE	*dfp;
@@ -89,6 +97,7 @@ struct vmssdata {
 	/* about the memory */
 	uint32_t	alignmask;
 	uint32_t	regionscount;
+        memregion	regions[MAX_REGIONS];
 	uint64_t	memoffset;
 	uint64_t	memsize;
 };

@@ -139,8 +139,7 @@ vmware_vmss_init(char *filename, FILE *ofp)
 				break;
 			}
 			name[nameLen] = 0;
-			DEBUG_PARSE_PRINT((vmss.ofp, LOGPRX"\t Item %20s",
-					   name));
+			DEBUG_PARSE_PRINT((vmss.ofp, LOGPRX"\t Item %20s", name));
 
 			nindx = TAG_NINDX(tag);
 			if (nindx > 3) {
@@ -162,6 +161,9 @@ vmware_vmss_init(char *filename, FILE *ofp)
 				uint64_t nbytesinmem;
 				int compressed = IS_BLOCK_COMPRESSED_TAG(tag);
 				uint16_t padsize;
+
+				assert(strcmp(name, "Memory") == 0);
+				assert(!compressed);
 
 				if (fread(&nbytes, sizeof(nbytes), 1, vmss.dfp) != 1) {
 					fprintf(vmss.ofp, LOGPRX"Cannot read block size.\n");
@@ -188,11 +190,8 @@ vmware_vmss_init(char *filename, FILE *ofp)
 				}
 
 				/* The things that we really care about...*/
-				if (strcmp(grps[i].name, "memory") == 0 &&
-				    strcmp(name, "Memory") == 0) {
-					vmss.memoffset = blockpos;
-					vmss.memsize = nbytesinmem;
-				}
+				vmss.memoffset = blockpos;
+				vmss.memsize = nbytesinmem;
 
 				DEBUG_PARSE_PRINT((vmss.ofp, "\t=> %sBLOCK: position=%#llx size=%#llx memsize=%#llx\n",
 						  compressed ? "COMPRESSED " : "",
@@ -216,18 +215,21 @@ vmware_vmss_init(char *filename, FILE *ofp)
 
 				if (strcmp(grps[i].name, "memory") == 0) {
 					if (strcmp(name, "regionsCount") == 0) {
-						vmss.regionscount = (uint32_t) *val;
-						if (vmss.regionscount != 0) {
-							fprintf(vmss.ofp, LOGPRX"regionsCount=%d (!= 0) NOT TESTED!",
-							        vmss.regionscount);
-						}
+						vmss.regionscount = *(uint32_t*)val;
+						assert(vmss.regionscount <= MAX_REGIONS);
+					}
+				        if (strcmp(name, "regionPageNum") == 0) {
+						vmss.regions[idx[0]].startpagenum = *(uint32_t*)val;
+					}
+					if (strcmp(name, "regionPPN") == 0) {
+						vmss.regions[idx[0]].startppn = *(uint32_t*)val;
+					}
+					if (strcmp(name, "regionSize") == 0) {
+						vmss.regions[idx[0]].size = *(uint32_t*)val;
 					}
 					if (strcmp(name, "align_mask") == 0) {
-						vmss.alignmask = (uint32_t) *val;
-						if (vmss.alignmask != 0xff) {
-							fprintf(vmss.ofp, LOGPRX"align_mask=%d (!= 0xff) NOT TESTED!",
-							        vmss.regionscount);
-						}
+						vmss.alignmask = *(uint32_t*)val;
+						assert(vmss.alignmask == 0xFFFF);
 					}
 				}
 
@@ -272,27 +274,35 @@ vmware_vmss_init(char *filename, FILE *ofp)
 
 uint vmware_vmss_page_size(void)
 {
-	return 4096;
+	return PAGE_SIZE;
 }
 
 int
 read_vmware_vmss(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 {
-	uint64_t pos = vmss.memoffset + paddr;
+	uint64_t pos = paddr;
 
-	if (pos + cnt > vmss.memoffset + vmss.memsize) {
-		cnt -= ((pos + cnt) - (vmss.memoffset + vmss.memsize));
-		if (cnt < 0) {
-			error(INFO, LOGPRX"Read beyond the end of file! paddr=%#lx\n",
-			      paddr);
+	if (vmss.regionscount > 0) {
+		/* Memory is divided into regions and there are holes between them. */
+		uint32_t ppn = (uint32_t) (pos >> PAGE_SHIFT);
+	        int i;
+
+		for (i = 0; i < vmss.regionscount; i++) {
+			if (ppn < vmss.regions[i].startppn)
+				break;
+
+			/* skip holes. */
+			pos -= ((vmss.regions[i].startppn - vmss.regions[i].startpagenum)
+				<< PAGE_SHIFT);
 		}
 	}
+	assert(pos + cnt <= vmss.memsize);
 
+	pos += vmss.memoffset;
         if (fseek(vmss.dfp, pos, SEEK_SET) != 0)
 		return SEEK_ERROR;
 
-        if (fread(bufptr, 1 , cnt, vmss.dfp) != cnt)
-		return READ_ERROR;
+	cnt = fread(bufptr, 1, cnt, vmss.dfp);
 
 	return cnt;
 }
