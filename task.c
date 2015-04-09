@@ -2018,7 +2018,7 @@ retry_pid_hash:
 do_chained:
         	if (!readmem(upid, KVADDR, nodebuf, SIZE(upid), 
 		    "pid_hash upid", RETURN_ON_ERROR|QUIET)) { 
-			error(INFO, "\ncannot read pid_hash upid\n");
+			error(INFO, "\npid_hash[%d]: cannot read pid_hash upid\n", i);
                         if (DUMPFILE())
                                 continue;
                         hq_close();
@@ -2033,14 +2033,22 @@ do_chained:
 		/*
 		 *  Use init_pid_ns level 0 (PIDTYPE_PID).
 		 */
-		if (upid_ns != tt->init_pid_ns)
+		if (upid_ns != tt->init_pid_ns) {
+			if (!accessible(upid_ns)) {
+				error(INFO, 
+				    "%spid_hash[%d]: invalid upid.ns: %lx\n",
+					DUMPFILE() ? "\n" : "",
+					i, upid_ns);
+                             	continue;
+			}
 			goto chain_next;
+		}
 
 		pid = upid - OFFSET(pid_numbers);
 
 		if (!readmem(pid + OFFSET(pid_tasks), KVADDR, &pid_tasks_0, 
 		    sizeof(void *), "pid tasks", RETURN_ON_ERROR|QUIET)) {
-                        error(INFO, "\ncannot read pid.tasks[0]\n");
+                        error(INFO, "\npid_hash[%d]: cannot read pid.tasks[0]\n", i);
                         if (DUMPFILE())
                                 continue;
                         hq_close();
@@ -2065,18 +2073,18 @@ do_chained:
 		}
 
 		if (!IS_TASK_ADDR(next)) {
- 			error(INFO, "%sinvalid task address in pid_hash: %lx\n",
-                        	DUMPFILE() ? "\n" : "", next);
-			 if (DUMPFILE())
-                                        break;
+			error(INFO, "%spid_hash[%d]: invalid task address: %lx\n",
+				DUMPFILE() ? "\n" : "", i, next);
+			if (DUMPFILE())
+				break;
  			hq_close();
  			retries++;
  			goto retry_pid_hash;
 		}
 
 		if (!is_idle_thread(next) && !hq_enter(next)) {
-			error(INFO, "%sduplicate task in pid_hash: %lx\n",
-				DUMPFILE() ? "\n" : "", next);
+			error(INFO, "%spid_hash[%d]: duplicate task: %lx\n",
+				DUMPFILE() ? "\n" : "", i, next);
 			if (DUMPFILE())
 				break;
 			hq_close();
@@ -2087,6 +2095,12 @@ do_chained:
 		cnt++;
 chain_next:
 		if (pnext) {
+			if (chained >= tt->max_tasks) {
+				error(INFO, 
+				    "%spid_hash[%d]: corrupt/invalid upid chain\n",
+					DUMPFILE() ? "\n" : "", i);
+				continue;
+			}
 			kpp = pnext;
 			upid = pnext - OFFSET(upid_pid_chain);
 			chained++;
