@@ -1,8 +1,8 @@
 /* symbols.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -12112,4 +12112,54 @@ init_module_function(ulong vaddr)
 	}
 
 	return NULL;
+}
+
+/*
+ *  The caller fills in the structure and member name fields of
+ *  the passed-in struct_member_data structure, which are then
+ *  passed to the gdb "printm" command to get the member data.
+ *
+ *  Adapted from Qiao Nuohan's "pstruct" extension module.
+ */
+int
+fill_struct_member_data(struct struct_member_data *smd)
+{
+	int i, cnt;
+	char buf[BUFSIZE];
+	char *printm_list[MAXARGS];
+
+	cnt = 0;
+	sprintf(buf, "printm ((struct %s *)0x0).%s", 
+		smd->structure, smd->member);
+
+	open_tmpfile2();
+
+	if (!gdb_pass_through(buf, pc->tmpfile2, GNU_RETURN_ON_ERROR))
+		return FALSE;
+
+	rewind(pc->tmpfile2);
+	if (fgets(buf, BUFSIZE, pc->tmpfile2)) {
+		if (CRASHDEBUG(2))
+			fprintf(fp, "%s.%s: %s", 
+				smd->structure, smd->member, buf);
+		cnt = parse_line(buf, printm_list);
+	} 
+
+	close_tmpfile2();
+
+	if (cnt != 6)
+		return FALSE;
+	for (i = 0; i < cnt; i++) {
+		if (!decimal(printm_list[i], 0))
+			return FALSE;
+	}
+
+	smd->type = dtol(printm_list[0], RETURN_ON_ERROR, NULL);
+	smd->unsigned_type = dtol(printm_list[1], RETURN_ON_ERROR, NULL);
+	smd->length = dtol(printm_list[2], RETURN_ON_ERROR, NULL);
+	smd->offset = dtol(printm_list[3], RETURN_ON_ERROR, NULL);
+	smd->bitpos = dtol(printm_list[4], RETURN_ON_ERROR, NULL);
+	smd->bitsize = dtol(printm_list[5], RETURN_ON_ERROR, NULL);
+
+	return TRUE;
 }

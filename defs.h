@@ -4650,6 +4650,17 @@ void dump_trace(void **);
 int enumerator_value(char *, long *);
 int dump_enumerator_list(char *);
 struct load_module *init_module_function(ulong);
+struct struct_member_data {
+	char *structure;
+	char *member;
+	long type;
+	long unsigned_type;
+	long length;
+	long offset;
+	long bitpos;
+	long bitsize;
+};
+int fill_struct_member_data(struct struct_member_data *);
 
 /*  
  *  memory.c 
