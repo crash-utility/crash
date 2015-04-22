@@ -471,6 +471,7 @@ struct program_context {
 #define MOD_SECTIONS     (0x4000)
 #define MOD_READNOW      (0x8000)
 #define MM_STRUCT_FORCE (0x10000)
+#define CPUMASK         (0x20000)
 	ulonglong curcmd_private;	/* general purpose per-command info */
 	int cur_gdb_cmd;                /* current gdb command */
 	int last_gdb_cmd;               /* previously-executed gdb command */

@@ -7622,12 +7622,14 @@ void
 cmd_runq(void)
 {
         int c;
+	char arg_buf[BUFSIZE];
+	ulong *cpus = NULL;
 	int sched_debug = 0;
 	int dump_timestamp_flag = 0;
 	int dump_task_group_flag = 0;
 	int dump_milliseconds_flag = 0;
 
-        while ((c = getopt(argcnt, args, "dtgm")) != EOF) {
+        while ((c = getopt(argcnt, args, "dtgmc:")) != EOF) {
                 switch(c)
                 {
 		case 'd':
@@ -7646,6 +7648,19 @@ cmd_runq(void)
 				option_not_supported(c);
 			dump_task_group_flag = 1;
 			break;
+		case 'c':
+			if (pc->curcmd_flags & CPUMASK) {
+				error(INFO, "only one -c option allowed\n");
+				argerrs++;
+			} else {
+				pc->curcmd_flags |= CPUMASK;
+				BZERO(arg_buf, BUFSIZE);
+				strncpy(arg_buf, optarg, strlen(optarg));
+				cpus = get_cpumask_buf();
+				make_cpumask(arg_buf, cpus, FAULT_ON_ERROR, NULL);
+				pc->curcmd_private = (ulong)cpus;
+			}
+			break;
                 default:
                         argerrs++;
                         break;
@@ -7656,27 +7671,19 @@ cmd_runq(void)
         if (argerrs)
                 cmd_usage(pc->curcmd, SYNOPSIS);
 
-	if (dump_timestamp_flag) {
+	if (dump_timestamp_flag)
                 dump_on_rq_timestamp();
-                return;
-        }
-
-	if (dump_milliseconds_flag) {
+	else if (dump_milliseconds_flag)
                 dump_on_rq_milliseconds();
-                return;
-        }
-
-	if (sched_debug) {
+	else if (sched_debug)
 		dump_on_rq_tasks();
-		return;
-	}
-
-	if (dump_task_group_flag) {
+	else if (dump_task_group_flag)
 		dump_tasks_by_task_group();
-		return;
-	}
+	else
+		dump_runq();
 
-	dump_runq();
+	if (cpus)
+		FREEBUF(cpus);
 }
 
 /*
@@ -7692,8 +7699,11 @@ dump_on_rq_timestamp(void)
 	struct task_context *tc;
 	int cpu, len, indent;
 	ulonglong timestamp;
+	ulong *cpus;
 
 	indent = runq = 0;
+	cpus = pc->curcmd_flags & CPUMASK ? 
+		(ulong *)(ulong)pc->curcmd_private : NULL;
 
 	if (!(rq_sp = per_cpu_symbol_search("per_cpu__runqueues")))
 		error(FATAL, "per-cpu runqueues do not exist\n");
@@ -7701,6 +7711,9 @@ dump_on_rq_timestamp(void)
 		option_not_supported('t');
 
 	for (cpu = 0; cpu < kt->cpus; cpu++) {
+		if (cpus && !NUM_IN_BITMAP(cpus, cpu))
+			continue;
+
 		if ((kt->flags & SMP) && (kt->flags &PER_CPU_OFF))
 			runq = rq_sp->value + kt->__per_cpu_offset[cpu];
 		else
@@ -7757,6 +7770,7 @@ dump_on_rq_milliseconds(void)
 	int cpu, max_indent, indent, max_days, days;
 	long long delta;
 	ulonglong task_timestamp, rq_timestamp;
+	ulong *cpus;
 
 	if (!(rq_sp = per_cpu_symbol_search("per_cpu__runqueues")))
 		error(FATAL, "per-cpu runqueues do not exist\n");
@@ -7773,8 +7787,13 @@ dump_on_rq_milliseconds(void)
 		max_indent = 4;
 
 	max_days = days = 0;
+	cpus = pc->curcmd_flags & CPUMASK ? 
+		(ulong *)(ulong)pc->curcmd_private : NULL;
 
 	for (cpu = 0; cpu < kt->cpus; cpu++) {
+		if (cpus && !NUM_IN_BITMAP(cpus, cpu))
+			continue;
+
 		if ((kt->flags & SMP) && (kt->flags &PER_CPU_OFF))
 			runq = rq_sp->value + kt->__per_cpu_offset[cpu];
 		else
@@ -7902,12 +7921,13 @@ start_again:
 static void
 dump_runqueues(void)
 {
-	int cpu;
+	int cpu, displayed;
 	ulong runq, offset;
 	char *runqbuf;
 	ulong active, expired, arrays;
 	struct task_context *tc;
 	struct syment *rq_sp;
+	ulong *cpus;
 
 	runq = 0;
 
@@ -7921,8 +7941,13 @@ dump_runqueues(void)
 
 	get_active_set();
         runqbuf = GETBUF(SIZE(runqueue));
+	cpus = pc->curcmd_flags & CPUMASK ? 
+		(ulong *)(ulong)pc->curcmd_private : NULL;
 
-	for (cpu = 0; cpu < kt->cpus; cpu++, runq += SIZE(runqueue)) {
+	for (cpu = displayed = 0; cpu < kt->cpus; cpu++, runq += SIZE(runqueue)) {
+		if (cpus && !NUM_IN_BITMAP(cpus, cpu))
+			continue;
+
 		if (rq_sp) {
 			if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF))
 				runq = rq_sp->value + kt->__per_cpu_offset[cpu];
@@ -7930,7 +7955,7 @@ dump_runqueues(void)
 				runq = rq_sp->value;
 		}
 
-		fprintf(fp, "%sCPU %d ", cpu ? "\n" : "", cpu);
+		fprintf(fp, "%sCPU %d ", displayed++ ? "\n" : "", cpu);
 
 		if (hide_offline_cpu(cpu)) {
 			fprintf(fp, "[OFFLINE]\n");
@@ -8376,6 +8401,7 @@ dump_on_rq_tasks(void)
 	char buf[BUFSIZE];
 	struct task_context *tc;
 	int i, cpu, on_rq, tot;
+	ulong *cpus;
 
 	if (!VALID_MEMBER(task_struct_on_rq)) {
 		MEMBER_OFFSET_INIT(task_struct_se, "task_struct", "se");
@@ -8390,7 +8416,13 @@ dump_on_rq_tasks(void)
 		}
 	}
 
+	cpus = pc->curcmd_flags & CPUMASK ? 
+		(ulong *)(ulong)pc->curcmd_private : NULL;
+
 	for (cpu = 0; cpu < kt->cpus; cpu++) {
+		if (cpus && !NUM_IN_BITMAP(cpus, cpu))
+			continue;
+
                 fprintf(fp, "%sCPU %d", cpu ? "\n" : "", cpu);
 
 		if (hide_offline_cpu(cpu)) {
@@ -8503,13 +8535,14 @@ task_group_offset_init(void)
 static void
 dump_CFS_runqueues(void)
 {
-	int cpu, tot;
+	int cpu, tot, displayed;
 	ulong runq, cfs_rq, prio_array;
 	char *runqbuf, *cfs_rq_buf;
 	ulong tasks_timeline ATTRIBUTE_UNUSED;
 	struct task_context *tc;
 	struct rb_root *root;
 	struct syment *rq_sp, *init_sp;
+	ulong *cpus;
 
 	cfs_rq_offset_init();
 
@@ -8523,14 +8556,19 @@ dump_CFS_runqueues(void)
 		cfs_rq_buf = NULL;
 
 	get_active_set();
+	cpus = pc->curcmd_flags & CPUMASK ? 
+		(ulong *)(ulong)pc->curcmd_private : NULL;
 
-        for (cpu = 0; cpu < kt->cpus; cpu++) {
+        for (cpu = displayed = 0; cpu < kt->cpus; cpu++) {
+		if (cpus && !NUM_IN_BITMAP(cpus, cpu))
+			continue;
+		
 		if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF))
 			runq = rq_sp->value + kt->__per_cpu_offset[cpu];
 		else
 			runq = rq_sp->value;
 
-                fprintf(fp, "%sCPU %d ", cpu ? "\n" : "", cpu);
+                fprintf(fp, "%sCPU %d ", displayed++ ? "\n" : "", cpu);
 
 		if (hide_offline_cpu(cpu)) {
 			fprintf(fp, "[OFFLINE]\n");
@@ -8990,12 +9028,13 @@ fill_task_group_info_array(int depth, ulong group, char *group_buf, int i)
 static void
 dump_tasks_by_task_group(void)
 {
-	int cpu;
+	int cpu, displayed;
 	ulong root_task_group, cfs_rq, cfs_rq_p;
 	ulong rt_rq, rt_rq_p;
 	char *buf;
 	struct task_context *tc;
 	char *task_group_name;
+	ulong *cpus;
 
 	cfs_rq_offset_init();
 	task_group_offset_init();
@@ -9027,12 +9066,18 @@ dump_tasks_by_task_group(void)
 
 	get_active_set();
 
-	for (cpu = 0; cpu < kt->cpus; cpu++) {
+	cpus = pc->curcmd_flags & CPUMASK ? 
+		(ulong *)(ulong)pc->curcmd_private : NULL;
+
+	for (cpu = displayed = 0; cpu < kt->cpus; cpu++) {
+		if (cpus && !NUM_IN_BITMAP(cpus, cpu))
+			continue;
+
 		readmem(rt_rq + cpu * sizeof(ulong), KVADDR, &rt_rq_p,
 			sizeof(ulong), "task_group rt_rq", FAULT_ON_ERROR);
 		readmem(cfs_rq + cpu * sizeof(ulong), KVADDR, &cfs_rq_p,
 			sizeof(ulong), "task_group cfs_rq", FAULT_ON_ERROR);
-		fprintf(fp, "%sCPU %d", cpu ? "\n" : "", cpu);
+		fprintf(fp, "%sCPU %d", displayed++ ? "\n" : "", cpu);
 
 		if (hide_offline_cpu(cpu)) {
 			fprintf(fp, " [OFFLINE]\n");
