@@ -38,12 +38,12 @@ $(CONTRIB_SO): %.so: %.c defs.h
 	else \
 		grep '((constructor))' $*.c > .constructor; \
 		if [ -s .constructor ]; then \
-			echo "gcc -Wall -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
-			gcc -Wall -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
+			echo "gcc -Wall -g -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
+			gcc -Wall -g -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
 		fi; \
 		if [ ! -s .constructor ]; then \
-			echo "gcc -Wall -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
-			gcc -Wall -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
+			echo "gcc -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
+			gcc -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
 		fi; \
 	fi
 

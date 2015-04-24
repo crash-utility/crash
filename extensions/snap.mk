@@ -47,4 +47,4 @@ endif
 all: snap.so
 	
 snap.so: $(INCDIR)/defs.h snap.c 
-	gcc -Wall -I$(INCDIR) -shared -rdynamic -o snap.so snap.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)
+	gcc -Wall -g -I$(INCDIR) -shared -rdynamic -o snap.so snap.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)
