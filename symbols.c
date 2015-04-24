@@ -8993,6 +8993,10 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(rt_prio_array_queue));
 	fprintf(fp, "          prio_array_nr_active: %ld\n",
 		OFFSET(prio_array_nr_active));
+	fprintf(fp, "                  pt_regs_regs: %ld\n",
+		OFFSET(pt_regs_regs));
+	fprintf(fp, "          pt_regs_cp0_badvaddr: %ld\n",
+		OFFSET(pt_regs_cp0_badvaddr));
 	fprintf(fp, "          user_regs_struct_ebp: %ld\n",
 		OFFSET(user_regs_struct_ebp));
 	fprintf(fp, "          user_regs_struct_eip: %ld\n",

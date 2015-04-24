@@ -47,6 +47,11 @@ typedef ulong pte_t;
 
 #define MIPS_CPU_RIXI	0x00800000llu
 
+#define MIPS32_EF_R0	6
+#define MIPS32_EF_R29	35
+#define MIPS32_EF_R31	37
+#define MIPS32_EF_CPU0_EPC	40
+
 static struct machine_specific mips_machine_specific = { 0 };
 
 static void
@@ -315,28 +320,34 @@ mips_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbose
 }
 
 static void
-mips_dump_exception_stack(struct bt_info *bt, struct mips_pt_regs *regs)
+mips_dump_exception_stack(struct bt_info *bt, char *pt_regs)
 {
+	struct mips_pt_regs_main *mains;
+	struct mips_pt_regs_cp0 *cp0;
 	int i;
 	char buf[BUFSIZE];
 
+	mains = (struct mips_pt_regs_main *) (pt_regs + OFFSET(pt_regs_regs));
+	cp0 = (struct mips_pt_regs_cp0 *) \
+	      (pt_regs + OFFSET(pt_regs_cp0_badvaddr));
+
 	for (i = 0; i < 32; i += 4) {
 		fprintf(fp, "    $%2d   : %08lx %08lx %08lx %08lx\n",
-			i, regs->regs[i], regs->regs[i+1],
-			regs->regs[i+2], regs->regs[i+3]);
+			i, mains->regs[i], mains->regs[i+1],
+			mains->regs[i+2], mains->regs[i+3]);
 	}
-	fprintf(fp, "    Hi    : %08lx\n", regs->hi);
-	fprintf(fp, "    Lo    : %08lx\n", regs->lo);
+	fprintf(fp, "    Hi    : %08lx\n", mains->hi);
+	fprintf(fp, "    Lo    : %08lx\n", mains->lo);
 
-	value_to_symstr(regs->cp0_epc, buf, 16);
-	fprintf(fp, "    epc   : %08lx %s\n", regs->cp0_epc, buf);
+	value_to_symstr(cp0->cp0_epc, buf, 16);
+	fprintf(fp, "    epc   : %08lx %s\n", cp0->cp0_epc, buf);
 
-	value_to_symstr(regs->regs[31], buf, 16);
-	fprintf(fp, "    ra    : %08lx %s\n", regs->regs[31], buf);
+	value_to_symstr(mains->regs[31], buf, 16);
+	fprintf(fp, "    ra    : %08lx %s\n", mains->regs[31], buf);
 
-	fprintf(fp, "    Status: %08lx\n", regs->cp0_status);
-	fprintf(fp, "    Cause : %08lx\n", regs->cp0_cause);
-	fprintf(fp, "    BadVA : %08lx\n", regs->cp0_badvaddr);
+	fprintf(fp, "    Status: %08lx\n", mains->cp0_status);
+	fprintf(fp, "    Cause : %08lx\n", cp0->cp0_cause);
+	fprintf(fp, "    BadVA : %08lx\n", cp0->cp0_badvaddr);
 }
 
 struct mips_unwind_frame {
@@ -426,10 +437,10 @@ mips_dump_backtrace_entry(struct bt_info *bt, struct syment *sym,
 	}
 
 	if (mips_is_exception_entry(sym)) {
-		struct mips_pt_regs ptregs;
+		char pt_regs[SIZE(pt_regs)];
 
-		GET_STACK_DATA(current->sp, &ptregs, sizeof(ptregs));
-		mips_dump_exception_stack(bt, &ptregs);
+		GET_STACK_DATA(current->sp, &pt_regs, SIZE(pt_regs));
+		mips_dump_exception_stack(bt, pt_regs);
 	}
 
 	if (bt->flags & BT_FULL) {
@@ -520,7 +531,7 @@ mips_back_trace_cmd(struct bt_info *bt)
 
 	if (bt->machdep) {
 		struct mips_regset *regs = bt->machdep;
-		previous.pc = current.ra = regs->regs[31];
+		previous.pc = current.ra = regs->regs[MIPS32_EF_R31];
 	}
 
 	while (INSTACK(current.sp, bt)) {
@@ -574,13 +585,20 @@ mips_back_trace_cmd(struct bt_info *bt)
 		}
 
 		if (mips_is_exception_entry(symbol)) {
-			struct mips_pt_regs ptregs;
+			struct mips_pt_regs_main *mains;
+			struct mips_pt_regs_cp0 *cp0;
+			char pt_regs[SIZE(pt_regs)];
 
-			GET_STACK_DATA(current.sp, &ptregs, sizeof(ptregs));
+			mains = (struct mips_pt_regs_main *) \
+			       (pt_regs + OFFSET(pt_regs_regs));
+			cp0 = (struct mips_pt_regs_cp0 *) \
+			      (pt_regs + OFFSET(pt_regs_cp0_badvaddr));
 
-			previous.ra = ptregs.regs[31];
-			previous.sp = ptregs.regs[29];
-			current.ra = ptregs.cp0_epc;
+			GET_STACK_DATA(current.sp, pt_regs, sizeof(pt_regs));
+
+			previous.ra = mains->regs[31];
+			previous.sp = mains->regs[29];
+			current.ra = cp0->cp0_epc;
 
 			if (CRASHDEBUG(8))
 				fprintf(fp, "exception pc %#lx ra %#lx sp %lx\n",
@@ -614,9 +632,9 @@ mips_dumpfile_stack_frame(struct bt_info *bt, ulong *nip, ulong *ksp)
 	}
 
 	if (nip)
-		*nip = regs->regs[40];
+		*nip = regs->regs[MIPS32_EF_CPU0_EPC];
 	if (ksp)
-		*ksp = regs->regs[29];
+		*ksp = regs->regs[MIPS32_EF_R29];
 }
 
 static int
@@ -661,6 +679,10 @@ mips_stackframe_init(void)
 		task_struct_thread + thread_reg29;
 	ASSIGN_OFFSET(task_struct_thread_reg31) =
 		task_struct_thread + thread_reg31;
+
+	STRUCT_SIZE_INIT(pt_regs, "pt_regs");
+	MEMBER_OFFSET_INIT(pt_regs_regs, "pt_regs", "regs");
+	MEMBER_OFFSET_INIT(pt_regs_cp0_badvaddr, "pt_regs", "cp0_badvaddr");
 }
 
 static void
@@ -718,9 +740,6 @@ mips_vmalloc_start(void)
 static int
 mips_verify_symbol(const char *name, ulong value, char type)
 {
-	if (CRASHDEBUG(8) && name && strlen(name))
-		fprintf(fp, "%08lx %s\n", value, name);
-
 	if (STREQ(name, "_text"))
 		machdep->flags |= KSYMS_START;
 

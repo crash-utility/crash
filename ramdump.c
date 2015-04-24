@@ -194,6 +194,8 @@ char *ramdump_to_elf(void)
 		e_machine = EM_ARM;
 	else if (machine_type("ARM64"))
 		e_machine = EM_AARCH64;
+	else if (machine_type("MIPS"))
+		e_machine = EM_MIPS;
 	else
 		error(FATAL, "ramdump: unsupported machine type: %s\n", 
 			MACHINE_TYPE);

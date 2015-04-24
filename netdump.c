@@ -274,6 +274,12 @@ is_netdump(char *file, ulong source_query)
 				goto bailout;
 			break;
 
+		case EM_MIPS:
+			if (machine_type_mismatch(file, "MIPS", NULL,
+			    source_query))
+				goto bailout;
+			break;
+
 		default:
 			if (machine_type_mismatch(file, "(unknown)", NULL,
 			    source_query))

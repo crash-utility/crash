@@ -1938,6 +1938,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long mm_struct_mm_count;
 	long task_struct_thread_reg29;
 	long task_struct_thread_reg31;
+	long pt_regs_regs;
+	long pt_regs_cp0_badvaddr;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -5612,12 +5614,14 @@ struct mips_regset {
 	ulong regs[45];
 };
 
-struct mips_pt_regs {
-        ulong pad0[8];
+struct mips_pt_regs_main {
         ulong regs[32];
         ulong cp0_status;
         ulong hi;
         ulong lo;
+};
+
+struct mips_pt_regs_cp0 {
         ulong cp0_badvaddr;
         ulong cp0_cause;
         ulong cp0_epc;

@@ -345,7 +345,7 @@ x86_process_elf_notes(void *note_ptr, unsigned long size_note)
 		process_elf32_notes(note_ptr, size_note);
 }
 
-#if defined(__i386__) && defined(ARM)
+#if defined(__i386__) && (defined(ARM) || defined(MIPS))
 /*
  * The kdump_sub_header member offsets are different when the crash 
  * binary is built natively on an ARM host vs. when built with  
@@ -448,7 +448,7 @@ arm_kdump_header_adjust(int header_version)
 		kdsh->max_mapnr_64 = dd->max_mapnr;
 	}
 }
-#endif  /* __i386__ && ARM */
+#endif  /* __i386__ && (ARM || MIPS) */
 
 static int 
 read_dump_header(char *file)
@@ -532,6 +532,9 @@ restart:
 	else if (STRNEQ(header->utsname.machine, "arm") &&
 	    machine_type_mismatch(file, "ARM", NULL, 0))
 		goto err;
+	else if (STRNEQ(header->utsname.machine, "mips") &&
+	    machine_type_mismatch(file, "MIPS", NULL, 0))
+		goto err;
 	else if (STRNEQ(header->utsname.machine, "s390x") &&
 	    machine_type_mismatch(file, "S390X", NULL, 0))
 		goto err;
@@ -614,7 +617,7 @@ restart:
 		}
 		dd->sub_header_kdump = sub_header_kdump;
 
-#if defined(__i386__) && defined(ARM)
+#if defined(__i386__) && (defined(ARM) || defined(MIPS))
 		arm_kdump_header_adjust(header->header_version);
 #endif
 		/* use 64bit max_mapnr in compressed kdump file sub-header */
@@ -689,6 +692,8 @@ restart:
 
 	if (machine_type("ARM"))
 		dd->machine_type = EM_ARM;
+	else if (machine_type("MIPS"))
+		dd->machine_type = EM_MIPS;
 	else if (machine_type("X86"))
 		dd->machine_type = EM_386;
 	else if (machine_type("X86_64"))
@@ -1610,6 +1615,8 @@ __diskdump_memory_dump(FILE *fp)
 	{
 	case EM_ARM:
 		fprintf(fp, "(EM_ARM)\n"); break;
+	case EM_MIPS:
+		fprintf(fp, "(EM_MIPS)\n"); break;
 	case EM_386:
 		fprintf(fp, "(EM_386)\n"); break;
 	case EM_X86_64:
