@@ -804,7 +804,7 @@ char *help_foreach[] = {
 "display command data for multiple tasks in the system",
 "[[pid | taskp | name | state | [kernel | user]] ...]\n"
 "          command [flag] [argument]",
-"  This command allows for a an examination of various kernel data associated",
+"  This command allows for an examination of various kernel data associated",
 "  with any, or all, tasks in the system, without having to set the context",
 "  to each targeted task.\n",
 "      pid  perform the command(s) on this PID.",
@@ -6843,7 +6843,7 @@ char *input_info[] = {
 "",
 "Alternatively, an input file containing command arguments may be created.",
 "The arguments in the input file will be passed to the command specified,",
-"which will be executed repetetively for each line of arguments in the file:",
+"which will be executed repetitively for each line of arguments in the file:",
 "",
 "  %s> ps -p < inputfile",
 "",
