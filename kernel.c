@@ -201,8 +201,8 @@ kernel_init()
 	MEMBER_OFFSET_INIT(timekeeper_xtime_sec, "timekeeper", "xtime_sec");
 	get_xtime(&kt->date);
 	
-	if (pc->flags2 & GET_TIMESTAMP) {
-        	fprintf(fp, "%s\n\n", 
+	if (kt->flags2 & GET_TIMESTAMP) {
+		fprintf(fp, "%s\n\n", 
 			strip_linefeeds(ctime(&kt->date.tv_sec)));
 		clean_exit(0);
 	}

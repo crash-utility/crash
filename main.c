@@ -337,7 +337,7 @@ main(int argc, char **argv)
 			break;
 
 		case 't':
-			pc->flags2 |= GET_TIMESTAMP;
+			kt->flags2 |= GET_TIMESTAMP;
 			break;
 
 		case 'i':
