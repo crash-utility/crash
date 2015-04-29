@@ -56,8 +56,10 @@ store_flat_data_array(char *file, struct flat_data **fda)
 {
 	int			result = FALSE, fd;
 	int64_t			offset_fdh;
+	int64_t			offset_report = 0;
 	unsigned long long	num_allocated = 0;
 	unsigned long long	num_stored    = 0;
+	unsigned long long	sort_idx;
 	unsigned long long	size_allocated;
 	struct flat_data	*ptr = NULL, *cur, *new;
 	struct makedumpfile_data_header	fdh;
@@ -100,10 +102,33 @@ store_flat_data_array(char *file, struct flat_data **fda)
 			break;
 		}
 		cur = ptr + num_stored;
+		sort_idx = num_stored;
+		while (sort_idx) {
+			new = ptr + --sort_idx;
+			if (new->off_rearranged >= fdh.offset) {
+				cur->off_flattened = new->off_flattened;
+				cur->off_rearranged = new->off_rearranged;
+				cur->buf_size = new->buf_size;
+				cur = new;
+			} else {
+				if (CRASHDEBUG(1) && sort_idx + 1 != num_stored) {
+					fprintf(fp,
+						"makedumpfile: Moved from %lld to %lld\n",
+						num_stored, sort_idx + 1);
+				}
+				break;
+			}
+		}
 		cur->off_flattened  = offset_fdh + sizeof(fdh);
 		cur->off_rearranged = fdh.offset;
 		cur->buf_size       = fdh.buf_size;
 		num_stored++;
+
+		if (CRASHDEBUG(1) && (fdh.offset >> 30) > (offset_report >> 30)) {
+			fprintf(fp, "makedumpfile: At %lld GiB\n",
+			      (ulonglong)(fdh.offset >> 30));
+			offset_report = fdh.offset;
+		}
 
 		/* seek for next makedumpfile_data_header. */
 		if (lseek(fd, fdh.buf_size, SEEK_CUR) < 0) {
@@ -121,35 +146,6 @@ store_flat_data_array(char *file, struct flat_data **fda)
 	return num_stored;
 }
 
-static void
-sort_flat_data_array(struct flat_data **fda, unsigned long long num_fda)
-{
-	unsigned long long	i, j;
-	struct flat_data	tmp, *cur_i, *cur_j;
-
-	for (i = 0; i < num_fda - 1; i++) {
-		for (j = i + 1; j < num_fda; j++) {
-			cur_i = *fda + i;
-			cur_j = *fda + j;
-
-			if (cur_i->off_rearranged < cur_j->off_rearranged)
-				continue;
-
-			tmp.off_flattened  = cur_i->off_flattened;
-			tmp.off_rearranged = cur_i->off_rearranged;
-			tmp.buf_size       = cur_i->buf_size;
-
-			cur_i->off_flattened  = cur_j->off_flattened;
-			cur_i->off_rearranged = cur_j->off_rearranged;
-			cur_i->buf_size       = cur_j->buf_size;
-
-			cur_j->off_flattened  = tmp.off_flattened;
-			cur_j->off_rearranged = tmp.off_rearranged;
-			cur_j->buf_size       = tmp.buf_size;
-		}
-	}
-}
-
 static int
 read_all_makedumpfile_data_header(char *file)
 {
@@ -160,8 +156,6 @@ read_all_makedumpfile_data_header(char *file)
 	retval = num = store_flat_data_array(file, &fda);
 	if (retval < 0)
 		return FALSE;
-
-	sort_flat_data_array(&fda, num);
 
 	afd.num_array = num;
 	afd.array     = fda;
