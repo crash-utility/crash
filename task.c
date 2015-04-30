@@ -2843,7 +2843,7 @@ task_struct_member(struct task_context *tc, unsigned int radix, struct reference
 }
 
 static char *ps_exclusive = 
-    "-a, -t, -c, -p, -g, -l, -m, -L, -S and -r flags are all mutually-exclusive\n";
+    "-a, -t, -c, -p, -g, -l, -m, -S and -r flags are all mutually-exclusive\n";
 
 static void
 check_ps_exclusive(ulong flag, ulong thisflag)
