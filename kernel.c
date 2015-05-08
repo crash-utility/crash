@@ -5828,6 +5828,7 @@ generic_dump_irq(int irq)
 
 	handler = UNINITIALIZED;
 	action = 0;
+	pc->curcmd_flags &= ~HEADER_PRINTED;
 	
 	irq_desc_addr = get_irq_desc_addr(irq);
 	if (!irq_desc_addr && symbol_exists("irq_desc_ptrs")) {

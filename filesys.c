@@ -1,8 +1,8 @@
 /* filesys.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1281,6 +1281,8 @@ cmd_mount(void)
 	show_mounts(0, MOUNT_PRINT_FILES | 
 		(VALID_MEMBER(super_block_s_dirty) ? MOUNT_PRINT_INODES : 0), 
 		namespace_context);
+
+	pc->curcmd_flags &= ~HEADER_PRINTED;
 
 	do {
 		spec_string = args[optind];
