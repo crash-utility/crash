@@ -4424,6 +4424,7 @@ cmd_kmem(void)
 	escape = FALSE;
 	BZERO(&meminfo, sizeof(struct meminfo));
 	BZERO(&value[0], sizeof(ulonglong)*MAXARGS);
+	pc->curcmd_flags &= ~HEADER_PRINTED;
 
         while ((c = getopt(argcnt, args, "gI:sSFfpvczCinl:L:PVoh")) != EOF) {
                 switch(c)
@@ -5103,7 +5104,6 @@ dump_mem_map_SPARSEMEM(struct meminfo *mi)
 	nr_mem_sections = NR_MEM_SECTIONS();
 
 	bufferindex = 0;
-	pc->curcmd_flags &= ~HEADER_PRINTED;
 
 	/* 
 	 *  Iterate over all possible sections
@@ -5578,7 +5578,6 @@ dump_mem_map(struct meminfo *mi)
 	total_pages = 0;
 
 	bufferindex = 0;
-	pc->curcmd_flags &= ~HEADER_PRINTED;
 
 	for (n = 0; n < vt->numnodes; n++) {
 		if (print_hdr) {
@@ -8115,7 +8114,6 @@ dump_vmlist(struct meminfo *vi)
 	next = vmlist;
 	count = verified = 0;
 	mod_vmlist = kernel_symbol_exists("mod_vmlist");
-	pc->curcmd_flags &= ~HEADER_PRINTED;
 
 	while (next) {
 		if (!(pc->curcmd_flags & HEADER_PRINTED) && (next == vmlist) && 
@@ -8235,7 +8233,6 @@ dump_vmap_area(struct meminfo *vi)
 
 	vmap_area_buf = GETBUF(SIZE(vmap_area));
 	start = count = verified = size = 0;
-	pc->curcmd_flags &= ~HEADER_PRINTED;
 
 	ld = &list_data;
 	BZERO(ld, sizeof(struct list_data));

@@ -5693,6 +5693,8 @@ cmd_irq(void)
 		return;
 	}
 
+	pc->curcmd_flags &= ~HEADER_PRINTED;
+
 	if (!args[optind]) {
 		for (i = 0; i < nr_irqs; i++)
 			machdep->dump_irq(i);
@@ -5828,7 +5830,6 @@ generic_dump_irq(int irq)
 
 	handler = UNINITIALIZED;
 	action = 0;
-	pc->curcmd_flags &= ~HEADER_PRINTED;
 	
 	irq_desc_addr = get_irq_desc_addr(irq);
 	if (!irq_desc_addr && symbol_exists("irq_desc_ptrs")) {
