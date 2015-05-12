@@ -54,6 +54,8 @@ struct meminfo {           /* general purpose memory information structure */
 	int current_cache_index;
 	ulong found;
 	ulong retval;
+	struct struct_member_data *page_member_cache;
+	ulong nr_members;
 	char *ignore;
 	int errors;
 	int calls;
@@ -134,6 +136,14 @@ struct searchinfo {
 
 static char *memtype_string(int, int);
 static char *error_handle_string(ulong);
+static void collect_page_member_data(char *, struct meminfo *);
+struct integer_data {
+	ulong value;
+	ulong bitfield_value;
+	struct struct_member_data *pmd;
+};
+static int get_bitfield_data(struct integer_data *);
+static int show_page_member_data(char *, ulong, struct meminfo *, char *);
 static void dump_mem_map(struct meminfo *);
 static void dump_mem_map_SPARSEMEM(struct meminfo *);
 static void fill_mem_map_cache(ulong, ulong, char *);
@@ -4214,6 +4224,268 @@ tgid_quick_search(ulong tgid)
 	return NULL;
 }
 
+static void
+collect_page_member_data(char *optlist, struct meminfo *mi)
+{
+	int i;
+	int members;
+	char buf[BUFSIZE];
+	char *memberlist[MAXARGS];
+	struct struct_member_data *page_member_cache, *pmd;
+
+	if ((count_chars(optlist, ',')+1) > MAXARGS)
+		error(FATAL, "too many members in comma-separated list\n");
+
+	if ((LASTCHAR(optlist) == ',') || (LASTCHAR(optlist) == '.'))
+		error(FATAL, "invalid format: %s\n", optlist);
+
+	strcpy(buf, optlist);
+	replace_string(optlist, ",", ' ');
+
+	if (!(members = parse_line(optlist, memberlist)))
+		error(FATAL, "invalid page struct member list format: %s\n", buf);
+
+        page_member_cache = (struct struct_member_data *)
+                GETBUF(sizeof(struct struct_member_data) * members);
+
+	for (i = 0, pmd = page_member_cache; i < members; i++, pmd++) {
+		pmd->structure = "page";
+		pmd->member = memberlist[i];
+
+		if (!fill_struct_member_data(pmd))
+			error(FATAL, "invalid %s struct member: %s\n",
+				pmd->structure, pmd->member);
+
+		if (CRASHDEBUG(1)) {
+			fprintf(fp, "      structure: %s\n", pmd->structure);
+			fprintf(fp, "         member: %s\n", pmd->member);
+			fprintf(fp, "           type: %ld\n", pmd->type);
+			fprintf(fp, "  unsigned_type: %ld\n", pmd->unsigned_type);
+			fprintf(fp, "         length: %ld\n", pmd->length);
+			fprintf(fp, "         offset: %ld\n", pmd->offset);
+			fprintf(fp, "         bitpos: %ld\n", pmd->bitpos);
+			fprintf(fp, "        bitsize: %ld%s", pmd->bitsize,
+				members > 1 ? "\n\n" : "\n");
+		}
+	}
+
+	mi->nr_members = members;
+	mi->page_member_cache = page_member_cache;
+}
+
+static int
+get_bitfield_data(struct integer_data *bd)
+{
+	int pos, size;
+	uint32_t tmpvalue32;
+	uint64_t tmpvalue64;
+	uint32_t mask32;
+	uint64_t mask64;
+	struct struct_member_data *pmd;
+
+	pmd = bd->pmd;
+	pos = bd->pmd->bitpos;
+	size = bd->pmd->bitsize;
+
+	if (pos == 0 && size == 0) {
+		bd->bitfield_value = bd->value;
+		return TRUE;
+	}
+
+	switch (__BYTE_ORDER)
+	{
+	case __LITTLE_ENDIAN:
+		switch (pmd->length)
+		{
+		case 4:
+			tmpvalue32 = (uint32_t)bd->value;
+			tmpvalue32 >>= pos;
+			mask32 = (1 << size) - 1;
+			tmpvalue32 &= mask32;
+			bd->bitfield_value = (ulong)tmpvalue32;
+			break;
+		case 8:
+			tmpvalue64 = (uint64_t)bd->value;
+			tmpvalue64 >>= pos;
+			mask64 = (1UL << size) - 1;
+			tmpvalue64 &= mask64;
+			bd->bitfield_value = tmpvalue64;
+			break;
+		default:
+			return FALSE;
+		}
+		break;
+
+	case __BIG_ENDIAN:
+		switch (pmd->length)
+		{
+		case 4:
+			tmpvalue32 = (uint32_t)bd->value;
+			tmpvalue32 <<= pos;
+			tmpvalue32 >>= (32-size);
+			mask32 = (1 << size) - 1;
+			tmpvalue32 &= mask32;
+			bd->bitfield_value = (ulong)tmpvalue32;
+			break;
+		case 8:
+			tmpvalue64 = (uint64_t)bd->value;
+			tmpvalue64 <<= pos;
+			tmpvalue64 >>= (64-size);
+			mask64 = (1UL << size) - 1;
+			tmpvalue64 &= mask64;
+			bd->bitfield_value = tmpvalue64;
+			break;
+		default:
+			return FALSE;
+		}
+		break;
+	}
+
+	return TRUE;
+}
+
+static int
+show_page_member_data(char *pcache, ulong pp, struct meminfo *mi, char *outputbuffer)
+{
+	int bufferindex, i, c, cnt, radix, struct_intbuf[10];
+	ulong longbuf, struct_longbuf[10];
+	unsigned char boolbuf;
+	void *voidptr;
+	ushort shortbuf;
+	struct struct_member_data *pmd;
+	struct integer_data integer_data;
+
+	bufferindex = 0;
+	pmd = mi->page_member_cache;
+
+	bufferindex += sprintf(outputbuffer + bufferindex, "%lx  ", pp);
+
+	for (i = 0; i < mi->nr_members; pmd++, i++) {
+
+		switch (pmd->type)
+		{
+		case TYPE_CODE_PTR:
+			voidptr = VOID_PTR(pcache + pmd->offset);
+			bufferindex += sprintf(outputbuffer + bufferindex, 
+				VADDR_PRLEN == 8 ? "%08lx  " : "%016lx  ", (ulong)voidptr);
+			break;
+
+		case TYPE_CODE_INT:
+			switch (pmd->length)
+			{
+			case 1:
+				integer_data.value = UCHAR(pcache + pmd->offset);
+				break;
+			case 2:
+				integer_data.value = USHORT(pcache + pmd->offset);
+				break;
+			case 4:	
+				integer_data.value = UINT(pcache + pmd->offset);
+				break;
+			case 8:
+				if (BITS32()) 
+					goto unsupported;
+				integer_data.value = ULONG(pcache + pmd->offset);
+				break;
+			default:
+				goto unsupported;
+			}
+
+			integer_data.pmd = pmd;
+			if (get_bitfield_data(&integer_data))
+				longbuf = integer_data.bitfield_value;
+			else
+				goto unsupported;
+
+			if (STREQ(pmd->member, "flags"))
+				radix = 16;
+			else if (STRNEQ(pmd->member, "_count") || STRNEQ(pmd->member, "_mapcount"))
+				radix = 10;
+			else
+				radix = *gdb_output_radix;
+			
+			if (pmd->unsigned_type) {
+				if (pmd->length == sizeof(ulonglong))
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						radix == 10 ?  "%lu  " : "%016lx  ", longbuf);
+				else if (pmd->length == sizeof(int))
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						radix == 10 ?  "%u  " : "%08x  ", (uint)longbuf);
+				else if (pmd->length == sizeof(short)) {
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						radix == 10 ?  "%u  " : "%04x  ", (ushort)longbuf);
+				}
+				else if (pmd->length == sizeof(char))
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						radix == 10 ?  "%u  " : "%02x  ", (unsigned char)longbuf);
+			} else {
+				if (pmd->length == sizeof(ulonglong))
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						radix == 10 ?  "%ld  " : "%016lx", longbuf);
+				else if (pmd->length == sizeof(int))
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						radix == 10 ?  "%d  " : "%08x  ", (int)longbuf);
+				else if (pmd->length == sizeof(short))
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						radix == 10 ?  "%d  " : "%04x  ", (short)longbuf);
+				else if (pmd->length == sizeof(char))
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						radix == 10 ?  "%d  " : "%02x  ", (char)longbuf);
+			}
+			break;
+
+		case TYPE_CODE_STRUCT:
+			if (STRNEQ(pmd->member, "_count") || STRNEQ(pmd->member, "_mapcount")) {
+				BCOPY(pcache+pmd->offset, (char *)&struct_intbuf[0], pmd->length);
+				bufferindex += sprintf(outputbuffer + bufferindex,
+					"%d  ", struct_intbuf[0]); 
+			} else if ((pmd->length % sizeof(long)) == 0) {
+				BCOPY(pcache+pmd->offset, (char *)&struct_longbuf[0], pmd->length);
+				cnt = pmd->length / sizeof(long);
+				for (c = 0; c < cnt; c++) {
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						BITS32() ? "%08lx%s" : "%016lx%s", 
+						struct_longbuf[c], (c+1) < cnt ? "," : "");
+				}
+				bufferindex += sprintf(outputbuffer + bufferindex, "  "); 
+			} else if ((pmd->length % sizeof(int)) == 0) {
+				BCOPY(pcache+pmd->offset, (char *)&struct_intbuf[0], pmd->length);
+				cnt = pmd->length / sizeof(int);
+				for (c = 0; c < cnt; c++) {
+					bufferindex += sprintf(outputbuffer + bufferindex,
+						"%08x%s", struct_intbuf[c], 
+						(c+1) < cnt ? "," : "");
+				}
+			} else if (pmd->length == sizeof(short)) {
+				BCOPY(pcache+pmd->offset, (char *)&shortbuf, pmd->length);
+				bufferindex += sprintf(outputbuffer + bufferindex,
+					"%04x  ", shortbuf); 
+			} else
+				goto unsupported;
+			break;
+
+		case TYPE_CODE_BOOL:
+			radix = *gdb_output_radix;
+			boolbuf = UCHAR(pcache + pmd->offset);
+			if (boolbuf <= 1)
+				bufferindex += sprintf(outputbuffer + bufferindex, "%s  ", 
+					boolbuf ? "true" : "false");
+			else
+				bufferindex += sprintf(outputbuffer + bufferindex, 
+					radix == 10 ? "%d" : "%x  ", boolbuf);
+			break;
+
+		default:
+unsupported:
+			error(FATAL, "unsupported page member reference: %s.%s\n",
+				pmd->structure, pmd->member);
+			break;
+		}
+	}
+
+	return bufferindex += sprintf(outputbuffer+bufferindex, "\n");
+}
+
 /*
  *  Fill in the task_mem_usage structure with the RSS, virtual memory size,
  *  percent of physical memory being used, and the mm_struct address.
@@ -4426,7 +4698,7 @@ cmd_kmem(void)
 	BZERO(&value[0], sizeof(ulonglong)*MAXARGS);
 	pc->curcmd_flags &= ~HEADER_PRINTED;
 
-        while ((c = getopt(argcnt, args, "gI:sSFfpvczCinl:L:PVoh")) != EOF) {
+        while ((c = getopt(argcnt, args, "gI:sSFfm:pvczCinl:L:PVoh")) != EOF) {
                 switch(c)
 		{
 		case 'V':
@@ -4479,6 +4751,11 @@ cmd_kmem(void)
 
 		case 'p':
 			pflag = 1;
+			break;
+
+		case 'm':
+			pflag = 1;
+			collect_page_member_data(optarg, &meminfo);
 			break;
 
 		case 'I':
@@ -5026,7 +5303,13 @@ dump_mem_map_SPARSEMEM(struct meminfo *mi)
 		    space(MINSPACE),               
 		    mkstring(buf4, 8, CENTER|LJUST, "OFFSET"),
 		    space(MINSPACE-1));
-        } else {
+	} else if (mi->nr_members) {
+		sprintf(hdr, "%s", mkstring(buf1, VADDR_PRLEN, CENTER, "PAGE"));
+		for (i = 0; i < mi->nr_members; i++)
+			sprintf(&hdr[strlen(hdr)], "  %s", 
+				mi->page_member_cache[i].member);
+		strcat(hdr, "\n");
+	} else {
 		sprintf(hdr, "%s%s%s%s%s%s%sCNT FLAGS\n",
 		    mkstring(buf1, VADDR_PRLEN, CENTER, "PAGE"), 
 		    space(MINSPACE),             
@@ -5189,6 +5472,11 @@ dump_mem_map_SPARSEMEM(struct meminfo *mi)
 
 			if (!done && (pg_spec || phys_spec))
 				continue;
+
+			if (mi->nr_members) {
+				bufferindex += show_page_member_data(pcache, pp, mi, outputbuffer+bufferindex);
+				goto display_members;
+			}
 			
 			flags = ULONG(pcache + OFFSET(page_flags));
 			if (SIZE(page_flags) == 4)
@@ -5365,6 +5653,7 @@ dump_mem_map_SPARSEMEM(struct meminfo *mi)
 				bufferindex += sprintf(outputbuffer+bufferindex, "\n");
 			}
 
+display_members:
 			if (bufferindex > buffersize) {
 				fprintf(fp, "%s", outputbuffer);
 				bufferindex = 0;
@@ -5412,6 +5701,8 @@ dump_mem_map_SPARSEMEM(struct meminfo *mi)
 		break; 
 	}
 
+	if (mi->nr_members)
+		FREEBUF(mi->page_member_cache);
 	FREEBUF(outputbuffer);
 	FREEBUF(page_cache);
 }
@@ -5502,7 +5793,13 @@ dump_mem_map(struct meminfo *mi)
 		    space(MINSPACE),               
 		    mkstring(buf4, 8, CENTER|LJUST, "OFFSET"),
 		    space(MINSPACE-1));
-        } else {
+	} else if (mi->nr_members) {
+		sprintf(hdr, "%s", mkstring(buf1, VADDR_PRLEN, CENTER, "PAGE"));
+		for (i = 0; i < mi->nr_members; i++)
+			sprintf(&hdr[strlen(hdr)], "  %s", 
+				mi->page_member_cache[i].member);
+		strcat(hdr, "\n");
+	} else {
 		sprintf(hdr, "%s%s%s%s%s%s%sCNT FLAGS\n",
 		    mkstring(buf1, VADDR_PRLEN, CENTER, "PAGE"), 
 		    space(MINSPACE),             
@@ -5627,6 +5924,11 @@ dump_mem_map(struct meminfo *mi)
 			if (!done && (pg_spec || phys_spec))
 				continue;
 			
+			if (mi->nr_members) {
+				bufferindex += show_page_member_data(pcache, pp, mi, outputbuffer+bufferindex);
+				goto display_members;
+			}
+
 			flags = ULONG(pcache + OFFSET(page_flags));
 			if (SIZE(page_flags) == 4)
 				flags &= 0xffffffff;
@@ -5803,6 +6105,7 @@ dump_mem_map(struct meminfo *mi)
 				bufferindex += sprintf(outputbuffer+bufferindex, "\n");
 			}
 	
+display_members:
 			if (bufferindex > buffersize) {
 				fprintf(fp, "%s", outputbuffer);
 				bufferindex = 0;
@@ -5850,6 +6153,8 @@ dump_mem_map(struct meminfo *mi)
 		break; 
 	}
 
+	if (mi->nr_members)
+		FREEBUF(mi->page_member_cache);
 	FREEBUF(outputbuffer);
 	FREEBUF(page_cache);
 }

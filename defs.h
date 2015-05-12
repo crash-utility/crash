@@ -4201,6 +4201,7 @@ enum type_code {
   /* 
    *  NOTE: the remainder of the type codes are not list or used here...
    */
+  TYPE_CODE_BOOL = 20,
 #endif
 };
 
