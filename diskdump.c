@@ -1285,14 +1285,11 @@ extern void get_netdump_regs_x86(struct bt_info *, ulong *, ulong *);
 extern void get_netdump_regs_x86_64(struct bt_info *, ulong *, ulong *);
 
 static void
-get_diskdump_regs_ppc(struct bt_info *bt, ulong *eip, ulong *esp)
+get_diskdump_regs_32(struct bt_info *bt, ulong *eip, ulong *esp)
 {
 	Elf32_Nhdr *note;
 	int len;
 
-	if (KDUMP_CMPRS_VALID())
-		ppc_relocate_nt_prstatus_percpu(dd->nt_prstatus_percpu,
-						&dd->num_prstatus_notes);
 	if (KDUMP_CMPRS_VALID() &&
 		(bt->task == tt->panic_task || 
 		(is_task_active(bt->task) && dd->num_prstatus_notes > 1))) {
@@ -1310,6 +1307,16 @@ get_diskdump_regs_ppc(struct bt_info *bt, ulong *eip, ulong *esp)
 	}
 
 	machdep->get_stack_frame(bt, eip, esp);
+}
+
+static void
+get_diskdump_regs_ppc(struct bt_info *bt, ulong *eip, ulong *esp)
+{
+	if (KDUMP_CMPRS_VALID())
+		ppc_relocate_nt_prstatus_percpu(dd->nt_prstatus_percpu,
+						&dd->num_prstatus_notes);
+
+	get_diskdump_regs_32(bt, eip, esp);
 }
 
 static void
@@ -1344,6 +1351,10 @@ get_diskdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 	{
 	case EM_ARM:
 		get_diskdump_regs_arm(bt, eip, esp);
+		break;
+
+	case EM_MIPS:
+		return get_diskdump_regs_32(bt, eip, esp);
 		break;
 
 	case EM_386:

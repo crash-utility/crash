@@ -833,6 +833,10 @@ mips_init(int when)
 #endif
 
 	switch (when) {
+	case SETUP_ENV:
+		machdep->process_elf_notes = process_elf32_notes;
+		break;
+
 	case PRE_SYMTAB:
 		machdep->verify_symbol = mips_verify_symbol;
 		machdep->machspec = &mips_machine_specific;
