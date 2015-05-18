@@ -11,3 +11,6 @@ crash.spec
 *.rpm
 gdb.files
 gdb-7.6/
+extensions/defs.h
+extensions/*.so
+extensions/eppic

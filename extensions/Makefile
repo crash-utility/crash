@@ -45,6 +45,7 @@ $(CONTRIB_SO): %.so: %.c defs.h
 			echo "gcc -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
 			gcc -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
 		fi; \
+		rm -f .constructor; \
 	fi
 
 clean:
