@@ -16734,7 +16734,7 @@ sparse_mem_init(void)
 		error(FATAL, 
 		    "CONFIG_SPARSEMEM kernels not supported for this architecture\n");
 
-	if ((len = get_array_length("mem_section", &dimension, 0) ==
+	if (((len = get_array_length("mem_section", &dimension, 0)) ==
 	    (NR_MEM_SECTIONS() / _SECTIONS_PER_ROOT_EXTREME())) || !dimension)
 		vt->flags |= SPARSEMEM_EX;
 
