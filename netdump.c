@@ -2431,6 +2431,8 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 			}
 			if (machine_type("PPC64") && (note->n_type == NT_PRSTATUS))
 				display_ELF_note(EM_PPC64, PRSTATUS_NOTE, note, nd->ofp);
+			if (machine_type("ARM64") && (note->n_type == NT_PRSTATUS))
+				display_ELF_note(EM_AARCH64, PRSTATUS_NOTE, note, nd->ofp);
 		}
 		for (i = lf = 0; i < note->n_descsz/sizeof(ulonglong); i++) {
 			if (((i%2)==0)) {
@@ -3073,6 +3075,104 @@ display_prstatus_ppc64(void *note_ptr, FILE *ofp)
 		space(sp), pr->pr_reg.dsisr, pr->pr_reg.result);
 }
 
+struct arm64_elf_siginfo {
+    int si_signo;
+    int si_code;
+    int si_errno;
+};
+
+struct arm64_elf_prstatus {
+    struct arm64_elf_siginfo pr_info;
+    short pr_cursig;
+    unsigned long pr_sigpend;
+    unsigned long pr_sighold;
+    pid_t pr_pid;
+    pid_t pr_ppid;
+    pid_t pr_pgrp;
+    pid_t pr_sid;
+    struct timeval pr_utime;
+    struct timeval pr_stime;
+    struct timeval pr_cutime;
+    struct timeval pr_cstime;
+/*  arm64_elf_gregset_t pr_reg; -> typedef unsigned long [34] arm64_elf_gregset_t */
+    unsigned long pr_reg[34];
+    int pr_fpvalid;
+};
+
+/*
+  Note that the ARM64 elf_gregset_t includes the 31 numbered registers
+  plus the sp, pc and pstate:
+
+  typedef unsigned long [34] elf_gregset_t;
+
+  struct pt_regs {
+      union {
+          struct user_pt_regs user_regs;
+          struct {
+              u64 regs[31];
+              u64 sp;
+              u64 pc;
+              u64 pstate;
+          };
+      };
+      u64 orig_x0;
+      u64 syscallno;
+  }
+*/
+
+static void
+display_prstatus_arm64(void *note_ptr, FILE *ofp)
+{
+	struct arm64_elf_prstatus *pr;
+	Elf64_Nhdr *note;
+	int sp;
+
+	note = (Elf64_Nhdr *)note_ptr;
+	pr = (struct arm64_elf_prstatus *)(
+		(char *)note + sizeof(Elf64_Nhdr) + note->n_namesz);
+	pr = (struct arm64_elf_prstatus *)roundup((ulong)pr, 4);
+	sp = nd->num_prstatus_notes ? 25 : 22;
+
+	fprintf(ofp,
+		"%ssi.signo: %d  si.code: %d  si.errno: %d\n"
+		"%scursig: %d  sigpend: %lx  sighold: %lx\n"
+		"%spid: %d  ppid: %d  pgrp: %d  sid:%d\n"
+		"%sutime: %01lld.%06d  stime: %01lld.%06d\n"
+		"%scutime: %01lld.%06d  cstime: %01lld.%06d\n",
+		space(sp), pr->pr_info.si_signo, pr->pr_info.si_code, pr->pr_info.si_errno,
+		space(sp), pr->pr_cursig, pr->pr_sigpend, pr->pr_sighold,
+		space(sp), pr->pr_pid, pr->pr_ppid, pr->pr_pgrp, pr->pr_sid,
+		space(sp), (long long)pr->pr_utime.tv_sec, (int)pr->pr_utime.tv_usec,
+		(long long)pr->pr_stime.tv_sec, (int)pr->pr_stime.tv_usec,
+		space(sp), (long long)pr->pr_cutime.tv_sec, (int)pr->pr_cutime.tv_usec,
+		(long long)pr->pr_cstime.tv_sec, (int)pr->pr_cstime.tv_usec);
+	fprintf(ofp,
+		"%s X0: %016lx   X1: %016lx   X2: %016lx\n"
+		"%s X3: %016lx   X4: %016lx   X5: %016lx\n"
+		"%s X6: %016lx   X7: %016lx   X8: %016lx\n"
+		"%s X9: %016lx  X10: %016lx  X11: %016lx\n"
+		"%sX12: %016lx  X13: %016lx  X14: %016lx\n"
+		"%sX15: %016lx  X16: %016lx  X16: %016lx\n"
+		"%sX18: %016lx  X19: %016lx  X20: %016lx\n"
+		"%sX21: %016lx  X22: %016lx  X23: %016lx\n"
+		"%sX24: %016lx  X25: %016lx  X26: %016lx\n"
+		"%sX27: %016lx  X28: %016lx  X29: %016lx\n"
+		"%sX30: %016lx   SP: %016lx   PC: %016lx\n"
+		"%sPSTATE: %08lx   FPVALID: %08x\n", 
+		space(sp), pr->pr_reg[0], pr->pr_reg[1], pr->pr_reg[2],
+		space(sp), pr->pr_reg[3], pr->pr_reg[4], pr->pr_reg[5],
+		space(sp), pr->pr_reg[6], pr->pr_reg[7], pr->pr_reg[8],
+		space(sp), pr->pr_reg[9], pr->pr_reg[10], pr->pr_reg[11],
+		space(sp), pr->pr_reg[12], pr->pr_reg[13], pr->pr_reg[14],
+		space(sp), pr->pr_reg[15], pr->pr_reg[16], pr->pr_reg[17],
+		space(sp), pr->pr_reg[18], pr->pr_reg[19], pr->pr_reg[20],
+		space(sp), pr->pr_reg[21], pr->pr_reg[22], pr->pr_reg[23],
+		space(sp), pr->pr_reg[24], pr->pr_reg[25], pr->pr_reg[26],
+		space(sp), pr->pr_reg[27], pr->pr_reg[28], pr->pr_reg[29],
+		space(sp), pr->pr_reg[30], pr->pr_reg[31], pr->pr_reg[32],
+		space(sp), pr->pr_reg[33], pr->pr_fpvalid);
+}
+
 
 void
 display_ELF_note(int machine, int type, void *note, FILE *ofp)
@@ -3111,6 +3211,15 @@ display_ELF_note(int machine, int type, void *note, FILE *ofp)
 		{
 		case PRSTATUS_NOTE:
 			display_prstatus_ppc64(note, ofp);
+			break;
+		}
+		break;
+
+	case EM_AARCH64:
+		switch (type)
+		{
+		case PRSTATUS_NOTE:
+			display_prstatus_arm64(note, ofp);
 			break;
 		}
 		break;
