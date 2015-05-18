@@ -76,9 +76,12 @@ arm64_init(int when)
 #endif
 
 	switch (when) {
+	case SETUP_ENV:
+		machdep->process_elf_notes = process_elf64_notes;
+		break;
+
 	case PRE_SYMTAB:
 		machdep->machspec = &arm64_machine_specific;
-		machdep->process_elf_notes = process_elf64_notes;
 		machdep->verify_symbol = arm64_verify_symbol;
 		if (pc->flags & KERNEL_DEBUG_QUERY)
 			return;
