@@ -3152,12 +3152,12 @@ display_prstatus_arm64(void *note_ptr, FILE *ofp)
 		"%s X6: %016lx   X7: %016lx   X8: %016lx\n"
 		"%s X9: %016lx  X10: %016lx  X11: %016lx\n"
 		"%sX12: %016lx  X13: %016lx  X14: %016lx\n"
-		"%sX15: %016lx  X16: %016lx  X16: %016lx\n"
+		"%sX15: %016lx  X16: %016lx  X17: %016lx\n"
 		"%sX18: %016lx  X19: %016lx  X20: %016lx\n"
 		"%sX21: %016lx  X22: %016lx  X23: %016lx\n"
 		"%sX24: %016lx  X25: %016lx  X26: %016lx\n"
 		"%sX27: %016lx  X28: %016lx  X29: %016lx\n"
-		"%sX30: %016lx   SP: %016lx   PC: %016lx\n"
+		"%s LR: %016lx   SP: %016lx   PC: %016lx\n"
 		"%sPSTATE: %08lx   FPVALID: %08x\n", 
 		space(sp), pr->pr_reg[0], pr->pr_reg[1], pr->pr_reg[2],
 		space(sp), pr->pr_reg[3], pr->pr_reg[4], pr->pr_reg[5],
