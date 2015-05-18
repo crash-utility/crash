@@ -2216,12 +2216,59 @@ diskdump_display_regs(int cpu, FILE *ofp)
 		len = sizeof(Elf64_Nhdr);
 		len = roundup(len + note64->n_namesz, 4);
 		len = roundup(len + note64->n_descsz, 4);
-//		user_regs = (char *)note64 + len - SIZE(user_regs_struct) - sizeof(long);
 		if (!valid_note_address((unsigned char *)note64 + len)) {
 			error(INFO, "invalid NT_PRSTATUS note for cpu %d\n", cpu);
 			return;
 		}
-		fprintf(ofp, "diskdump_display_regs: ARM64 register dump TBD\n");
+		user_regs = (char *)note64 + len - SIZE(elf_prstatus) + OFFSET(elf_prstatus_pr_reg);
+		fprintf(ofp,
+			"    X0: %016lx   X1: %016lx   X2: %016lx\n"
+			"    X3: %016lx   X4: %016lx   X5: %016lx\n"
+			"    X6: %016lx   X7: %016lx   X8: %016lx\n"
+			"    X9: %016lx  X10: %016lx  X11: %016lx\n"
+			"   X12: %016lx  X13: %016lx  X14: %016lx\n"
+			"   X15: %016lx  X16: %016lx  X17: %016lx\n"
+			"   X18: %016lx  X19: %016lx  X20: %016lx\n"
+			"   X21: %016lx  X22: %016lx  X23: %016lx\n"
+			"   X24: %016lx  X25: %016lx  X26: %016lx\n"
+			"   X27: %016lx  X28: %016lx  X29: %016lx\n"
+			"    LR: %016lx   SP: %016lx   PC: %016lx\n"
+			"   PSTATE: %08lx   FPVALID: %08x\n", 
+			ULONG(user_regs + sizeof(ulong) * 0),
+			ULONG(user_regs + sizeof(ulong) * 1),
+			ULONG(user_regs + sizeof(ulong) * 2),
+			ULONG(user_regs + sizeof(ulong) * 3),
+			ULONG(user_regs + sizeof(ulong) * 4),
+			ULONG(user_regs + sizeof(ulong) * 5),
+			ULONG(user_regs + sizeof(ulong) * 6),
+			ULONG(user_regs + sizeof(ulong) * 7),
+			ULONG(user_regs + sizeof(ulong) * 8),
+			ULONG(user_regs + sizeof(ulong) * 9),
+			ULONG(user_regs + sizeof(ulong) * 10),
+			ULONG(user_regs + sizeof(ulong) * 11),
+			ULONG(user_regs + sizeof(ulong) * 12),
+			ULONG(user_regs + sizeof(ulong) * 13),
+			ULONG(user_regs + sizeof(ulong) * 14),
+			ULONG(user_regs + sizeof(ulong) * 15),
+			ULONG(user_regs + sizeof(ulong) * 16),
+			ULONG(user_regs + sizeof(ulong) * 17),
+			ULONG(user_regs + sizeof(ulong) * 18),
+			ULONG(user_regs + sizeof(ulong) * 19),
+			ULONG(user_regs + sizeof(ulong) * 20),
+			ULONG(user_regs + sizeof(ulong) * 21),
+			ULONG(user_regs + sizeof(ulong) * 22),
+			ULONG(user_regs + sizeof(ulong) * 23),
+			ULONG(user_regs + sizeof(ulong) * 24),
+			ULONG(user_regs + sizeof(ulong) * 25),
+			ULONG(user_regs + sizeof(ulong) * 26),
+			ULONG(user_regs + sizeof(ulong) * 27),
+			ULONG(user_regs + sizeof(ulong) * 28),
+			ULONG(user_regs + sizeof(ulong) * 29),
+			ULONG(user_regs + sizeof(ulong) * 30),
+			ULONG(user_regs + sizeof(ulong) * 31),
+			ULONG(user_regs + sizeof(ulong) * 32),
+			ULONG(user_regs + sizeof(ulong) * 33),
+			UINT(user_regs + sizeof(ulong) * 34));
 	}
 
 	if (machine_type("X86")) {
@@ -2269,6 +2316,11 @@ dump_registers_for_compressed_kdump(void)
 	    !(machine_type("X86") || machine_type("X86_64") || 
 	      machine_type("ARM64") || machine_type("PPC64")))
 		error(FATAL, "-r option not supported for this dumpfile\n");
+
+	if (machine_type("ARM64") && (kt->cpus != dd->num_prstatus_notes))
+		fprintf(fp, "NOTE: cpus: %d  NT_PRSTATUS notes: %d  "
+			"(note-to-cpu mapping is questionable)\n\n", 
+			kt->cpus, dd->num_prstatus_notes);
 
 	for (c = 0; c < kt->cpus; c++) {
 		if (hide_offline_cpu(c)) {
