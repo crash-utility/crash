@@ -9083,6 +9083,12 @@ get_xtime(struct timespec *date)
 			&xtime_sec, sizeof(uint64_t),
                         "timekeeper xtime_sec", RETURN_ON_ERROR);
 		date->tv_sec = (__time_t)xtime_sec;
+	} else if (VALID_MEMBER(timekeeper_xtime_sec) &&
+	    (sp = kernel_symbol_search("shadow_timekeeper"))) {
+                readmem(sp->value + OFFSET(timekeeper_xtime_sec), KVADDR, 
+			&xtime_sec, sizeof(uint64_t),
+                        "shadow_timekeeper xtime_sec", RETURN_ON_ERROR);
+		date->tv_sec = (__time_t)xtime_sec;
 	} else if (kernel_symbol_exists("xtime"))
 		get_symbol_data("xtime", sizeof(struct timespec), date);
 }
