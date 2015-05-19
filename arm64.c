@@ -91,12 +91,28 @@ arm64_init(int when)
 		break;
 
 	case PRE_GDB:
-		if (kernel_symbol_exists("swapper_pg_dir") &&
+		if (!machdep->pagesize &&
+		    kernel_symbol_exists("swapper_pg_dir") &&
 		    kernel_symbol_exists("idmap_pg_dir")) {
 			value = symbol_value("swapper_pg_dir") -
 				symbol_value("idmap_pg_dir");
-			machdep->pagesize = value / 2;
-		} else
+			/*
+			 * idmap_pg_dir is 2 pages prior to 4.1,
+			 * and 3 pages thereafter.  Only 4K and 64K 
+			 * page sizes are supported.
+			 */
+			switch (value)
+			{
+			case (4096 * 2):
+			case (4096 * 3):
+				machdep->pagesize = 4096;
+				break;
+			case (65536 * 2):
+			case (65536 * 3):
+				machdep->pagesize = 65536;
+				break;
+			}
+		} else if (ACTIVE())
 			machdep->pagesize = memory_page_size();   /* host */
 
 		machdep->pageshift = ffs(machdep->pagesize) - 1;
@@ -146,8 +162,11 @@ arm64_init(int when)
 			break;
 
 		default:
-			error(FATAL, "invalid/unsupported page size: %d\n", 
-				machdep->pagesize);
+			if (machdep->pagesize)
+				error(FATAL, "invalid/unsupported page size: %d\n", 
+					machdep->pagesize);
+			else
+				error(FATAL, "cannot determine page size\n");
 		}
 
 		machdep->last_pud_read = 0;  /* not used */
