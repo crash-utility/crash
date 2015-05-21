@@ -1,8 +1,8 @@
 /* cmdline.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -497,13 +497,14 @@ setup_redirect(int origin)
 	if (FIRSTCHAR(p) == '|' || FIRSTCHAR(p) == '!')
 		pc->redirect |= REDIRECT_SHELL_COMMAND;
 
-	expression = string = FALSE;
+	expression = 0;
+	string = FALSE;
 
 	while (*p) {
 		if (*p == '(')
-			expression = TRUE;
+			expression++;
 		if (*p == ')')
-			expression = FALSE;
+			expression--;
 
 		if ((*p == '"') || (*p == '\''))
 			string = !string;
