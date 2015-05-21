@@ -2822,17 +2822,8 @@ typedef signed int s32;
  * (arch/arm64/include/asm/pgtable.h)
  */
 #define PTE_VALID       (1UL << 0)
-#define PTE_PROT_NONE   (1UL << 1) /* only when !PTE_VALID */
-#define PTE_FILE        (1UL << 2) /* only when !pte_present() */
 #define PTE_DIRTY       (1UL << 55)
 #define PTE_SPECIAL     (1UL << 56)
-
-/*
- * HugeTLB/THP 3.10 support proposal swaps PTE_PROT_NONE
- * and PTE_FILE bit positions:
- */
-#define PTE_FILE_3_10       (1UL << 1)
-#define PTE_PROT_NONE_3_10  (1UL << 2)
 
 /*
  * Level 3 descriptor (PTE).
@@ -2849,30 +2840,10 @@ typedef signed int s32;
 #define PTE_PXN         (1UL << 53)        /* Privileged XN */
 #define PTE_UXN         (1UL << 54)        /* User XN */
 
-/*
- * swap entry:
- *      bits 0-1:       present (must be zero)
- *      bit  2:         PTE_FILE
- *      bits 3-8:       swap type
- *      bits 9-63:      swap offset
- *
- * HugeTLB/THP 3.10 support proposal swaps PTE_PROT_NONE 
- * and PTE_FILE bit positions:
- *
- *      bits 0, 2:	present (must both be zero)
- *	bit  1:		PTE_FILE
- *      bits 3-8:       swap type
- *      bits 9-63:      swap offset
- */
-#define __SWP_TYPE_SHIFT    3
-#define __SWP_TYPE_BITS     6
-#define __SWP_TYPE_MASK     ((1 << __SWP_TYPE_BITS) - 1)
-#define __SWP_OFFSET_SHIFT  (__SWP_TYPE_BITS + __SWP_TYPE_SHIFT)
-
-#define __swp_type(x)       (((x) >> __SWP_TYPE_SHIFT) & __SWP_TYPE_MASK)
-#define __swp_offset(x)     ((x) >> __SWP_OFFSET_SHIFT)
-#define SWP_TYPE(x)         __swp_type(x)
-#define SWP_OFFSET(x)       __swp_offset(x)
+#define __swp_type(x)     arm64_swp_type(x)
+#define __swp_offset(x)   arm64_swp_offset(x)
+#define SWP_TYPE(x)       __swp_type(x)
+#define SWP_OFFSET(x)     __swp_offset(x)
 
 #define KSYMS_START   (0x1)
 #define PHYS_OFFSET   (0x2)
@@ -2951,9 +2922,15 @@ struct machine_specific {
 	ulong __exception_text_start;
 	ulong __exception_text_end;
 	struct arm64_pt_regs *panic_task_regs;
-	ulong pte_protnone;
-	ulong pte_file;
+	ulong PTE_PROT_NONE;
+	ulong PTE_FILE;
 	ulong VA_BITS;
+	ulong __SWP_TYPE_BITS;
+	ulong __SWP_TYPE_SHIFT;
+	ulong __SWP_TYPE_MASK;
+	ulong __SWP_OFFSET_BITS;
+	ulong __SWP_OFFSET_SHIFT;
+	ulong __SWP_OFFSET_MASK;
 };
 
 struct arm64_stackframe {
@@ -5172,6 +5149,8 @@ void unwind_backtrace(struct bt_info *);
 void arm64_init(int);
 void arm64_dump_machdep_table(ulong);
 int arm64_IS_VMALLOC_ADDR(ulong);
+ulong arm64_swp_type(ulong);
+ulong arm64_swp_offset(ulong);
 #endif
 
 /*

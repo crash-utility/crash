@@ -15484,10 +15484,10 @@ swap_location(ulonglong pte, char *buf)
 
 	if (THIS_KERNEL_VERSION >= LINUX(2,6,0))
 		sprintf(buf, "%s  OFFSET: %lld", 
-			get_swapdev(__swp_type(pte), swapdev), __swp_offset(pte));
+			get_swapdev(__swp_type(pte), swapdev), (ulonglong)__swp_offset(pte));
 	else
 		sprintf(buf, "%s  OFFSET: %llx", 
-			get_swapdev(SWP_TYPE(pte), swapdev), SWP_OFFSET(pte));
+			get_swapdev(SWP_TYPE(pte), swapdev), (ulonglong)SWP_OFFSET(pte));
 
         return buf;
 }

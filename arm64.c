@@ -69,6 +69,7 @@ void
 arm64_init(int when)
 {
 	ulong value;
+	struct machine_specific *ms;
 
 #if defined(__x86_64__)
 	if (ACTIVE())
@@ -214,12 +215,44 @@ arm64_init(int when)
 		arm64_calc_virtual_memory_ranges();
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
-		if (THIS_KERNEL_VERSION >= LINUX(3,10,0)) {
-			machdep->machspec->pte_protnone = PTE_PROT_NONE_3_10;
-			machdep->machspec->pte_file = PTE_FILE_3_10;
+		ms = machdep->machspec;
+
+		if (THIS_KERNEL_VERSION >= LINUX(4,0,0)) {
+			ms->__SWP_TYPE_BITS = 6;
+			ms->__SWP_TYPE_SHIFT = 2;
+			ms->__SWP_TYPE_MASK = ((1UL << ms->__SWP_TYPE_BITS) - 1);
+			ms->__SWP_OFFSET_SHIFT = (ms->__SWP_TYPE_BITS + ms->__SWP_TYPE_SHIFT);
+			ms->__SWP_OFFSET_BITS = 50;
+			ms->__SWP_OFFSET_MASK = ((1UL << ms->__SWP_OFFSET_BITS) - 1);
+			ms->PTE_PROT_NONE = (1UL << 58); 
+			ms->PTE_FILE = 0;  /* unused */
+		} else if (THIS_KERNEL_VERSION >= LINUX(3,13,0)) {
+			ms->__SWP_TYPE_BITS = 6;
+			ms->__SWP_TYPE_SHIFT = 3;
+			ms->__SWP_TYPE_MASK = ((1UL << ms->__SWP_TYPE_BITS) - 1);
+			ms->__SWP_OFFSET_SHIFT = (ms->__SWP_TYPE_BITS + ms->__SWP_TYPE_SHIFT);
+			ms->__SWP_OFFSET_BITS = 49;
+			ms->__SWP_OFFSET_MASK = ((1UL << ms->__SWP_OFFSET_BITS) - 1);
+			ms->PTE_PROT_NONE = (1UL << 58); 
+			ms->PTE_FILE = (1UL << 2);
+		} else if (THIS_KERNEL_VERSION >= LINUX(3,11,0)) {
+			ms->__SWP_TYPE_BITS = 6;
+			ms->__SWP_TYPE_SHIFT = 4;
+			ms->__SWP_TYPE_MASK = ((1UL << ms->__SWP_TYPE_BITS) - 1);
+			ms->__SWP_OFFSET_SHIFT = (ms->__SWP_TYPE_BITS + ms->__SWP_TYPE_SHIFT);
+			ms->__SWP_OFFSET_BITS = 0;  /* unused */ 
+			ms->__SWP_OFFSET_MASK = 0;  /* unused */ 
+			ms->PTE_PROT_NONE = (1UL << 2); 
+			ms->PTE_FILE = (1UL << 3);
 		} else {
-			machdep->machspec->pte_protnone = PTE_PROT_NONE;
-			machdep->machspec->pte_file = PTE_FILE;
+			ms->__SWP_TYPE_BITS = 6;
+			ms->__SWP_TYPE_SHIFT = 3;
+			ms->__SWP_TYPE_MASK = ((1UL << ms->__SWP_TYPE_BITS) - 1);
+			ms->__SWP_OFFSET_SHIFT = (ms->__SWP_TYPE_BITS + ms->__SWP_TYPE_SHIFT);
+			ms->__SWP_OFFSET_BITS = 0;  /* unused */ 
+			ms->__SWP_OFFSET_MASK = 0;  /* unused */
+			ms->PTE_PROT_NONE = (1UL << 1); 
+			ms->PTE_FILE = (1UL << 2);
 		}
 
 		if (symbol_exists("irq_desc"))
@@ -399,8 +432,26 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "__exception_text_start: %lx\n", ms->__exception_text_start);
 	fprintf(fp, "  __exception_text_end: %lx\n", ms->__exception_text_end);
 	fprintf(fp, "       panic_task_regs: %lx\n", (ulong)ms->panic_task_regs);
-	fprintf(fp, "          pte_protnone: %lx\n", ms->pte_protnone);
-	fprintf(fp, "              pte_file: %lx\n", ms->pte_file);
+	fprintf(fp, "         PTE_PROT_NONE: %lx\n", ms->PTE_PROT_NONE);
+	fprintf(fp, "              PTE_FILE: ");
+	if (ms->PTE_FILE)
+		fprintf(fp, "%lx\n", ms->PTE_FILE);
+	else
+		fprintf(fp, "(unused)\n");
+        fprintf(fp, "       __SWP_TYPE_BITS: %ld\n", ms->__SWP_TYPE_BITS);
+        fprintf(fp, "      __SWP_TYPE_SHIFT: %ld\n", ms->__SWP_TYPE_SHIFT);
+        fprintf(fp, "       __SWP_TYPE_MASK: %lx\n", ms->__SWP_TYPE_MASK);
+        fprintf(fp, "     __SWP_OFFSET_BITS: ");
+	if (ms->__SWP_OFFSET_BITS)
+        	fprintf(fp, "%ld\n", ms->__SWP_OFFSET_BITS);
+	else
+		fprintf(fp, "(unused)\n");
+        fprintf(fp, "    __SWP_OFFSET_SHIFT: %ld\n", ms->__SWP_OFFSET_SHIFT);
+	fprintf(fp, "     __SWP_OFFSET_MASK: ");
+	if (ms->__SWP_OFFSET_MASK)
+        	fprintf(fp, "%lx\n", ms->__SWP_OFFSET_MASK);
+	else
+		fprintf(fp, "(unused)\n");
 }
 
 
@@ -1263,7 +1314,7 @@ arm64_translate_pte(ulong pte, void *physaddr, ulonglong unused)
 	int page_present;
 
 	paddr = pte & PHYS_MASK & (s32)machdep->pagemask;
-       	page_present = pte & (PTE_VALID | machdep->machspec->pte_protnone);
+       	page_present = pte & (PTE_VALID | machdep->machspec->PTE_PROT_NONE);
 
         if (physaddr) {
 		*((ulong *)physaddr) = paddr;
@@ -1274,7 +1325,7 @@ arm64_translate_pte(ulong pte, void *physaddr, ulonglong unused)
 	len1 = MAX(strlen(ptebuf), strlen("PTE"));
 	fprintf(fp, "%s  ", mkstring(buf1, len1, CENTER|LJUST, "PTE"));
 
-        if (!page_present && (pte & PTE_FILE)) {
+        if (!page_present) { 
                 swap_location(pte, buf1);
                 if ((c = parse_line(buf1, arglist)) != 3)
                         error(FATAL, "cannot determine swap location\n");
@@ -1292,7 +1343,6 @@ arm64_translate_pte(ulong pte, void *physaddr, ulonglong unused)
                         mkstring(ptebuf, len1, CENTER|RJUST, NULL),
                         mkstring(buf2, len2, CENTER|RJUST, NULL),
                         mkstring(buf3, len3, CENTER|RJUST, NULL));
-
                 return page_present;
         }
 
@@ -1311,17 +1361,10 @@ arm64_translate_pte(ulong pte, void *physaddr, ulonglong unused)
 	if (pte) {
 		if (pte & PTE_VALID)
 			fprintf(fp, "%sVALID", others++ ? "|" : "");
-		if (THIS_KERNEL_VERSION >= LINUX(3,10,0)) {
-			if (pte & machdep->machspec->pte_file)
-				fprintf(fp, "%sFILE", others++ ? "|" : "");
-			if (pte & machdep->machspec->pte_protnone)
-				fprintf(fp, "%sPROTNONE", others++ ? "|" : "");
-		} else {
-			if (pte & machdep->machspec->pte_protnone)
-				fprintf(fp, "%sPROTNONE", others++ ? "|" : "");
-			if (pte & machdep->machspec->pte_file)
-				fprintf(fp, "%sFILE", others++ ? "|" : "");
-		} 
+		if (pte & machdep->machspec->PTE_FILE)
+			fprintf(fp, "%sFILE", others++ ? "|" : "");
+		if (pte & machdep->machspec->PTE_PROT_NONE)
+			fprintf(fp, "%sPROT_NONE", others++ ? "|" : "");
 		if (pte & PTE_USER)
 			fprintf(fp, "%sUSER", others++ ? "|" : "");
 		if (pte & PTE_RDONLY)
@@ -1736,5 +1779,28 @@ arm64_is_uvaddr(ulong addr, struct task_context *tc)
         return (addr < ARM64_USERSPACE_TOP);
 }
 
+
+ulong
+arm64_swp_type(ulong pte)
+{
+	struct machine_specific *ms = machdep->machspec;
+
+	pte >>= ms->__SWP_TYPE_SHIFT;
+	pte &= ms->__SWP_TYPE_MASK;
+	return pte;
+}
+
+ulong
+arm64_swp_offset(ulong pte)
+{
+	struct machine_specific *ms = machdep->machspec;
+
+	pte >>= ms->__SWP_OFFSET_SHIFT;
+	if (ms->__SWP_OFFSET_MASK)
+		pte &= ms->__SWP_OFFSET_MASK;
+	return pte;
+}
+
 #endif  /* ARM64 */
+
 
