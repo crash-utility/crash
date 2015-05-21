@@ -3526,13 +3526,9 @@ do_list(struct list_data *ld)
 						dump_struct(ld->structname[i], 
 							next - ld->list_head_offset, radix);
 						break;
-					case 1:
+					default:
 						dump_struct_members(ld, i, next);
 						break;
-					default:
-						error(FATAL, 
-						    "invalid structure reference: %s\n",
-							ld->structname[i]);
 					}
 				}
 			}
@@ -4000,14 +3996,10 @@ rdtree_iteration(ulong node_p, struct tree_data *td, char *ppos, ulong indexnum,
 						dump_struct(td->structname[i],
 							slot, print_radix);
 						break;
-					case 1:
+                                        default:
 						dump_struct_members_for_tree(td, i,
 							slot);
 						break;
-					default:
-						error(FATAL,
-						  "invalid struct reference: %s\n",
-							td->structname[i]);
 					}
 				}
 			}
@@ -4078,12 +4070,9 @@ rbtree_iteration(ulong node_p, struct tree_data *td, char *pos)
 			case 0:
 				dump_struct(td->structname[i], struct_p, print_radix);
 				break;
-			case 1:
+                        default:
 				dump_struct_members_for_tree(td, i, struct_p);
 				break;
-			default:
-				error(FATAL, "invalid struct reference: %s\n",
-					td->structname[i]);
 			}
 		}
 	}

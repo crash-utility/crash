@@ -94,6 +94,11 @@ static int dereference_pointer(ulong, struct datatype_member *, ulong);
 #define PARSE_FOR_DECLARATION (2)
 static void parse_for_member(struct datatype_member *, ulong);
 static int show_member_offset(FILE *, struct datatype_member *, char *);
+struct struct_elem;
+static void free_structure(struct struct_elem *);
+static unsigned char is_right_brace(const char *);
+static struct struct_elem *find_node(struct struct_elem *, char *);
+static void dump_node(struct struct_elem *, char *, unsigned char, unsigned char);
 
 
 /*
@@ -5576,17 +5581,17 @@ dump_struct_member(char *s, ulong addr, unsigned radix)
 		FREEBUF(buf);
                 error(FATAL, "invalid structure name: %s\n", dm->name);
 	}
-	if (!MEMBER_EXISTS(dm->name, dm->member)) {
-		FREEBUF(buf);
-                error(FATAL, "invalid structure member name: %s\n", 
-			dm->member);
-	}
  
 	set_temporary_radix(radix, &restore_radix);
                 
         open_tmpfile();
         print_struct(dm->name, addr);
-        parse_for_member(dm, PARSE_FOR_DATA);
+
+	if (MEMBER_EXISTS(dm->name, dm->member))
+		parse_for_member(dm, PARSE_FOR_DATA);
+	else
+		parse_for_member_extended(dm, PARSE_FOR_DATA);
+
         close_tmpfile();
                 
 	restore_current_radix(restore_radix);
@@ -6026,8 +6031,7 @@ cmd_datatype_common(ulong flags)
         if ((count_chars(args[optind], ',')+1) > MAXARGS)
                 error(FATAL, "too many members in comma-separated list!\n");
 
-	if ((count_chars(args[optind], '.') > 1) ||
-	    (LASTCHAR(args[optind]) == ',') ||
+	if ((LASTCHAR(args[optind]) == ',') ||
 	    (LASTCHAR(args[optind]) == '.'))
 		error(FATAL, "invalid format: %s\n", args[optind]);
 
@@ -6219,6 +6223,10 @@ do_datatype_addr(struct datatype_member *dm, ulong addr, int count,
 		i = 0;
         	do {
                 	if (argc_members) {
+				/* This call works fine with fields
+				 * of the second, third, ... levels.
+				 * There is no need to fix it
+				 */
 				if (!member_to_datatype(memberlist[i], dm,
 							ANON_MEMBER_QUERY))
 					error(FATAL, "invalid data structure reference: %s.%s\n",
@@ -6249,8 +6257,12 @@ do_datatype_addr(struct datatype_member *dm, ulong addr, int count,
 
 				if (dm->member) {
 					if (!((flags & DEREF_POINTERS) &&
-				    	    dereference_pointer(addr, dm, flags)))
-						parse_for_member(dm, PARSE_FOR_DATA);
+				    	    dereference_pointer(addr, dm, flags))) {
+						if (count_chars(dm->member, '.') || count_chars(dm->member, '['))
+							parse_for_member_extended(dm, PARSE_FOR_DATA);
+						else
+							parse_for_member(dm, PARSE_FOR_DATA);
+					}
 					close_tmpfile();
 				}
 
@@ -6274,6 +6286,10 @@ do_datatype_declaration(struct datatype_member *dm, ulong flags)
 
 	if (CRASHDEBUG(1))
 		dump_datatype_member(fp, dm);
+
+	if (dm->member && count_chars(dm->member, '.'))
+		error(FATAL, "invalid data structure reference: %s.%s\n",
+			dm->name, dm->member);
 
         open_tmpfile();
         whatis_datatype(dm->name, flags, pc->tmpfile);
@@ -7381,6 +7397,286 @@ next_item:
 
 		break;
 	}
+}
+
+struct struct_elem {
+	char field_name[BUFSIZE];
+	unsigned char field_len;
+	char value[BUFSIZE];
+	unsigned char is_array_root:1;
+
+	struct struct_elem *parent;
+	struct struct_elem *inner;
+	struct struct_elem *next;
+	struct struct_elem *prev;
+};
+
+#define ALLOC_XXX_ELEMENT(xxx, clone_parent) \
+{ \
+	if (current == NULL) { \
+		error(FATAL, "Internal error while parsing structure %s\n", dm->name); \
+	} \
+	current->xxx = (struct struct_elem *)GETBUF(sizeof(struct struct_elem)); \
+	if (clone_parent) current->xxx->parent = current->parent; \
+		else current->xxx->parent = current; \
+	current = current->xxx; \
+}
+
+#define ALLOC_INNER_ELEMENT { ALLOC_XXX_ELEMENT(inner, 0) }
+#define ALLOC_NEXT_ELEMENT { ALLOC_XXX_ELEMENT(next, 1) }
+
+static void
+free_structure(struct struct_elem *p)
+{
+	if (p == NULL)
+		return;
+	free_structure(p->inner);
+	free_structure(p->next);
+	FREEBUF(p);
+}
+
+static unsigned char
+is_right_brace(const char *b)
+{
+	unsigned char r = 0;
+	for (; *b == ' '; b++);
+	if (*b == '}') {
+		b++;
+		r = 1;
+		if (*b == '}') {
+			r = 2;
+			b++;
+		}
+	}
+
+	if (*b == ',')
+		b++;
+
+	if (*b == '\0')
+		return r;
+	else
+		return 0;
+}
+
+static struct struct_elem *
+find_node(struct struct_elem *s, char *n)
+{
+	char *p, *b, *e;
+	struct struct_elem *t = s;
+	unsigned i;
+
+	if (('\0' == *n) || (s == NULL))
+		return s;
+
+	/* [n .. p) - struct member with index*/
+	if ((p = strstr(n, ".")) == NULL)
+		p = n + strlen(n);
+
+	/* [n .. b) - struct member without index*/
+	for (b = n; (b < p) && (*b != '['); b++);
+
+	/* s - is the current level of items [s, s->next, ..., s->...->next] */
+	for (; s; s = s->next) {
+		if (*s->field_name == '\0')
+			continue;
+
+		/* `field_name` doesn't match */
+		if (((b - n) != s->field_len) || memcmp(s->field_name, n, b - n))
+			continue;
+
+		// For case like `pids.node` where pids is an array
+		if (s->is_array_root && *b != '[' && *p)
+			return NULL;
+
+		if (*b == '[') { /* Array */
+			i = strtol(b + 1, &e, 10);
+			/* Check if the current node is array and
+			 * we've parsed index more or less correctly
+			 */
+			if (!(s->is_array_root && *e == ']' && (e != b + 1)))
+				return NULL;
+
+			/* Look for the i-th element */
+			for (s = s->inner; s && i; s = s->next, i--);
+			if (i || (s == NULL))
+				return NULL;
+		}
+
+		/* Ok. We've found node, it's - the last member
+		 * in our search string, let's return it.
+		 */
+		if ('\0' == *p)
+			return s;
+		else
+			return find_node(s->inner, p + 1);
+	}
+
+	// We haven't found any field.
+	// Might happen, we've encountered anonymous structure
+	// of union. Lets try every record without `field_name`
+	s = t;
+	t = NULL;
+	for (; s; s = s->next) {
+		if (*s->field_name)
+			continue;
+		t = find_node(s->inner, n);
+		if (t)
+			break;
+	}
+
+	return t;
+}
+
+static void
+dump_node(struct struct_elem *p, char *f, unsigned char level, unsigned char is_array)
+{
+	unsigned int i;
+	if (p == NULL)
+		return;
+	do {
+#define PUT_INDENTED_STRING(m, ...) { \
+	for (i = 0; i++ < 2 + 2 * (m * is_array + level); fprintf(pc->saved_fp, " ")); \
+	fprintf(pc->saved_fp, __VA_ARGS__); }
+
+		if (p->inner) {
+			if (*p->field_name) {
+				PUT_INDENTED_STRING(1, "%s = %s\n", f ? f : p->field_name, 
+					p->inner->is_array_root ? "{{" : "{");
+			} else {
+				if (f) /* For union */
+					PUT_INDENTED_STRING(1, "%s = ", f);
+				PUT_INDENTED_STRING(1, "%s\n", p->inner->is_array_root ? "{{" : "{");
+			}
+			dump_node(p->inner, NULL, is_array + level + 1, p->inner->is_array_root);
+			PUT_INDENTED_STRING(1, "%s%s\n", p->inner->is_array_root ? "}}" : "}", 
+				(p->next && !p->next->is_array_root) ? "," : "");
+		} else {
+			PUT_INDENTED_STRING(1, "%s = %s%s", f ? f : p->field_name, 
+				p->value, p->next ? ",\n" : "\n");
+		}
+		if (level) {
+			p = p->next;
+			if (p && p->is_array_root)
+				PUT_INDENTED_STRING(0, "}, {\n");
+		}
+	} while (p && level);
+}
+
+void
+parse_for_member_extended(struct datatype_member *dm,
+	ulong __attribute__ ((unused)) flag)
+{
+	struct struct_elem *i, *current = NULL, *root = NULL;
+
+	char buf[BUFSIZE];
+	char *p, *p1;
+	char *s_e; // structure_element
+	unsigned int len;
+	unsigned char trailing_comma, braces, found = 0;
+
+	rewind(pc->tmpfile);
+
+	root = (struct struct_elem *)GETBUF(sizeof(struct struct_elem));
+	current = root;
+	ALLOC_INNER_ELEMENT;
+
+	while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+		len = strlen(buf) - 1;
+		for (; buf[len] <= ' '; buf[len--] = '\0');
+		if ((trailing_comma = (buf[len] == ',')))
+			buf[len--] = '\0';
+
+		if ((braces = is_right_brace(buf))) {
+			for (; braces && current; braces--)
+				current = current->parent;
+
+			if ((current->parent == root) || trailing_comma)
+				ALLOC_NEXT_ELEMENT;
+			continue;
+		}
+
+		for (p1 = buf; *p1 == ' '; p1++);
+
+		if ((p = strstr(buf, " = ")) != NULL)
+			s_e = p + 3;
+		else
+			s_e = p1;
+
+		/*
+		 * After that we have pointers:
+		 *      foobar = bazzz
+		 * -----^     ^  ^
+		 * |    ------|  |
+		 * |    |        |
+		 * p1   p        s_e
+		 *
+		 * OR
+		 *
+		 *      {
+		 *      ^
+		 *      |
+		 *  ---------
+		 *  |       |
+		 *  p1      s_e
+		 *      
+		 *      p == NULL
+		 *
+		 *
+		 * p1   - the first non-whitespace symbol in line
+		 * p    - pointer to line ' = '. 
+		 *        If not NULL, there is identifier
+		 * s_e  - element of structure (brace / double brace / array separator / scalar)
+		 *
+		 */
+
+		if (current && p && (p - p1 < BUFSIZE)) {
+			strncpy(current->field_name, p1, p - p1);
+			current->field_len = p - p1;
+		}
+
+		if ( p && (*s_e != '{' || (*s_e == '{' && buf[len] == '}') )) {
+			/* Scalar or one-line array
+			 * next = 0x0 
+			 *   or 
+			 * files = {0x0, 0x0}
+			 */
+			strcpy(current->value, s_e);
+			if (trailing_comma) ALLOC_NEXT_ELEMENT;
+		}
+		else if ( *s_e == '{' ) {
+			ALLOC_INNER_ELEMENT;
+			if (*(s_e + 1) == '{') {
+				current->parent->is_array_root = 1;
+				ALLOC_INNER_ELEMENT;
+			}
+		}
+		else if (strstr(s_e, "}, {")) {
+			/* Next array element */
+			current = current->parent;
+			ALLOC_NEXT_ELEMENT;
+			ALLOC_INNER_ELEMENT;
+		}
+		else if (buf == (p = strstr(buf, "struct "))) {
+			p += 7; /* strlen "struct " */
+			p1 = strstr(buf, " {");
+			strncpy(current->field_name, p, p1 - p);
+			ALLOC_INNER_ELEMENT;
+		}
+	}
+
+	for (i = root->inner; i; i = i->next) {
+		if ((current = find_node(i->inner, dm->member))) {
+			dump_node(current, dm->member, 0, 0);
+			found = 1;
+			break;
+		}
+	}
+
+	free_structure(root);
+
+	if (!found)
+		error(FATAL, "invalid data structure member reference: %s\n",
+			dm->member);
 }
 
 /*

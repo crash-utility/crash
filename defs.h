@@ -4642,6 +4642,7 @@ struct struct_member_data {
 	long bitsize;
 };
 int fill_struct_member_data(struct struct_member_data *);
+void parse_for_member_extended(struct datatype_member *, ulong);
 
 /*  
  *  memory.c 

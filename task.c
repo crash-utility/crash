@@ -107,6 +107,7 @@ static int sort_by_last_run(const void *arg1, const void *arg2);
 static void sort_context_array_by_last_run(void);
 static void show_ps_summary(ulong);
 static void irqstacks_init(void);
+static void parse_task_thread(int argcnt, char *arglist[], struct task_context *);
 
 /*
  *  Figure out how much space will be required to hold the task context
@@ -2710,6 +2711,10 @@ cmd_task(void)
 			if (strlen(ref->str))
 				strcat(ref->str, ",");
 			strcat(ref->str, args[optind]);
+		} else if (strstr(args[optind], ".") || strstr(args[optind], "[")) {
+			if (strlen(ref->str))
+				strcat(ref->str, ",");
+			strcat(ref->str, args[optind]);
 		} else
                         error(INFO, 
 			    "invalid task, pid, or task_struct member: %s\n\n",
@@ -2735,9 +2740,10 @@ do_task(ulong task, ulong flags, struct reference *ref, unsigned int radix)
 
 	tc = task_to_context(task);
 
-	if (ref) 
+	if (ref) {
+		print_task_header(fp, tc, 0);
 		task_struct_member(tc, radix, ref);
-	else { 
+	} else { 
 		if (!(flags & FOREACH_TASK))
 			print_task_header(fp, tc, 0);
 		dump_struct("task_struct", task, radix);
@@ -2760,13 +2766,7 @@ task_struct_member(struct task_context *tc, unsigned int radix, struct reference
 	int argcnt;
 	char *arglist[MAXARGS];
 	char *refcopy;
-	char buf[BUFSIZE];
-	char lookfor1[BUFSIZE];
-	char lookfor2[BUFSIZE];
-	char lookfor3[BUFSIZE];
-	int header_printed;
-
-	header_printed = FALSE;
+	struct datatype_member dm;
 
 	if ((count_chars(ref->str, ',')+1) > MAXARGS) {
 		error(INFO, 
@@ -2779,16 +2779,40 @@ task_struct_member(struct task_context *tc, unsigned int radix, struct reference
 	replace_string(refcopy, ",", ' ');
 
 	argcnt = parse_line(refcopy, arglist);
-	for (i = 0; i < argcnt; i++)
-		if (!MEMBER_EXISTS("task_struct", arglist[i]) &&
-		    !MEMBER_EXISTS("thread_info", arglist[i]))
-			error(INFO, "%s: not a task_struct or thread_info member\n", 
-				arglist[i]);
 
         open_tmpfile();
         dump_struct("task_struct", tc->task, radix);
 	if (tt->flags & THREAD_INFO)
 		dump_struct("thread_info", tc->thread_info, radix);
+
+	for (i = 0; i < argcnt; i++) {
+		if (count_chars(arglist[i], '.') || count_chars(arglist[i], '[')) {
+			dm.member = arglist[i];
+			parse_for_member_extended(&dm, 0);
+		} else {
+			if (!MEMBER_EXISTS("task_struct", arglist[i]) &&
+				!MEMBER_EXISTS("thread_info", arglist[i]))
+				error(INFO, "%s: not a task_struct or "
+					"thread_info member\n", arglist[i]);
+
+			parse_task_thread(1, &arglist[i], tc);
+		}
+	}
+
+	close_tmpfile();
+
+	FREEBUF(refcopy);
+
+}
+
+static void 
+parse_task_thread(int argcnt, char *arglist[], struct task_context *tc) {
+	char buf[BUFSIZE];
+	char lookfor1[BUFSIZE];
+	char lookfor2[BUFSIZE];
+	char lookfor3[BUFSIZE];
+	int i;
+
         rewind(pc->tmpfile);
 
 	BZERO(lookfor1, BUFSIZE);
@@ -2797,10 +2821,6 @@ task_struct_member(struct task_context *tc, unsigned int radix, struct reference
 
         while (fgets(buf, BUFSIZE, pc->tmpfile)) {
 		if (strlen(lookfor2)) {
-			if (!header_printed) {
-				print_task_header(pc->saved_fp, tc, 0);
-				header_printed = TRUE;
-			}
 			fprintf(pc->saved_fp, "%s", buf);
 			if (STRNEQ(buf, lookfor2))
 				BZERO(lookfor2, BUFSIZE);
@@ -2808,10 +2828,6 @@ task_struct_member(struct task_context *tc, unsigned int radix, struct reference
 		}
 
 		if (strlen(lookfor3)) {
-                        if (!header_printed) {
-                                print_task_header(pc->saved_fp, tc, 0);
-                                header_printed = TRUE;
-                        }
 			fprintf(pc->saved_fp, "%s", buf);
 			if (strstr(buf, lookfor3))
 				BZERO(lookfor3, BUFSIZE);
@@ -2824,10 +2840,6 @@ task_struct_member(struct task_context *tc, unsigned int radix, struct reference
 			BZERO(lookfor3, BUFSIZE);
 			sprintf(lookfor1, "  %s = ", arglist[i]);
 			if (STRNEQ(buf, lookfor1)) {
-                        	if (!header_printed) {
-                                	print_task_header(pc->saved_fp, tc, 0);
-                                	header_printed = TRUE;
-                        	}
 				fprintf(pc->saved_fp, "%s", buf);
                         	if (strstr(buf, "{{\n")) 
                                 	sprintf(lookfor2, "    }},");
@@ -2839,7 +2851,6 @@ task_struct_member(struct task_context *tc, unsigned int radix, struct reference
 			}
 		}
 	}
-	close_tmpfile();
 }
 
 static char *ps_exclusive = 
