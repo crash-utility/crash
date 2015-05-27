@@ -4443,7 +4443,12 @@ retry:
 		*/
 		splast = NULL;
                 for ( ; sp <= sp_end; sp++) {
-                	if (value == sp->value) {
+			if (machine_type("ARM64") &&
+			    IN_MODULE_PERCPU(sp->value, lm) &&
+			    !IN_MODULE_PERCPU(value, lm)) 
+				continue;       
+
+			if (value == sp->value) {
 				if (MODULE_END(sp) || MODULE_INIT_END(sp))
 					break;
 
