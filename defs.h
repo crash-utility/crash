@@ -2849,6 +2849,7 @@ typedef signed int s32;
 #define PHYS_OFFSET   (0x2)
 #define VM_L2_64K     (0x4)
 #define VM_L3_4K      (0x8)
+#define KDUMP_ENABLED (0x10)
 
 /* 
  * sources: Documentation/arm64/memory.txt 
@@ -2931,6 +2932,10 @@ struct machine_specific {
 	ulong __SWP_OFFSET_BITS;
 	ulong __SWP_OFFSET_SHIFT;
 	ulong __SWP_OFFSET_MASK;
+	ulong crash_kexec_start;
+	ulong crash_kexec_end;
+	ulong crash_save_cpu_start;
+	ulong crash_save_cpu_end;
 };
 
 struct arm64_stackframe {
@@ -4991,6 +4996,7 @@ ulong cpu_map_addr(const char *type);
 #define BT_SCHEDULE      (BT_RESCHEDULE)
 #define BT_RET_FROM_SMP_FORK   (0x10000ULL)
 #define BT_STRACE              (0x20000ULL)
+#define BT_KDUMP_ADJUST         (BT_STRACE)
 #define BT_KSTACKP             (0x40000ULL)
 #define BT_LOOP_TRAP           (0x80000ULL)
 #define BT_BUMP_FRAME_LEVEL   (0x100000ULL)

@@ -37,12 +37,14 @@ static int arm64_vtop_3level_4k(ulong, ulong, physaddr_t *, int);
 static ulong arm64_get_task_pgd(ulong);
 static void arm64_stackframe_init(void);
 static int arm64_eframe_search(struct bt_info *);
+static int arm64_is_kernel_exception_frame(struct bt_info *, ulong);
 static int arm64_in_exception_text(ulong);
 static void arm64_back_trace_cmd(struct bt_info *);
 static int arm64_print_stackframe_entry(struct bt_info *, int, struct arm64_stackframe *);
 static void arm64_display_full_frame(struct bt_info *, ulong);
 static int arm64_unwind_frame(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_dumpfile_stackframe(struct bt_info *, struct arm64_stackframe *);
+static int arm64_in_kdump_text(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_stackframe(struct bt_info *, struct arm64_stackframe *);
 static void arm64_get_stack_frame(struct bt_info *, ulong *, ulong *);
 static void arm64_print_exception_frame(struct bt_info *, ulong, int);
@@ -338,6 +340,8 @@ arm64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sVM_L3_4K", others++ ? "|" : "");
 	if (machdep->flags & VMEMMAP)
 		fprintf(fp, "%sVMEMMAP", others++ ? "|" : "");
+	if (machdep->flags & KDUMP_ENABLED)
+		fprintf(fp, "%sKDUMP_ENABLED", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "              kvbase: %lx\n", machdep->kvbase);
@@ -452,6 +456,10 @@ arm64_dump_machdep_table(ulong arg)
         	fprintf(fp, "%lx\n", ms->__SWP_OFFSET_MASK);
 	else
 		fprintf(fp, "(unused)\n");
+	fprintf(fp, "     crash_kexec_start: %lx\n", ms->crash_kexec_start);
+	fprintf(fp, "       crash_kexec_end: %lx\n", ms->crash_kexec_end);
+	fprintf(fp, "  crash_save_cpu_start: %lx\n", ms->crash_save_cpu_start);
+	fprintf(fp, "    crash_save_cpu_end: %lx\n", ms->crash_save_cpu_end);
 }
 
 
@@ -857,6 +865,7 @@ arm64_stackframe_init(void)
 	long task_struct_thread;
 	long thread_struct_cpu_context;
 	long context_sp, context_pc, context_fp;
+	struct syment *sp1, *sp1n, *sp2, *sp2n;
 
 	STRUCT_SIZE_INIT(note_buf, "note_buf_t");
 	STRUCT_SIZE_INIT(elf_prstatus, "elf_prstatus");
@@ -867,6 +876,17 @@ arm64_stackframe_init(void)
 		symbol_value("__exception_text_start");
 	machdep->machspec->__exception_text_end = 
 		symbol_value("__exception_text_end");
+
+	if ((sp1 = kernel_symbol_search("crash_kexec")) &&
+	    (sp1n = next_symbol(NULL, sp1)) && 
+	    (sp2 = kernel_symbol_search("crash_save_cpu")) &&
+	    (sp2n = next_symbol(NULL, sp2))) {
+		machdep->machspec->crash_kexec_start = sp1->value;
+		machdep->machspec->crash_kexec_end = sp1n->value;
+		machdep->machspec->crash_save_cpu_start = sp2->value;
+		machdep->machspec->crash_save_cpu_end = sp2n->value;
+		machdep->flags |= KDUMP_ENABLED;
+	}
 
 	task_struct_thread = MEMBER_OFFSET("task_struct", "thread");
 	thread_struct_cpu_context = MEMBER_OFFSET("thread_struct", "cpu_context");
@@ -937,29 +957,39 @@ arm64_stackframe_init(void)
 #define PSR_MODE_EL3h   0x0000000d
 #define PSR_MODE_MASK   0x0000000f
 
-static int arm64_eframe_search(struct bt_info *bt)
+static int
+arm64_is_kernel_exception_frame(struct bt_info *bt, ulong stkptr)
+{
+        struct arm64_pt_regs *regs;
+
+        regs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(stkptr))];
+
+	if (INSTACK(regs->sp, bt) && INSTACK(regs->regs[29], bt) && 
+	    !(regs->pstate & (0xffffffff00000000ULL | PSR_MODE32_BIT)) &&
+	    is_kernel_text(regs->pc) &&
+	    is_kernel_text(regs->regs[30])) {
+		switch (regs->pstate & PSR_MODE_MASK)
+		{
+		case PSR_MODE_EL1t:
+		case PSR_MODE_EL1h:
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+static int 
+arm64_eframe_search(struct bt_info *bt)
 {
 	ulong ptr, count;
-        struct arm64_pt_regs *regs;
 
 	count = 0;
 	for (ptr = bt->stackbase; ptr < bt->stacktop - SIZE(pt_regs); ptr++) {
-        	regs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(ptr))];
-
-		if (INSTACK(regs->sp, bt) && INSTACK(regs->regs[29], bt) && 
-		    !(regs->pstate & (0xffffffff00000000ULL | PSR_MODE32_BIT)) &&
-		    is_kernel_text(regs->pc) &&
-		    is_kernel_text(regs->regs[30])) {
-			switch (regs->pstate & PSR_MODE_MASK)
-			{
-			case PSR_MODE_EL1t:
-			case PSR_MODE_EL1h:
-				fprintf(fp, 
-				    "\nKERNEL-MODE EXCEPTION FRAME AT: %lx\n", ptr); 
-				arm64_print_exception_frame(bt, ptr, KERNEL_MODE);
-				count++;
-				break;
-			}
+		if (arm64_is_kernel_exception_frame(bt, ptr)) {
+			fprintf(fp, "\nKERNEL-MODE EXCEPTION FRAME AT: %lx\n", ptr); 
+			arm64_print_exception_frame(bt, ptr, KERNEL_MODE);
+			count++;
 		}
 	}
 
@@ -1062,7 +1092,8 @@ arm64_display_full_frame(struct bt_info *bt, ulong sp)
 	fprintf(fp, "\n");
 }
 
-static int arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
+static int 
+arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 {
 	unsigned long high, low, fp;
 	unsigned long stack_mask;
@@ -1083,7 +1114,8 @@ static int arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame
 	return TRUE;
 }
 
-static void arm64_back_trace_cmd(struct bt_info *bt)
+static void 
+arm64_back_trace_cmd(struct bt_info *bt)
 {
 	struct arm64_stackframe stackframe;
 	int level;
@@ -1092,17 +1124,43 @@ static void arm64_back_trace_cmd(struct bt_info *bt)
 	if (BT_REFERENCE_CHECK(bt))
 		option_not_supported('R');
 
-	if (bt->flags & BT_USER_SPACE) {
-		fprintf(fp, "#0 [user space]\n");
-		return;
+	/*
+	 *  stackframes are created from 3 contiguous stack addresses:
+	 *
+	 *     x: contains stackframe.fp -- points to next triplet
+	 *   x+8: contains stackframe.pc -- text return address
+	 *  x+16: is the stackframe.sp address 
+	 */
+
+	if (bt->flags & BT_KDUMP_ADJUST) {
+		stackframe.fp = GET_STACK_ULONG(bt->bptr - 8);
+		stackframe.pc = GET_STACK_ULONG(bt->bptr);
+		stackframe.sp = bt->bptr + 8;
+	} else if (bt->hp && bt->hp->esp) {
+		stackframe.fp = GET_STACK_ULONG(bt->hp->esp - 8);
+		stackframe.pc = bt->hp->eip ? 
+			bt->hp->eip : GET_STACK_ULONG(bt->hp->esp);
+		stackframe.sp = bt->hp->esp + 8;
+	} else {
+		stackframe.sp = bt->stkptr;
+		stackframe.pc = bt->instptr;
+		stackframe.fp = bt->frameptr;
 	}
 
-	stackframe.sp = bt->stkptr;
-	stackframe.pc = bt->instptr;
-	stackframe.fp = bt->frameptr;
+	if (!(bt->flags & BT_KDUMP_ADJUST)) {
+		if (bt->flags & BT_USER_SPACE)
+			goto complete_user;
+
+		if (DUMPFILE() && is_task_active(bt->task)) {
+			exception_frame = stackframe.fp - SIZE(pt_regs);
+			if (arm64_is_kernel_exception_frame(bt, exception_frame))
+				arm64_print_exception_frame(bt, exception_frame, 
+					KERNEL_MODE);
+		}
+	}
 
 	level = exception_frame = 0;
-        while (1) {
+	while (1) {
 		bt->instptr = stackframe.pc;
 
 		switch (arm64_print_stackframe_entry(bt, level, &stackframe))
@@ -1116,21 +1174,18 @@ static void arm64_back_trace_cmd(struct bt_info *bt)
 		}
 
 		if (exception_frame) {
-			arm64_print_exception_frame(bt, exception_frame, 
-				KERNEL_MODE);
+			arm64_print_exception_frame(bt, exception_frame, KERNEL_MODE);
 			exception_frame = 0;
 		}
 
-                if (!arm64_unwind_frame(bt, &stackframe))
-                        break;
+		if (!arm64_unwind_frame(bt, &stackframe))
+			break;
 
-        	if (arm64_in_exception_text(bt->instptr)) {
-			if (stackframe.fp)
-				exception_frame = stackframe.fp - SIZE(pt_regs);
-		}
+		if (arm64_in_exception_text(bt->instptr) && INSTACK(stackframe.fp, bt))
+			exception_frame = stackframe.fp - SIZE(pt_regs);
 
 		level++;
-        }
+	}
 
 	if (is_kernel_thread(bt->tc->task)) 
 		return;
@@ -1138,6 +1193,46 @@ static void arm64_back_trace_cmd(struct bt_info *bt)
 complete_user:
 	exception_frame = bt->stacktop - USER_EFRAME_OFFSET;
 	arm64_print_exception_frame(bt, exception_frame, USER_MODE);
+	if ((bt->flags & (BT_USER_SPACE|BT_KDUMP_ADJUST)) == BT_USER_SPACE)
+		fprintf(fp, " #0 [user space]\n");
+}
+
+static int
+arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
+{
+	ulong *ptr, *start, *base;
+	struct machine_specific *ms;
+
+	if (!(machdep->flags & KDUMP_ENABLED))
+		return FALSE;
+
+	base = (ulong *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(bt->stackbase))];
+	if (bt->flags & BT_USER_SPACE)
+		start = (ulong *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(bt->stacktop))];
+	else {
+		if (INSTACK(frame->fp, bt))
+			start = (ulong *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(frame->fp))];
+		else 
+			start = (ulong *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(bt->stacktop))];
+	}
+
+	ms = machdep->machspec;
+	for (ptr = start - 8; ptr >= base; ptr--) {
+		if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+			bt->bptr = ((ulong)ptr - (ulong)base) + bt->tc->thread_info;
+			if (CRASHDEBUG(1))
+				fprintf(fp, "%lx: %lx (crash_kexec)\n", bt->bptr, *ptr);
+			return TRUE;
+		}
+		if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
+			bt->bptr = ((ulong)ptr - (ulong)base) + bt->tc->thread_info;
+			if (CRASHDEBUG(1))
+				fprintf(fp, "%lx: %lx (crash_save_cpu)\n", bt->bptr, *ptr);
+			return TRUE;
+		}
+	} 
+
+	return FALSE;
 }
 
 static int
@@ -1157,6 +1252,9 @@ arm64_get_dumpfile_stackframe(struct bt_info *bt, struct arm64_stackframe *frame
 	if (!is_kernel_text(frame->pc) && 
 	    in_user_stack(bt->tc->task, frame->sp))
 		bt->flags |= BT_USER_SPACE;
+
+	if (arm64_in_kdump_text(bt, frame))
+		bt->flags |= BT_KDUMP_ADJUST;
 
 	return TRUE;
 }
