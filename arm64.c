@@ -40,14 +40,16 @@ static int arm64_eframe_search(struct bt_info *);
 static int arm64_is_kernel_exception_frame(struct bt_info *, ulong);
 static int arm64_in_exception_text(ulong);
 static void arm64_back_trace_cmd(struct bt_info *);
-static int arm64_print_stackframe_entry(struct bt_info *, int, struct arm64_stackframe *);
+static void arm64_print_text_symbols(struct bt_info *, struct arm64_stackframe *, FILE *);
+static int arm64_print_stackframe_entry(struct bt_info *, int, struct arm64_stackframe *, FILE *);
 static void arm64_display_full_frame(struct bt_info *, ulong);
 static int arm64_unwind_frame(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_dumpfile_stackframe(struct bt_info *, struct arm64_stackframe *);
 static int arm64_in_kdump_text(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_stackframe(struct bt_info *, struct arm64_stackframe *);
 static void arm64_get_stack_frame(struct bt_info *, ulong *, ulong *);
-static void arm64_print_exception_frame(struct bt_info *, ulong, int);
+static void arm64_print_exception_frame(struct bt_info *, ulong, int, FILE *ofp);
+static void arm64_do_bt_reference_check(struct bt_info *, ulong, char *);
 static int arm64_translate_pte(ulong, void *, ulonglong);
 static ulong arm64_vmalloc_start(void);
 static int arm64_is_task_addr(ulong);
@@ -91,6 +93,7 @@ arm64_init(int when)
 		machdep->verify_paddr = generic_verify_paddr;
 		if (machdep->cmdline_args[0])
 			arm64_parse_cmdline_args();
+		machdep->flags |= MACHDEP_BT_TEXT;
 		break;
 
 	case PRE_GDB:
@@ -342,6 +345,8 @@ arm64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sVMEMMAP", others++ ? "|" : "");
 	if (machdep->flags & KDUMP_ENABLED)
 		fprintf(fp, "%sKDUMP_ENABLED", others++ ? "|" : "");
+	if (machdep->flags & MACHDEP_BT_TEXT)
+		fprintf(fp, "%sMACHDEP_BT_TEXT", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "              kvbase: %lx\n", machdep->kvbase);
@@ -988,7 +993,7 @@ arm64_eframe_search(struct bt_info *bt)
 	for (ptr = bt->stackbase; ptr < bt->stacktop - SIZE(pt_regs); ptr++) {
 		if (arm64_is_kernel_exception_frame(bt, ptr)) {
 			fprintf(fp, "\nKERNEL-MODE EXCEPTION FRAME AT: %lx\n", ptr); 
-			arm64_print_exception_frame(bt, ptr, KERNEL_MODE);
+			arm64_print_exception_frame(bt, ptr, KERNEL_MODE, fp);
 			count++;
 		}
 	}
@@ -999,7 +1004,7 @@ arm64_eframe_search(struct bt_info *bt)
 	ptr = bt->stacktop - USER_EFRAME_OFFSET;
 	fprintf(fp, "%sUSER-MODE EXCEPTION FRAME AT: %lx\n", 
 		count++ ? "\n" : "", ptr); 
-	arm64_print_exception_frame(bt, ptr, USER_MODE);
+	arm64_print_exception_frame(bt, ptr, USER_MODE, fp);
 
 	return count;
 }
@@ -1018,7 +1023,7 @@ arm64_in_exception_text(ulong ptr)
 #define BACKTRACE_COMPLETE_USER   (3)
 
 static int 
-arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackframe *frame)
+arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackframe *frame, FILE *ofp)
 {
 	char *name, *name_plus_offset;
 	ulong symbol_offset;
@@ -1041,18 +1046,21 @@ arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackfr
 		bt->frameptr = frame->sp;
 	}
 
-        fprintf(fp, "%s#%d [%8lx] %s at %lx", level < 10 ? " " : "", level,
+        fprintf(ofp, "%s#%d [%8lx] %s at %lx", level < 10 ? " " : "", level,
                 frame->sp, name_plus_offset ? name_plus_offset : name, frame->pc);
 
-	if (module_symbol(frame->pc, NULL, &lm, NULL, 0))
-		fprintf(fp, " [%s]", lm->mod_name);
+	if (BT_REFERENCE_CHECK(bt))
+		arm64_do_bt_reference_check(bt, frame->pc, name);
 
-	fprintf(fp, "\n");
+	if (module_symbol(frame->pc, NULL, &lm, NULL, 0))
+		fprintf(ofp, " [%s]", lm->mod_name);
+
+	fprintf(ofp, "\n");
 
 	if (bt->flags & BT_LINE_NUMBERS) {
 		get_line_number(frame->pc, buf, FALSE);
 		if (strlen(buf))
-			fprintf(fp, "    %s\n", buf);
+			fprintf(ofp, "    %s\n", buf);
 	}
 
 	if (STREQ(name, "start_kernel") || STREQ(name, "secondary_start_kernel") ||
@@ -1120,9 +1128,9 @@ arm64_back_trace_cmd(struct bt_info *bt)
 	struct arm64_stackframe stackframe;
 	int level;
 	ulong exception_frame;
+	FILE *ofp;
 
-	if (BT_REFERENCE_CHECK(bt))
-		option_not_supported('R');
+	ofp = BT_REFERENCE_CHECK(bt) ? pc->nullfp : fp;
 
 	/*
 	 *  stackframes are created from 3 contiguous stack addresses:
@@ -1147,6 +1155,16 @@ arm64_back_trace_cmd(struct bt_info *bt)
 		stackframe.fp = bt->frameptr;
 	}
 
+	if (bt->flags & BT_TEXT_SYMBOLS) {
+		arm64_print_text_symbols(bt, &stackframe, ofp);
+                if (BT_REFERENCE_FOUND(bt)) {
+                        print_task_header(fp, task_to_context(bt->task), 0);
+			arm64_print_text_symbols(bt, &stackframe, fp);
+                        fprintf(fp, "\n");
+                }
+		return;
+        }
+
 	if (!(bt->flags & BT_KDUMP_ADJUST)) {
 		if (bt->flags & BT_USER_SPACE)
 			goto complete_user;
@@ -1155,7 +1173,7 @@ arm64_back_trace_cmd(struct bt_info *bt)
 			exception_frame = stackframe.fp - SIZE(pt_regs);
 			if (arm64_is_kernel_exception_frame(bt, exception_frame))
 				arm64_print_exception_frame(bt, exception_frame, 
-					KERNEL_MODE);
+					KERNEL_MODE, ofp);
 		}
 	}
 
@@ -1163,7 +1181,7 @@ arm64_back_trace_cmd(struct bt_info *bt)
 	while (1) {
 		bt->instptr = stackframe.pc;
 
-		switch (arm64_print_stackframe_entry(bt, level, &stackframe))
+		switch (arm64_print_stackframe_entry(bt, level, &stackframe, ofp))
 		{
 		case BACKTRACE_COMPLETE_KERNEL:
 			return;
@@ -1174,7 +1192,7 @@ arm64_back_trace_cmd(struct bt_info *bt)
 		}
 
 		if (exception_frame) {
-			arm64_print_exception_frame(bt, exception_frame, KERNEL_MODE);
+			arm64_print_exception_frame(bt, exception_frame, KERNEL_MODE, ofp);
 			exception_frame = 0;
 		}
 
@@ -1192,9 +1210,54 @@ arm64_back_trace_cmd(struct bt_info *bt)
 
 complete_user:
 	exception_frame = bt->stacktop - USER_EFRAME_OFFSET;
-	arm64_print_exception_frame(bt, exception_frame, USER_MODE);
+	arm64_print_exception_frame(bt, exception_frame, USER_MODE, ofp);
 	if ((bt->flags & (BT_USER_SPACE|BT_KDUMP_ADJUST)) == BT_USER_SPACE)
-		fprintf(fp, " #0 [user space]\n");
+		fprintf(ofp, " #0 [user space]\n");
+}
+
+static void
+arm64_print_text_symbols(struct bt_info *bt, struct arm64_stackframe *frame, FILE *ofp)
+{
+	int i;
+	ulong *up;
+	struct load_module *lm;
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char *name;
+	ulong start;
+
+	if (bt->flags & BT_TEXT_SYMBOLS_ALL)
+		start = bt->stackbase;
+	else {
+		start = frame->sp - 8;
+		fprintf(ofp, "%sSTART: %s at %lx\n",
+			space(VADDR_PRLEN > 8 ? 14 : 6),
+			bt->flags & BT_SYMBOL_OFFSET ?
+			value_to_symstr(frame->pc, buf2, bt->radix) :
+			closest_symbol(frame->pc), frame->pc);
+	}
+
+	for (i = (start - bt->stackbase)/sizeof(ulong); i < LONGS_PER_STACK; i++) {
+		up = (ulong *)(&bt->stackbuf[i*sizeof(ulong)]);
+		if (is_kernel_text(*up)) {
+			name = closest_symbol(*up);
+			fprintf(ofp, "  %s[%s] %s at %lx",
+				bt->flags & BT_ERROR_MASK ?
+				"  " : "",
+				mkstring(buf1, VADDR_PRLEN, 
+				RJUST|LONG_HEX,
+				MKSTR(bt->stackbase + 
+				(i * sizeof(long)))),
+				bt->flags & BT_SYMBOL_OFFSET ?
+				value_to_symstr(*up, buf2, bt->radix) :
+				name, *up);
+			if (module_symbol(*up, NULL, &lm, NULL, 0))
+				fprintf(ofp, " [%s]", lm->mod_name);
+			fprintf(ofp, "\n");
+			if (BT_REFERENCE_CHECK(bt))
+				arm64_do_bt_reference_check(bt, *up, name);
+		}
+	}
 }
 
 static int
@@ -1298,7 +1361,7 @@ arm64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 }
 
 static void
-arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode)
+arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode, FILE *ofp)
 {
 	int i, r, rows, top_reg, is_64_bit;
 	struct arm64_pt_regs *regs;
@@ -1307,7 +1370,7 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode)
 	char buf[BUFSIZE];
 
 	if (CRASHDEBUG(1))
-		fprintf(fp, "pt_regs: %lx\n", pt_regs);
+		fprintf(ofp, "pt_regs: %lx\n", pt_regs);
 
 	regs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(pt_regs))];
 
@@ -1328,71 +1391,121 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode)
 	switch (mode) {
 	case USER_MODE: 
 		if (is_64_bit)
-			fprintf(fp, 
+			fprintf(ofp, 
 			    "     PC: %016lx   LR: %016lx   SP: %016lx\n    ",
 				(ulong)regs->pc, LR, SP);
 		else
-			fprintf(fp, 
+			fprintf(ofp, 
 			    "     PC: %08lx  LR: %08lx  SP: %08lx  PSTATE: %08lx\n    ",
 				(ulong)regs->pc, LR, SP, (ulong)regs->pstate);
 		break;
 
 	case KERNEL_MODE:
-		fprintf(fp, "     PC: %016lx  ", (ulong)regs->pc);
+		fprintf(ofp, "     PC: %016lx  ", (ulong)regs->pc);
 		if (is_kernel_text(regs->pc) &&
 		    (sp = value_search(regs->pc, &offset))) {
-			fprintf(fp, "[%s", sp->name);
+			fprintf(ofp, "[%s", sp->name);
 			if (offset)
-				fprintf(fp, (*gdb_output_radix == 16) ?
+				fprintf(ofp, (*gdb_output_radix == 16) ?
 				    "+0x%lx" : "+%ld", 
 					offset);
-			fprintf(fp, "]\n");
+			fprintf(ofp, "]\n");
 		} else
-			fprintf(fp, "[unknown or invalid address]\n");
+			fprintf(ofp, "[unknown or invalid address]\n");
 
-		fprintf(fp, "     LR: %016lx  ", LR);
+		fprintf(ofp, "     LR: %016lx  ", LR);
 		if (is_kernel_text(LR) &&
 		    (sp = value_search(LR, &offset))) {
-			fprintf(fp, "[%s", sp->name);
+			fprintf(ofp, "[%s", sp->name);
 			if (offset)
-				fprintf(fp, (*gdb_output_radix == 16) ?
+				fprintf(ofp, (*gdb_output_radix == 16) ?
 				    "+0x%lx" : "+%ld", 
 					offset);
-			fprintf(fp, "]\n");
+			fprintf(ofp, "]\n");
 		} else
-			fprintf(fp, "[unknown or invalid address]\n");
+			fprintf(ofp, "[unknown or invalid address]\n");
 
-		fprintf(fp, "     SP: %016lx  PSTATE: %08lx\n    ", 
+		fprintf(ofp, "     SP: %016lx  PSTATE: %08lx\n    ", 
 			SP, (ulong)regs->pstate);
 		break;
 	}
 
 	for (i = top_reg, r = 1; i >= 0; r++, i--) {
-		fprintf(fp, "%sX%d: ", 
+		fprintf(ofp, "%sX%d: ", 
 			i < 10 ? " " : "", i);
-		fprintf(fp, is_64_bit ? "%016lx" : "%08lx",
+		fprintf(ofp, is_64_bit ? "%016lx" : "%08lx",
 			(ulong)regs->regs[i]);
 		if ((i == 0) || ((r % rows) == 0))
-			fprintf(fp, "\n    ");
+			fprintf(ofp, "\n    ");
 		else
-			fprintf(fp, "%s", is_64_bit ? "  " : " "); 
+			fprintf(ofp, "%s", is_64_bit ? "  " : " "); 
 	}
 
 	if (is_64_bit) {
-		fprintf(fp, "ORIG_X0: %016lx  SYSCALLNO: %lx",
+		fprintf(ofp, "ORIG_X0: %016lx  SYSCALLNO: %lx",
 			(ulong)regs->orig_x0, (ulong)regs->syscallno);
 		if (mode == USER_MODE)
-			fprintf(fp, "  PSTATE: %08lx", (ulong)regs->pstate);
-		fprintf(fp, "\n");
+			fprintf(ofp, "  PSTATE: %08lx", (ulong)regs->pstate);
+		fprintf(ofp, "\n");
 	}
 
 	if (is_kernel_text(regs->pc) && (bt->flags & BT_LINE_NUMBERS)) {
 		get_line_number(regs->pc, buf, FALSE);
 		if (strlen(buf))
-			fprintf(fp, "    %s\n", buf);
+			fprintf(ofp, "    %s\n", buf);
+	}
+
+	if (BT_REFERENCE_CHECK(bt)) {
+		arm64_do_bt_reference_check(bt, regs->pc, NULL);
+		arm64_do_bt_reference_check(bt, LR, NULL);
+		arm64_do_bt_reference_check(bt, SP, NULL);
+		arm64_do_bt_reference_check(bt, regs->pstate, NULL);
+		for (i = 0; i <= top_reg; i++)
+			arm64_do_bt_reference_check(bt, regs->regs[i], NULL);
+		if (is_64_bit) {
+			arm64_do_bt_reference_check(bt, regs->orig_x0, NULL);
+			arm64_do_bt_reference_check(bt, regs->syscallno, NULL);
+		}
 	}
 }
 
+/*
+ *  Check a frame for a requested reference.
+ */
+static void
+arm64_do_bt_reference_check(struct bt_info *bt, ulong text, char *name)
+{
+	ulong offset;
+	struct syment *sp = NULL;
+
+	if (!name)
+		sp = value_search(text, &offset); 
+	else if (!text)
+		sp = symbol_search(name);
+
+        switch (bt->ref->cmdflags & (BT_REF_SYMBOL|BT_REF_HEXVAL))
+        {
+        case BT_REF_SYMBOL:
+                if (name) {
+			if (STREQ(name, bt->ref->str))
+                        	bt->ref->cmdflags |= BT_REF_FOUND;
+		} else {
+			if (sp && !offset && STREQ(sp->name, bt->ref->str))
+                        	bt->ref->cmdflags |= BT_REF_FOUND;
+		}
+                break;
+
+        case BT_REF_HEXVAL:
+                if (text) {
+			if (bt->ref->hexval == text) 
+                        	bt->ref->cmdflags |= BT_REF_FOUND;
+		} else if (sp && (bt->ref->hexval == sp->value))
+                       	bt->ref->cmdflags |= BT_REF_FOUND;
+		else if (!name && !text && (bt->ref->hexval == 0))
+			bt->ref->cmdflags |= BT_REF_FOUND;
+                break;
+        }
+}
 
 /*
  *  Translate a PTE, returning TRUE if the page is present.
