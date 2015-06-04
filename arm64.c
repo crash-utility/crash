@@ -289,9 +289,9 @@ arm64_init(int when)
 
 	case LOG_ONLY:
 		machdep->machspec = &arm64_machine_specific;
-		error(FATAL, "crash --log not implemented on ARM64: TBD\n");
-		/* machdep->identity_map_base = ARM64_PAGE_OFFSET; */
+		arm64_calc_VA_BITS();
 		arm64_calc_phys_offset();
+		machdep->machspec->page_offset = ARM64_PAGE_OFFSET;
 		break;
 	}
 }
@@ -1910,6 +1910,7 @@ arm64_calc_VA_BITS(void)
 {
 	int bitval;
 	struct syment *sp;
+	ulong value;
 
 	if (!(sp = symbol_search("swapper_pg_dir")) &&
 	    !(sp = symbol_search("idmap_pg_dir")) &&
@@ -1921,8 +1922,13 @@ arm64_calc_VA_BITS(void)
 		}
 	}
 
-	for (bitval = highest_bit_long(sp->value); bitval; bitval--) {
-		if ((sp->value & (1UL << bitval)) == 0) {
+	if (sp) 
+		value = sp->value;
+	else
+		value = kt->vmcoreinfo.log_buf_SYMBOL;  /* crash --log */
+
+	for (bitval = highest_bit_long(value); bitval; bitval--) {
+		if ((value & (1UL << bitval)) == 0) {
 			machdep->machspec->VA_BITS = bitval + 2;
 			break;
 		}
