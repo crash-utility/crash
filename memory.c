@@ -5734,10 +5734,6 @@ dump_mem_map(struct meminfo *mi)
 	long buffersize;
 	char *outputbuffer;
 	int bufferindex;
-
-	buffersize = 1024 * 1024;
-	outputbuffer = GETBUF(buffersize + 512);
-
 	char style1[100];
 	char style2[100];
 	char style3[100];
@@ -5747,6 +5743,9 @@ dump_mem_map(struct meminfo *mi)
 		dump_mem_map_SPARSEMEM(mi);
 		return;
 	}
+
+	buffersize = 1024 * 1024;
+	outputbuffer = GETBUF(buffersize + 512);
 
 	sprintf((char *)&style1, "%%lx%s%%%dllx%s%%%dlx%s%%8lx %%2d%s",
 			space(MINSPACE),
