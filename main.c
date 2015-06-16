@@ -1857,10 +1857,10 @@ get_osrelease(char *dumpfile)
 {
 	int retval = 1;
 
-	if (is_flattened_format(dumpfile))
-		pc->flags2 |= FLAT;
-	
-	if (is_diskdump(dumpfile)) {
+	if (is_flattened_format(dumpfile)) {
+		if (pc->flags2 & GET_OSRELEASE)
+			retval = 0;
+	} else if (is_diskdump(dumpfile)) {
 		if (pc->flags2 & GET_OSRELEASE)
 			retval = 0;
 	} else if (is_kdump(dumpfile, KDUMP_LOCAL)) {

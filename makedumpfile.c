@@ -22,6 +22,8 @@
 #include "makedumpfile.h"
 #include <byteswap.h>
 
+static void flattened_format_get_osrelease(char *);
+
 int flattened_format = 0;
 
 struct flat_data {
@@ -166,9 +168,15 @@ read_all_makedumpfile_data_header(char *file)
 void
 check_flattened_format(char *file)
 {
-	int fd;
+	int fd, get_osrelease;
 	struct stat stat;
 	struct makedumpfile_header fh;
+
+	if (pc->flags2 & GET_OSRELEASE) {
+		get_osrelease = TRUE;
+		pc->flags2 &= ~GET_OSRELEASE;
+	} else
+		get_osrelease = FALSE;
 
 	if (flattened_format)
 		return;
@@ -195,6 +203,11 @@ check_flattened_format(char *file)
 	if ((strncmp(fh.signature, MAKEDUMPFILE_SIGNATURE, sizeof(MAKEDUMPFILE_SIGNATURE)) != 0) || 
 	    (fh.type != TYPE_FLAT_HEADER))
 		return;
+
+	if (get_osrelease) {
+		flattened_format_get_osrelease(file);
+		return;
+	}
 
 	if (!read_all_makedumpfile_data_header(file))
 		return;
@@ -319,4 +332,29 @@ dump_flat_header(FILE *ofp)
 	fprintf(ofp, "          num_array: %lld\n", (ulonglong)afd.num_array);
 	fprintf(ofp, "              array: %lx\n", (ulong)afd.array);
 	fprintf(ofp, "          file_size: %ld\n\n", (ulong)afd.file_size);
+}
+
+static void 
+flattened_format_get_osrelease(char *file)
+{
+	int c;
+	FILE *pipe;
+	char buf[BUFSIZE], *p1, *p2;
+
+	c = strlen("OSRELEASE=");
+	sprintf(buf, "/usr/bin/strings -n %d %s", c, file);
+			
+	if ((pipe = popen(buf, "r")) == NULL)
+		return;
+
+        for (c = 0; (c < 100) && fgets(buf, BUFSIZE-1, pipe); c++) {
+		if ((p1 = strstr(buf, "OSRELEASE="))) {
+			p2 = strstr(p1, "=");
+			fprintf(fp, "%s", p2+1);
+			flattened_format = TRUE;
+			pc->flags2 |= GET_OSRELEASE;
+		}
+	}
+
+	fclose(fp);
 }
