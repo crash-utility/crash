@@ -18,6 +18,7 @@
  * Author: Ken'ichi Ohmichi <oomichi mxs nes nec co jp>
  */
 
+#define _LARGEFILE64_SOURCE 1  /* stat64() */
 #include "defs.h"
 #include "makedumpfile.h"
 #include <byteswap.h>
@@ -65,6 +66,10 @@ store_flat_data_array(char *file, struct flat_data **fda)
 	unsigned long long	size_allocated;
 	struct flat_data	*ptr = NULL, *cur, *new;
 	struct makedumpfile_data_header	fdh;
+	struct stat64		stat;
+	ulonglong		pct, last_pct;
+	char			buf[BUFSIZE];
+	ssize_t			bytes_read;
 
 	fd = open(file, O_RDONLY);
 	if (fd < 0) {
@@ -76,6 +81,13 @@ store_flat_data_array(char *file, struct flat_data **fda)
 		close(fd);
 		return -1;
 	}
+	if (stat64(file, &stat) < 0) {
+		error(INFO, "cannot stat64 %s\n", file);
+                return -1;
+	}
+
+	please_wait("sorting flat format data");
+	pct = last_pct = 0;
 	while (1) {
 		if (num_allocated <= num_stored) {
 			num_allocated += 100;
@@ -91,8 +103,13 @@ store_flat_data_array(char *file, struct flat_data **fda)
 		}
 		offset_fdh = lseek(fd, 0x0, SEEK_CUR);
 
-		if (read(fd, &fdh, sizeof(fdh)) < 0) {
-			error(INFO, "read error: %s (flat format)\n", file);
+		if ((bytes_read = read(fd, &fdh, sizeof(fdh))) != sizeof(fdh)) {
+			if (bytes_read >= 0)
+				error(INFO, 
+				    "read error: %s (flat format): truncated/incomplete\n", 
+					file);
+			else
+				error(INFO, "read error: %s (flat format)\n", file);
 			break;
 		}
 		if (!is_bigendian()){
@@ -126,6 +143,15 @@ store_flat_data_array(char *file, struct flat_data **fda)
 		cur->buf_size       = fdh.buf_size;
 		num_stored++;
 
+		pct = (offset_fdh * 100ULL) / stat.st_size; 
+		if (pct > last_pct) {
+			sprintf(buf, "sorting flat format data: %lld%%", (ulonglong)pct);
+			please_wait(buf);
+			if (CRASHDEBUG(1))
+				fprintf(fp, "\n");
+			last_pct = pct;
+		}
+
 		if (CRASHDEBUG(1) && (fdh.offset >> 30) > (offset_report >> 30)) {
 			fprintf(fp, "makedumpfile: At %lld GiB\n",
 			      (ulonglong)(fdh.offset >> 30));
@@ -138,6 +164,8 @@ store_flat_data_array(char *file, struct flat_data **fda)
 			break;
 		}
 	}
+	please_wait_done();
+
 	close(fd);
 	if (result == FALSE) {
 		free(ptr);
