@@ -4804,6 +4804,7 @@ static long _WAKEKILL_ = TASK_STATE_UNINITIALIZED;
 static long _WAKING_ = TASK_STATE_UNINITIALIZED;
 static long _NONINTERACTIVE_ = TASK_STATE_UNINITIALIZED;
 static long _PARKED_ = TASK_STATE_UNINITIALIZED;
+static long _NOLOAD_ = TASK_STATE_UNINITIALIZED;
 
 #define valid_task_state(X) ((X) != TASK_STATE_UNINITIALIZED)
 
@@ -4877,6 +4878,10 @@ dump_task_states(void)
 	if (valid_task_state(_PARKED_))
 		fprintf(fp, "            PARKED: %3ld (0x%lx)\n", 
 			_PARKED_, _PARKED_);
+
+	if (valid_task_state(_NOLOAD_))
+		fprintf(fp, "            NOLOAD: %3ld (0x%lx)\n", 
+			_NOLOAD_, _NOLOAD_);
 }
 
 
@@ -4906,6 +4911,64 @@ old_defaults:
 		_EXCLUSIVE_ = 32;
 		return;
 	}
+
+	/*
+	 *  If the later version of stat_nam[] array exists that contains 
+	 *  WAKING, WAKEKILL and PARKED, use it instead of task_state_array[].
+	 */
+	if (((len = get_array_length("stat_nam", NULL, 0)) > 0) &&
+	    read_string(symbol_value("stat_nam"), buf, BUFSIZE-1) &&
+	    ascii_string(buf) && (strlen(buf) > strlen("RSDTtZX"))) {
+		for (i = 0; i < strlen(buf); i++) {
+			switch (buf[i]) 
+			{
+			case 'R':
+				_RUNNING_ = i;
+				break;
+			case 'S':
+				_INTERRUPTIBLE_ = i;
+				break;
+			case 'D':
+				_UNINTERRUPTIBLE_ = (1 << (i-1));
+				break;
+			case 'T':
+				_STOPPED_ = (1 << (i-1));
+				break;
+			case 't':
+				_TRACING_STOPPED_ = (1 << (i-1));
+				break;
+			case 'X':
+				if (_DEAD_ == UNINITIALIZED)
+					_DEAD_ = (1 << (i-1));
+				else
+					_DEAD_ |= (1 << (i-1));
+				break;
+			case 'Z':
+				_ZOMBIE_ = (1 << (i-1));
+				break;
+			case 'x':
+				if (_DEAD_ == UNINITIALIZED)
+					_DEAD_ = (1 << (i-1));
+				else
+					_DEAD_ |= (1 << (i-1));
+				break;
+			case 'K':
+				_WAKEKILL_ = (1 << (i-1));
+				break;
+			case 'W':
+				_WAKING_ = (1 << (i-1));
+				break;
+			case 'P':
+				_PARKED_ = (1 << (i-1));
+				break;
+			case 'N':
+				_NOLOAD_ = (1 << (i-1));
+				break;
+			}
+		}
+
+		goto done_states;
+	} 
 		
 	if ((len = get_array_length("task_state_array", NULL, 0)) <= 0)
 		goto old_defaults;
@@ -4975,6 +5038,7 @@ old_defaults:
 		}
 	}
 
+done_states:
 	if (CRASHDEBUG(3))
 		dump_task_states();
 
@@ -5044,6 +5108,10 @@ task_state_string_verbose(ulong task, char *buf)
 
 	if (valid_task_state(_WAKEKILL_) && (state & _WAKEKILL_))
 		sprintf(&buf[strlen(buf)], "%sTASK_WAKEKILL",
+			count++ ? "|" : "");
+
+	if (valid_task_state(_NOLOAD_) && (state & _NOLOAD_))
+		sprintf(&buf[strlen(buf)], "%sTASK_NOLOAD",
 			count++ ? "|" : "");
 
 	if (valid_task_state(_NONINTERACTIVE_) &&
@@ -5133,6 +5201,11 @@ task_state_string(ulong task, char *buf, int verbose)
 
 	if (state == _PARKED_) {
 		sprintf(buf, "PA"); 
+		valid++;
+	}
+
+	if (state == _WAKING_) {
+		sprintf(buf, "WA"); 
 		valid++;
 	}
 
@@ -5744,6 +5817,13 @@ cmd_foreach(void)
 		 *  If it's a task pointer or pid, take it.
 		 */
                 if (IS_A_NUMBER(args[optind])) {
+			if (STREQ(args[optind], "DE") && pid_exists(0xde)) {
+				error(INFO, "ambiguous task-identifying argument: %s\n", args[optind]);
+				error(CONT, "for a \"state\" argument, use: \\DE\n");
+				error(CONT, "for a \"pid\" argument, use: 0xDE, 0xde, de or 222\n\n");
+				cmd_usage(pc->curcmd, SYNOPSIS);
+				return;
+			}
 
 			switch (str_to_context(args[optind], &value, &tc))
 			{
@@ -5786,6 +5866,10 @@ cmd_foreach(void)
 			continue;
 		}
 
+		if ((args[optind][0] == '\\') &&
+		    STREQ(&args[optind][1], "DE"))
+			shift_string_left(args[optind], 1);
+
 		if (STREQ(args[optind], "RU") ||
 		    STREQ(args[optind], "IN") ||
 		    STREQ(args[optind], "UN") ||
@@ -5794,11 +5878,13 @@ cmd_foreach(void)
 		    STREQ(args[optind], "ZO") ||
 		    STREQ(args[optind], "DE") ||
 		    STREQ(args[optind], "PA") ||
+		    STREQ(args[optind], "WA") ||
 		    STREQ(args[optind], "SW")) {
 
 			if (fd->flags & FOREACH_STATE)
-				error(INFO, "only one task state allowed\n");
-			else if (STREQ(args[optind], "RU"))
+				error(FATAL, "only one task state allowed\n");
+
+			if (STREQ(args[optind], "RU"))
 				fd->state = _RUNNING_;
 			else if (STREQ(args[optind], "IN"))
 				fd->state = _INTERRUPTIBLE_;
@@ -5816,6 +5902,14 @@ cmd_foreach(void)
 				fd->state = _SWAPPING_;
 			else if (STREQ(args[optind], "PA"))
 				fd->state = _PARKED_;
+			else if (STREQ(args[optind], "WA"))
+				fd->state = _WAKING_;
+
+			if (fd->state == TASK_STATE_UNINITIALIZED)
+				error(FATAL, 
+				    "invalid task state for this kernel: %s\n",
+					args[optind]);
+
 			fd->flags |= FOREACH_STATE;
 
 			optind++;
