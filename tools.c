@@ -4750,11 +4750,9 @@ void free_all_bufs(void)
 		}
 	}
 
-	if (bp->mallocs != bp->frees) {
-		dump_shared_bufs();
-		error(FATAL, "malloc-free mismatch (%ld-%ld)\n",
+	if (bp->mallocs != bp->frees)
+		error(WARNING, "malloc/free mismatch (%ld/%ld)\n",
 			bp->mallocs, bp->frees);
-	}
 }
 
 /*
@@ -4901,8 +4899,8 @@ dump_shared_bufs(void)
 	fprintf(fp, "  max_embedded: %ld\n", bp->max_embedded);
 	fprintf(fp, "       mallocs: %ld\n", bp->mallocs);
 	fprintf(fp, "         frees: %ld\n", bp->frees);
-	fprintf(fp, "    reqs/total: %ld/%.1f\n", bp->reqs, bp->total);
-	fprintf(fp, "  average size: %.1f\n", bp->total/bp->reqs);
+	fprintf(fp, "    reqs/total: %ld/%.0f\n", bp->reqs, bp->total);
+	fprintf(fp, "  average size: %.0f\n", bp->total/bp->reqs);
 }
 
 /*
@@ -5039,8 +5037,7 @@ getbuf(long reqsize)
 		if (bp->malloc_bp[i])
 			continue;
 
-		if ((bp->malloc_bp[i] = (char *)malloc(reqsize))) {
-			BZERO(bp->malloc_bp[i], reqsize);
+		if ((bp->malloc_bp[i] = (char *)calloc(reqsize, 1))) {
 			bp->mallocs++;
 			return(bp->malloc_bp[i]);
 		}
