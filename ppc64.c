@@ -2231,6 +2231,7 @@ get_ppc64_frame(struct bt_info *bt, ulong *getpc, ulong *getsp)
 	ulong sp;
 	ulong *stack;
 	ulong task;
+	char *closest;
 	struct ppc64_pt_regs regs;
 
 	ip = 0;
@@ -2244,7 +2245,8 @@ get_ppc64_frame(struct bt_info *bt, ulong *getpc, ulong *getsp)
 		sizeof(struct ppc64_pt_regs),
 		"PPC64 pt_regs", FAULT_ON_ERROR);
 	ip = regs.nip; 
-	if (STREQ(closest_symbol(ip), ".__switch_to")) {
+	closest = closest_symbol(ip);
+	if (STREQ(closest, ".__switch_to") || STREQ(closest, "__switch_to")) {
 		/* NOTE: _switch_to() calls _switch() which
 		 * is asm.  _switch leaves pc == lr.
 		 * Working through this frame is tricky,
