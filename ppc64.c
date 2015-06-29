@@ -1830,8 +1830,9 @@ ppc64_print_stack_entry(int frame,
 				return;
 			}
 			if (req->pc != lr) {
-				fprintf(fp, "\n [Link Register ] ");
-				fprintf(fp, " [%lx] %s at %lx",
+				fprintf(fp, "\n%s[Link Register] ", 
+					frame < 10 ? " " : "");
+				fprintf(fp, "[%lx] %s at %lx",
 					req->sp, lrname, lr);
 			}
 			req->ra = lr;
@@ -1863,37 +1864,53 @@ ppc64_check_eframe(struct ppc64_pt_regs *regs)
 	case 0x100:
 		return("System Reset");
 	case 0x200:
-		return("machine check");
+		return("Machine Check");
 	case 0x300:
-		return("Data Access error");
+		return("Data Access");
 	case 0x380:
 		return("Data SLB Access");
 	case 0x400:
-		return("Instruction bus error");
+		return("Instruction Access");
 	case 0x480:
 		return("Instruction SLB Access");
 	case 0x500:
 		return("Hardware Interrupt");
 	case 0x600:
-		return("Alingment");
+		return("Alignment");
 	case 0x700:
-		return("Breakpoint trap");
+		return("Program Check");
 	case 0x800:
-		return("FPU unavailable");
+		return("FPU Unavailable");
 	case 0x900:
 		return("Decrementer");
+	case 0x980:
+		return("Hypervisor Decrementer");
 	case 0xa00:
-		return("reserved");
+		return("Doorbell");
 	case 0xb00:
 		return("reserved");
 	case 0xc00:
-		return("syscall");
+		return("System Call");
 	case 0xd00:
-		return("single-step/watch");
+		return("Single Step");
 	case 0xe00:
 		return("fp assist");
+	case 0xe40:
+		return("Emulation Assist");
+	case 0xe60:
+		return("HMI");
+	case 0xe80:
+		return("Hypervisor Doorbell");
 	case 0xf00:
 		return("Performance Monitor");
+	case 0xf20:
+		return("Altivec Unavailable");
+	case 0x1300:    
+		return("Instruction Breakpoint");
+	case 0x1500:
+		return("Denormalisation");
+	case 0x1700:    
+		return("Altivec Assist");
 	}
 	
 	/* No exception frame exists */
@@ -1948,7 +1965,7 @@ ppc64_print_eframe(char *efrm_str, struct ppc64_pt_regs *regs,
 	if (BT_REFERENCE_CHECK(bt))
 		return;
 
-	fprintf(fp, " %s  [%lx] exception frame:\n", efrm_str, regs->trap);
+	fprintf(fp, " %s [%lx] exception frame:\n", efrm_str, regs->trap);
 	ppc64_print_regs(regs);
 }
 
