@@ -2023,6 +2023,7 @@ ppc64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 	int check_hardirq, check_softirq;
 	int check_intrstack = TRUE;
 	struct ppc64_pt_regs *pt_regs;
+	struct syment *sp;
 
 	/* 
 	 * For the kdump vmcore, Use SP and IP values that are saved in ptregs.
@@ -2049,7 +2050,8 @@ ppc64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 		 * We captured the GPR1 register value in the
 		 * platform_freeze_cpu() function.
 		 */
-		if (symbol_exists("dump_header")) { /* Diskdump */
+		if ((sp = symbol_search("dump_header")) && 
+		    !((sp->type == 'T') || (sp->type == 't'))) { /* Diskdump */
 			ulong task_addr;
 			/*
 			 * The dump_header struct is specified in the module.
@@ -2079,7 +2081,7 @@ ppc64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 			if (cpu_frozen) 
 				readmem(ur_ksp, KVADDR, &ur_ksp, sizeof(ulong),
 					"Stack Pointer", FAULT_ON_ERROR);
-			else
+			else if (symbol_exists("platform_freeze_cpu"))
 				fprintf(fp, 
 				"%0lx: GPR1 register value (SP) was not saved\n",
 					bt->task);
