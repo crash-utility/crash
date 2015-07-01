@@ -7833,6 +7833,7 @@ new_timer_list_format:
                                 tdx++;
                         }
 		}
+		FREEBUF(timer_list);
 	}
 
 	FREEBUF(timer_list_buf);
