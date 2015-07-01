@@ -207,20 +207,20 @@ check_flattened_format(char *file)
 		get_osrelease = FALSE;
 
 	if (flattened_format)
-		return;
+		goto out;
 
 	if (file_exists(file, &stat) && S_ISCHR(stat.st_mode))
-		return;
+		goto out;
 
 	fd = open(file, O_RDONLY);
 	if (fd < 0) {
 		error(INFO, "unable to open dump file %s\n", file);
-		return;
+		goto out;
 	}
 	if (read(fd, &fh, sizeof(fh)) < 0) {
 		error(INFO, "unable to read dump file %s\n", file);
 		close(fd);
-		return;
+		goto out;
 	}
 	close(fd);
 
@@ -230,7 +230,7 @@ check_flattened_format(char *file)
 	}
 	if ((strncmp(fh.signature, MAKEDUMPFILE_SIGNATURE, sizeof(MAKEDUMPFILE_SIGNATURE)) != 0) || 
 	    (fh.type != TYPE_FLAT_HEADER))
-		return;
+		goto out;
 
 	if (get_osrelease) {
 		flattened_format_get_osrelease(file);
@@ -246,6 +246,11 @@ check_flattened_format(char *file)
 	fh_save = fh;
 
 	flattened_format = TRUE;
+	return;
+
+out:
+	if (get_osrelease)
+		pc->flags2 |= GET_OSRELEASE;
 }
 
 static int
