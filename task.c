@@ -7759,8 +7759,8 @@ cmd_runq(void)
 			dump_milliseconds_flag = 1;
 			break;
 		case 'g':
-			if (INVALID_MEMBER(task_group_cfs_rq) ||
-			    INVALID_MEMBER(task_group_rt_rq) ||
+			if ((INVALID_MEMBER(task_group_cfs_rq) &&
+			     INVALID_MEMBER(task_group_rt_rq)) ||
 			    INVALID_MEMBER(task_group_parent))
 				option_not_supported(c);
 			dump_task_group_flag = 1;
@@ -9146,8 +9146,8 @@ static void
 dump_tasks_by_task_group(void)
 {
 	int cpu, displayed;
-	ulong root_task_group, cfs_rq, cfs_rq_p;
-	ulong rt_rq, rt_rq_p;
+	ulong root_task_group, cfs_rq = 0, cfs_rq_p;
+	ulong rt_rq = 0, rt_rq_p;
 	char *buf;
 	struct task_context *tc;
 	char *task_group_name;
@@ -9173,8 +9173,10 @@ dump_tasks_by_task_group(void)
 	buf = GETBUF(SIZE(task_group));
 	readmem(root_task_group, KVADDR, buf, SIZE(task_group),
 		"task_group", FAULT_ON_ERROR);
-	rt_rq = ULONG(buf + OFFSET(task_group_rt_rq));
-	cfs_rq = ULONG(buf + OFFSET(task_group_cfs_rq));
+	if (VALID_MEMBER(task_group_rt_rq))
+		rt_rq = ULONG(buf + OFFSET(task_group_rt_rq));
+	if (VALID_MEMBER(task_group_cfs_rq))
+		cfs_rq = ULONG(buf + OFFSET(task_group_cfs_rq));
 
 	fill_task_group_info_array(0, root_task_group, buf, -1);
 	sort_task_group_info_array();
@@ -9190,10 +9192,14 @@ dump_tasks_by_task_group(void)
 		if (cpus && !NUM_IN_BITMAP(cpus, cpu))
 			continue;
 
-		readmem(rt_rq + cpu * sizeof(ulong), KVADDR, &rt_rq_p,
-			sizeof(ulong), "task_group rt_rq", FAULT_ON_ERROR);
-		readmem(cfs_rq + cpu * sizeof(ulong), KVADDR, &cfs_rq_p,
-			sizeof(ulong), "task_group cfs_rq", FAULT_ON_ERROR);
+		if (rt_rq)
+			readmem(rt_rq + cpu * sizeof(ulong), KVADDR,
+				&rt_rq_p, sizeof(ulong), "task_group rt_rq",
+				FAULT_ON_ERROR);
+		if (cfs_rq)
+			readmem(cfs_rq + cpu * sizeof(ulong), KVADDR,
+				&cfs_rq_p, sizeof(ulong), "task_group cfs_rq",
+				FAULT_ON_ERROR);
 		fprintf(fp, "%sCPU %d", displayed++ ? "\n" : "", cpu);
 
 		if (hide_offline_cpu(cpu)) {
@@ -9209,15 +9215,19 @@ dump_tasks_by_task_group(void)
 		else
 			fprintf(fp, "%lx\n", tt->active_set[cpu]);
 
-		fprintf(fp, "  %s_TASK_GROUP: %lx  RT_RQ: %lx\n", 
-			task_group_name, root_task_group, rt_rq_p);
-		reuse_task_group_info_array();
-		dump_tasks_in_task_group_rt_rq(0, rt_rq_p, cpu);
+		if (rt_rq) {
+			fprintf(fp, "  %s_TASK_GROUP: %lx  RT_RQ: %lx\n",
+				task_group_name, root_task_group, rt_rq_p);
+			reuse_task_group_info_array();
+			dump_tasks_in_task_group_rt_rq(0, rt_rq_p, cpu);
+		}
 
-		fprintf(fp, "  %s_TASK_GROUP: %lx  CFS_RQ: %lx\n", 
-			task_group_name, root_task_group, cfs_rq_p);
-		reuse_task_group_info_array();
-		dump_tasks_in_task_group_cfs_rq(0, cfs_rq_p, cpu, tc);
+		if (cfs_rq) {
+			fprintf(fp, "  %s_TASK_GROUP: %lx  CFS_RQ: %lx\n",
+				task_group_name, root_task_group, cfs_rq_p);
+			reuse_task_group_info_array();
+			dump_tasks_in_task_group_cfs_rq(0, cfs_rq_p, cpu, tc);
+		}
 	}
 
 	FREEBUF(buf);
