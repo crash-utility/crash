@@ -476,6 +476,7 @@ vm_init(void)
 	MEMBER_OFFSET_INIT(block_device_bd_list, "block_device", "bd_list");
 	MEMBER_OFFSET_INIT(block_device_bd_disk, "block_device", "bd_disk");
 	MEMBER_OFFSET_INIT(inode_i_mapping, "inode", "i_mapping");
+	MEMBER_OFFSET_INIT(address_space_page_tree, "address_space", "page_tree");
 	MEMBER_OFFSET_INIT(address_space_nrpages, "address_space", "nrpages");
 	if (INVALID_MEMBER(address_space_nrpages))
 		MEMBER_OFFSET_INIT(address_space_nrpages, "address_space", "__nrpages");
@@ -6462,6 +6463,23 @@ translate_page_flags(char *buffer, ulong flags)
 	strcpy(buffer, buf);
 
 	return(strlen(buf));
+}
+
+/*
+ *  Display the mem_map data for a single page.
+ */
+int
+dump_inode_page(ulong page)
+{
+	struct meminfo meminfo;
+
+	BZERO(&meminfo, sizeof(struct meminfo));
+	meminfo.spec_addr = page;
+	meminfo.memtype = KVADDR;
+	meminfo.flags = ADDRESS_SPECIFIED;
+	dump_mem_map(&meminfo);
+
+	return meminfo.retval;
 }
 
 /*

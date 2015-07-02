@@ -49,7 +49,8 @@ static void *radix_tree_lookup(ulong, ulong, int);
 static int match_file_string(char *, char *, char *);
 static ulong get_root_vfsmount(char *);
 static void check_live_arch_mismatch(void);
-
+static long get_inode_nrpages(ulong);
+static void dump_inode_page_cache_info(ulong);
 
 #define DENTRY_CACHE (20)
 #define INODE_CACHE  (20)
@@ -2168,6 +2169,70 @@ show_hit_rates:
 }
 
 /*
+ * Get the page count for the specific mapping
+ */
+static long
+get_inode_nrpages(ulong i_mapping)
+{
+	char *address_space_buf;
+	ulong nrpages;
+
+	address_space_buf = GETBUF(SIZE(address_space));
+
+	readmem(i_mapping, KVADDR, address_space_buf,
+	    SIZE(address_space), "address_space buffer",
+	    FAULT_ON_ERROR);
+	nrpages = ULONG(address_space_buf + OFFSET(address_space_nrpages));
+
+	FREEBUF(address_space_buf);
+
+	return nrpages;
+}
+
+static void
+dump_inode_page_cache_info(ulong inode)
+{
+	char *inode_buf;
+	ulong i_mapping, nrpages, root_rnode, count;
+	struct radix_tree_pair rtp;
+	char header[BUFSIZE];
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+
+	inode_buf = GETBUF(SIZE(inode));
+	readmem(inode, KVADDR, inode_buf, SIZE(inode), "inode buffer",
+	    FAULT_ON_ERROR);
+
+	i_mapping = ULONG(inode_buf + OFFSET(inode_i_mapping));
+	nrpages = get_inode_nrpages(i_mapping);
+
+	sprintf(header, "%s  NRPAGES\n",
+		mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "INODE"));
+	fprintf(fp, "%s", header);
+
+	fprintf(fp, "%s  %s\n\n",
+		mkstring(buf1, VADDR_PRLEN,
+		CENTER|RJUST|LONG_HEX,
+		MKSTR(inode)),
+		mkstring(buf2, strlen("NRPAGES"),
+		RJUST|LONG_DEC,
+		MKSTR(nrpages)));
+
+	root_rnode = i_mapping + OFFSET(address_space_page_tree);
+	rtp.index = 0;
+	rtp.value = (void *)&dump_inode_page;
+
+	count = do_radix_tree(root_rnode, RADIX_TREE_DUMP_CB, &rtp);
+
+	if (count != nrpages)
+		error(INFO, "page_tree count: %ld  nrpages: %ld\n",
+			count, nrpages);
+
+	FREEBUF(inode_buf);
+	return;
+}
+
+/*
  *  This command displays information about the open files of a context.
  *  For each open file descriptor the file descriptor number, a pointer
  *  to the file struct, pointer to the dentry struct, pointer to the inode 
@@ -2187,11 +2252,12 @@ cmd_files(void)
 	int subsequent;
 	struct reference reference, *ref;
 	char *refarg;
+	int open_flags = 0;
 
         ref = NULL;
         refarg = NULL;
 
-        while ((c = getopt(argcnt, args, "d:R:")) != EOF) {
+        while ((c = getopt(argcnt, args, "d:R:p:c")) != EOF) {
                 switch(c)
 		{
 		case 'R':
@@ -2210,6 +2276,23 @@ cmd_files(void)
 			display_dentry_info(value);
 			return;
 
+		case 'p':
+			if (VALID_MEMBER(address_space_page_tree) &&
+			    VALID_MEMBER(inode_i_mapping)) {
+				value = htol(optarg, FAULT_ON_ERROR, NULL);
+				dump_inode_page_cache_info(value);
+			} else
+				option_not_supported('p');
+			return;
+
+		case 'c':
+			if (VALID_MEMBER(address_space_page_tree) &&
+			    VALID_MEMBER(inode_i_mapping))
+				open_flags |= PRINT_NRPAGES;
+			else
+				option_not_supported('c');
+			break;
+
 		default:
 			argerrs++;
 			break;
@@ -2222,7 +2305,9 @@ cmd_files(void)
 	if (!args[optind]) {
 		if (!ref)
 			print_task_header(fp, CURRENT_CONTEXT(), 0);
-		open_files_dump(CURRENT_TASK(), 0, ref);
+
+		open_files_dump(CURRENT_TASK(), open_flags, ref);
+
 		return;
 	}
 
@@ -2241,7 +2326,7 @@ cmd_files(void)
                         for (tc = pid_to_context(value); tc; tc = tc->tc_next) {
                                 if (!ref)
                                         print_task_header(fp, tc, subsequent);
-                                open_files_dump(tc->task, 0, ref);
+                                open_files_dump(tc->task, open_flags, ref);
                                 fprintf(fp, "\n");
                         }
                         break;
@@ -2249,7 +2334,7 @@ cmd_files(void)
                 case STR_TASK:
                         if (!ref)
                                 print_task_header(fp, tc, subsequent);
-                        open_files_dump(tc->task, 0, ref);
+                        open_files_dump(tc->task, open_flags, ref);
                         break;
 
                 case STR_INVALID:
@@ -2321,6 +2406,7 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 	char buf4[BUFSIZE];
 	char root_pwd[BUFSIZE];
 	int root_pwd_printed = 0;
+	int file_dump_flags = 0;
 
 	BZERO(root_pathname, BUFSIZE);
 	BZERO(pwd_pathname, BUFSIZE);
@@ -2329,15 +2415,27 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 		fdtable_buf = GETBUF(SIZE(fdtable));
 	fill_task_struct(task);
 
-	sprintf(files_header, " FD%s%s%s%s%s%s%sTYPE%sPATH\n",
-		space(MINSPACE),
-		mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "FILE"),
-		space(MINSPACE),
-		mkstring(buf2, VADDR_PRLEN, CENTER|LJUST, "DENTRY"),
-		space(MINSPACE),
-		mkstring(buf3, VADDR_PRLEN, CENTER|LJUST, "INODE"),
-		space(MINSPACE),
-		space(MINSPACE));
+	if (flags & PRINT_NRPAGES) {
+		sprintf(files_header, " FD%s%s%s%s%sNRPAGES%sTYPE%sPATH\n",
+			space(MINSPACE),
+			mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "INODE"),
+			space(MINSPACE),
+			mkstring(buf2, MAX(VADDR_PRLEN, strlen("I_MAPPING")),
+			BITS32() ? (CENTER|RJUST) : (CENTER|LJUST), "I_MAPPING"),
+			space(MINSPACE),
+			space(MINSPACE),
+			space(MINSPACE));
+	} else {
+		sprintf(files_header, " FD%s%s%s%s%s%s%sTYPE%sPATH\n",
+			space(MINSPACE),
+			mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "FILE"),
+			space(MINSPACE),
+			mkstring(buf2, VADDR_PRLEN, CENTER|LJUST, "DENTRY"),
+			space(MINSPACE),
+			mkstring(buf3, VADDR_PRLEN, CENTER|LJUST, "INODE"),
+			space(MINSPACE),
+			space(MINSPACE));
+	}
 
 	tc = task_to_context(task);
 
@@ -2523,6 +2621,10 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 		return;
 	}
 
+	file_dump_flags = DUMP_FULL_NAME | DUMP_EMPTY_FILE;
+	if (flags & PRINT_NRPAGES)
+		file_dump_flags |= DUMP_FILE_NRPAGES;
+
 	j = 0;
 	for (;;) {
 		unsigned long set;
@@ -2539,8 +2641,7 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 
 				if (ref && file) {
 					open_tmpfile();
-                                        if (file_dump(file, 0, 0, i,
-                                            DUMP_FULL_NAME|DUMP_EMPTY_FILE)) {
+                                        if (file_dump(file, 0, 0, i, file_dump_flags)) {
 						BZERO(buf4, BUFSIZE);
 						rewind(pc->tmpfile);
 						ret = fgets(buf4, BUFSIZE, 
@@ -2558,8 +2659,7 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 						fprintf(fp, "%s", files_header);
 						header_printed = 1;
 					}
-					file_dump(file, 0, 0, i, 
-						DUMP_FULL_NAME|DUMP_EMPTY_FILE);
+					file_dump(file, 0, 0, i, file_dump_flags);
 				}
 			}
 			i++;
@@ -2754,6 +2854,8 @@ file_dump(ulong file, ulong dentry, ulong inode, int fd, int flags)
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
+	ulong i_mapping = 0;
+	ulong nrpages = 0;
 
 	file_buf = NULL;
 
@@ -2863,6 +2965,28 @@ file_dump(ulong file, ulong dentry, ulong inode, int fd, int flags)
 				type, 
 				space(MINSPACE),
 				pathname+1);
+		} else if (flags & DUMP_FILE_NRPAGES) {
+			i_mapping = ULONG(inode_buf + OFFSET(inode_i_mapping));
+			nrpages = get_inode_nrpages(i_mapping);
+
+			fprintf(fp, "%3d%s%s%s%s%s%s%s%s%s%s\n",
+				fd,
+				space(MINSPACE),
+				mkstring(buf1, VADDR_PRLEN,
+				CENTER|RJUST|LONG_HEX,
+				MKSTR(inode)),
+				space(MINSPACE),
+				mkstring(buf2, MAX(VADDR_PRLEN, strlen("I_MAPPING")),
+				CENTER|RJUST|LONG_HEX,
+				MKSTR(i_mapping)),
+				space(MINSPACE),
+				mkstring(buf3, strlen("NRPAGES"),
+				RJUST|LONG_DEC,
+				MKSTR(nrpages)),
+				space(MINSPACE),
+				type,
+				space(MINSPACE),
+				pathname);
 		} else {
                         fprintf(fp, "%3d%s%s%s%s%s%s%s%s%s%s\n",
                                 fd,
@@ -3870,6 +3994,9 @@ ulong RADIX_TREE_MAP_MASK = UNINITIALIZED;
  *            limit the number of returned entries by putting the array size
  *            (max count) in the rtp->index field of the first structure 
  *            in the passed-in array.
+ *          RADIX_TREE_DUMP_CB - Similar with RADIX_TREE_DUMP, but for each
+ *            radix tree entry, a user defined callback at rtp->value will
+ *            be invoked.
  *
  *     rtp: Unused by RADIX_TREE_COUNT and RADIX_TREE_DUMP. 
  *          A pointer to a radix_tree_pair structure for RADIX_TREE_SEARCH.
@@ -3877,6 +4004,8 @@ ulong RADIX_TREE_MAP_MASK = UNINITIALIZED;
  *          RADIX_TREE_GATHER; the dimension (max count) of the array may
  *          be stored in the index field of the first structure to avoid
  *          any chance of an overrun.
+ *          For RADIX_TREE_DUMP_CB, the rtp->value must be initialized as a
+ *          callback function.  The callback prototype must be: int (*)(ulong);
  */
 ulong
 do_radix_tree(ulong root, int flag, struct radix_tree_pair *rtp)
@@ -3889,6 +4018,7 @@ do_radix_tree(ulong root, int flag, struct radix_tree_pair *rtp)
 	struct radix_tree_pair *r;
 	ulong root_rnode;
 	void *ret;
+	int (*cb)(ulong) = NULL;
 
 	count = 0;
 
@@ -3932,14 +4062,13 @@ do_radix_tree(ulong root, int flag, struct radix_tree_pair *rtp)
 		"radix_tree_root", FAULT_ON_ERROR);
 	height = UINT(radix_tree_root_buf + OFFSET(radix_tree_root_height));
 
-	if (height > ilen) {
-		fprintf(fp, "radix_tree_root at %lx:\n", root);
+	if ((height < 0) || (height > ilen)) {
+		error(INFO, "height_to_maxindex[] index: %ld\n", ilen);
+		fprintf(fp, "invalid height in radix_tree_root at %lx:\n", root);
 		dump_struct("radix_tree_root", (ulong)root, RADIX(16));
-		error(FATAL, 
-                   "height %d is greater than height_to_maxindex[] index %ld\n",
-			height, ilen);
+		return 0;
 	}
-	
+
 	maxindex = height_to_maxindex[height];
 	FREEBUF(height_to_maxindex);
 	FREEBUF(radix_tree_root_buf);
@@ -3991,6 +4120,26 @@ do_radix_tree(ulong root, int flag, struct radix_tree_pair *rtp)
 				r++;
                         }
                 }
+		break;
+
+	case RADIX_TREE_DUMP_CB:
+		if (rtp->value == NULL) {
+			error(FATAL, "do_radix_tree: need set callback function");
+			return -EINVAL;
+		}
+		cb = (int (*)(ulong))rtp->value;
+		for (index = count = 0; index <= maxindex; index++) {
+			if ((ret =
+			    radix_tree_lookup(root_rnode, index, height))) {
+				/* Caller defined operation */
+				if (!cb((ulong)ret)) {
+					error(FATAL, "do_radix_tree: callback "
+					    "operation failed: entry: %ld  item: %lx\n",
+					    count, (ulong)ret);
+				}
+				count++;
+			}
+		}
 		break;
 
 	default:

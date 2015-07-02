@@ -8634,6 +8634,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(block_device_bd_disk));
 	fprintf(fp, "         address_space_nrpages: %ld\n",
 		OFFSET(address_space_nrpages));
+	fprintf(fp, "         address_space_page_tree: %ld\n",
+		OFFSET(address_space_page_tree));
 	fprintf(fp, "                 gendisk_major: %ld\n",
 		OFFSET(gendisk_major));
 	fprintf(fp, "                  gendisk_fops: %ld\n",

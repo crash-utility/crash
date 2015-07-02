@@ -1940,6 +1940,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long task_struct_thread_reg31;
 	long pt_regs_regs;
 	long pt_regs_cp0_badvaddr;
+	long address_space_page_tree;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2598,6 +2599,7 @@ struct load_module {
 #define PRINT_SINGLE_VMA  (0x80)
 #define PRINT_RADIX_10   (0x100)
 #define PRINT_RADIX_16   (0x200)
+#define PRINT_NRPAGES    (0x400)
 
 #define MIN_PAGE_SIZE  (4096)
 
@@ -4707,6 +4709,8 @@ void alter_stackbuf(struct bt_info *);
 int vaddr_type(ulong, struct task_context *);
 char *format_stack_entry(struct bt_info *bt, char *, ulong, ulong);
 int in_user_stack(ulong, ulong);
+int dump_inode_page(ulong);
+
 
 /*
  *  filesys.c 
@@ -4743,16 +4747,18 @@ int is_readable(char *);
 #define RADIX_TREE_SEARCH  (2)
 #define RADIX_TREE_DUMP    (3)
 #define RADIX_TREE_GATHER  (4)
+#define RADIX_TREE_DUMP_CB (5)
 struct radix_tree_pair {
 	ulong index;
 	void *value;
 };
 ulong do_radix_tree(ulong, int, struct radix_tree_pair *);
 int file_dump(ulong, ulong, ulong, int, int);
-#define DUMP_FULL_NAME   1
-#define DUMP_INODE_ONLY  2
-#define DUMP_DENTRY_ONLY 4
-#define DUMP_EMPTY_FILE  8
+#define DUMP_FULL_NAME      0x1
+#define DUMP_INODE_ONLY     0x2
+#define DUMP_DENTRY_ONLY    0x4
+#define DUMP_EMPTY_FILE     0x8
+#define DUMP_FILE_NRPAGES  0x10
 #endif  /* !GDB_COMMON */
 int same_file(char *, char *);
 #ifndef GDB_COMMON

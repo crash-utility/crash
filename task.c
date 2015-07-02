@@ -6234,6 +6234,12 @@ foreach(struct foreach_data *fd)
 			print_header = FALSE;
 			break;
 
+		case FOREACH_FILES:
+			if (fd->flags & FOREACH_p_FLAG)
+				error(FATAL,
+				    "files command does not support -p option\n");
+			break;
+
 		case FOREACH_TEST:
 			break;
 		}
@@ -6460,9 +6466,15 @@ foreach(struct foreach_data *fd)
 
 			case FOREACH_FILES:
 				pc->curcmd = "files";
-				open_files_dump(tc->task, 
-					fd->flags & FOREACH_i_FLAG ?
-					PRINT_INODES : 0, 
+				cmdflags = 0;
+
+				if (fd->flags & FOREACH_i_FLAG)
+					cmdflags |= PRINT_INODES;
+				if (fd->flags & FOREACH_c_FLAG)
+					cmdflags |= PRINT_NRPAGES;
+
+				open_files_dump(tc->task,
+					cmdflags,
 					fd->reference ? ref : NULL);
 				break;
 
