@@ -7680,7 +7680,7 @@ parse_for_member_extended(struct datatype_member *dm,
 	free_structure(root);
 
 	if (!found)
-		error(FATAL, "invalid data structure member reference: %s\n",
+		error(INFO, "invalid data structure member reference: %s\n",
 			dm->member);
 }
 
