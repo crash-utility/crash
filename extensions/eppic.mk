@@ -16,6 +16,9 @@ endif
 ifeq ($(TARGET), ARM)
         TARGET_FLAGS += -m32
 endif
+ifeq ($(TARGET), MIPS)
+        TARGET_FLAGS += -m32
+endif
 ifeq ($(TARGET), X86)
         TARGET_FLAGS += -m32
 endif
