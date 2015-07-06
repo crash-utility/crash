@@ -1436,6 +1436,8 @@ cmd_dis(void)
 					req->addr);
 				unfiltered = TRUE;
 			}
+			if (!offset)
+				req->flags |= GNU_FUNCTION_ONLY;
                 } else if ((sp = symbol_search(args[optind]))) {
                         req->addr = sp->value;
 			req->flags |= GNU_FUNCTION_ONLY;
