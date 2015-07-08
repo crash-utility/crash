@@ -1533,7 +1533,6 @@ static void ftrace_show(int argc, char *argv[])
 	FILE *file;
 	size_t ret;
 	size_t nitems __attribute__ ((__unused__));
-	char *unused __attribute__ ((__unused__));
 
 	/* check trace-cmd */
 	if (env_trace_cmd)
@@ -1557,8 +1556,9 @@ static void ftrace_show(int argc, char *argv[])
 	}
 
 	/* dump trace.dat to the temp file */
-	unused = mktemp(tmp);
-	fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	fd = mkstemp(tmp);
+	if (fd < 0)
+		return;
 	if (trace_cmd_data_output(fd) < 0)
 		goto out;
 
