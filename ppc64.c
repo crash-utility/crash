@@ -2068,7 +2068,7 @@ ppc64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 		 * platform_freeze_cpu() function.
 		 */
 		if ((sp = symbol_search("dump_header")) && 
-		    !((sp->type == 'T') || (sp->type == 't'))) { /* Diskdump */
+		    !is_symbol_text(sp)) { /* Diskdump */
 			ulong task_addr;
 			/*
 			 * The dump_header struct is specified in the module.

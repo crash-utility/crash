@@ -4546,6 +4546,7 @@ int is_kernel_text(ulong);
 int is_kernel_data(ulong);
 int is_init_data(ulong value); 
 int is_kernel_text_offset(ulong);
+int is_symbol_text(struct syment *);
 int is_rodata(ulong, struct syment **);
 void datatype_init(void);
 struct syment *symbol_search(char *);
@@ -4569,6 +4570,7 @@ void show_symbol(struct syment *, ulong, ulong);
 #define SHOW_DEC_OFFS (0x8)
 #define SHOW_RADIX() (*gdb_output_radix == 16 ? SHOW_HEX_OFFS : SHOW_DEC_OFFS)
 #define SHOW_MODULE  (0x10)
+int symbol_name_count(char *);
 int symbol_query(char *, char *, struct syment **);
 struct syment *next_symbol(char *, struct syment *);
 struct syment *prev_symbol(char *, struct syment *);

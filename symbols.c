@@ -37,7 +37,6 @@ static asection *get_kernel_section(char *);
 static char * get_section(ulong vaddr, char *buf);
 static void symbol_dump(ulong, char *);
 static void check_for_dups(struct load_module *);
-static int symbol_name_count(char *);
 static struct syment *kallsyms_module_symbol(struct load_module *, symbol_info *);
 static void store_load_module_symbols \
 	(bfd *, int, void *, long, uint, ulong, char *);
@@ -2691,12 +2690,11 @@ is_kernel_text(ulong value)
 	start = 0;
 
 	if (pc->flags & SYSMAP) {
-		if ((sp = value_search(value, NULL)) &&
-		    ((sp->type == 'T') || (sp->type == 't'))) 
+		if ((sp = value_search(value, NULL)) && is_symbol_text(sp))
 			return TRUE;
 
 		for (sp = st->symtable; sp < st->symend; sp++) {
-			if (!((sp->type == 'T') || (sp->type == 't')))
+			if (!is_symbol_text(sp))
 				continue;
 			if ((value >= sp->value) && (value < kt->etext))
 				return TRUE;
@@ -2718,8 +2716,7 @@ is_kernel_text(ulong value)
 		}
 	}
 
-        if ((sp = value_search(value, NULL)) &&
-	    ((sp->type == 'T') || (sp->type == 't'))) 
+        if ((sp = value_search(value, NULL)) && is_symbol_text(sp))
 		return TRUE;
 
         if (NO_MODULES())
@@ -2787,6 +2784,11 @@ is_kernel_text_offset(ulong value)
 	return(offset ? TRUE : FALSE);
 }
 
+int
+is_symbol_text(struct syment *sp)
+{
+	return ((sp->type == 'T') || (sp->type == 't'));
+}
 
 /*
  *  Check whether an address is most likely kernel data.
@@ -4161,7 +4163,7 @@ symbol_search(char *s)
 /*
  *  Count the number of instances of a symbol name.
  */
-static int
+int
 symbol_name_count(char *s)
 {
         int i;
