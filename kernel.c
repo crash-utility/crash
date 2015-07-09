@@ -1306,8 +1306,103 @@ verify_namelist()
         program_usage(SHORT_FORM);
 }
 
+/*
+ *  From either a syment pointer, or a virtual address evaluated
+ *  from a symbol name plus an offset value, determine whether 
+ *  there are multiple symbols with the same name.  
 
+ *  If there are multiple text symbols with the same name, then 
+ *  display a "duplicate text symbols found" message followed by
+ *  a list of each symbol's information, and return FALSE.
+ * 
+ *  If there is one text symbol and one or more data symbols with
+ *  the same name, reset the incoming address based upon the 
+ *  single text symbol, and return TRUE.
+ *
+ *  All of the remaining possibilities return TRUE without changing
+ *  the incoming address:
+ * 
+ *   (1) if an evaluated address cannot be resolved to any symbol.
+ *   (2) if an evaluated address argument did not contain a symbol name.
+ *   (3) if there is only one possible symbol resolution.
+ *   (4) if there are multiple data symbols.
+ */
+static int
+resolve_text_symbol(char *arg, struct syment *sp_in, struct gnu_request *req, int radix)
+{
+	int text_symbols;
+	struct syment *sp, *sp_orig, *first_text_sp;
+	ulong offset, radix_flag;
 
+	if (sp_in) {
+		sp_orig = sp_in;
+		offset = 0;
+	} else if ((sp_orig = value_search(req->addr, &offset))) {
+		if (!strstr(arg, sp_orig->name))
+			return TRUE;
+	} else {
+		if (CRASHDEBUG(1))
+			error(INFO, "%s: no text symbol found\n", arg);
+		return TRUE;
+	}
+
+	if (symbol_name_count(sp_orig->name) <= 1)
+		return TRUE;
+
+	text_symbols = 0;
+	first_text_sp = NULL;
+	sp = sp_orig;
+
+	do {
+		if (is_symbol_text(sp)) {
+			if (!first_text_sp)
+				first_text_sp = sp;
+			text_symbols++;
+		} 
+	} while ((sp = symbol_search_next(sp->name, sp)));
+
+	/*
+	 *  If no text symbols for a symbol name exist, let it be...
+	 */
+	if (!text_symbols) {
+		if (CRASHDEBUG(1))
+			error(INFO, "%s: no text symbol found\n", arg);
+		return TRUE;
+	}
+
+	/*
+	 *  If only one symbol with the specified name is text,
+	 *  reset the req->addr as appropriate in case a
+	 *  lower-value data symbol was originally selected.
+	 */
+	if (text_symbols == 1) { 
+		if (sp_in)
+			req->addr = first_text_sp->value;
+		else
+			req->addr = first_text_sp->value + offset;
+		return TRUE;
+	}
+
+	/*
+	 *  Multiple text symbols with the same name exist.
+	 *  Display them all and return FALSE.
+	 */
+	error(INFO, "%s: duplicate text symbols found:\n", arg);
+
+	radix_flag = radix == 10 ? SHOW_DEC_OFFS : SHOW_HEX_OFFS;
+	sp = sp_orig;
+
+	do {
+		if (is_symbol_text(sp)) {
+			if (module_symbol(sp->value, NULL, NULL, NULL, 0))
+				show_symbol(sp, offset, SHOW_LINENUM|SHOW_MODULE|radix_flag);
+			else
+				show_symbol(sp, offset, SHOW_LINENUM|radix_flag);
+		}
+	} while ((sp = symbol_search_next(sp->name, sp)));
+
+	return FALSE;
+}
 
 /*
  *  This routine disassembles text in one of four manners.  A starting
@@ -1363,7 +1458,7 @@ cmd_dis(void)
 	unfiltered = user_mode = do_machdep_filter = do_load_module_filter = 0;
 	radix = 0;
 
-	req = (struct gnu_request *)getbuf(sizeof(struct gnu_request));
+	req = (struct gnu_request *)GETBUF(sizeof(struct gnu_request));
 	req->buf = GETBUF(BUFSIZE);
 	req->flags |= GNU_FROM_TTY_OFF|GNU_RETURN_ON_ERROR;
 	req->count = 1;
@@ -1425,22 +1520,34 @@ cmd_dis(void)
 		radix = pc->output_radix;
 
         if (args[optind]) {
-                if (can_eval(args[optind])) 
+                if (can_eval(args[optind])) {
                         req->addr = eval(args[optind], FAULT_ON_ERROR, NULL);
-                else if (hexadecimal(args[optind], 0)) {
+			if (!user_mode &&
+			    !resolve_text_symbol(args[optind], NULL, req, radix)) {
+				FREEBUF(req->buf);
+				FREEBUF(req);
+				return;
+			}
+                } else if (hexadecimal(args[optind], 0)) {
                         req->addr = htol(args[optind], FAULT_ON_ERROR, NULL);
-			if (!user_mode && 
-			    !(sp = value_search(req->addr, &offset))) {
+			sp = value_search(req->addr, &offset);
+			if (!user_mode && !sp) {
 				error(WARNING, 
 				    "%lx: no associated kernel symbol found\n",
 					req->addr);
 				unfiltered = TRUE;
 			}
-			if (!offset)
+			if (!offset && sp && is_symbol_text(sp))
 				req->flags |= GNU_FUNCTION_ONLY;
                 } else if ((sp = symbol_search(args[optind]))) {
                         req->addr = sp->value;
-			req->flags |= GNU_FUNCTION_ONLY;
+			if (!resolve_text_symbol(args[optind], sp, req, radix)) {
+				FREEBUF(req->buf);
+				FREEBUF(req);
+				return;
+			}
+			if (is_symbol_text(sp))
+				req->flags |= GNU_FUNCTION_ONLY;
 		} else {
                         fprintf(fp, "symbol not found: %s\n", args[optind]);
                         fprintf(fp, "possible alternatives:\n");
