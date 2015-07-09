@@ -24,7 +24,7 @@ ifeq ($(TARGET), X86)
 endif
 
 APPFILE=eppic/applications/crash/eppic.c
-GOOGLE := $(shell ping -c 1 code.google.com | grep "1 received")
+GITHUB := $(shell ping -c 1 github.com | grep "1 received")
 GIT := $(shell which git 2> /dev/null)
 
 all:
@@ -38,8 +38,8 @@ all:
              if [ -n "$(EPPIC_GIT_URL)" ]; then \
                git clone "$(EPPIC_GIT_URL)" eppic; \
              else \
-	          if [ -n "$(GOOGLE)" ] ; then \
-	            git clone https://code.google.com/p/eppic eppic; \
+	          if [ -n "$(GITHUB)" ] ; then \
+		    git clone https://github.com/lucchouina/eppic.git eppic; \
 	          fi; \
              fi; \
           else \
