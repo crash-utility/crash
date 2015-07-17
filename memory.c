@@ -9103,8 +9103,16 @@ vaddr_to_kmem_cache(ulong vaddr, char *buf, int verbose)
 		readmem(page+OFFSET(page_flags), KVADDR,
 			&page_flags, sizeof(ulong), "page.flags",
 			FAULT_ON_ERROR);
-		if (!(page_flags & (1 << vt->PG_slab)))
-			return NULL;
+		if (!(page_flags & (1 << vt->PG_slab))) {
+			if (vt->flags & KMALLOC_SLUB) {
+				readmem(compound_head(page)+OFFSET(page_flags), KVADDR,
+					&page_flags, sizeof(ulong), "page.flags",
+					FAULT_ON_ERROR);
+				if (!(page_flags & (1 << vt->PG_slab)))
+					return NULL;
+			} else
+				return NULL;
+		}
 	}
 
 	if ((vt->flags & KMALLOC_SLUB) ||
