@@ -1144,6 +1144,7 @@ arm64_back_trace_cmd(struct bt_info *bt)
 		stackframe.fp = GET_STACK_ULONG(bt->bptr - 8);
 		stackframe.pc = GET_STACK_ULONG(bt->bptr);
 		stackframe.sp = bt->bptr + 8;
+		bt->frameptr = stackframe.sp;
 	} else if (bt->hp && bt->hp->esp) {
 		stackframe.fp = GET_STACK_ULONG(bt->hp->esp - 8);
 		stackframe.pc = bt->hp->eip ? 
