@@ -34,6 +34,10 @@ static int encapsulated_current_trace;
  * trace_buffer is supported
  */
 static int trace_buffer_available;
+/*
+ * max_buffer is supported
+ */
+static int max_buffer_available;
 
 #define koffset(struct, member) struct##_##member##_offset
 
@@ -163,8 +167,10 @@ static int init_offsets(void)
 
 	if (trace_buffer_available) {
 		init_offset(trace_array, trace_buffer);
-		init_offset(trace_array, max_buffer);
 		init_offset(trace_buffer, buffer);
+
+		if (max_buffer_available)
+			init_offset(trace_array, max_buffer);
 	} else {
 		init_offset(trace_array, buffer);
 	}
@@ -448,6 +454,9 @@ out_fail:
 static int ftrace_int_max_tr_trace(void)
 {
 	if (trace_buffer_available) {
+		if (!max_buffer_available)
+			return 0;
+
 		global_max_buffer = global_trace + koffset(trace_array, max_buffer);
 		read_value(max_tr_ring_buffer, global_max_buffer, trace_buffer, buffer);
 	} else {
@@ -528,6 +537,9 @@ static int ftrace_init(void)
 
 	if (MEMBER_EXISTS("trace_array", "trace_buffer")) {
 		trace_buffer_available = 1;
+
+		if (MEMBER_EXISTS("trace_array", "max_buffer"))
+			max_buffer_available = 1;
 	} else {
 		sym_max_tr_trace = symbol_search("max_tr");
 		if (sym_max_tr_trace == NULL)
