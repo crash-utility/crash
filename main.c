@@ -709,12 +709,18 @@ main_loop(void)
 		    "unpredictable\n         runtime behavior.\n",
 			pc->dumpfile);
 
-	if (pc->flags2 & INCOMPLETE_DUMP)
+	if (pc->flags2 & INCOMPLETE_DUMP) {
 		error(WARNING, "\n%s:\n         "
 		    "This dumpfile is incomplete.  This may cause the crash session"
 		    "\n         to fail entirely, may cause commands to fail, or may"
 		    " result in\n         unpredictable runtime behavior.\n",
 			pc->dumpfile);
+		if (!(*diskdump_flags & ZERO_EXCLUDED))
+			fprintf(fp,
+			    "   NOTE: This dumpfile may be analyzed with the --zero_excluded command\n"
+			    "         line option, in which case any read requests from missing pages\n"
+			    "         will return zero-filled memory.\n");
+	}
 
         if (!(pc->flags & GDB_INIT)) {
 		gdb_session_init();
