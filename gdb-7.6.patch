@@ -1761,3 +1761,18 @@
    _rl_tracefp = 0;
    return r;
  }
+--- gdb-7.6/gdb/symtab.c.orig
++++ gdb-7.6/gdb/symtab.c
+@@ -5447,9 +5447,9 @@ eval_enum(struct type *type, struct gnu_
+         lastval = 0;
+ 
+         for (i = 0; i < len; i++) {
+-                if (lastval != TYPE_FIELD_BITPOS (type, i)) {
+-                        lastval = TYPE_FIELD_BITPOS (type, i);
+-                } 
++		if (lastval != TYPE_FIELD_ENUMVAL (type, i))
++			lastval = TYPE_FIELD_ENUMVAL (type, i);
++
+ 		if (STREQ(TYPE_FIELD_NAME(type, i), req->name)) {
+ 			req->tagname = "(unknown)";
+ 			req->value = lastval;
