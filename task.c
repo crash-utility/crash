@@ -6750,6 +6750,9 @@ get_dumpfile_panic_task(void)
         } else if (LKCD_DUMPFILE())
 		return(get_lkcd_panic_task());
 
+	if (pc->flags2 & LIVE_DUMP)
+		return NO_TASK;
+
 	if (get_active_set())
 		return(get_active_set_panic_task());
 
