@@ -518,6 +518,7 @@ struct program_context {
 #define INCOMPLETE_DUMP  (0x8000ULL)
 #define is_incomplete_dump() (pc->flags2 & INCOMPLETE_DUMP)
 #define QEMU_MEM_DUMP_COMPRESSED (0x10000ULL)
+#define SNAP        (0x20000ULL)
 	char *cleanup;
 	char *namelist_orig;
 	char *namelist_debug_orig;

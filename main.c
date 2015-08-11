@@ -1436,6 +1436,8 @@ dump_program_context(void)
 		fprintf(fp, "%sOFFLINE_HIDE", others++ ? "|" : "");
 	if (pc->flags2 & INCOMPLETE_DUMP)
 		fprintf(fp, "%sINCOMPLETE_DUMP", others++ ? "|" : "");
+	if (pc->flags2 & SNAP)
+		fprintf(fp, "%sSNAP", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "         namelist: %s\n", pc->namelist);

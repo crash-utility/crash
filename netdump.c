@@ -2223,7 +2223,7 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 	case NT_TASKSTRUCT:
 		netdump_print("(NT_TASKSTRUCT)\n");
 		if (STRNEQ(buf, "SNAP"))
-			pc->flags2 |= LIVE_DUMP;
+			pc->flags2 |= (LIVE_DUMP|SNAP);
 		if (store) {
 			nd->nt_taskstruct = (void *)note;
 			nd->task_struct = *((ulong *)(ptr + note->n_namesz));

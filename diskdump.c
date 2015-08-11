@@ -70,6 +70,7 @@ struct diskdump_data {
 	ulong	cached_reads;
 	ulong  *valid_pages;
 	ulong   accesses;
+	ulong	snapshot_task;
 };
 
 static struct diskdump_data diskdump_data = { 0 };
@@ -314,6 +315,12 @@ process_elf64_notes(void *note_buf, unsigned long size_note)
 		if (nt->n_type == NT_PRSTATUS) {
 			dd->nt_prstatus_percpu[num] = nt;
 			num++;
+		}
+		if ((nt->n_type == NT_TASKSTRUCT) && 
+		    (STRNEQ((char *)nt + sizeof(Elf64_Nhdr), "SNAP"))) {
+			pc->flags2 |= (LIVE_DUMP|SNAP);
+			dd->snapshot_task = 
+			    *((ulong *)((char *)nt + sizeof(Elf64_Nhdr) + nt->n_namesz));
 		}
 		len = sizeof(Elf64_Nhdr);
 		if (STRNEQ((char *)nt + len, "QEMU")) {
@@ -1262,6 +1269,9 @@ get_diskdump_panic_task(void)
 	    || !get_active_set())
 		return NO_TASK;
 
+	if (pc->flags2 & SNAP)
+		return (task_exists(dd->snapshot_task) ? dd->snapshot_task : NO_TASK);
+
 	if (DISKDUMP_VALID())
 		return (ulong)dd->header->tasks[dd->header->current_cpu];
 
@@ -1826,6 +1836,8 @@ __diskdump_memory_dump(FILE *fp)
 				display_ELF_note(dd->machine_type, PRSTATUS_NOTE,
 					 dd->nt_prstatus_percpu[i], fp);
 			}
+			fprintf(fp, "       snapshot_task: %lx %s\n", dd->snapshot_task, 
+				dd->snapshot_task ? "(NT_TASKSTRUCT)" : "");
 			fprintf(fp, "      num_qemu_notes: %d\n",
 				dd->num_qemu_notes);
 			for (i = 0; i < dd->num_qemu_notes; i++) {

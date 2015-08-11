@@ -4714,7 +4714,7 @@ show_context(struct task_context *tc)
 		else if ((tc->task == tt->panic_task) &&
 			XENDUMP_DUMPFILE() && (kt->xen_flags & XEN_SUSPEND))
 			fprintf(fp, "(SUSPEND)");
-		else if (tc->task == tt->panic_task)
+		else if ((tc->task == tt->panic_task) && !(pc->flags2 & SNAP))
 			fprintf(fp, "(PANIC)");
 		else
 			fprintf(fp, "(ACTIVE)");
