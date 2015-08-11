@@ -6629,6 +6629,9 @@ panic_search(void)
 		goto found_panic_task;
 	}
 
+	if (pc->flags2 & LIVE_DUMP)
+		return NULL;
+
         BZERO(&foreach_data, sizeof(struct foreach_data));
         fd = &foreach_data;
 	fd->keys = 1;
