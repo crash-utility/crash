@@ -6636,7 +6636,10 @@ panic_search(void)
         fd = &foreach_data;
 	fd->keys = 1;
 	fd->keyword_array[0] = FOREACH_BT; 
-	fd->flags |= (FOREACH_t_FLAG|FOREACH_o_FLAG);
+	if (machine_type("S390X"))
+		fd->flags |= FOREACH_o_FLAG;
+	else
+		fd->flags |= (FOREACH_t_FLAG|FOREACH_o_FLAG);
 
 	dietask = lasttask = NO_TASK;
 	
