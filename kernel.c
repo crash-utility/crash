@@ -1427,11 +1427,11 @@ void
 cmd_dis(void)
 {
 	int c;
-	int do_load_module_filter, do_machdep_filter, reverse; 
+	int do_load_module_filter, do_machdep_filter, reverse, forward;
 	int unfiltered, user_mode, count_entered, bug_bytes_entered;
 	unsigned int radix;
 	ulong curaddr;
-	ulong revtarget;
+	ulong target;
 	ulong count;
 	ulong offset;
 	struct syment *sp;
@@ -1453,17 +1453,18 @@ cmd_dis(void)
 		return;
 	}
 
-	reverse = count_entered = bug_bytes_entered = FALSE;
+	reverse = forward = count_entered = bug_bytes_entered = FALSE;
 	sp = NULL;
 	unfiltered = user_mode = do_machdep_filter = do_load_module_filter = 0;
 	radix = 0;
+	target = 0;
 
 	req = (struct gnu_request *)GETBUF(sizeof(struct gnu_request));
 	req->buf = GETBUF(BUFSIZE);
 	req->flags |= GNU_FROM_TTY_OFF|GNU_RETURN_ON_ERROR;
 	req->count = 1;
 
-        while ((c = getopt(argcnt, args, "dxhulrUb:B:")) != EOF) {
+        while ((c = getopt(argcnt, args, "dxhulrfUb:B:")) != EOF) {
                 switch(c)
 		{
 		case 'd':
@@ -1490,7 +1491,17 @@ cmd_dis(void)
 			break;
 
 		case 'r':
+			if (forward)
+				error(FATAL, 
+					"-r and -f are mutually exclusive\n");
 			reverse = TRUE;
+			break;
+
+		case 'f':
+			if (reverse)
+				error(FATAL, 
+					"-r and -f are mutually exclusive\n");
+			forward = TRUE;
 			break;
 
 		case 'l':
@@ -1559,9 +1570,10 @@ cmd_dis(void)
                 }
 
                 if (args[++optind]) {
-			if (reverse) {
+			if (reverse || forward) {
 				error(INFO, 
-			            "count argument ignored with -r option\n");
+			            "count argument ignored with -%s option\n",
+				    	reverse ? "r" : "f");
 			} else {
                         	req->count = stol(args[optind], 
 					FAULT_ON_ERROR, NULL);
@@ -1589,212 +1601,131 @@ cmd_dis(void)
 			return;
 		}
 
+		req->command = GNU_RESOLVE_TEXT_ADDR;
+		gdb_interface(req);
+		req->flags &= ~GNU_COMMAND_FAILED;
+		if (reverse || forward || req->flags & GNU_FUNCTION_ONLY) {
+			if (sp) {
+				savename = sp->name;
+				if ((sp = next_symbol(NULL, sp)))
+					req->addr2 = sp->value;
+				else
+					error(FATAL, 
+				"unable to determine symbol after %s\n",
+						savename);
+			} else {
+				if ((sp = value_search(req->addr, NULL))
+				     && (sp = next_symbol(NULL, sp)))
+					req->addr2 = sp->value;	
+				else 
+					error(FATAL, dis_err, req->addr);
+			}
+		}
+
+		if (reverse || forward) {
+			target = req->addr;
+			if ((sp = value_search(target, NULL)) == NULL)
+				error(FATAL, "cannot resolve address: %lx\n", target);
+
+			req->addr = sp->value;
+		} else
+			count = 0;
 		do_load_module_filter = module_symbol(req->addr, NULL, NULL, 
 			NULL, *gdb_output_radix);
 
-		if (!reverse) {
-			req->command = GNU_RESOLVE_TEXT_ADDR;
-			gdb_interface(req);
-                        if ((req->flags & GNU_COMMAND_FAILED) ||
-			    do_load_module_filter ||
-			    (req->flags & GNU_FUNCTION_ONLY)) {
-				req->flags &= ~GNU_COMMAND_FAILED;
-				if (sp) {
-					savename = sp->name;
-                                        if ((sp = next_symbol(NULL, sp)))
-                                                req->addr2 = sp->value;
-					else
-                                		error(FATAL, 
-				        "unable to determine symbol after %s\n",
-                                        		savename);
-				} else {
-					if ((sp = value_search(req->addr, NULL))
-                                             && (sp = next_symbol(NULL, sp)))
-						req->addr2 = sp->value;	
-					else 
-						error(FATAL, dis_err, req->addr);
-				}
-                        }
+		do_machdep_filter = machdep->dis_filter(req->addr, NULL, radix);
+		open_tmpfile();
 
-			do_machdep_filter = machdep->dis_filter(req->addr, NULL, radix);
-			count = 0;
-			open_tmpfile();
-#ifdef OLDWAY
-			req->command = GNU_DISASSEMBLE;
-			req->fp = pc->tmpfile;
-			gdb_interface(req);
-#else
-			sprintf(buf1, "x/%ldi 0x%lx",
-                                count_entered && req->count ? req->count : 
-				req->flags & GNU_FUNCTION_ONLY ? 
+		if (reverse)
+			sprintf(buf5, "x/%ldi 0x%lx",
+				(target - req->addr) ? target - req->addr : 1, 
+				req->addr);
+		else
+			sprintf(buf5, "x/%ldi 0x%lx",
+				count_entered && req->count ? req->count : 
+				forward || req->flags & GNU_FUNCTION_ONLY ? 
 				req->addr2 - req->addr : 1, 
 				req->addr);
-        		gdb_pass_through(buf1, NULL, GNU_RETURN_ON_ERROR);
-#endif
-			if (req->flags & GNU_COMMAND_FAILED) {
-				close_tmpfile();
-				error(FATAL, dis_err, req->addr);
+		gdb_pass_through(buf5, NULL, GNU_RETURN_ON_ERROR);
+
+		if (req->flags & GNU_COMMAND_FAILED) {
+			close_tmpfile();
+			error(FATAL, dis_err, req->addr);
+		}
+
+		rewind(pc->tmpfile);
+		while (fgets(buf2, BUFSIZE, pc->tmpfile)) {
+			if (STRNEQ(buf2, "Dump of") ||
+			    STRNEQ(buf2, "End of"))
+				continue;
+
+			strip_beginning_whitespace(buf2);
+
+			if (do_load_module_filter)
+				load_module_filter(buf2, LM_DIS_FILTER);
+
+			if (STRNEQ(buf2, "0x"))
+				extract_hex(buf2, &curaddr, ':', TRUE);
+
+			if (forward) {
+				if (curaddr != target)
+					continue;
+				else
+					forward = FALSE;
 			}
 
-        		rewind(pc->tmpfile);
-        		while (fgets(buf2, BUFSIZE, pc->tmpfile)) {
-				if (STRNEQ(buf2, "Dump of") ||
-				    STRNEQ(buf2, "End of"))
-					continue;
-
-				strip_beginning_whitespace(buf2);
-
-				if (do_load_module_filter)
-					load_module_filter(buf2, LM_DIS_FILTER);
-
-				if (STRNEQ(buf2, "0x")) 
-					extract_hex(buf2, &curaddr, ':', TRUE);
-
-				if ((req->flags & GNU_FUNCTION_ONLY) &&
+			if (!reverse)
+				if (!count_entered && req->addr2 &&
 				    (curaddr >= req->addr2))
 					break;
 
-				if (do_machdep_filter)
-					machdep->dis_filter(curaddr, buf2, radix);
+			if (do_machdep_filter)
+				machdep->dis_filter(curaddr, buf2, radix);
 
-				if (req->flags & GNU_FUNCTION_ONLY) {
-                                        if (req->flags & 
-                                            GNU_PRINT_LINE_NUMBERS) {
-                                                get_line_number(curaddr, buf3,
-                                                        FALSE);
-                                                if (!STREQ(buf3, buf4)) {
-                                                        print_verbatim(
-                                                            pc->saved_fp, buf3);
-                                                        print_verbatim(
-                                                            pc->saved_fp, "\n");
-                                                        strcpy(buf4, buf3);
-                                                }
-                                        }
-
-                			print_verbatim(pc->saved_fp, buf2); 
-					continue;
-				} else {
-					if (curaddr < req->addr) 
-						continue;
-
-                			if (req->flags & 
-					    GNU_PRINT_LINE_NUMBERS) {
-                        			get_line_number(curaddr, buf3, 
-							FALSE);
-                        			if (!STREQ(buf3, buf4)) {
-                                			print_verbatim(
-							    pc->saved_fp, buf3);
-                                			print_verbatim(
-						            pc->saved_fp, "\n");
-                                			strcpy(buf4, buf3);
-                        			}
-                			} 
-
-                			print_verbatim(pc->saved_fp, buf2);
-
-					if (LASTCHAR(clean_line(buf2)) 
-						!= ':') {
-						if (++count == req->count)
-							break;
-					}
+			if (req->flags & GNU_PRINT_LINE_NUMBERS) {
+				get_line_number(curaddr, buf3,
+					FALSE);
+				if (!STREQ(buf3, buf4)) {
+					print_verbatim(
+					    pc->saved_fp, buf3);
+					print_verbatim(
+					    pc->saved_fp, "\n");
+					strcpy(buf4, buf3);
 				}
-        		}
-			close_tmpfile();
+			}
+
+			print_verbatim(pc->saved_fp, buf2); 
+			if (reverse) {
+				if (curaddr == target) {
+					if (LASTCHAR(clean_line(buf2)) != ':') 
+						break;
+
+					ret = fgets(buf2, BUFSIZE, pc->tmpfile);
+
+					if (do_load_module_filter)
+						load_module_filter(buf2, LM_DIS_FILTER);
+
+					if (do_machdep_filter) 
+						machdep->dis_filter(curaddr, buf2, radix);
+
+					print_verbatim(pc->saved_fp, buf2);
+					break;
+				}
+			}
+
+			if (count_entered && LASTCHAR(clean_line(buf2)) != ':')
+				if (++count == req->count)
+					break;
 		}
+		close_tmpfile();
         }
         else if (bug_bytes_entered)
 		return;
 	else cmd_usage(pc->curcmd, SYNOPSIS);
 
-	if (!reverse) {
-		FREEBUF(req->buf);
-		FREEBUF(req);
-		return;
-	}
-
-        revtarget = req->addr;
-        if ((sp = value_search(revtarget, NULL)) == NULL)
-                error(FATAL, "cannot resolve address: %lx\n", revtarget);
-
-        sprintf(buf1, "0x%lx", revtarget);
-
-        open_tmpfile();
-
-        req->addr = sp->value;
-        req->flags |= GNU_FUNCTION_ONLY;
-        req->command = GNU_RESOLVE_TEXT_ADDR;
-        gdb_interface(req);
-        req->flags &= ~GNU_COMMAND_FAILED;
-	savename = sp->name;
-        if ((sp = next_symbol(NULL, sp)))
-                req->addr2 = sp->value;
-        else {
-		close_tmpfile();
-                error(FATAL, "unable to determine symbol after %s\n", savename);
-	}
-
-	do_machdep_filter = machdep->dis_filter(req->addr, NULL, radix);
-#ifdef OLDWAY
-	req->command = GNU_DISASSEMBLE;
-	req->fp = pc->tmpfile;
-	gdb_interface(req);
-#else
-        sprintf(buf5, "x/%ldi 0x%lx",
-        	(revtarget - req->addr) ? revtarget - req->addr : 1, 
-		req->addr);
-        gdb_pass_through(buf5, NULL, GNU_RETURN_ON_ERROR);
-#endif
-        if (req->flags & GNU_COMMAND_FAILED) {
-		close_tmpfile();
-        	error(FATAL, dis_err, req->addr);
-	}
-
-        rewind(pc->tmpfile);
-        while (fgets(buf2, BUFSIZE, pc->tmpfile)) {
-                if (STRNEQ(buf2, "Dump of") || STRNEQ(buf2, "End of"))
-                	continue;
-
-		strip_beginning_whitespace(buf2);
-
-                if (do_load_module_filter)
-                        load_module_filter(buf2, LM_DIS_FILTER);
-
-                if (STRNEQ(buf2, "0x"))
-                	extract_hex(buf2, &curaddr, ':', TRUE);
-
-		if (do_machdep_filter)
-			machdep->dis_filter(curaddr, buf2, radix);
-
-		if (req->flags & GNU_PRINT_LINE_NUMBERS) {
-			get_line_number(curaddr, buf3, FALSE);
-			if (!STREQ(buf3, buf4)) {
-				print_verbatim(pc->saved_fp, buf3);
-				print_verbatim(pc->saved_fp, "\n");
-				strcpy(buf4, buf3);
-			}
-		}
-
-                print_verbatim(pc->saved_fp, buf2);
-                if (STRNEQ(buf2, buf1)) {
-                	if (LASTCHAR(clean_line(buf2)) != ':') 
-                        	break;
-
-        		ret = fgets(buf2, BUFSIZE, pc->tmpfile);
-
-                	if (do_load_module_filter)
-                        	load_module_filter(buf2, LM_DIS_FILTER);
-
-			if (do_machdep_filter) 
-				machdep->dis_filter(curaddr, buf2, radix);
-
-                	print_verbatim(pc->saved_fp, buf2);
-			break;
-		}
-        }
-
-        close_tmpfile();
 	FREEBUF(req->buf);
 	FREEBUF(req);
+	return;
 }
 
 /*
