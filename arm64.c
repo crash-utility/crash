@@ -1655,10 +1655,10 @@ arm64_dis_filter(ulong vaddr, char *inbuf, unsigned int output_radix)
 	if ((FIRSTCHAR(argv[argc-1]) == '<') &&
 	    (LASTCHAR(argv[argc-1]) == '>')) {
 		p1 = rindex(inbuf, '<');
-		while ((p1 > inbuf) && !STRNEQ(p1, " 0x"))
+		while ((p1 > inbuf) && !(STRNEQ(p1, " 0x") || STRNEQ(p1, "\t0x")))
 			p1--;
 
-		if (!STRNEQ(p1, " 0x"))
+		if (!(STRNEQ(p1, " 0x") || STRNEQ(p1, "\t0x")))
 			return FALSE;
 		p1++;
 
