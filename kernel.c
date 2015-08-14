@@ -1660,10 +1660,6 @@ cmd_dis(void)
 
 		rewind(pc->tmpfile);
 		while (fgets(buf2, BUFSIZE, pc->tmpfile)) {
-			if (STRNEQ(buf2, "Dump of") ||
-			    STRNEQ(buf2, "End of"))
-				continue;
-
 			strip_beginning_whitespace(buf2);
 
 			if (do_load_module_filter)
@@ -1673,7 +1669,7 @@ cmd_dis(void)
 				extract_hex(buf2, &curaddr, ':', TRUE);
 
 			if (forward) {
-				if (curaddr != target)
+				if (curaddr < target)
 					continue;
 				else
 					forward = FALSE;
@@ -1701,7 +1697,7 @@ cmd_dis(void)
 
 			print_verbatim(pc->saved_fp, buf2); 
 			if (reverse) {
-				if (curaddr == target) {
+				if (curaddr >= target) {
 					if (LASTCHAR(clean_line(buf2)) != ':') 
 						break;
 
