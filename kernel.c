@@ -1434,6 +1434,7 @@ cmd_dis(void)
 	ulong target;
 	ulong count;
 	ulong offset;
+	ulong low, high;
 	struct syment *sp;
 	struct gnu_request *req;
 	char *savename; 
@@ -1604,8 +1605,12 @@ cmd_dis(void)
 		req->command = GNU_RESOLVE_TEXT_ADDR;
 		gdb_interface(req);
 		req->flags &= ~GNU_COMMAND_FAILED;
+
 		if (reverse || forward || req->flags & GNU_FUNCTION_ONLY) {
-			if (sp) {
+			if (get_text_function_range(sp ? sp->value : req->addr,
+			    &low, &high))
+				req->addr2 = high;
+			else if (sp) {
 				savename = sp->name;
 				if ((sp = next_symbol(NULL, sp)))
 					req->addr2 = sp->value;

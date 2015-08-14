@@ -1776,3 +1776,18 @@
  		if (STREQ(TYPE_FIELD_NAME(type, i), req->name)) {
  			req->tagname = "(unknown)";
  			req->value = lastval;
+--- gdb-7.6/gdb/symtab.c.orig
++++ gdb-7.6/gdb/symtab.c
+@@ -5236,6 +5236,12 @@ gdb_command_funnel(struct gnu_request *r
+ 		gdb_set_crash_block(req);
+ 		break;
+ 
++	case GNU_GET_FUNCTION_RANGE:
++		sym = lookup_symbol(req->name, 0, VAR_DOMAIN, 0);
++		if (!find_pc_partial_function(req->pc, NULL, &req->addr, &req->addr2))
++			req->flags |= GNU_COMMAND_FAILED;
++		break;
++
+ 	default:
+ 		req->flags |= GNU_COMMAND_FAILED;
+ 		break;

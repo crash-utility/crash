@@ -2823,6 +2823,37 @@ is_rodata(ulong value, struct syment **spp)
 }
 
 /*
+ *  For a given kernel virtual address, request that gdb return 
+ *  the address range of the containing function.  For module 
+ *  text addresses, its debuginfo data must be loaded.
+ */
+int
+get_text_function_range(ulong vaddr, ulong *low, ulong *high)
+{
+	struct syment *sp;
+	struct gnu_request gnu_request, *req = &gnu_request;
+
+	if (!(sp = value_search(vaddr, NULL)))
+		return FALSE;
+
+	BZERO(req, sizeof(struct gnu_request));
+	req->command = GNU_GET_FUNCTION_RANGE;
+	req->pc = sp->value;
+	req->name = sp->name;
+	gdb_interface(req);
+	if (req->flags & GNU_COMMAND_FAILED)
+		return FALSE;
+
+	if ((vaddr < req->addr) || (vaddr >= req->addr2))
+		return FALSE;
+
+	*low = req->addr;
+	*high = req->addr2;
+
+	return TRUE;
+}
+
+/*
  *  "help -s" output
  */
 void

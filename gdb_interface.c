@@ -1,8 +1,8 @@
 /* gdb_interface.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015 David Anderson
+ * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -592,6 +592,9 @@ gdb_command_string(int cmd, char *buf, int live)
         case GNU_SET_CRASH_BLOCK:
                 sprintf(buf, "GNU_SET_CRASH_BLOCK");
 		break;
+	case GNU_GET_FUNCTION_RANGE:
+                sprintf(buf, "GNU_GET_FUNCTION_RANGE");
+                break;
 	case 0:
 		buf[0] = NULLCHAR;
 		break;

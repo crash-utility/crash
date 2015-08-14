@@ -4118,6 +4118,7 @@ struct gnu_request {
 #define GNU_GET_SYMBOL_TYPE      (15)
 #define GNU_USER_PRINT_OPTION 	 (16)
 #define GNU_SET_CRASH_BLOCK      (17)
+#define GNU_GET_FUNCTION_RANGE   (18)
 #define GNU_DEBUG_COMMAND       (100)
 /*
  *  GNU flags
@@ -4549,6 +4550,7 @@ int is_init_data(ulong value);
 int is_kernel_text_offset(ulong);
 int is_symbol_text(struct syment *);
 int is_rodata(ulong, struct syment **);
+int get_text_function_range(ulong, ulong *, ulong *);
 void datatype_init(void);
 struct syment *symbol_search(char *);
 struct syment *value_search(ulong, ulong *);
