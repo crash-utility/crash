@@ -458,10 +458,14 @@ main(int argc, char **argv)
 			continue;
 		}
 
-       		if (!file_exists(argv[optind], NULL)) {
-                	error(INFO, "%s: %s\n", argv[optind], strerror(ENOENT));
-                	program_usage(SHORT_FORM);
-        	} else if (!is_readable(argv[optind])) 
+		if (!file_exists(argv[optind], NULL)) {
+			error(INFO, "%s: %s\n", argv[optind], strerror(ENOENT));
+			program_usage(SHORT_FORM);
+		} else if (is_directory(argv[optind])) {
+			error(INFO, "%s: not a supported file format\n", 
+				argv[optind]);
+			program_usage(SHORT_FORM);
+		} else if (!is_readable(argv[optind])) 
 			program_usage(SHORT_FORM);
 
 		if (is_kernel(argv[optind])) {
