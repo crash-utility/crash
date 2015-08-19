@@ -5162,6 +5162,10 @@ PG_slab_flag_init(void)
 	       		if (CRASHDEBUG(2))
 				fprintf(fp, "PG_head_tail_mask: %lx\n", 
 					vt->PG_head_tail_mask);
+		} else if (vt->flags & PAGEFLAGS) {
+			vt->PG_head_tail_mask = 0;
+			error(WARNING, 
+				"SLUB: cannot determine how compound pages are linked\n\n");
 		}
 	} else {
 		if (enumerator_value("PG_tail", (long *)&flags))
@@ -5172,7 +5176,9 @@ PG_slab_flag_init(void)
 	       		if (CRASHDEBUG(2))
 				fprintf(fp, "PG_head_tail_mask: %lx (PG_compound|PG_reclaim)\n", 
 					vt->PG_head_tail_mask);
-		}
+		} else if (vt->flags & PAGEFLAGS) 
+			error(WARNING, 
+				"SLAB: cannot determine how compound pages are linked\n\n");
 	}
 
 	if (!vt->PG_slab)
