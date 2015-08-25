@@ -45,9 +45,11 @@ static ulonglong ktime_to_ns(const void *);
 static void dump_timer_data(void);
 static void dump_timer_data_tvec_bases_v1(void);
 static void dump_timer_data_tvec_bases_v2(void);
+static void dump_timer_data_tvec_bases_v3(void);
 struct tv_range;
 static void init_tv_ranges(struct tv_range *, int, int, int);
 static int do_timer_list(ulong,int, ulong *, void *,ulong *,struct tv_range *);
+static int do_timer_list_v3(ulong,int, ulong *, void *,ulong *);
 static int compare_timer_data(const void *, const void *);
 static void panic_this_kernel(void);
 static void dump_waitq(ulong, char *);
@@ -538,6 +540,15 @@ kernel_init()
 	        	MEMBER_OFFSET_INIT(tvec_s_vec, "tvec", "vec");
 		}
 	}
+
+	if (per_cpu_symbol_search("per_cpu__tvec_bases")) {
+		if (MEMBER_EXISTS("tvec_base", "migration_enabled"))
+			kt->flags2 |= TVEC_BASES_V3;
+		else
+			kt->flags |= TVEC_BASES_V2;
+	} else if (symbol_exists("tvec_bases"))
+		kt->flags |= TVEC_BASES_V1;
+
         STRUCT_SIZE_INIT(__wait_queue, "__wait_queue");
         if (VALID_STRUCT(__wait_queue)) {
 		if (MEMBER_EXISTS("__wait_queue", "task"))
@@ -5325,6 +5336,8 @@ dump_kernel_table(int verbose)
 		fprintf(fp, "%sKASLR", others++ ? "|" : "");
 	if (kt->flags2 & KASLR_CHECK)
 		fprintf(fp, "%sKASLR_CHECK", others++ ? "|" : "");
+	if (kt->flags2 & TVEC_BASES_V3)
+		fprintf(fp, "%sTVEC_BASES_V3", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
         fprintf(fp, "         stext: %lx\n", kt->stext);
@@ -7213,14 +7226,17 @@ dump_timer_data(void)
 	int flen, tdx, old_timers_exist;
         struct tv_range tv[TVN];
 
-	if (per_cpu_symbol_search("per_cpu__tvec_bases")) {
+	if (kt->flags2 & TVEC_BASES_V3) {
+		dump_timer_data_tvec_bases_v3();
+		return;
+	} else if (kt->flags & TVEC_BASES_V2) {
 		dump_timer_data_tvec_bases_v2();
 		return;
-	} else if (symbol_exists("tvec_bases")) {
+	} else if (kt->flags & TVEC_BASES_V1) {
 		dump_timer_data_tvec_bases_v1();
 		return;
-	} 
-
+	}
+		
 	BZERO(tv, sizeof(struct tv_range) * TVN);
 
 	vec_root_size = (i = ARRAY_LENGTH(timer_vec_root_vec)) ?
@@ -7371,8 +7387,6 @@ dump_timer_data_tvec_bases_v1(void)
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
 
-	kt->flags |= TVEC_BASES_V1;
-
 	/*
          */
         vec_root_size = (i = ARRAY_LENGTH(tvec_root_s_vec)) ?
@@ -7490,10 +7504,6 @@ dump_timer_data_tvec_bases_v2(void)
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
 
-	kt->flags |= TVEC_BASES_V2;
-
-	/*
-         */
         vec_root_size = (i = ARRAY_LENGTH(tvec_root_s_vec)) ?
                 i : get_array_length("tvec_root_s.vec", NULL, SIZE(list_head));
 	if (!vec_root_size && 
@@ -7622,6 +7632,140 @@ next_cpu:
 }
 
 /*
+ *  Linux 4.2 timers use new tvec_root, tvec and timer_list structures
+ */
+static void
+dump_timer_data_tvec_bases_v3(void)
+{
+	int i, cpu, tdx, flen;
+	struct timer_data *td;
+	int vec_root_size, vec_size;
+	struct tv_range tv[TVN];
+	ulong *vec, jiffies, highest, function;
+	ulong tvec_bases;
+	long count, head_size;
+	struct syment *sp;
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char buf3[BUFSIZE];
+
+	vec_root_size = vec_size = 0;
+	head_size = SIZE(hlist_head);
+
+	if ((i = get_array_length("tvec_root.vec", NULL, head_size)))
+		vec_root_size = i;
+	else
+		error(FATAL, "cannot determine tvec_root.vec[] array size\n");
+
+	if ((i = get_array_length("tvec.vec", NULL, head_size)))
+		vec_size = i;
+	else
+		error(FATAL, "cannot determine tvec.vec[] array size\n");
+
+	vec = (ulong *)GETBUF(head_size * MAX(vec_root_size, vec_size));
+	cpu = 0;
+
+next_cpu:
+	/*
+	 * hide data of offline cpu and goto next cpu
+	 */
+	if (hide_offline_cpu(cpu)) {
+	        fprintf(fp, "TVEC_BASES[%d]: [OFFLINE]\n", cpu);
+		if (++cpu < kt->cpus)
+			goto next_cpu;
+	}
+
+	count = 0;
+	td = (struct timer_data *)NULL;
+
+	BZERO(tv, sizeof(struct tv_range) * TVN);
+	init_tv_ranges(tv, vec_root_size, vec_size, cpu);
+
+	count += do_timer_list_v3(tv[1].base + OFFSET(tvec_root_s_vec),
+		vec_root_size, vec, NULL, NULL);
+	count += do_timer_list_v3(tv[2].base + OFFSET(tvec_s_vec),
+		vec_size, vec, NULL, NULL);
+	count += do_timer_list_v3(tv[3].base + OFFSET(tvec_s_vec),
+		vec_size, vec, NULL, NULL);
+	count += do_timer_list_v3(tv[4].base + OFFSET(tvec_s_vec),
+		vec_size, vec, NULL, NULL);
+	count += do_timer_list_v3(tv[5].base + OFFSET(tvec_s_vec),
+		vec_size, vec, NULL, NULL);
+
+	if (count)
+		td = (struct timer_data *)
+			GETBUF((count*2) * sizeof(struct timer_data));
+	tdx = 0;
+	highest = 0;
+	get_symbol_data("jiffies", sizeof(ulong), &jiffies);
+
+	do_timer_list_v3(tv[1].base + OFFSET(tvec_root_s_vec),
+		vec_root_size, vec, (void *)td, &highest);
+	do_timer_list_v3(tv[2].base + OFFSET(tvec_s_vec),
+		vec_size, vec, (void *)td, &highest);
+	do_timer_list_v3(tv[3].base + OFFSET(tvec_s_vec),
+		vec_size, vec, (void *)td, &highest);
+	do_timer_list_v3(tv[4].base + OFFSET(tvec_s_vec),
+		vec_size, vec, (void *)td, &highest);
+	tdx = do_timer_list_v3(tv[5].base + OFFSET(tvec_s_vec),
+		vec_size, vec, (void *)td, &highest);
+
+	qsort(td, tdx, sizeof(struct timer_data), compare_timer_data);
+
+	sp = per_cpu_symbol_search("per_cpu__tvec_bases");
+	if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF))
+		tvec_bases = sp->value + kt->__per_cpu_offset[cpu];
+	else
+		tvec_bases =  sp->value;
+
+	fprintf(fp, "TVEC_BASES[%d]: %lx\n", cpu, tvec_bases);
+
+	sprintf(buf1, "%ld", highest);
+	flen = MAX(strlen(buf1), strlen("JIFFIES"));
+	fprintf(fp, "%s\n", mkstring(buf1,flen, CENTER|RJUST, "JIFFIES"));
+	fprintf(fp, "%s\n", mkstring(buf1,flen, 
+		RJUST|LONG_DEC,MKSTR(jiffies)));
+
+	fprintf(fp, "%s  %s  %s\n",
+		mkstring(buf1, flen, CENTER|RJUST, "EXPIRES"),
+		mkstring(buf2, VADDR_PRLEN, CENTER|LJUST, "TIMER_LIST"),
+		mkstring(buf3, VADDR_PRLEN, CENTER|LJUST, "FUNCTION"));
+
+	for (i = 0; i < tdx; i++) {
+		fprintf(fp, "%s",
+			mkstring(buf1, flen, RJUST|LONG_DEC, MKSTR(td[i].expires)));
+
+		fprintf(fp, "  %s  ", mkstring(buf1, 
+			MAX(VADDR_PRLEN, strlen("TIMER_LIST")), 
+			RJUST|CENTER|LONG_HEX, MKSTR(td[i].address)));
+
+		if (is_kernel_text(td[i].function)) {
+			fprintf(fp, "%s  <%s>\n",
+				mkstring(buf2, VADDR_PRLEN, RJUST|LONG_HEX,
+				MKSTR(td[i].function)),
+				value_to_symstr(td[i].function, buf1, 0));
+		} else {
+			fprintf(fp, "%s  ", mkstring(buf1, VADDR_PRLEN, 
+				RJUST|LONG_HEX, MKSTR(td[i].function)));
+			if (readmem(td[i].function, KVADDR, &function,
+			    sizeof(ulong), "timer function",
+			    RETURN_ON_ERROR|QUIET)) {
+				if (is_kernel_text(function))
+					fprintf(fp, "<%s>",
+						value_to_symstr(function, buf1, 0));
+			}
+			fprintf(fp, "\n");
+		}
+	}
+
+	if (td)
+		FREEBUF(td);
+
+	if (++cpu < kt->cpus)
+		goto next_cpu;
+}
+
+/*
  *  The comparison function must return an integer less  than,
  *  equal  to,  or  greater than zero if the first argument is
  *  considered to be respectively  less  than,  equal  to,  or
@@ -7667,7 +7811,8 @@ init_tv_ranges(struct tv_range *tv, int vec_root_size, int vec_size, int cpu)
 
                 tv[5].base = tv[4].end;
                 tv[5].end = tv[5].base + SIZE(tvec_s);
-	} else if (kt->flags & TVEC_BASES_V2) {
+	} else if ((kt->flags & TVEC_BASES_V2) ||
+		   (kt->flags2 & TVEC_BASES_V3)) {
 		sp = per_cpu_symbol_search("per_cpu__tvec_bases");
 		if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF))
 			tvec_bases = sp->value + kt->__per_cpu_offset[cpu];
@@ -7785,8 +7930,10 @@ do_timer_list(ulong vec_kvaddr,
 
 			hq_open();
                 	timer_cnt = do_list(ld);
-			if (!timer_cnt)
+			if (!timer_cnt) {
+				hq_close();
 				continue;
+			}
                 	timer_list = (ulong *)GETBUF(timer_cnt * sizeof(ulong));
                 	timer_cnt = retrieve_list(timer_list, timer_cnt);
                 	hq_close();
@@ -7873,6 +8020,90 @@ new_timer_list_format:
                                         *highest = expires;
                                 tdx++;
                         }
+		}
+		FREEBUF(timer_list);
+	}
+
+	FREEBUF(timer_list_buf);
+
+	return(td ? tdx : count);
+}
+
+static int
+do_timer_list_v3(ulong vec_kvaddr,
+	      int size, 
+	      ulong *vec, 
+	      void *option, 
+	      ulong *highest)
+{
+	int i, t; 
+	int count, tdx;
+	ulong expires, function;
+	struct timer_data *td;
+	char *timer_list_buf;
+	ulong *timer_list;
+	int timer_cnt;
+	struct list_data list_data, *ld;
+
+	tdx = 0;
+	td = option ? (struct timer_data *)option : NULL;
+	if (td) {
+		while (td[tdx].function)
+			tdx++;
+	}
+
+	readmem(vec_kvaddr, KVADDR, vec, SIZE(hlist_head) * size, 
+		"timer_list vec array", FAULT_ON_ERROR);
+
+	ld = &list_data;
+	timer_list_buf = GETBUF(SIZE(timer_list));
+
+	for (i = count = 0; i < size; i++, vec_kvaddr += SIZE(hlist_head)) {
+
+		if (vec[i] == 0)
+			continue;
+
+		BZERO(ld, sizeof(struct list_data));
+		ld->start = vec[i];
+		ld->list_head_offset = OFFSET(timer_list_entry);
+		ld->end = vec_kvaddr;
+		ld->flags = RETURN_ON_LIST_ERROR;
+
+		hq_open();
+		if ((timer_cnt = do_list(ld)) == -1) {
+			/* Ignore chains with errors */
+			error(INFO, 
+		      "ignoring faulty timer list at index %d of timer array\n", i);
+			continue; 
+		}
+		if (!timer_cnt) {
+			hq_close();
+			continue;
+		}
+		timer_list = (ulong *)GETBUF(timer_cnt * sizeof(ulong));
+		timer_cnt = retrieve_list(timer_list, timer_cnt);
+		hq_close();
+
+		for (t = 0; t < timer_cnt; t++) {
+			count++;
+
+			readmem(timer_list[t], KVADDR, timer_list_buf,
+				SIZE(timer_list), "timer_list buffer",
+				FAULT_ON_ERROR);
+
+			expires = ULONG(timer_list_buf + 
+				OFFSET(timer_list_expires));
+			function = ULONG(timer_list_buf +
+				OFFSET(timer_list_function));
+
+			if (td) {
+				td[tdx].address = timer_list[t];
+				td[tdx].expires = expires;
+				td[tdx].function = function;
+				if (highest && (expires > *highest))
+					*highest = expires;
+				tdx++;
+			}
 		}
 		FREEBUF(timer_list);
 	}

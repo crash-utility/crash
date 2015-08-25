@@ -623,6 +623,7 @@ struct new_utsname {
 #define KASLR                       (0x2ULL)
 #define KASLR_CHECK                 (0x4ULL)
 #define GET_TIMESTAMP               (0x8ULL)
+#define TVEC_BASES_V3              (0x10ULL)
 
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
