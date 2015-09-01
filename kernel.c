@@ -77,6 +77,7 @@ static void dump_log_legacy(void);
 static void dump_variable_length_record(void);
 static int is_livepatch(void);
 static void show_kernel_taints(char *, int);
+static void list_source_code(struct gnu_request *, int);
 
 
 /*
@@ -1317,6 +1318,155 @@ verify_namelist()
         program_usage(SHORT_FORM);
 }
 
+
+static void
+list_source_code(struct gnu_request *req, int count_entered)
+{
+	int argc, line, last, done, assembly;
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char buf3[BUFSIZE];
+	char file[BUFSIZE];
+        char *argv[MAXARGS];
+	struct syment *sp;
+	ulong remaining, offset;
+	char *p1;
+
+	sp = value_search(req->addr, &offset);
+	if (!sp || !is_symbol_text(sp))
+		error(FATAL, "%lx: not a kernel text address\n", req->addr);
+
+	sprintf(buf1, "list *0x%lx", req->addr);
+	open_tmpfile();
+	if (!gdb_pass_through(buf1, pc->tmpfile, GNU_RETURN_ON_ERROR)) {
+		close_tmpfile();
+		error(FATAL, "gdb command failed: %s\n", buf1);
+	}
+
+	done = FALSE;
+	last = line = assembly = file[0] = 0;
+	remaining = count_entered ? req->count : 0;
+
+	rewind(pc->tmpfile);
+	while (fgets(buf1, BUFSIZE, pc->tmpfile)) {
+		strcpy(buf2, buf1);
+		argc = parse_line(buf2, argv);
+		if (!line && hexadecimal(argv[0], 0) && 
+		    STREQ(argv[1], "is") && 
+		    (STREQ(argv[2], "in") || STREQ(argv[2], "at"))) {
+			/*
+			 *  Don't bother continuing beyond the initial
+			 *  list command if it's assembly language.
+			 */
+			if (STREQ(argv[2], "at"))
+				assembly = TRUE;
+
+			strip_beginning_char(argv[argc-1], '(');
+			strip_ending_char(argv[argc-1], '.');
+			strip_ending_char(argv[argc-1], ')');
+			p1 = strstr_rightmost(argv[argc-1], ":");
+			*p1 = NULLCHAR;
+			strcpy(file, argv[argc-1]);
+			line = atoi(p1+1);
+
+			fprintf(pc->saved_fp, "FILE: %s\nLINE: %d\n\n", file, line);
+
+			continue;
+		} 
+
+		/*
+		 *  Check for 2 possible results of unavailable source.
+		 */
+		if ((argc == 3) &&
+		    decimal(argv[0], 0) &&
+		    STREQ(argv[1], "in") &&
+		    STREQ(argv[2], file))
+			error(FATAL, 
+			    "%s: source code is not available\n\n", req->buf);
+
+		sprintf(buf3, "%s: No such file or directory.", file);
+		if (decimal(argv[0], 0) && strstr(buf1, buf3))
+			error(FATAL, 
+			    "%s: source code is not available\n\n", req->buf);
+
+		if (decimal(argv[0], 0)) {
+			if (count_entered && (last >= line)) {
+				if (!remaining--) {
+					done = TRUE;
+					break;
+				}
+			}
+			last = atoi(argv[0]);
+			fprintf(pc->saved_fp, "%s%s", 
+				last == line ? "* " : "  ", buf1);
+		} else
+			continue;
+
+		if (!count_entered && (last > line) && 
+		    STREQ(first_space(buf1), "\t}\n")) {
+			done = TRUE;
+			break;
+		}
+	}
+	close_tmpfile();
+
+	if (!line) {
+		fprintf(fp, "FILE: (unknown)\nLINE: (unknown)\n\n");
+		error(FATAL, "%s: source code is not available\n\n", req->buf);
+	}
+
+	if ((count_entered && !remaining) || (!count_entered && assembly)) {
+		fprintf(fp, "\n");
+		return;
+	}
+
+	/*
+	 *  If the end of the containing function or a specified count
+	 *  has not been reached, continue the listing until it has.
+	 */
+	while (!done) {
+		open_tmpfile();
+		if (!gdb_pass_through("list", fp, GNU_RETURN_ON_ERROR)) {
+			close_tmpfile();
+			return;
+		}
+		rewind(pc->tmpfile);
+		while (fgets(buf1, BUFSIZE, pc->tmpfile)) {
+			strcpy(buf2, buf1);
+			argc = parse_line(buf2, argv);
+
+			if (decimal(argv[0], 0))
+				line = atoi(argv[0]);
+			else
+				continue;
+
+			if (count_entered) {
+				if (!remaining--) {
+					done = TRUE;
+					break;
+				}
+			}
+
+			if (line == last) {
+				done = TRUE;
+				break;
+			}
+			last = line;
+
+			fprintf(pc->saved_fp, "  %s", buf1);
+
+			if (!count_entered && 
+			    STREQ(first_space(buf1), "\t}\n")) {
+				done = TRUE;
+				break;
+			}
+		}
+		close_tmpfile();
+	}
+
+	fprintf(fp, "\n");
+}
+
 /*
  *  From either a syment pointer, or a virtual address evaluated
  *  from a symbol name plus an offset value, determine whether 
@@ -1439,7 +1589,7 @@ cmd_dis(void)
 {
 	int c;
 	int do_load_module_filter, do_machdep_filter, reverse, forward;
-	int unfiltered, user_mode, count_entered, bug_bytes_entered;
+	int unfiltered, user_mode, count_entered, bug_bytes_entered, sources;
 	unsigned int radix;
 	ulong curaddr;
 	ulong target;
@@ -1465,18 +1615,17 @@ cmd_dis(void)
 		return;
 	}
 
-	reverse = forward = count_entered = bug_bytes_entered = FALSE;
+	reverse = forward = count_entered = bug_bytes_entered = sources = FALSE;
 	sp = NULL;
 	unfiltered = user_mode = do_machdep_filter = do_load_module_filter = 0;
 	radix = 0;
 	target = 0;
 
 	req = (struct gnu_request *)GETBUF(sizeof(struct gnu_request));
-	req->buf = GETBUF(BUFSIZE);
 	req->flags |= GNU_FROM_TTY_OFF|GNU_RETURN_ON_ERROR;
 	req->count = 1;
 
-        while ((c = getopt(argcnt, args, "dxhulrfUb:B:")) != EOF) {
+        while ((c = getopt(argcnt, args, "dxhulsrfUb:B:")) != EOF) {
                 switch(c)
 		{
 		case 'd':
@@ -1499,6 +1648,9 @@ cmd_dis(void)
 			break;
 
 		case 'u':
+			if (sources)
+				error(FATAL, 
+					"-s can only be used with kernel addresses\n");
 			user_mode = TRUE;
 			break;
 
@@ -1506,6 +1658,9 @@ cmd_dis(void)
 			if (forward)
 				error(FATAL, 
 					"-r and -f are mutually exclusive\n");
+			if (sources)
+				error(FATAL, 
+					"-r and -s are mutually exclusive\n");
 			reverse = TRUE;
 			break;
 
@@ -1513,6 +1668,9 @@ cmd_dis(void)
 			if (reverse)
 				error(FATAL, 
 					"-r and -f are mutually exclusive\n");
+			if (sources)
+				error(FATAL, 
+					"-f and -s are mutually exclusive\n");
 			forward = TRUE;
 			break;
 
@@ -1522,6 +1680,21 @@ cmd_dis(void)
 			else
 				req->flags |= GNU_PRINT_LINE_NUMBERS;
 			BZERO(buf4, BUFSIZE);
+			break;
+
+		case 's':
+			if (reverse)
+				error(FATAL, 
+					"-r and -s are mutually exclusive\n");
+			if (forward)
+				error(FATAL, 
+					"-f and -s are mutually exclusive\n");
+			if (user_mode)
+				error(FATAL, 
+					"-s can only be used with kernel addresses\n");
+			if (NO_LINE_NUMBERS())
+				error(INFO, "line numbers are not available\n");
+			sources = TRUE;
 			break;
 
 		case 'B':
@@ -1544,14 +1717,15 @@ cmd_dis(void)
 
         if (args[optind]) {
                 if (can_eval(args[optind])) {
+			req->buf = args[optind];
                         req->addr = eval(args[optind], FAULT_ON_ERROR, NULL);
 			if (!user_mode &&
 			    !resolve_text_symbol(args[optind], NULL, req, radix)) {
-				FREEBUF(req->buf);
 				FREEBUF(req);
 				return;
 			}
                 } else if (hexadecimal(args[optind], 0)) {
+			req->buf = args[optind];
                         req->addr = htol(args[optind], FAULT_ON_ERROR, NULL);
 			sp = value_search(req->addr, &offset);
 			if (!user_mode && !sp) {
@@ -1563,9 +1737,9 @@ cmd_dis(void)
 			if (!offset && sp && is_symbol_text(sp))
 				req->flags |= GNU_FUNCTION_ONLY;
                 } else if ((sp = symbol_search(args[optind]))) {
+			req->buf = args[optind];
                         req->addr = sp->value;
 			if (!resolve_text_symbol(args[optind], sp, req, radix)) {
-				FREEBUF(req->buf);
 				FREEBUF(req);
 				return;
 			}
@@ -1576,7 +1750,6 @@ cmd_dis(void)
                         fprintf(fp, "possible alternatives:\n");
                         if (!symbol_query(args[optind], "  ", NULL))
                                 fprintf(fp, "  (none found)\n");
-			FREEBUF(req->buf);
 			FREEBUF(req);
                         return;
                 }
@@ -1592,6 +1765,11 @@ cmd_dis(void)
 				req->flags &= ~GNU_FUNCTION_ONLY;
 				count_entered++;
 			}
+		}
+
+		if (sources) {
+			list_source_code(req, count_entered);
+			return;
 		}
 
 		if (unfiltered) {
@@ -1735,7 +1913,6 @@ cmd_dis(void)
 		return;
 	else cmd_usage(pc->curcmd, SYNOPSIS);
 
-	FREEBUF(req->buf);
 	FREEBUF(req);
 	return;
 }
