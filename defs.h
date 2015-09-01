@@ -732,6 +732,7 @@ struct kernel_table {                   /* kernel data */
 		ulong _stext_SYMBOL;
 	} vmcoreinfo;
 	ulonglong flags2;
+	char *source_tree;
 };
 
 /*

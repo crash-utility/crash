@@ -72,6 +72,7 @@ static struct option long_options[] = {
 	{"no_strip", 0, 0, 0},
 	{"hash", required_argument, 0, 0},
 	{"offline", required_argument, 0, 0},
+	{"src", required_argument, 0, 0},
         {0, 0, 0, 0}
 };
 
@@ -292,6 +293,9 @@ main(int argc, char **argv)
 					program_usage(SHORT_FORM);
 				}
 			}
+
+			else if (STREQ(long_options[option_index].name, "src"))
+				kt->source_tree = optarg;
 
 			else {
 				error(INFO, "internal error: option %s unhandled\n",

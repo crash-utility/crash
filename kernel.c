@@ -78,6 +78,7 @@ static void dump_variable_length_record(void);
 static int is_livepatch(void);
 static void show_kernel_taints(char *, int);
 static void list_source_code(struct gnu_request *, int);
+static void source_tree_init(void);
 
 
 /*
@@ -728,6 +729,9 @@ kernel_init()
 	if (INVALID_MEMBER(ktime_t_nsec))
 		MEMBER_OFFSET_INIT(ktime_t_nsec, "ktime_t", "nsec");
 
+	if (kt->source_tree)
+		source_tree_init();
+
 	kt->flags &= ~PRE_KERNEL_INIT;
 }
 
@@ -1316,6 +1320,39 @@ verify_namelist()
 		strlen(buffer2) > 48 ? "\n  " : "", buffer2);
 
         program_usage(SHORT_FORM);
+}
+
+/*
+ *  Set up the gdb source code path.
+ */
+static void
+source_tree_init(void)
+{
+	FILE *pipe;
+	char command[BUFSIZE];
+	char buf[BUFSIZE];
+
+	if (!is_directory(kt->source_tree)) {
+		error(INFO, "invalid --src argument: %s\n\n", 
+			kt->source_tree);
+		kt->source_tree = NULL;
+		return;
+	}
+
+	sprintf(command, "/usr/bin/ls -d %s/arch/*/include/asm 2>/dev/null", 
+		kt->source_tree);
+	if ((pipe = popen(command, "r"))) {
+		if (fgets(buf, BUFSIZE-1, pipe)) {
+			sprintf(command, "directory %s", buf);
+			gdb_pass_through(command, NULL, GNU_RETURN_ON_ERROR);
+		} 
+		pclose(pipe);
+	} else
+		error(INFO, "%s: %s\n", command, strerror(errno));
+
+	sprintf(command, "directory %s", kt->source_tree);
+	gdb_pass_through(command, NULL, GNU_RETURN_ON_ERROR);
+
 }
 
 
@@ -5557,6 +5594,8 @@ dump_kernel_table(int verbose)
 	fprintf(fp, "mods_installed: %d\n", kt->mods_installed);
 	fprintf(fp, "   module_tree: %s\n", kt->module_tree ? 
 		kt->module_tree : "(not used)");
+	fprintf(fp, "   source_tree: %s\n", kt->source_tree ? 
+		kt->source_tree : "(not used)");
 	if (!(pc->flags & KERNEL_DEBUG_QUERY) && ACTIVE()) 
 		get_xtime(&kt->date);
         fprintf(fp, "          date: %s\n",
