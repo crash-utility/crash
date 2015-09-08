@@ -702,8 +702,8 @@ arm64_uvtop(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, int verbos
 #define PMD_TYPE_MASK   3
 #define PMD_TYPE_SECT   1
 #define PMD_TYPE_TABLE  2
-#define SECTION_PAGE_MASK_2MB    (~((MEGABYTES(2))-1))
-#define SECTION_PAGE_MASK_512MB  (~((MEGABYTES(512))-1))
+#define SECTION_PAGE_MASK_2MB    ((long)(~((MEGABYTES(2))-1)))
+#define SECTION_PAGE_MASK_512MB  ((long)(~((MEGABYTES(512))-1)))
 
 static int 
 arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
@@ -729,7 +729,7 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	 */
 
 	if ((pgd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = pgd_val & SECTION_PAGE_MASK_512MB;
+		ulong sectionbase = (pgd_val & SECTION_PAGE_MASK_512MB) & PHYS_MASK;
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (512MB)\n\n", sectionbase);
 			arm64_translate_pte(pgd_val, 0, 0);
@@ -801,7 +801,7 @@ arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		goto no_page;
 
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = pmd_val & SECTION_PAGE_MASK_2MB;
+		ulong sectionbase = (pmd_val & SECTION_PAGE_MASK_2MB) & PHYS_MASK;
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (2MB)\n\n", sectionbase);
 			arm64_translate_pte(pmd_val, 0, 0);
