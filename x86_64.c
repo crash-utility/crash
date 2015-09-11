@@ -1,7 +1,7 @@
 /* x86_64.c -- core analysis suite
  *
- * Copyright (C) 2004-2014 David Anderson
- * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2015 David Anderson
+ * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -5537,12 +5537,13 @@ x86_64_framepointer_init(void)
 	unsigned int push_rbp_mov_rsp_rbp;
 	int i, check;
 	char *checkfuncs[] = {"sys_open", "sys_fork", "sys_read",
-		"do_futex", "do_fork", "vfs_read"};
+		"do_futex", "do_fork", "_do_fork", "sys_write", 
+		"vfs_read", "__schedule"};
 
 	if (pc->flags & KERNEL_DEBUG_QUERY)
 		return;
 
-	for (i = check = 0; i < 6; i++) {
+	for (i = check = 0; i < 9; i++) {
 		if (!kernel_symbol_exists(checkfuncs[i]))
 			continue;
 
@@ -5559,12 +5560,13 @@ x86_64_framepointer_init(void)
 				return;
 		}
 
-		if (push_rbp_mov_rsp_rbp == PUSH_RBP_MOV_RSP_RBP)
-			check++;
+		if (push_rbp_mov_rsp_rbp == PUSH_RBP_MOV_RSP_RBP) {
+			if (++check > 2) {
+				machdep->flags |= FRAMEPOINTER;
+				break;
+			}
+		}
         }
-
-	if (check >= 3)
-		machdep->flags |= FRAMEPOINTER;
 }
 
 static ulong
