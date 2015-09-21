@@ -1791,3 +1791,88 @@
  	default:
  		req->flags |= GNU_COMMAND_FAILED;
  		break;
+--- gdb-7.6/opcodes/i386-dis.c.orig
++++ gdb-7.6/opcodes/i386-dis.c
+@@ -11300,6 +11300,29 @@ get_sib (disassemble_info *info)
+     }
+ }
+ 
++static char *
++check_for_extensions(struct dis_private *priv)
++{
++	unsigned char ModRM;
++
++	if ((priv->the_buffer[0] == 0x66) &&
++	    (priv->the_buffer[1] == 0x0f) && 
++	    (priv->the_buffer[2] == 0xae)) {
++		ModRM = priv->the_buffer[3];
++		if (ModRM == 0xf8)
++			return "pcommit";
++
++		switch ((ModRM >> 3)) 
++		{
++		case 0x6:
++			return "clwb";
++		case 0x7: 
++			return "clflushopt";
++		}
++	}
++	return NULL;
++}
++
+ static int
+ print_insn (bfd_vma pc, disassemble_info *info)
+ {
+@@ -11312,6 +11335,7 @@ print_insn (bfd_vma pc, disassemble_info
+   struct dis_private priv;
+   int prefix_length;
+   int default_prefixes;
++  char *extension;
+ 
+   priv.orig_sizeflag = AFLAG | DFLAG;
+   if ((info->mach & bfd_mach_i386_i386) != 0)
+@@ -11575,6 +11599,7 @@ print_insn (bfd_vma pc, disassemble_info
+   need_vex = 0;
+   need_vex_reg = 0;
+   vex_w_done = 0;
++  extension = NULL;
+ 
+   if (dp->name == NULL && dp->op[0].bytemode == FLOATCODE)
+     {
+@@ -11610,9 +11635,14 @@ print_insn (bfd_vma pc, disassemble_info
+ 	    name = prefix_name (all_prefixes[i], priv.orig_sizeflag);
+ 	    if (name == NULL)
+ 	      name = INTERNAL_DISASSEMBLER_ERROR;
+-	    (*info->fprintf_func) (info->stream, "%s", name);
+-	    return 1;
+-	  }
++	    if ((extension = check_for_extensions(&priv))) {
++    	      strcpy(obuf, extension);
++	      obufp = &obuf[strlen(obuf)];
++	    } else {
++	      (*info->fprintf_func) (info->stream, "%s", name);
++	      return 1;
++	    }
++	 }
+     }
+ 
+   /* Check if the REX prefix is used.  */
+@@ -11637,7 +11667,7 @@ print_insn (bfd_vma pc, disassemble_info
+     all_prefixes[last_data_prefix] = 0;
+ 
+   prefix_length = 0;
+-  for (i = 0; i < (int) ARRAY_SIZE (all_prefixes); i++)
++  for (i = 0; !extension && i < (int) ARRAY_SIZE (all_prefixes); i++)
+     if (all_prefixes[i])
+       {
+ 	const char *name;
+@@ -11655,7 +11685,8 @@ print_insn (bfd_vma pc, disassemble_info
+       return MAX_CODE_LENGTH;
+     }
+ 
+-  obufp = mnemonicendp;
++  if (!extension)
++    obufp = mnemonicendp;
+   for (i = strlen (obuf) + prefix_length; i < 6; i++)
+     oappend (" ");
+   oappend (" ");
