@@ -21,10 +21,10 @@
 #include "defs.h"
 #include "netdump.h"
 #include "sadump.h"
+#include "xen_dom0.h"
 
 static struct vmcore_data vmcore_data = { 0 };
 static struct vmcore_data *nd = &vmcore_data;
-static struct xen_kdump_data xen_kdump_data = { 0 };
 static struct proc_kcore_data proc_kcore_data = { 0 };
 static struct proc_kcore_data *pkd = &proc_kcore_data;
 static void netdump_print(char *, ...);
@@ -40,7 +40,6 @@ static void get_netdump_regs_ppc(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_ppc64(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_arm(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_arm64(struct bt_info *, ulong *, ulong *);
-static physaddr_t xen_kdump_p2m(physaddr_t);
 static void check_dumpfile_size(char *);
 static int proc_kcore_init_32(FILE *fp);
 static int proc_kcore_init_64(FILE *fp);
@@ -1169,50 +1168,7 @@ netdump_memory_dump(FILE *fp)
 	netdump_print("            task_struct: %lx\n", nd->task_struct);
 	netdump_print("              page_size: %d\n", nd->page_size);
 	netdump_print("           switch_stack: %lx\n", nd->switch_stack);
-	netdump_print("         xen_kdump_data: %s\n",
-		XEN_CORE_DUMPFILE() ? " " : "(unused)");
-	if (XEN_CORE_DUMPFILE()) {
-		netdump_print("                    flags: %lx (", nd->xen_kdump_data->flags);
-		others = 0;
-        	if (nd->xen_kdump_data->flags & KDUMP_P2M_INIT)
-                	netdump_print("%sKDUMP_P2M_INIT", others++ ? "|" : "");
-        	if (nd->xen_kdump_data->flags & KDUMP_CR3)
-                	netdump_print("%sKDUMP_CR3", others++ ? "|" : "");
-        	if (nd->xen_kdump_data->flags & KDUMP_MFN_LIST)
-                	netdump_print("%sKDUMP_MFN_LIST", others++ ? "|" : "");
-		netdump_print(")\n");
-		netdump_print("                  p2m_mfn: %lx\n", 
-			nd->xen_kdump_data->p2m_mfn);
-		netdump_print("                      cr3: %lx\n", 
-			nd->xen_kdump_data->cr3);
-		netdump_print("            last_mfn_read: %lx\n", 
-			nd->xen_kdump_data->last_mfn_read);
-		netdump_print("            last_pmd_read: %lx\n", 
-			nd->xen_kdump_data->last_pmd_read);
-		netdump_print("                     page: %lx\n", 
-			nd->xen_kdump_data->page);
-		netdump_print("                 accesses: %ld\n", 
-			nd->xen_kdump_data->accesses);
-		netdump_print("               cache_hits: %ld ", 
-			nd->xen_kdump_data->cache_hits);
-      		if (nd->xen_kdump_data->accesses)
-                	netdump_print("(%ld%%)", 
-			    nd->xen_kdump_data->cache_hits * 100 / nd->xen_kdump_data->accesses);
-		netdump_print("\n               p2m_frames: %d\n", 
-			nd->xen_kdump_data->p2m_frames);
-		netdump_print("           xen_phys_start: %lx\n", 
-			nd->xen_kdump_data->xen_phys_start);
-		netdump_print("        xen_major_version: %d\n", 
-			nd->xen_kdump_data->xen_major_version);
-		netdump_print("        xen_minor_version: %d\n", 
-			nd->xen_kdump_data->xen_minor_version);
-		netdump_print("       p2m_mfn_frame_list: %lx\n", 
-			nd->xen_kdump_data->p2m_mfn_frame_list);
-		for (i = 0; i < nd->xen_kdump_data->p2m_frames; i++)
-			netdump_print("%lx ", 
-				nd->xen_kdump_data->p2m_mfn_frame_list[i]);
-		if (i) netdump_print("\n");
-	}
+	dump_xen_kdump_data(fp);
 	netdump_print("     num_prstatus_notes: %d\n", nd->num_prstatus_notes);
 	netdump_print("         num_qemu_notes: %d\n", nd->num_qemu_notes);
 	netdump_print("             vmcoreinfo: %lx\n", (ulong)nd->vmcoreinfo);
@@ -1878,7 +1834,7 @@ vmcoreinfo_read_integer(const char *key, long default_value)
 static size_t 
 dump_Elf32_Nhdr(Elf32_Off offset, int store)
 {
-	int i, lf, words;
+	int i, lf;
 	Elf32_Nhdr *note;
 	size_t len;
 	char buf[BUFSIZE];
@@ -2008,10 +1964,6 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 
 	case NT_XEN_KDUMP_CR3: 
                 netdump_print("(NT_XEN_KDUMP_CR3) [obsolete]\n");
-		if (store)
-			error(WARNING, 
-			    "obsolete Xen n_type: %lx (NT_XEN_KDUMP_CR3)\n\n", 
-				note->n_type);
 		/* FALL THROUGH */
 
 	case XEN_ELFNOTE_CRASH_INFO:
@@ -2021,39 +1973,10 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 		if (note->n_type == XEN_ELFNOTE_CRASH_INFO)
                 	netdump_print("(XEN_ELFNOTE_CRASH_INFO)\n");
 		xen_core = TRUE;
-		if (store) { 
-			pc->flags |= XEN_CORE;
-			nd->xen_kdump_data = &xen_kdump_data;
-			nd->xen_kdump_data->last_mfn_read = UNINITIALIZED;
-			nd->xen_kdump_data->last_pmd_read = UNINITIALIZED;
-
-			if ((note->n_type == NT_XEN_KDUMP_CR3) &&
-			    ((note->n_descsz/sizeof(ulong)) == 1)) {
-				nd->xen_kdump_data->flags |= KDUMP_CR3;
-				/*
-				 *  Use the first cr3 found.
-				 */
-				if (!nd->xen_kdump_data->cr3) {
-					uptr = (ulong *)(ptr + note->n_namesz);
-					uptr = (ulong *)roundup((ulong)uptr, 4);
-					nd->xen_kdump_data->cr3 = *uptr;
-				}
-			} else {
-				nd->xen_kdump_data->flags |= KDUMP_MFN_LIST;
-				uptr = (ulong *)(ptr + note->n_namesz);
-				uptr = (ulong *)roundup((ulong)uptr, 4);
-				words = note->n_descsz/sizeof(ulong);
-				/*
-				 *  If already set, overridden with --pfm_mfn
-				 */
-				if (!nd->xen_kdump_data->p2m_mfn)
-					nd->xen_kdump_data->p2m_mfn = *(uptr+(words-1));
-				if (words > 9 && !nd->xen_kdump_data->xen_phys_start)
-					nd->xen_kdump_data->xen_phys_start = *(uptr+(words-2));
-				nd->xen_kdump_data->xen_major_version = *uptr;
-				nd->xen_kdump_data->xen_minor_version = *(uptr+1);
-			}
-		}
+		if (store)
+			process_xen_note(note->n_type,
+					 ptr + roundup(note->n_namesz, 4),
+					 note->n_descsz);
 		break;
 
 	case XEN_ELFNOTE_CRASH_REGS:
@@ -2129,14 +2052,13 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 static size_t 
 dump_Elf64_Nhdr(Elf64_Off offset, int store)
 {
-	int i, lf, words;
+	int i, lf;
 	Elf64_Nhdr *note;
 	size_t len;
 	char buf[BUFSIZE];
 	char *ptr;
 	ulonglong *uptr;
 	int *iptr;
-	ulong *up;
 	int xen_core, vmcoreinfo, eraseinfo, qemuinfo;
 	uint64_t remaining, notesize;
 
@@ -2302,10 +2224,6 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 
 	case NT_XEN_KDUMP_CR3: 
                 netdump_print("(NT_XEN_KDUMP_CR3) [obsolete]\n");
-               	if (store)
-                	error(WARNING,
-                            "obsolete Xen n_type: %lx (NT_XEN_KDUMP_CR3)\n\n",
-                                note->n_type);
 		/* FALL THROUGH */
 
 	case XEN_ELFNOTE_CRASH_INFO:
@@ -2315,39 +2233,10 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 		if (note->n_type == XEN_ELFNOTE_CRASH_INFO)
                 	netdump_print("(XEN_ELFNOTE_CRASH_INFO)\n");
 		xen_core = TRUE;
-		if (store) {
-			pc->flags |= XEN_CORE;
-			nd->xen_kdump_data = &xen_kdump_data;
-			nd->xen_kdump_data->last_mfn_read = UNINITIALIZED;
-			nd->xen_kdump_data->last_pmd_read = UNINITIALIZED;
-
-			if ((note->n_type == NT_XEN_KDUMP_CR3) &&
-			    ((note->n_descsz/sizeof(ulong)) == 1)) {
-				nd->xen_kdump_data->flags |= KDUMP_CR3;
-	                        /*
-	                         *  Use the first cr3 found.
-	                         */
-	                        if (!nd->xen_kdump_data->cr3) {
-					up = (ulong *)(ptr + note->n_namesz);
-	                                up = (ulong *)roundup((ulong)up, 4);
-	                                nd->xen_kdump_data->cr3 = *up;
-	                        }
-			} else {
-				nd->xen_kdump_data->flags |= KDUMP_MFN_LIST;
-				up = (ulong *)(ptr + note->n_namesz);
-	                        up = (ulong *)roundup((ulong)up, 4);
-				words = note->n_descsz/sizeof(ulong);
-				/*
-				 *  If already set, overridden with --p2m_mfn
-				 */
-	                        if (!nd->xen_kdump_data->p2m_mfn)
-	                        	nd->xen_kdump_data->p2m_mfn = *(up+(words-1));
-				if (words > 9 && !nd->xen_kdump_data->xen_phys_start)
-					nd->xen_kdump_data->xen_phys_start = *(up+(words-2));
-				nd->xen_kdump_data->xen_major_version = *up;
-				nd->xen_kdump_data->xen_minor_version = *(up+1);
-			}
-		}
+		if (store)
+			process_xen_note(note->n_type,
+					 ptr + roundup(note->n_namesz, 4),
+					 note->n_descsz);
                 break;
 
         case XEN_ELFNOTE_CRASH_REGS:
@@ -3752,23 +3641,6 @@ read_kdump(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 	}
 
 	if (XEN_CORE_DUMPFILE() && !XEN_HYPER_MODE()) {
-	    	if (!(nd->xen_kdump_data->flags & KDUMP_P2M_INIT)) {
-        		if (!machdep->xen_kdump_p2m_create)
-                		error(FATAL,
-                            "xen kdump dumpfiles not supported on this architecture\n");
-
-			if ((nd->xen_kdump_data->page = 
-			    (char *)malloc(PAGESIZE())) == NULL)
-				error(FATAL,
-				    "cannot malloc xen kdump data page\n");
-
-			if (!machdep->xen_kdump_p2m_create(nd->xen_kdump_data))
-                		error(FATAL,
-                    	    "cannot create xen kdump pfn-to-mfn mapping\n");
-
-        		nd->xen_kdump_data->flags |= KDUMP_P2M_INIT;
-		}
-
 		if ((paddr = xen_kdump_p2m(paddr)) == P2M_FAILURE) {
 			if (CRASHDEBUG(8)) 
 				fprintf(fp, "read_kdump: xen_kdump_p2m(%llx): "
@@ -3827,70 +3699,6 @@ kdump_memory_dump(FILE *fp)
 	return netdump_memory_dump(fp);
 }
 
-/*
- *  Translate a xen domain's pseudo-physical address into the
- *  xen machine address.  Since there's no compression involved,
- *  just the last phys_to_machine_mapping[] page read is cached, 
- *  which essentially caches 1024 p2m translations. 
- */
-static physaddr_t 
-xen_kdump_p2m(physaddr_t pseudo)
-{
-	ulong pfn, mfn_frame; 
-	ulong *mfnptr;
-	ulong mfn_idx, frame_idx;
-	physaddr_t paddr;
-	struct xen_kdump_data *xkd = nd->xen_kdump_data;
-
-	if (pc->curcmd_flags & XEN_MACHINE_ADDR)
-		return pseudo;
-
-#ifdef IA64
-	return ia64_xen_kdump_p2m(xkd, pseudo);
-#endif
-
-	xkd->accesses++;
-
-	pfn = (ulong)BTOP(pseudo);
-	mfn_idx = pfn / (PAGESIZE()/sizeof(ulong));
-	frame_idx = pfn % (PAGESIZE()/sizeof(ulong));
-	if (mfn_idx >= xkd->p2m_frames) {
-		if (CRASHDEBUG(8))
-			fprintf(fp, "xen_kdump_p2m: paddr/pfn: %llx/%lx: "
-			    "mfn_idx nonexistent\n",
-				(ulonglong)pseudo, pfn);
-		return P2M_FAILURE;
-	}
-	mfn_frame = xkd->p2m_mfn_frame_list[mfn_idx];
-
-	if (mfn_frame == xkd->last_mfn_read)
-		xkd->cache_hits++;
-	else {
-		if (CRASHDEBUG(8))
-			fprintf(fp, "xen_kdump_p2m: paddr/pfn: %llx/%lx: "
-			    "read mfn_frame: %llx\n",
-				(ulonglong)pseudo, pfn, PTOB(mfn_frame));
-		if (read_netdump(0, xkd->page, PAGESIZE(), 0, 
-		    (physaddr_t)PTOB(mfn_frame)) != PAGESIZE())
-			return P2M_FAILURE;
-	}
-
-	xkd->last_mfn_read = mfn_frame;
-
-	mfnptr = ((ulong *)(xkd->page)) + frame_idx;
-	paddr = (physaddr_t)PTOB((ulonglong)(*mfnptr));  
-	paddr |= PAGEOFFSET(pseudo);
-
-	if (CRASHDEBUG(7))
-		fprintf(fp, 
-		    "xen_kdump_p2m(%llx): mfn_idx: %ld frame_idx: %ld"
-		    " mfn_frame: %lx mfn: %lx => %llx\n",
-			(ulonglong)pseudo, mfn_idx, frame_idx, 
-			mfn_frame, *mfnptr, (ulonglong)paddr);
-	
-	return paddr;
-}
-
 struct vmcore_data *
 get_kdump_vmcore_data(void)
 {
@@ -3899,81 +3707,6 @@ get_kdump_vmcore_data(void)
 
 	return &vmcore_data;
 }
-
-/*
- *  Override the dom0 p2m mfn in the XEN_ELFNOTE_CRASH_INFO note
- *  in order to initiate a crash session of a guest kernel.
- */
-void
-xen_kdump_p2m_mfn(char *arg)
-{
-	ulong value;
-	int errflag;
-
-	errflag = 0;
-	value = htol(arg, RETURN_ON_ERROR|QUIET, &errflag);
-	if (!errflag) {
-		xen_kdump_data.p2m_mfn = value;
-		if (CRASHDEBUG(1))
-			error(INFO, 
-			    "xen_kdump_data.p2m_mfn override: %lx\n",  
-				value); 
-	} else 
-		error(WARNING, "invalid p2m_mfn argument: %s\n", arg);
-}
-
-/*
- *  Fujitsu dom0/HV sadump-generated dumpfile, which requires
- *  the --p2m_mfn command line argument.
- */
-int
-is_sadump_xen(void)
-{
-	if (xen_kdump_data.p2m_mfn) {
-		if (!XEN_CORE_DUMPFILE()) {
-			pc->flags |= XEN_CORE;
-			nd->xen_kdump_data = &xen_kdump_data;
-			nd->xen_kdump_data->last_mfn_read = UNINITIALIZED;
-			nd->xen_kdump_data->last_pmd_read = UNINITIALIZED;
-			nd->xen_kdump_data->flags |= KDUMP_MFN_LIST;
-		}
-		return TRUE;
-	}
-
-	return FALSE;
-}
-
-void
-set_xen_phys_start(char *arg)
-{
-	ulong value;
-	int errflag = 0;
-
-	value = htol(arg, RETURN_ON_ERROR|QUIET, &errflag);
-	if (!errflag)
-		xen_kdump_data.xen_phys_start = value;
-	else 
-		error(WARNING, "invalid xen_phys_start argument: %s\n", arg);
-}
-
-ulong
-xen_phys_start(void)
-{
-	return nd->xen_kdump_data->xen_phys_start;
-}
-
-int
-xen_major_version(void)
-{
-	return nd->xen_kdump_data->xen_major_version;
-}
-
-int
-xen_minor_version(void)
-{
-	return nd->xen_kdump_data->xen_minor_version;
-}
-
 
 /*
  *  The following set of functions are not used by the crash

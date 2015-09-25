@@ -25,6 +25,7 @@
 
 #include "defs.h"
 #include "diskdump.h"
+#include "xen_dom0.h"
 
 #define BITMAP_SECT_LEN	4096
 
@@ -285,6 +286,13 @@ process_elf32_notes(void *note_buf, unsigned long size_note)
 			dd->nt_qemu_percpu[qemu_num] = nt;
 			qemu_num++;
 		}
+		if (nt->n_type == NT_XEN_KDUMP_CR3 ||
+		    nt->n_type == XEN_ELFNOTE_CRASH_INFO) {
+			void *data = (char*)(nt + 1) +
+				roundup(nt->n_namesz, 4);
+			process_xen_note(nt->n_type, data, nt->n_descsz);
+		}
+
 		len = roundup(len + nt->n_namesz, 4);
 		len = roundup(len + nt->n_descsz, 4);
 	}
@@ -326,6 +334,12 @@ process_elf64_notes(void *note_buf, unsigned long size_note)
 		if (STRNEQ((char *)nt + len, "QEMU")) {
 			dd->nt_qemu_percpu[qemu_num] = nt;
 			qemu_num++;
+		}
+		if (nt->n_type == NT_XEN_KDUMP_CR3 ||
+		    nt->n_type == XEN_ELFNOTE_CRASH_INFO) {
+			void *data = (char*)(nt + 1) +
+				roundup(nt->n_namesz, 4);
+			process_xen_note(nt->n_type, data, nt->n_descsz);
 		}
 
 		len = roundup(len + nt->n_namesz, 4);
@@ -1165,6 +1179,19 @@ read_diskdump(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 	int ret;
 	physaddr_t curpaddr;
 	ulong pfn, page_offset;
+	physaddr_t paddr_in = paddr;
+
+	if (XEN_CORE_DUMPFILE() && !XEN_HYPER_MODE()) {
+		if ((paddr = xen_kdump_p2m(paddr)) == P2M_FAILURE) {
+			if (CRASHDEBUG(8))
+				fprintf(fp, "read_diskdump: xen_kdump_p2m(%llx): "
+					"P2M_FAILURE\n", (ulonglong)paddr_in);
+			return READ_ERROR;
+		}
+		if (CRASHDEBUG(8))
+			fprintf(fp, "read_diskdump: xen_kdump_p2m(%llx): %llx\n",
+				(ulonglong)paddr_in, (ulonglong)paddr);
+	}
 
 	pfn = paddr_to_pfn(paddr);
 

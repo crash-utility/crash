@@ -3848,6 +3848,7 @@ ia64_vtop_xen_wpt(ulong vaddr, physaddr_t *paddr, ulong *pgd, int verbose, int u
 }
 
 #include "netdump.h"
+#include "xen_dom0.h"
 
 /*
  *  Determine the relocatable physical address base.
@@ -3982,13 +3983,12 @@ static int
 ia64_xen_kdump_p2m_create(struct xen_kdump_data *xkd)
 {
 	/*
-	 *  Temporarily read physical (machine) addresses from vmcore by
-	 *  going directly to read_netdump() instead of via read_kdump().
+	 *  Temporarily read physical (machine) addresses from vmcore.
 	 */
-	pc->readmem = read_netdump;
+	pc->curcmd_flags |= XEN_MACHINE_ADDR;
 
 	if (CRASHDEBUG(1)) {
-		fprintf(fp, "readmem (temporary): read_netdump()\n");
+		fprintf(fp, "readmem (temporary): force XEN_MACHINE_ADDR\n");
 		fprintf(fp, "ia64_xen_kdump_p2m_create: p2m_mfn: %lx\n", xkd->p2m_mfn);
 	}
 
@@ -4001,9 +4001,9 @@ ia64_xen_kdump_p2m_create(struct xen_kdump_data *xkd)
 
 	xkd->p2m_frames = PAGESIZE()/sizeof(ulong);
 
-	pc->readmem = read_kdump;
+	pc->curcmd_flags &= ~XEN_MACHINE_ADDR;
 	if (CRASHDEBUG(1))
-		fprintf(fp, "readmem (restore): read_kdump()\n");
+		fprintf(fp, "readmem (restore): p2m translation\n");
 
 	return TRUE;
 }
@@ -4016,12 +4016,11 @@ ia64_xen_kdump_p2m(struct xen_kdump_data *xkd, physaddr_t pseudo)
 	physaddr_t paddr;
 
 	/*
-	 *  Temporarily read physical (machine) addresses from vmcore by
-	 *  going directly to read_netdump() instead of via read_kdump().
+	 *  Temporarily read physical (machine) addresses from vmcore.
 	 */
-	pc->readmem = read_netdump;
+	pc->curcmd_flags |= XEN_MACHINE_ADDR;
 	if (CRASHDEBUG(1))
-		fprintf(fp, "readmem (temporary): read_netdump()\n");
+		fprintf(fp, "readmem (temporary): force XEN_MACHINE_ADDR\n");
 
 	xkd->accesses += 2;
 
@@ -4073,9 +4072,9 @@ ia64_xen_kdump_p2m(struct xen_kdump_data *xkd, physaddr_t pseudo)
 	paddr = (paddr & _PFN_MASK) | PAGEOFFSET(pseudo);
 
 out:
-	pc->readmem = read_kdump;
+	pc->curcmd_flags &= ~XEN_MACHINE_ADDR;
 	if (CRASHDEBUG(1))
-		fprintf(fp, "readmem (restore): read_kdump()\n");
+		fprintf(fp, "readmem (restore): p2m translation\n");
 
 	return paddr;
 }

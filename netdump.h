@@ -68,7 +68,6 @@ struct vmcore_data {
 	ulong switch_stack;
 	uint num_prstatus_notes;
 	void *nt_prstatus_percpu[NR_CPUS];
-	struct xen_kdump_data *xen_kdump_data;
 	void *vmcoreinfo;
 	uint size_vmcoreinfo;
 /* Backup Region, first 640K of System RAM. */
@@ -81,58 +80,6 @@ struct vmcore_data {
 };
 
 #define DUMP_ELF_INCOMPLETE  0x1   /* dumpfile is incomplete */
-
-/*
- *  ELF note types for Xen dom0/hypervisor kdumps.
- *  The comments below are from xen/include/public/elfnote.h.
- */
-
-/*
- * System information exported through crash notes.
- *
- * The kexec / kdump code will create one XEN_ELFNOTE_CRASH_INFO
- * note in case of a system crash. This note will contain various
- * information about the system, see xen/include/xen/elfcore.h.
- */
-#define XEN_ELFNOTE_CRASH_INFO 0x1000001
-
-/*
- * System registers exported through crash notes.
- *
- * The kexec / kdump code will create one XEN_ELFNOTE_CRASH_REGS
- * note per cpu in case of a system crash. This note is architecture
- * specific and will contain registers not saved in the "CORE" note.
- * See xen/include/xen/elfcore.h for more information.
- */
-#define XEN_ELFNOTE_CRASH_REGS 0x1000002
-
-
-/* 
- * For (temporary) backwards compatibility.
- */
-#define NT_XEN_KDUMP_CR3 0x10000001
-
-struct xen_kdump_data {
-	ulong flags;
-	ulong cr3;
-	ulong p2m_mfn;
-	char *page;
-	ulong last_mfn_read;
-	ulong last_pmd_read;
-	ulong cache_hits;
-	ulong accesses;
-	int p2m_frames;
-        ulong *p2m_mfn_frame_list;
-	ulong xen_phys_start;
-	int xen_major_version;
-	int xen_minor_version;
-};
-
-#define KDUMP_P2M_INIT  (0x1)
-#define KDUMP_CR3       (0x2)
-#define KDUMP_MFN_LIST  (0x4)
-
-#define P2M_FAILURE ((physaddr_t)(0xffffffffffffffffLL))
 
 /*
  * S390 CPU timer ELF note

@@ -4519,6 +4519,7 @@ xen_m2p_nonPAE(ulong machine)
 }
 
 #include "netdump.h"
+#include "xen_dom0.h"
 
 /*
  *  From the xen vmcore, create an index of mfns for each page that makes 
@@ -4540,12 +4541,11 @@ x86_xen_kdump_p2m_create(struct xen_kdump_data *xkd)
 	int mfns[MAX_X86_FRAMES] = { 0 };
 
 	/*
-	 *  Temporarily read physical (machine) addresses from vmcore by
-	 *  going directly to read_netdump() instead of via read_kdump().
+	 *  Temporarily read physical (machine) addresses from vmcore.
 	 */ 
-	pc->readmem = read_netdump;
+	pc->curcmd_flags |= XEN_MACHINE_ADDR;
 	if (CRASHDEBUG(1)) 
-		fprintf(fp, "readmem (temporary): read_netdump()\n");
+		fprintf(fp, "readmem (temporary): force XEN_MACHINE_ADDR\n");
 
 	if (xkd->flags & KDUMP_CR3)
 		goto use_cr3;
@@ -4622,9 +4622,9 @@ x86_xen_kdump_p2m_create(struct xen_kdump_data *xkd)
                 fprintf(fp, "\n");
         }
 
-	pc->readmem = read_kdump;
+	pc->curcmd_flags &= ~XEN_MACHINE_ADDR;
 	if (CRASHDEBUG(1)) 
-		fprintf(fp, "readmem (restore): read_kdump()\n");
+		fprintf(fp, "readmem (restore): p2m translation\n");
 
 	return TRUE;
 
@@ -4713,9 +4713,9 @@ use_cr3:
         machdep->last_ptbl_read = 0;
         machdep->last_pmd_read = 0;
         machdep->last_pgd_read = 0;
-	pc->readmem = read_kdump;
+	pc->curcmd_flags &= ~XEN_MACHINE_ADDR;
 	if (CRASHDEBUG(1)) 
-		fprintf(fp, "readmem (restore): read_kdump()\n");
+		fprintf(fp, "readmem (restore): p2m translation\n");
 
 	return TRUE;
 }
