@@ -100,30 +100,39 @@ mips_cmd_mach(void)
 static void
 mips_init_page_flags(void)
 {
-	ulonglong cpu_options;
-	int rixi;
 	ulong shift = 0;
-	ulong addr;
-
-	addr = symbol_value("cpu_data") +
-	       MEMBER_OFFSET("cpuinfo_mips", "options");
-	readmem(addr, KVADDR, &cpu_options, sizeof(cpu_options),
-		"cpu_data[0].options", FAULT_ON_ERROR);
-
-	rixi = cpu_options & MIPS_CPU_RIXI;
 
 	_PAGE_PRESENT = 1UL << shift++;
 
-	if (!rixi)
-		_PAGE_READ = 1UL << shift++;
-
-	_PAGE_WRITE = 1UL << shift++;
-	_PAGE_ACCESSED = 1UL << shift++;
-	_PAGE_MODIFIED = 1UL << shift++;
-
-	if (rixi) {
+	if (THIS_KERNEL_VERSION >= LINUX(4,1,0)) {
+		_PAGE_WRITE = 1UL << shift++;
+		_PAGE_ACCESSED = 1UL << shift++;
+		_PAGE_MODIFIED = 1UL << shift++;
 		_PAGE_NO_EXEC = 1UL << shift++;
-		_PAGE_NO_READ = 1UL << shift++;
+		_PAGE_READ = _PAGE_NO_READ = 1UL << shift++;
+	} else {
+		ulonglong cpu_options;
+		int rixi;
+		ulong addr;
+
+		addr = symbol_value("cpu_data") +
+		       MEMBER_OFFSET("cpuinfo_mips", "options");
+		readmem(addr, KVADDR, &cpu_options, sizeof(cpu_options),
+			"cpu_data[0].options", FAULT_ON_ERROR);
+
+		rixi = cpu_options & MIPS_CPU_RIXI;
+
+		if (!rixi)
+			_PAGE_READ = 1UL << shift++;
+
+		_PAGE_WRITE = 1UL << shift++;
+		_PAGE_ACCESSED = 1UL << shift++;
+		_PAGE_MODIFIED = 1UL << shift++;
+
+		if (rixi) {
+			_PAGE_NO_EXEC = 1UL << shift++;
+			_PAGE_NO_READ = 1UL << shift++;
+		}
 	}
 
 	_PAGE_GLOBAL = 1UL << shift++;
