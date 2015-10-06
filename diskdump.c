@@ -548,7 +548,7 @@ restart:
 	else if (STREQ(header->utsname.machine, "ppc") &&
 	    machine_type_mismatch(file, "PPC", NULL, 0))
 		goto err;
-	else if (STREQ(header->utsname.machine, "ppc64") &&
+	else if (STRNEQ(header->utsname.machine, "ppc64") &&
 	    machine_type_mismatch(file, "PPC64", NULL, 0))
 		goto err;
 	else if (STRNEQ(header->utsname.machine, "arm") &&
