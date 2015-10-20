@@ -715,7 +715,7 @@ is_set_bit(char *bitmap, uint64_t pfn)
 	ulong index, bit;
 
 	index = pfn >> 3;
-	bit = pfn & 7;
+	bit = 7 - (pfn & 7);
 
 	return !!(bitmap[index] & (1UL << bit));
 }
