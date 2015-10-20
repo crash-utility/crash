@@ -790,7 +790,7 @@ int read_sadump(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 	if ((pfn >= sd->max_mapnr) || !page_is_ram(pfn))
 		return SEEK_ERROR;
 	if (!page_is_dumpable(pfn)) {
-		if (sd->flags & SADUMP_ZERO_EXCLUDED)
+		if (!(sd->flags & SADUMP_ZERO_EXCLUDED))
 			return PAGE_EXCLUDED;
 		memset(bufptr, 0, cnt);
 		return cnt;
