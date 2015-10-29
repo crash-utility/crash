@@ -15207,7 +15207,7 @@ next_physpage(ulonglong paddr, ulonglong *nextpaddr)
 static int
 get_hugetlb_total_pages(ulong *nr_total_pages)
 {
-	ulong hstate_p;
+	ulong hstate_p, vaddr;
 	int i, len;
 	ulong nr_huge_pages;
 	uint horder;
@@ -15224,13 +15224,16 @@ get_hugetlb_total_pages(ulong *nr_total_pages)
 		hstate_p = symbol_value("hstates");
 
 		for (i = 0; i < len; i++) {
-			hstate_p = hstate_p + (SIZE(hstate) * i);
+			vaddr = hstate_p + (SIZE(hstate) * i);
 
-			readmem(hstate_p + OFFSET(hstate_order),
+			readmem(vaddr + OFFSET(hstate_order),
 				KVADDR, &horder, sizeof(uint),
 				"hstate_order", FAULT_ON_ERROR);
 
-			readmem(hstate_p + OFFSET(hstate_nr_huge_pages),
+			if (!horder)
+				continue;
+
+			readmem(vaddr + OFFSET(hstate_nr_huge_pages),
 				KVADDR, &nr_huge_pages, sizeof(ulong),
 				"hstate_nr_huge_pages", FAULT_ON_ERROR);
 
