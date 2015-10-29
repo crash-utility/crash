@@ -519,6 +519,8 @@ struct program_context {
 #define is_incomplete_dump() (pc->flags2 & INCOMPLETE_DUMP)
 #define QEMU_MEM_DUMP_COMPRESSED (0x10000ULL)
 #define SNAP        (0x20000ULL)
+#define EXCLUDED_VMEMMAP (0x40000ULL)
+#define is_excluded_vmemmap() (pc->flags2 & EXCLUDED_VMEMMAP)
 	char *cleanup;
 	char *namelist_orig;
 	char *namelist_debug_orig;

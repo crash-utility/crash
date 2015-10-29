@@ -730,6 +730,16 @@ main_loop(void)
 			    "         will return zero-filled memory.\n");
 	}
 
+	if (pc->flags2 & EXCLUDED_VMEMMAP) {
+		error(WARNING, "\n%s:\n         "
+		    "This dumpfile is incomplete because the page structures associated\n"
+                    "         with excluded pages may also be excluded.  This may cause the crash\n"
+		    "         session to fail entirely, may cause commands to fail (most notably\n"
+		    "         the \"kmem\" command), or may result in unpredictable runtime behavior.\n",
+			pc->dumpfile);
+
+	}
+
         if (!(pc->flags & GDB_INIT)) {
 		gdb_session_init();
 		show_untrusted_files();
@@ -1446,6 +1456,8 @@ dump_program_context(void)
 		fprintf(fp, "%sINCOMPLETE_DUMP", others++ ? "|" : "");
 	if (pc->flags2 & SNAP)
 		fprintf(fp, "%sSNAP", others++ ? "|" : "");
+	if (pc->flags2 & EXCLUDED_VMEMMAP)
+		fprintf(fp, "%sEXCLUDED_VMEMMAP", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "         namelist: %s\n", pc->namelist);

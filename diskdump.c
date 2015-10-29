@@ -793,6 +793,10 @@ restart:
 	    (dd->header->status & DUMP_DH_COMPRESSED_INCOMPLETE))
 		pc->flags2 |= INCOMPLETE_DUMP;
 
+	if (KDUMP_CMPRS_VALID() && 
+	    (dd->header->status & DUMP_DH_EXCLUDED_VMEMMAP))
+		pc->flags2 |= EXCLUDED_VMEMMAP;
+
 	/* For split dumpfile */
 	if (KDUMP_CMPRS_VALID()) {
 		is_split = ((dd->header->header_version >= 2) &&
@@ -1722,6 +1726,8 @@ __diskdump_memory_dump(FILE *fp)
 			fprintf(fp, "DUMP_DH_COMPRESSED_SNAPPY");
 		if (dh->status & DUMP_DH_COMPRESSED_INCOMPLETE)
 			fprintf(fp, "DUMP_DH_COMPRESSED_INCOMPLETE");
+		if (dh->status & DUMP_DH_EXCLUDED_VMEMMAP)
+			fprintf(fp, "DUMP_DH_EXCLUDED_VMEMMAP");
 		break;
 	}
 	fprintf(fp, ")\n");
@@ -2023,12 +2029,14 @@ show_split_dumpfiles(void)
         for (i = 0; i < num_dumpfiles; i++) {
         	ddp = dd_list[i];
 		dh = ddp->header;
-		fprintf(fp, "%s%s%s%s", 
+		fprintf(fp, "%s%s%s%s%s", 
 			i ? "              " : "", 
 			ddp->filename, 
 			is_partial_diskdump() ? " [PARTIAL DUMP]" : "",
 			dh->status & DUMP_DH_COMPRESSED_INCOMPLETE ? 
-			" [INCOMPLETE]" : "");
+			" [INCOMPLETE]" : "",
+			dh->status & DUMP_DH_EXCLUDED_VMEMMAP ? 
+			" [EXCLUDED VMEMMAP]" : "");
 		if ((i+1) < num_dumpfiles)
 			fprintf(fp, "\n");
 	}

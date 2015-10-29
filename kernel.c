@@ -5086,12 +5086,16 @@ display_sys_stats(void)
 			fprintf(fp, "  [INCOMPLETE]");
 
 		if (DISKDUMP_DUMPFILE() && !dumpfile_is_split() &&
-		    (is_partial_diskdump() || is_incomplete_dump())) {
-			fprintf(fp, " %s%s",
+		    (is_partial_diskdump() || is_incomplete_dump() ||
+		     is_excluded_vmemmap())) {
+			fprintf(fp, " %s%s%s",
 				is_partial_diskdump() ? 
 				" [PARTIAL DUMP]" : "",
 				is_incomplete_dump() ? 
-				" [INCOMPLETE]" : "");
+				" [INCOMPLETE]" : "",
+				is_excluded_vmemmap() ? 
+				" [EXCLUDED VMEMMAP]" : "");
+
 		}
 
 		fprintf(fp, "\n");
