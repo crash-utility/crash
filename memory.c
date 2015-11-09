@@ -452,6 +452,9 @@ vm_init(void)
 	if (INVALID_MEMBER(page_lru))
 		ANON_MEMBER_OFFSET_INIT(page_lru, "page", "lru");
 	MEMBER_OFFSET_INIT(page_pte, "page", "pte");
+        MEMBER_OFFSET_INIT(page_compound_head, "page", "compound_head");
+	if (INVALID_MEMBER(page_compound_head))
+		ANON_MEMBER_OFFSET_INIT(page_compound_head, "page", "compound_head");
 
 	MEMBER_OFFSET_INIT(mm_struct_pgd, "mm_struct", "pgd");
 
@@ -5145,7 +5148,11 @@ PG_slab_flag_init(void)
 		}
 	}
 
-	if (vt->flags & KMALLOC_SLUB) {
+	if (VALID_MEMBER(page_compound_head)) {
+		if (CRASHDEBUG(2))
+			fprintf(fp, 
+			    "PG_head_tail_mask: (UNUSED): page.compound_head exists!\n");
+	} else if (vt->flags & KMALLOC_SLUB) {
 		/* 
 		 *  PG_slab and the following are hardwired for 
 		 *  kernels prior to the pageflags enumerator.
@@ -18530,17 +18537,22 @@ get_kmem_cache_list(ulong **cache_buf)
 static ulong
 compound_head(ulong page)
 {
-	ulong flags, first_page;;
+	ulong flags, first_page, compound_head;
 
 	first_page = page;
 
-	if (!readmem(page+OFFSET(page_flags), KVADDR, &flags, sizeof(ulong),
-	    "page.flags", RETURN_ON_ERROR))
-		return first_page;
-
-	if ((flags & vt->PG_head_tail_mask) == vt->PG_head_tail_mask)
-		readmem(page+OFFSET(page_first_page), KVADDR, &first_page, 
-			sizeof(ulong), "page.first_page", RETURN_ON_ERROR);
+	if (VALID_MEMBER(page_compound_head)) {
+		if (readmem(page+OFFSET(page_compound_head), KVADDR, &compound_head, 
+		    sizeof(ulong), "page.compound_head", RETURN_ON_ERROR)) {
+			if (compound_head & 1)
+				first_page = compound_head - 1;
+		}
+	} else if (readmem(page+OFFSET(page_flags), KVADDR, &flags, sizeof(ulong),
+		"page.flags", RETURN_ON_ERROR)) {
+		if ((flags & vt->PG_head_tail_mask) == vt->PG_head_tail_mask)
+			readmem(page+OFFSET(page_first_page), KVADDR, &first_page, 
+				sizeof(ulong), "page.first_page", RETURN_ON_ERROR);
+	}
 		
 	return first_page;
 }

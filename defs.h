@@ -1946,6 +1946,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long pt_regs_regs;
 	long pt_regs_cp0_badvaddr;
 	long address_space_page_tree;
+	long page_compound_head;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

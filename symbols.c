@@ -8633,6 +8633,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(page_s_mem));
         fprintf(fp, "                   page_active: %ld\n",
                 OFFSET(page_active));
+        fprintf(fp, "            page_compound_head: %ld\n",
+                OFFSET(page_compound_head));
 
 	fprintf(fp, "        trace_print_flags_mask: %ld\n",
 		OFFSET(trace_print_flags_mask));
@@ -8667,7 +8669,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(block_device_bd_disk));
 	fprintf(fp, "         address_space_nrpages: %ld\n",
 		OFFSET(address_space_nrpages));
-	fprintf(fp, "         address_space_page_tree: %ld\n",
+	fprintf(fp, "       address_space_page_tree: %ld\n",
 		OFFSET(address_space_page_tree));
 	fprintf(fp, "                 gendisk_major: %ld\n",
 		OFFSET(gendisk_major));
