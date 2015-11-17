@@ -119,7 +119,7 @@ void
 task_init(void)
 {
 	long len;
-	int dim;
+	int dim, task_struct_size;
         struct syment *nsp;
 	long tss_offset, thread_offset; 
 	long eip_offset, esp_offset, ksp_offset;
@@ -284,6 +284,17 @@ task_init(void)
 	MEMBER_OFFSET_INIT(pid_pid_chain, "pid", "pid_chain");
 
 	STRUCT_SIZE_INIT(task_struct, "task_struct");
+
+	if (kernel_symbol_exists("arch_task_struct_size") &&
+	    readmem(symbol_value("arch_task_struct_size"), KVADDR,
+	    &task_struct_size, sizeof(int),
+	    "arch_task_struct_size", RETURN_ON_ERROR)) {
+		ASSIGN_SIZE(task_struct) = task_struct_size;
+		if (CRASHDEBUG(1))
+			fprintf(fp, "downsize task_struct: %ld to %ld\n",
+				STRUCT_SIZE("task_struct"),
+				SIZE(task_struct));
+	}
 
 	MEMBER_OFFSET_INIT(task_struct_sig, "task_struct", "sig");
 	MEMBER_OFFSET_INIT(task_struct_signal, "task_struct", "signal");
