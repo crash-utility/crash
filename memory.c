@@ -9117,7 +9117,9 @@ vaddr_to_kmem_cache(ulong vaddr, char *buf, int verbose)
 			&page_flags, sizeof(ulong), "page.flags",
 			FAULT_ON_ERROR);
 		if (!(page_flags & (1 << vt->PG_slab))) {
-			if (vt->flags & KMALLOC_SLUB) {
+			if (((vt->flags & KMALLOC_SLUB) || VALID_MEMBER(page_compound_head)) ||
+			    ((vt->flags & KMALLOC_COMMON) &&
+			    VALID_MEMBER(page_slab) && VALID_MEMBER(page_first_page))) {
 				readmem(compound_head(page)+OFFSET(page_flags), KVADDR,
 					&page_flags, sizeof(ulong), "page.flags",
 					FAULT_ON_ERROR);
@@ -9129,8 +9131,8 @@ vaddr_to_kmem_cache(ulong vaddr, char *buf, int verbose)
 	}
 
 	if ((vt->flags & KMALLOC_SLUB) ||
-	    ((vt->flags & KMALLOC_COMMON) && 
-	     VALID_MEMBER(page_slab) && VALID_MEMBER(page_first_page))) {
+	    ((vt->flags & KMALLOC_COMMON) && VALID_MEMBER(page_slab) && 
+	    (VALID_MEMBER(page_compound_head) || VALID_MEMBER(page_first_page)))) {
                 readmem(compound_head(page)+OFFSET(page_slab),
                         KVADDR, &cache, sizeof(void *),
                         "page.slab", FAULT_ON_ERROR);
@@ -9160,8 +9162,8 @@ is_slab_overload_page(ulong vaddr, ulong *page_head, char *buf)
 	char *p;
 
         if ((vt->flags & SLAB_OVERLOAD_PAGE) &&
-	    is_page_ptr(vaddr, NULL) &&
-             VALID_MEMBER(page_slab) && VALID_MEMBER(page_first_page)) {
+	    is_page_ptr(vaddr, NULL) && VALID_MEMBER(page_slab) && 
+	    (VALID_MEMBER(page_compound_head) || VALID_MEMBER(page_first_page))) {
                 readmem(compound_head(vaddr)+OFFSET(page_slab),
                         KVADDR, &cache, sizeof(void *),
                         "page.slab", FAULT_ON_ERROR);
@@ -9201,10 +9203,10 @@ vaddr_to_slab(ulong vaddr)
 
 	slab = 0;
 
-        if (vt->flags & KMALLOC_SLUB)
+        if ((vt->flags & KMALLOC_SLUB) || VALID_MEMBER(page_compound_head))
 		slab = compound_head(page);
 	else if (vt->flags & SLAB_OVERLOAD_PAGE)
-		slab = page;
+		slab = compound_head(page);
         else if ((vt->flags & KMALLOC_COMMON) && VALID_MEMBER(page_slab_page))
                 readmem(page+OFFSET(page_slab_page),
                         KVADDR, &slab, sizeof(void *),
