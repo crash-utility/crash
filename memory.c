@@ -2207,14 +2207,14 @@ readmem(ulonglong addr, int memtype, void *buffer, long size,
                         goto readmem_error;
 
 		case READ_ERROR:
-                        if (PRINT_ERROR_MESSAGE) {
-				if ((pc->flags & DEVMEM) && (kt->flags & PRE_KERNEL_INIT) &&
-				    devmem_is_restricted() && switch_to_proc_kcore())
-					return(readmem(addr, memtype, bufptr, size,
-						type, error_handle));
+			if (PRINT_ERROR_MESSAGE)
 				error(INFO, READ_ERRMSG, memtype_string(memtype, 0), addr, type);
-			}
-                        goto readmem_error;
+			if ((pc->flags & DEVMEM) && (kt->flags & PRE_KERNEL_INIT) &&
+			    !(error_handle & NO_DEVMEM_SWITCH) && devmem_is_restricted() && 
+			    switch_to_proc_kcore())
+				return(readmem(addr, memtype, bufptr, size,
+					type, error_handle));
+			goto readmem_error;
 
 		case PAGE_EXCLUDED:
 			RETURN_ON_PARTIAL_READ();
@@ -2413,16 +2413,16 @@ devmem_is_restricted(void)
 	    	if (machine_type("X86") || machine_type("X86_64")) {
 			if (readmem(255*PAGESIZE(), PHYSADDR, &tmp,
 			    sizeof(long), "devmem_is_allowed - pfn 255",
-			    QUIET|RETURN_ON_ERROR) &&
+			    QUIET|RETURN_ON_ERROR|NO_DEVMEM_SWITCH) &&
 			    !(readmem(257*PAGESIZE(), PHYSADDR, &tmp,
 			    sizeof(long), "devmem_is_allowed - pfn 257",
-			    QUIET|RETURN_ON_ERROR)))
+			    QUIET|RETURN_ON_ERROR|NO_DEVMEM_SWITCH)))
 				restricted = TRUE;
 		} 
 		if (kernel_symbol_exists("jiffies") &&
 		    !readmem(symbol_value("jiffies"), KVADDR, &tmp,
 		    sizeof(ulong), "devmem_is_allowed - jiffies", 
-		    QUIET|RETURN_ON_ERROR))
+		    QUIET|RETURN_ON_ERROR|NO_DEVMEM_SWITCH))
 			restricted = TRUE;
 
 		if (restricted)
@@ -2656,6 +2656,8 @@ char *error_handle_string(ulong error_handle)
 		sprintf(&ebuf[strlen(ebuf)], "%sHB", others++ ? "|" : "");
 	if (error_handle & RETURN_PARTIAL)
 		sprintf(&ebuf[strlen(ebuf)], "%sRP", others++ ? "|" : "");
+	if (error_handle & NO_DEVMEM_SWITCH)
+		sprintf(&ebuf[strlen(ebuf)], "%sNDS", others++ ? "|" : "");
 
 	strcat(ebuf, ")");
 

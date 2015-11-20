@@ -328,6 +328,7 @@ struct number_option {
 #define HEX_BIAS         (0x8)
 #define LONG_LONG       (0x10)
 #define RETURN_PARTIAL  (0x20)
+#define NO_DEVMEM_SWITCH (0x40)
 
 #define SEEK_ERROR       (-1)
 #define READ_ERROR       (-2)
