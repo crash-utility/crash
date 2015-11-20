@@ -19,6 +19,7 @@
 
 #include "defs.h"
 #include <elf.h>
+#include <endian.h>
 
 #define NOT_IMPLEMENTED(X) error((X), "%s: function not implemented\n", __func__)
 
@@ -97,6 +98,32 @@ arm64_init(int when)
 		break;
 
 	case PRE_GDB:
+		if (!machdep->pagesize) {
+			/*
+			 * Kerneldoc Documentation/arm64/booting.txt describes
+			 * the kernel image header flags field.
+			 */
+			value = machdep->machspec->kernel_flags;
+			value = (value >> 1) & 3;
+
+			switch(value)
+			{
+			case 0:
+				break;
+			case 1:
+				machdep->pagesize = 4096;
+				break;
+			case 2:
+				/* TODO: machdep->pagesize = 16384; */
+				error(FATAL, "16K pages not supported.");
+				break;
+			case 3:
+				machdep->pagesize = 65536;
+				break;
+			}
+
+		}
+
 		if (!machdep->pagesize &&
 		    kernel_symbol_exists("swapper_pg_dir") &&
 		    kernel_symbol_exists("idmap_pg_dir")) {
@@ -305,6 +332,9 @@ arm64_verify_symbol(const char *name, ulong value, char type)
 	if (!name || !strlen(name))
 		return FALSE;
 
+	if ((type == 'A') && STREQ(name, "_kernel_flags_le"))
+		machdep->machspec->kernel_flags = le64toh(value);
+
 	if (((type == 'A') || (type == 'a')) && (highest_bit_long(value) != 63))
 		return FALSE;
 
@@ -465,6 +495,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "       crash_kexec_end: %lx\n", ms->crash_kexec_end);
 	fprintf(fp, "  crash_save_cpu_start: %lx\n", ms->crash_save_cpu_start);
 	fprintf(fp, "    crash_save_cpu_end: %lx\n", ms->crash_save_cpu_end);
+        fprintf(fp, "          kernel_flags: %lx\n", ms->kernel_flags);
 }
 
 

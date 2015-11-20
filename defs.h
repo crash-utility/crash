@@ -2945,6 +2945,7 @@ struct machine_specific {
 	ulong crash_kexec_end;
 	ulong crash_save_cpu_start;
 	ulong crash_save_cpu_end;
+	ulong kernel_flags;
 };
 
 struct arm64_stackframe {
