@@ -5721,6 +5721,7 @@ void dump_registers_for_qemu_mem_dump(void);
 void kdump_backup_region_init(void);
 void display_regs_from_elf_notes(int, FILE *);
 void display_ELF_note(int, int, void *, FILE *);
+void *netdump_get_prstatus_percpu(int);
 #define PRSTATUS_NOTE (1)
 #define QEMU_NOTE     (2)
 

@@ -2345,6 +2345,27 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 	return len;
 }
 
+void *
+netdump_get_prstatus_percpu(int cpu)
+{
+	int online;
+
+	if ((cpu < 0) || (cpu >= nd->num_prstatus_notes))
+		return NULL;
+
+	/*
+	 * If no cpu mapping was done, then there must be
+	 * a one-to-one relationship between the number
+	 * of online cpus and the number of notes.
+	 */
+	if ((online = get_cpus_online()) &&
+	    (online == kt->cpus) &&
+	    (online != nd->num_prstatus_notes))
+		return NULL;
+
+	return nd->nt_prstatus_percpu[cpu];
+}
+
 /*
  *  Send the request to the proper architecture hander.
  */

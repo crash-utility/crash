@@ -597,6 +597,28 @@ arm_get_crash_notes(void)
 		note = (Elf32_Nhdr *)buf;
 		p = buf + sizeof(Elf32_Nhdr);
 
+		/*
+		 * dumpfiles created with qemu won't have crash_notes, but there will
+		 * be elf notes.
+		 */
+		if (note->n_namesz == 0 && (DISKDUMP_DUMPFILE() || KDUMP_DUMPFILE())) {
+			if (DISKDUMP_DUMPFILE())
+				note = diskdump_get_prstatus_percpu(i);
+			else if (KDUMP_DUMPFILE())
+				note = netdump_get_prstatus_percpu(i);
+			if (note) {
+				/*
+				 * SIZE(note_buf) accounts for a "final note", which is a
+				 * trailing empty elf note header.
+				 */
+				long notesz = SIZE(note_buf) - sizeof(Elf32_Nhdr);
+
+				if (sizeof(Elf32_Nhdr) + roundup(note->n_namesz, 4) +
+				    note->n_descsz == notesz)
+					BCOPY((char *)note, buf, notesz);
+			}
+		}
+
 		if (note->n_type != NT_PRSTATUS) {
 			error(WARNING, "invalid note (n_type != NT_PRSTATUS)\n");
 			goto fail;
