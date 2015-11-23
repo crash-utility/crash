@@ -580,8 +580,8 @@ arm_get_crash_notes(void)
 
 	buf = GETBUF(SIZE(note_buf));
 
-	if (!(panic_task_regs = malloc(kt->cpus*sizeof(*panic_task_regs))))
-		error(FATAL, "cannot malloc panic_task_regs space\n");
+	if (!(panic_task_regs = calloc((size_t)kt->cpus, sizeof(*panic_task_regs))))
+		error(FATAL, "cannot calloc panic_task_regs space\n");
 	
 	for  (i=0;i<kt->cpus;i++) {
 
@@ -599,7 +599,8 @@ arm_get_crash_notes(void)
 
 		/*
 		 * dumpfiles created with qemu won't have crash_notes, but there will
-		 * be elf notes.
+		 * be elf notes; dumpfiles created by kdump do not create notes for
+		 * offline cpus.
 		 */
 		if (note->n_namesz == 0 && (DISKDUMP_DUMPFILE() || KDUMP_DUMPFILE())) {
 			if (DISKDUMP_DUMPFILE())
@@ -616,6 +617,10 @@ arm_get_crash_notes(void)
 				if (sizeof(Elf32_Nhdr) + roundup(note->n_namesz, 4) +
 				    note->n_descsz == notesz)
 					BCOPY((char *)note, buf, notesz);
+			} else {
+				error(WARNING,
+					"cannot find NT_PRSTATUS note for cpu: %d\n", i);
+				continue;
 			}
 		}
 
@@ -857,6 +862,9 @@ arm_back_trace(struct bt_info *bt)
 static void
 arm_back_trace_cmd(struct bt_info *bt)
 {
+	if (bt->flags & BT_REGS_NOT_FOUND)
+		return;
+
 	if (kt->flags & DWARF_UNWIND)
 		unwind_backtrace(bt);
 	else
@@ -1323,12 +1331,13 @@ arm_get_dumpfile_stack_frame(struct bt_info *bt, ulong *nip, ulong *ksp)
 {
 	const struct machine_specific *ms = machdep->machspec;
 
-	if (!ms->crash_task_regs)
+	if (!ms->crash_task_regs ||
+	    (!ms->crash_task_regs[bt->tc->processor].ARM_pc &&
+	     !ms->crash_task_regs[bt->tc->processor].ARM_sp)) {
+		bt->flags |= BT_REGS_NOT_FOUND;
 		return FALSE;
+	}
 
-	if (!is_task_active(bt->task))
-		return FALSE;
-	
 	/*
 	 * We got registers for panic task from crash_notes. Just return them.
 	 */
@@ -1361,11 +1370,9 @@ arm_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 	else
 		ret = arm_get_frame(bt, &ip, &sp);
 
-	if (!ret) {
+	if (!ret)
 		error(WARNING, "cannot determine starting stack frame for task %lx\n",
 			bt->task);
-		return;
-	}
 
 	if (pcp)
 		*pcp = ip;

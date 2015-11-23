@@ -1181,6 +1181,7 @@ arm64_back_trace_cmd(struct bt_info *bt)
 		stackframe.pc = bt->hp->eip ? 
 			bt->hp->eip : GET_STACK_ULONG(bt->hp->esp);
 		stackframe.sp = bt->hp->esp + 8;
+		bt->flags &= ~BT_REGS_NOT_FOUND;
 	} else {
 		stackframe.sp = bt->stkptr;
 		stackframe.pc = bt->instptr;
@@ -1196,6 +1197,9 @@ arm64_back_trace_cmd(struct bt_info *bt)
                 }
 		return;
         }
+
+	if (bt->flags & BT_REGS_NOT_FOUND)
+		return;
 
 	if (!(bt->flags & BT_KDUMP_ADJUST)) {
 		if (bt->flags & BT_USER_SPACE)
@@ -1336,8 +1340,12 @@ arm64_get_dumpfile_stackframe(struct bt_info *bt, struct arm64_stackframe *frame
 	struct machine_specific *ms = machdep->machspec;
 	struct arm64_pt_regs *ptregs;
 
-	if (!ms->panic_task_regs)
+	if (!ms->panic_task_regs ||
+	    (!ms->panic_task_regs[bt->tc->processor].sp && 
+	     !ms->panic_task_regs[bt->tc->processor].pc)) {
+		bt->flags |= BT_REGS_NOT_FOUND;
 		return FALSE;
+	}
 
 	ptregs = &ms->panic_task_regs[bt->tc->processor];
 	frame->sp = ptregs->sp;
@@ -1371,19 +1379,17 @@ static void
 arm64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 {
 	int ret;
-	struct arm64_stackframe stackframe;
+	struct arm64_stackframe stackframe = { 0 };
 
 	if (DUMPFILE() && is_task_active(bt->task))
 		ret = arm64_get_dumpfile_stackframe(bt, &stackframe);
 	else
 		ret = arm64_get_stackframe(bt, &stackframe);
 
-	if (!ret) {
+	if (!ret)
 		error(WARNING, 
 			"cannot determine starting stack frame for task %lx\n",
 				bt->task);
-		return;
-	}
 
 	bt->frameptr = stackframe.fp;
 	if (pcp)
@@ -1811,8 +1817,8 @@ arm64_get_crash_notes(void)
 
 	buf = GETBUF(SIZE(note_buf));
 
-	if (!(ms->panic_task_regs = malloc(kt->cpus * sizeof(struct arm64_pt_regs))))
-		error(FATAL, "cannot malloc panic_task_regs space\n");
+	if (!(ms->panic_task_regs = calloc((size_t)kt->cpus, sizeof(struct arm64_pt_regs))))
+		error(FATAL, "cannot calloc panic_task_regs space\n");
 	
 	for  (i = 0; i < kt->cpus; i++) {
 
@@ -1830,7 +1836,8 @@ arm64_get_crash_notes(void)
 
 		/*
 		 * dumpfiles created with qemu won't have crash_notes, but there will
-		 * be elf notes.
+		 * be elf notes; dumpfiles created by kdump do not create notes for
+		 * offline cpus.
 		 */
 		if (note->n_namesz == 0 && (DISKDUMP_DUMPFILE() || KDUMP_DUMPFILE())) {
 			if (DISKDUMP_DUMPFILE())
@@ -1847,6 +1854,10 @@ arm64_get_crash_notes(void)
 				if (sizeof(Elf64_Nhdr) + roundup(note->n_namesz, 4) +
 				    note->n_descsz == notesz)
 					BCOPY((char *)note, buf, notesz);
+			} else {
+				error(WARNING,
+					"cannot find NT_PRSTATUS note for cpu: %d\n", i);
+				continue;
 			}
 		}
 
