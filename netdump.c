@@ -604,6 +604,11 @@ check_dumpfile_size(char *file)
 	if (stat64(file, &stat) < 0)
 		return;
 
+	if (S_ISBLK(stat.st_mode)) {
+		error(NOTE, "%s: No dump complete check for block devices\n",
+		      file);
+		return;
+	}
 	for (i = 0; i < nd->num_pt_load_segments; i++) {
 		pls = &nd->pt_load_segments[i];
 
