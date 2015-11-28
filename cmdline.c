@@ -2059,6 +2059,8 @@ readline_init(void)
 			vi_insertion_keymap);
 		rl_bind_key_in_map(CTRL('N'), rl_get_next_history,
 			vi_insertion_keymap);
+		rl_bind_key_in_map(CTRL('l'), rl_clear_screen,
+			vi_insertion_keymap);
 
 		rl_generic_bind(ISFUNC, "[A", (char *)rl_get_previous_history, 
 			vi_movement_keymap);
