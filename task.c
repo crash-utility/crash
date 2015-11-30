@@ -290,6 +290,8 @@ task_init(void)
 	    &task_struct_size, sizeof(int),
 	    "arch_task_struct_size", RETURN_ON_ERROR)) {
 		ASSIGN_SIZE(task_struct) = task_struct_size;
+		if (STRUCT_SIZE("task_struct") != SIZE(task_struct))
+			add_to_downsized("task_struct");
 		if (CRASHDEBUG(1))
 			fprintf(fp, "downsize task_struct: %ld to %ld\n",
 				STRUCT_SIZE("task_struct"),

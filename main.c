@@ -1651,6 +1651,8 @@ dump_program_context(void)
 		fprintf(fp, "%sMM_STRUCT_FORCE", others ? "|" : "");
         if (pc->curcmd_flags & CPUMASK)
 		fprintf(fp, "%sCPUMASK", others ? "|" : "");
+        if (pc->curcmd_flags & PARTIAL_READ_OK)
+		fprintf(fp, "%sPARTIAL_READ_OK", others ? "|" : "");
 	fprintf(fp, ")\n");
 	fprintf(fp, "   curcmd_private: %llx\n", pc->curcmd_private); 
 	fprintf(fp, "      cmd_cleanup: %lx\n", (ulong)pc->cmd_cleanup);

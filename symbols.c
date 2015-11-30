@@ -2862,6 +2862,7 @@ dump_symbol_table(void)
 	int i, s, cnt, tot;
         struct load_module *lm;
 	struct syment *sp;
+	struct downsized *ds;
 	int others;
 	asection **sec;
 
@@ -3174,6 +3175,13 @@ dump_symbol_table(void)
 			(ulong)bfd_get_section_vma(st->bfd, section),
 			(ulong)bfd_section_size(st->bfd, section));
 	}
+	fprintf(fp, "\n           downsized: ");
+	if (st->downsized.name) {
+		for (ds = &st->downsized, cnt = 0; ds->name; ds = ds->next)
+			fprintf(fp, "%s%s", cnt++ ? ", " : "", ds->name);
+		fprintf(fp, "\n");
+	} else
+		fprintf(fp, "(none)\n");
 }
 
 
@@ -7126,6 +7134,9 @@ print_struct(char *s, ulong addr)
 {
 	char buf[BUFSIZE];
 
+	if (is_downsized(s))
+		pc->curcmd_flags |= PARTIAL_READ_OK;
+
 	if (is_typedef(s))
         	sprintf(buf, "output *(%s *)0x%lx", s, addr);
 	else
@@ -7133,6 +7144,8 @@ print_struct(char *s, ulong addr)
 	fprintf(fp, "struct %s ", s);
 	gdb_pass_through(buf, NULL, GNU_RETURN_ON_ERROR);
 	fprintf(fp, "\n");
+
+	pc->curcmd_flags &= ~PARTIAL_READ_OK;
 }
 
 
@@ -7144,12 +7157,17 @@ print_union(char *s, ulong addr)
 {
 	char buf[BUFSIZE];
 
+	if (is_downsized(s))
+		pc->curcmd_flags |= PARTIAL_READ_OK;
+
         if (is_typedef(s))
                 sprintf(buf, "output *(%s *)0x%lx", s, addr);
         else 
         	sprintf(buf, "output *(union %s *)0x%lx", s, addr);
         fprintf(fp, "union %s ", s);
         gdb_pass_through(buf, NULL, GNU_RETURN_ON_ERROR);
+
+	pc->curcmd_flags &= ~PARTIAL_READ_OK;
 }
 
 /*
@@ -12504,4 +12522,39 @@ fill_struct_member_data(struct struct_member_data *smd)
 	smd->bitsize = dtol(printm_list[5], RETURN_ON_ERROR, NULL);
 
 	return TRUE;
+}
+
+void
+add_to_downsized(char *name)
+{
+	struct downsized *ds;
+
+	ds = &st->downsized; 
+
+	while (ds->name)
+		ds = ds->next;
+
+	if (!(ds->name = (char *)malloc(strlen(name)+1)) ||
+	    !(ds->next = (struct downsized *)calloc(1, sizeof(struct downsized))))
+		error(FATAL, 
+		    "cannot calloc/malloc downsized struct or \"%s\" name string\n", name);
+
+	strcpy(ds->name, name);
+
+	if (CRASHDEBUG(1))
+		fprintf(fp, "%sadd_to_downsized: \"%s\"\n", 
+			(pc->flags & PLEASE_WAIT) ? "\n" : "", name);
+}
+
+int
+is_downsized(char *name)
+{
+	struct downsized *ds;
+
+	for (ds = &st->downsized; ds->name; ds = ds->next) {
+		if (STREQ(name, ds->name))
+			return TRUE;
+	}
+
+	return FALSE;
 }

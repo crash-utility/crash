@@ -815,12 +815,16 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 	char locbuf[SIZEOF_32BIT], *p1;
 	uint32_t *p2;
 	int memtype;
+	ulong readflags;
 
 	if (write)
 		return FALSE;
 
 	if (pc->cur_req->flags & GNU_NO_READMEM)
 		return TRUE;
+
+	readflags = pc->curcmd_flags & PARTIAL_READ_OK ?
+		RETURN_ON_ERROR|RETURN_PARTIAL : RETURN_ON_ERROR;
 
 	if (pc->curcmd_flags & MEMTYPE_UVADDR)
 		memtype = UVADDR;
@@ -845,7 +849,7 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 
 	if (memtype == FILEADDR)
 		return(readmem(pc->curcmd_private, memtype, buf, len,
-                	"gdb_readmem_callback", RETURN_ON_ERROR));
+			"gdb_readmem_callback", readflags));
 	
 	switch (len)
 	{
@@ -856,7 +860,7 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 			return TRUE;
 
 		if (!readmem(addr, memtype, locbuf, SIZEOF_32BIT,
-		    "gdb_readmem_callback", RETURN_ON_ERROR)) 
+		    "gdb_readmem_callback", readflags)) 
 			return FALSE;
 
 		*p1 = locbuf[0];
@@ -871,7 +875,7 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 			return TRUE;
 
 		if (!readmem(addr, memtype, buf, SIZEOF_32BIT, 
-		    "gdb_readmem callback", RETURN_ON_ERROR))
+		    "gdb_readmem callback", readflags))
 			return FALSE;
 
 		if (memtype == KVADDR)
@@ -880,9 +884,8 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 		return TRUE;
 	}
 
-	return(readmem(addr, memtype, buf, len,
-                "gdb_readmem_callback", RETURN_ON_ERROR));
-
+	return(readmem(addr, memtype, buf, len, 
+		"gdb_readmem_callback", readflags));
 }
 
 /*

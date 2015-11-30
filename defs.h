@@ -473,6 +473,7 @@ struct program_context {
 #define MOD_READNOW      (0x8000)
 #define MM_STRUCT_FORCE (0x10000)
 #define CPUMASK         (0x20000)
+#define PARTIAL_READ_OK (0x40000)
 	ulonglong curcmd_private;	/* general purpose per-command info */
 	int cur_gdb_cmd;                /* current gdb command */
 	int last_gdb_cmd;               /* previously-executed gdb command */
@@ -2436,6 +2437,11 @@ struct symbol_namespace {
 	long cnt;
 };
 
+struct downsized {
+	char *name;
+	struct downsized *next;
+};
+
 #define SYMVAL_HASH (512)
 #define SYMVAL_HASH_INDEX(vaddr) \
         (((vaddr) >> machdep->pageshift) % SYMVAL_HASH)
@@ -2486,6 +2492,7 @@ struct symbol_table_data {
 	ulong first_section_start;
 	ulong last_section_end;
 	ulong _stext_vmlinux;
+	struct downsized downsized;
 };
 
 /* flags for st */
@@ -4662,6 +4669,8 @@ struct struct_member_data {
 };
 int fill_struct_member_data(struct struct_member_data *);
 void parse_for_member_extended(struct datatype_member *, ulong);
+void add_to_downsized(char *);
+int is_downsized(char *);
 
 /*  
  *  memory.c 

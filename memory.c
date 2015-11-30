@@ -163,7 +163,7 @@ static void kmem_search(struct meminfo *);
 static void kmem_cache_init(void);
 static void kmem_cache_init_slub(void);
 static ulong max_cpudata_limit(ulong, ulong *);
-static void kmem_cache_downsize(void);
+static int kmem_cache_downsize(void);
 static int ignore_cache(struct meminfo *, char *);
 static char *is_kmem_cache_addr(ulong, char *);
 static char *is_kmem_cache_addr_common(ulong, char *);
@@ -9313,8 +9313,10 @@ kmem_cache_init(void)
         } else
                 cache = cache_end = symbol_value("cache_cache");
 
-	if (!(pc->flags & RUNTIME))
-		kmem_cache_downsize();
+	if (!(pc->flags & RUNTIME)) {
+		if (kmem_cache_downsize())
+			add_to_downsized("kmem_cache");
+	}
 
 	cache_buf = GETBUF(SIZE(kmem_cache_s));
 	hq_open();
@@ -9428,7 +9430,7 @@ kmem_cache_nodelists(ulong cache)
 		return cache+OFFSET(kmem_cache_s_lists);
 }
 
-static void
+static int
 kmem_cache_downsize(void)
 {
 	char *cache_buf;
@@ -9451,7 +9453,10 @@ kmem_cache_downsize(void)
 					STRUCT_SIZE("kmem_cache"), 
 					SIZE(kmem_cache));
 		}
-		return;
+		if (STRUCT_SIZE("kmem_cache") != SIZE(kmem_cache))
+			return TRUE;
+		else
+			return FALSE;
 	}
 
 	if ((THIS_KERNEL_VERSION < LINUX(2,6,22)) ||
@@ -9460,7 +9465,7 @@ kmem_cache_downsize(void)
 	     !kernel_symbol_exists("kmem_cache_boot")) ||
 	    (!MEMBER_EXISTS("kmem_cache", "buffer_size") &&
 	     !MEMBER_EXISTS("kmem_cache", "size"))) {
-		return;
+		return FALSE;
 	}
 
 	if (vt->flags & NODELISTS_IS_PTR) {
@@ -9504,7 +9509,11 @@ kmem_cache_downsize(void)
 		if (CRASHDEBUG(1))
 			fprintf(fp, "\nkmem_cache_downsize: %ld to %ld\n",
 				STRUCT_SIZE("kmem_cache"), SIZE(kmem_cache_s));
-		return;
+
+		if (STRUCT_SIZE("kmem_cache") != SIZE(kmem_cache_s))
+			return TRUE;
+		else
+			return FALSE;
 	} else if (vt->flags & SLAB_CPU_CACHE) {
                 if (kernel_symbol_exists("kmem_cache_boot") &&
                     MEMBER_EXISTS("kmem_cache", "object_size") &&
@@ -9521,7 +9530,11 @@ kmem_cache_downsize(void)
 		if (CRASHDEBUG(1))
 			fprintf(fp, "\nkmem_cache_downsize: %ld to %ld\n",
 				STRUCT_SIZE("kmem_cache"), SIZE(kmem_cache_s));
-		return;
+
+		if (STRUCT_SIZE("kmem_cache") != SIZE(kmem_cache_s))
+			return TRUE;
+		else
+			return FALSE;
 	}
 
 	cache_buf = GETBUF(SIZE(kmem_cache_s));
@@ -9529,7 +9542,7 @@ kmem_cache_downsize(void)
 	if (!readmem(symbol_value("cache_cache"), KVADDR, cache_buf, 
 	    SIZE(kmem_cache_s), "kmem_cache buffer", RETURN_ON_ERROR)) {
 		FREEBUF(cache_buf);
-		return;
+		return FALSE;
 	}
 
 	buffer_size = UINT(cache_buf + 
@@ -9561,9 +9574,16 @@ kmem_cache_downsize(void)
 			    "kmem_cache_downsize: nr_node_ids: %ld\n",
 				vt->kmem_cache_len_nodes);
 		}
+
+		FREEBUF(cache_buf);
+		if (STRUCT_SIZE("kmem_cache") != SIZE(kmem_cache_s))
+			return TRUE;
+		else
+			return FALSE;
 	}
 
 	FREEBUF(cache_buf);
+	return FALSE;
 }
 
 /*
@@ -17693,13 +17713,17 @@ dump_page_flags(ulonglong flags)
 static void
 kmem_cache_init_slub(void)
 {
+	if (vt->flags & KMEM_CACHE_INIT)
+		return;
+
 	if (CRASHDEBUG(1) &&
 	    !(vt->flags & CONFIG_NUMA) && (vt->numnodes > 1))
 		error(WARNING, 
 		    "kmem_cache_init_slub: numnodes: %d without CONFIG_NUMA\n",
 			vt->numnodes);
 
-	kmem_cache_downsize();
+	if (kmem_cache_downsize())
+		add_to_downsized("kmem_cache");
 
 	vt->cpu_slab_type = MEMBER_TYPE("kmem_cache", "cpu_slab");
 
