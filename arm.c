@@ -1539,6 +1539,7 @@ arm_dump_backtrace_entry(struct bt_info *bt, int level, ulong from, ulong sp)
 static ulong
 arm_vmalloc_start(void)
 {
+	machdep->machspec->vmalloc_start_addr = vt->high_memory;
 	return vt->high_memory;
 }
 
