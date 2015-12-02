@@ -3179,13 +3179,14 @@ cmd_list(void)
 	struct list_data list_data, *ld;
 	struct datatype_member struct_member, *sm;
 	struct syment *sp;
-	ulong value; 
+	ulong value, struct_list_offset; 
 
 	sm = &struct_member;
 	ld = &list_data;
 	BZERO(ld, sizeof(struct list_data));
+	struct_list_offset = 0;
 
-        while ((c = getopt(argcnt, args, "Hhrs:e:o:xd")) != EOF) {
+        while ((c = getopt(argcnt, args, "Hhrs:e:o:xdl:")) != EOF) {
                 switch(c)
 		{
 		case 'H':
@@ -3205,6 +3206,18 @@ cmd_list(void)
 			if (ld->structname_args++ == 0) 
 				hq_open();
 			hq_enter((ulong)optarg);
+			break;
+
+		case 'l':
+                        if (IS_A_NUMBER(optarg))
+                                struct_list_offset = stol(optarg,
+                                        FAULT_ON_ERROR, NULL);
+                        else if (arg_to_datatype(optarg,
+                                sm, RETURN_ON_ERROR) > 1)
+                                struct_list_offset = sm->member_offset;
+			else
+				error(FATAL, "invalid -l option: %s\n", 
+					optarg);
 			break;
 
 		case 'o':
@@ -3260,7 +3273,11 @@ cmd_list(void)
 	if (ld->structname_args) {
 		ld->structname = (char **)GETBUF(sizeof(char *) * ld->structname_args);
 		retrieve_list((ulong *)ld->structname, ld->structname_args); 
-		hq_close();
+		hq_close(); 
+		ld->struct_list_offset = struct_list_offset;
+	} else if (struct_list_offset) {
+		error(INFO, "-l option can only be used with -s option\n");
+		cmd_usage(pc->curcmd, SYNOPSIS);
 	}
 
 	while (args[optind]) {
@@ -3388,6 +3405,11 @@ next_arg:
 		cmd_usage(pc->curcmd, SYNOPSIS);
 	}
 
+	if ((ld->flags & LIST_OFFSET_ENTERED) && ld->struct_list_offset) {
+		error(INFO, "-l and -o are mutually exclusive\n");
+                cmd_usage(pc->curcmd, SYNOPSIS);
+	}
+
 	if (ld->flags & LIST_HEAD_FORMAT) {
 		ld->list_head_offset = ld->member_offset;
 		if (ld->flags & LIST_HEAD_REVERSE)
@@ -3433,7 +3455,7 @@ do_list(struct list_data *ld)
 
 	if (CRASHDEBUG(1)) {
 		others = 0;
-		console("           flags: %lx (", ld->flags);
+		console("             flags: %lx (", ld->flags);
 		if (ld->flags & VERBOSE)
 			console("%sVERBOSE", others++ ? "|" : "");
 		if (ld->flags & LIST_OFFSET_ENTERED)
@@ -3461,20 +3483,21 @@ do_list(struct list_data *ld)
 		if (ld->flags & CALLBACK_RETURN)
 			console("%sCALLBACK_RETURN", others++ ? "|" : "");
 		console(")\n");
-		console("           start: %lx\n", ld->start);
-		console("   member_offset: %ld\n", ld->member_offset);
-		console("list_head_offset: %ld\n", ld->list_head_offset);
-		console("             end: %lx\n", ld->end);
-		console("       searchfor: %lx\n", ld->searchfor);
-		console(" structname_args: %lx\n", ld->structname_args);
+		console("             start: %lx\n", ld->start);
+		console("     member_offset: %ld\n", ld->member_offset);
+		console("  list_head_offset: %ld\n", ld->list_head_offset);
+		console("               end: %lx\n", ld->end);
+		console("         searchfor: %lx\n", ld->searchfor);
+		console("   structname_args: %lx\n", ld->structname_args);
 		if (!ld->structname_args)
-			console("      structname: (unused)\n");
+			console("        structname: (unused)\n");
 		for (i = 0; i < ld->structname_args; i++)	
-			console("   structname[%d]: %s\n", i, ld->structname[i]);
-		console("          header: %s\n", ld->header);
-		console("        list_ptr: %lx\n", (ulong)ld->list_ptr);
-		console("   callback_func: %lx\n", (ulong)ld->callback_func);
-		console("   callback_data: %lx\n", (ulong)ld->callback_data);
+			console("     structname[%d]: %s\n", i, ld->structname[i]);
+		console("            header: %s\n", ld->header);
+		console("          list_ptr: %lx\n", (ulong)ld->list_ptr);
+		console("     callback_func: %lx\n", (ulong)ld->callback_func);
+		console("     callback_data: %lx\n", (ulong)ld->callback_data);
+		console("struct_list_offset: %lx\n", ld->struct_list_offset);
 	}
 
 	count = 0;
@@ -3524,7 +3547,8 @@ do_list(struct list_data *ld)
 					{
 					case 0:
 						dump_struct(ld->structname[i], 
-							next - ld->list_head_offset, radix);
+							next - ld->list_head_offset - ld->struct_list_offset,
+							radix);
 						break;
 					default:
 						dump_struct_members(ld, i, next);
@@ -3651,7 +3675,8 @@ dump_struct_members(struct list_data *ld, int idx, ulong next)
 	for (i = 0; i < argc; i++) {
 		*p1 = NULLCHAR;
 		strcat(structname, arglist[i]);
- 		dump_struct_member(structname, next - ld->list_head_offset, radix);
+ 		dump_struct_member(structname, 
+			next - ld->list_head_offset - ld->struct_list_offset, radix);
 	}
 
 	FREEBUF(structname);

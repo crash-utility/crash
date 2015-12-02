@@ -2333,6 +2333,7 @@ struct list_data {             /* generic structure used by do_list() to walk */
 	ulong *list_ptr;
 	int (*callback_func)(void *, void *); 
 	void *callback_data;
+	long struct_list_offset;
 };
 #define LIST_OFFSET_ENTERED  (VERBOSE << 1)
 #define LIST_START_ENTERED   (VERBOSE << 2)
