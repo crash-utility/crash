@@ -204,7 +204,9 @@ kernel_init()
 	MEMBER_OFFSET_INIT(timekeeper_xtime, "timekeeper", "xtime");
 	MEMBER_OFFSET_INIT(timekeeper_xtime_sec, "timekeeper", "xtime_sec");
 	get_xtime(&kt->date);
-	
+	if (CRASHDEBUG(1))
+		fprintf(fp, "xtime timespec.tv_sec: %lx: %s\n", 
+			kt->date.tv_sec, strip_linefeeds(ctime(&kt->date.tv_sec)));
 	if (kt->flags2 & GET_TIMESTAMP) {
 		fprintf(fp, "%s\n\n", 
 			strip_linefeeds(ctime(&kt->date.tv_sec)));
@@ -221,6 +223,22 @@ kernel_init()
 			"init_uts_ns", RETURN_ON_ERROR);
 	else
 		error(INFO, "cannot access utsname information\n\n");
+
+	if (CRASHDEBUG(1)) {
+		fprintf(fp, "utsname:\n");
+		fprintf(fp, "     sysname: %s\n", printable_string(kt->utsname.sysname) ? 
+			kt->utsname.sysname : "(not printable)");
+		fprintf(fp, "    nodename: %s\n", printable_string(kt->utsname.nodename) ? 
+			kt->utsname.nodename : "(not printable)");
+		fprintf(fp, "     release: %s\n", printable_string(kt->utsname.release) ? 
+			kt->utsname.release : "(not printable)");
+		fprintf(fp, "     version: %s\n", printable_string(kt->utsname.version) ? 
+			kt->utsname.version : "(not printable)");
+		fprintf(fp, "     machine: %s\n", printable_string(kt->utsname.machine) ? 
+			kt->utsname.machine : "(not printable)");
+		fprintf(fp, "  domainname: %s\n", printable_string(kt->utsname.domainname) ? 
+			kt->utsname.domainname : "(not printable)");
+	}
 
 	strncpy(buf, kt->utsname.release, MIN(strlen(kt->utsname.release), 65));
 	if (ascii_string(kt->utsname.release)) {
@@ -864,13 +882,16 @@ cpu_maps_init(void)
 		}
 
 		if (CRASHDEBUG(1)) {
-			fprintf(fp, "cpu_%s_%s: ", mapinfo[m].name,
-				cpu_map_type(mapinfo[m].name));
-			for (i = 0; i < NR_CPUS; i++) {
-				if (kt->cpu_flags[i] & mapinfo[m].cpu_flag)
+			fprintf(fp, "%scpu_%s_%s: cpus: ", 
+				space(strlen("possible")-strlen(mapinfo[m].name)),
+				mapinfo[m].name, cpu_map_type(mapinfo[m].name));
+			for (i = c = 0; i < NR_CPUS; i++) {
+				if (kt->cpu_flags[i] & mapinfo[m].cpu_flag) {
 					fprintf(fp, "%d ", i);
+					c++;
+				}
 			}
-			fprintf(fp, "\n");
+			fprintf(fp, "%s\n", c ? "" : "(none)");
 		}
 
 	}
@@ -5468,7 +5489,7 @@ get_NR_syscalls(int *confirmed)
 void
 dump_kernel_table(int verbose)
 {
-	int i, j, more, nr_cpus;
+	int i, c, j, more, nr_cpus;
         struct new_utsname *uts;
         int others;
 
@@ -5690,42 +5711,50 @@ dump_kernel_table(int verbose)
 		}
 	}
 	fprintf(fp, "\n");
-	fprintf(fp, "       cpu_possible_map: ");
+	fprintf(fp, "        possible cpus: ");
 	if (cpu_map_addr("possible")) {
-		for (i = 0; i < nr_cpus; i++) {
-			if (kt->cpu_flags[i] & POSSIBLE_MAP)
+		for (i = c = 0; i < nr_cpus; i++) {
+			if (kt->cpu_flags[i] & POSSIBLE_MAP) {
 				fprintf(fp, "%d ", i);
+				c++;
+			}
 		}
-		fprintf(fp, "\n");
+		fprintf(fp, "%s\n", c ? "" : "(none)");
 	} else
-		fprintf(fp, "(does not exist)\n");
-	fprintf(fp, "        cpu_present_map: ");
+		fprintf(fp, "(nonexistent)\n");
+	fprintf(fp, "         present cpus: ");
 	if (cpu_map_addr("present")) {
-		for (i = 0; i < nr_cpus; i++) {
-			if (kt->cpu_flags[i] & PRESENT_MAP)
+		for (i = c = 0; i < nr_cpus; i++) {
+			if (kt->cpu_flags[i] & PRESENT_MAP) {
 				fprintf(fp, "%d ", i);
+				c++;
+			}
 		}
-		fprintf(fp, "\n");
+		fprintf(fp, "%s\n", c ? "" : "(none)");
 	} else
-		fprintf(fp, "(does not exist)\n");
-	fprintf(fp, "         cpu_online_map: ");
+		fprintf(fp, "(nonexistent)\n");
+	fprintf(fp, "          online cpus: ");
 	if (cpu_map_addr("online")) {
-		for (i = 0; i < nr_cpus; i++) {
-			if (kt->cpu_flags[i] & ONLINE_MAP)
+		for (i = c = 0; i < nr_cpus; i++) {
+			if (kt->cpu_flags[i] & ONLINE_MAP) {
 				fprintf(fp, "%d ", i);
+				c++;
+			}
 		}
-		fprintf(fp, "\n");
+		fprintf(fp, "%s\n", c ? "" : "(none)");
 	} else
-		fprintf(fp, "(does not exist)\n");
-	fprintf(fp, "         cpu_active_map: ");
+		fprintf(fp, "(nonexistent)\n");
+	fprintf(fp, "          active cpus: ");
 	if (cpu_map_addr("active")) {
-		for (i = 0; i < nr_cpus; i++) {
-			if (kt->cpu_flags[i] & ACTIVE_MAP)
+		for (i = c = 0; i < nr_cpus; i++) {
+			if (kt->cpu_flags[i] & ACTIVE_MAP) {
 				fprintf(fp, "%d ", i);
+				c++;
+			}
 		}
-		fprintf(fp, "\n");
+		fprintf(fp, "%s\n", c ? "" : "(none)");
 	} else
-		fprintf(fp, "(does not exist)\n");
+		fprintf(fp, "(nonexistent)\n");
 
 no_cpu_flags:
 	fprintf(fp, "    vmcoreinfo: \n");

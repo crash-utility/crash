@@ -1103,7 +1103,7 @@ extract_hex(char *s, ulong *result, char stripchar, ulong first_instance)
 
 
 /*
- *  Determine whether a string contains only printable ASCII characters.
+ *  Determine whether a string contains only ASCII characters.
  */
 int
 ascii_string(char *s)
@@ -1112,6 +1112,22 @@ ascii_string(char *s)
 
         for (p = &s[0]; *p; p++) {
 		if (!ascii(*p)) 
+			return FALSE;
+        }
+
+        return TRUE;
+}
+
+/*
+ *  Check whether a string contains only printable ASCII characters.
+ */
+int
+printable_string(char *s)
+{
+        char *p;
+
+        for (p = &s[0]; *p; p++) {
+		if (!isprint(*p)) 
 			return FALSE;
         }
 

@@ -4441,6 +4441,7 @@ int console_verbatim(char *);
 int whitespace(int);
 int ascii(int);
 int ascii_string(char *);
+int printable_string(char *);
 char *clean_line(char *);
 char *strip_line_end(char *);
 char *strip_linefeeds(char *);
