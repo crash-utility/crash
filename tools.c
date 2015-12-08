@@ -2315,6 +2315,30 @@ cmd_set(void)
 					*gdb_stop_print_at_null ? "on" : "off");
 			return;
 
+                } else if (STREQ(args[optind], "print_array")) {
+			optind++;
+			if (args[optind]) {
+				if (!runtime)
+					defer();
+				else if (STREQ(args[optind], "on"))
+					*gdb_prettyprint_arrays = 1;
+				else if (STREQ(args[optind], "off"))
+					*gdb_prettyprint_arrays = 0;
+				else if (IS_A_NUMBER(args[optind])) {
+					value = stol(args[optind],
+						FAULT_ON_ERROR, NULL);
+					if (value)
+						*gdb_prettyprint_arrays = 1;
+					else
+						*gdb_prettyprint_arrays = 0;
+					} else
+						goto invalid_set_command;
+			}
+			if (runtime)
+				fprintf(fp, "print_array: %s\n", 
+					*gdb_prettyprint_arrays ? "on" : "off");
+			return;
+
                 } else if (STREQ(args[optind], "namelist")) {
 			optind++;
                         if (!runtime && args[optind]) {
@@ -2485,6 +2509,7 @@ show_options(void)
                 pc->output_radix == 16 ? "hexadecimal" : "unknown");
 	fprintf(fp, "       refresh: %s\n", tt->flags & TASK_REFRESH ? "on" : "off");
 	fprintf(fp, "     print_max: %d\n", *gdb_print_max);
+	fprintf(fp, "   print_array: %s\n", *gdb_prettyprint_arrays ? "on" : "off");
 	fprintf(fp, "       console: %s\n", pc->console ? 
 		pc->console : "(not assigned)");
 	fprintf(fp, "         debug: %ld\n", pc->debug);
