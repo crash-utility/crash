@@ -77,6 +77,7 @@ static void dump_log_legacy(void);
 static void dump_variable_length_record(void);
 static int is_livepatch(void);
 static void show_kernel_taints(char *, int);
+static void dump_dmi_info(void);
 static void list_source_code(struct gnu_request *, int);
 static void source_tree_init(void);
 
@@ -4924,7 +4925,7 @@ cmd_sys(void)
 
 	sflag = FALSE;
 
-        while ((c = getopt(argcnt, args, "ctp:")) != EOF) {
+        while ((c = getopt(argcnt, args, "ctip:")) != EOF) {
                 switch(c)
                 {
 		case 'p':
@@ -4940,6 +4941,10 @@ cmd_sys(void)
 
 		case 't':
 			show_kernel_taints(buf, VERBOSE);
+			return;
+
+		case 'i':
+			dump_dmi_info();
 			return;
 
                 default:
@@ -10112,3 +10117,67 @@ show_kernel_taints(char *buf, int verbose)
 		fprintf(fp, "TAINTED_MASK: %lx  %s\n", tainted_mask, buf);
 }
 
+static void
+dump_dmi_info(void)
+{
+	int i, array_len, len, maxlen;
+	ulong dmi_ident_p, vaddr;
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char *arglist[MAXARGS];
+
+	if (!kernel_symbol_exists("dmi_ident"))
+		error(FATAL, "dmi_ident does not exist in this kernel\n");
+
+	dmi_ident_p = symbol_value("dmi_ident");
+	array_len = get_array_length("dmi_ident", NULL, 0);
+	maxlen = 0;
+
+	open_tmpfile();
+
+	if (dump_enumerator_list("dmi_field")) {
+		rewind(pc->tmpfile);
+		while (fgets(buf1, BUFSIZE, pc->tmpfile)) {
+			if (!strstr(buf1, " = "))
+				continue;
+			if ((parse_line(buf1, arglist) != 3) ||
+			    (atoi(arglist[2]) >= array_len))
+				break;
+			len = strlen(arglist[0]);
+			if (len > maxlen)
+				maxlen = len;
+		}
+
+		rewind(pc->tmpfile);
+		while (fgets(buf1, BUFSIZE, pc->tmpfile)) {
+			if (!strstr(buf1, " = "))
+				continue;
+
+			if ((parse_line(buf1, arglist) != 3) ||
+			    ((i = atoi(arglist[2])) >= array_len))
+				break;
+
+			readmem(dmi_ident_p + (sizeof(void *) * i),
+				KVADDR, &vaddr, sizeof(void *),
+				"dmi_ident", FAULT_ON_ERROR);
+			if (!vaddr)
+				continue;
+
+			read_string(vaddr, buf2, BUFSIZE-1);
+			fprintf(pc->saved_fp, "  %s%s: %s\n", 
+				space(maxlen - strlen(arglist[0])), arglist[0], buf2);
+		}
+	} else {
+		for (i = 0; i < array_len; i++) {
+			readmem(dmi_ident_p + (sizeof(void *) * i),
+				KVADDR, &vaddr, sizeof(void *),
+				"dmi_ident", FAULT_ON_ERROR);
+			if (!vaddr)
+				continue;
+			read_string(vaddr, buf1, BUFSIZE-1);
+			fprintf(pc->saved_fp, "  dmi_ident[%d]: %s\n", i, buf1);
+		}
+	} 
+
+	close_tmpfile();
+}

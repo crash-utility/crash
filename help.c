@@ -3234,7 +3234,7 @@ NULL
 char *help_sys[] = {
 "sys",
 "system data",
-"[-c [name|number]] [-t] config",
+"[-c [name|number]] [-t] [-i] config",
 "  This command displays system-specific data.  If no arguments are entered,\n"
 "  the same system data shown during %s invocation is shown.\n",
 "    -c [name|number]  If no name or number argument is entered, dump all",
@@ -3257,6 +3257,7 @@ char *help_sys[] = {
 "                      /dev/mem.  Results in the %s context causing an",
 "                      \"Attempted to kill the idle task!\" panic.  (The dump",
 "                      will indicate that the %s context has a PID of 0).",
+"    -i                Dump the DMI string data if available in the kernel.",
 
 "\nEXAMPLES",
 "  Display essential system information:\n",
@@ -3321,6 +3322,26 @@ char *help_sys[] = {
 " ",
 "    If the current output radix has been set to 16, the system call numbers",
 "    will be displayed in hexadecimal.",
+"\n  Dump the DMI string data:\n",
+"    %s> sys -i",
+"            DMI_BIOS_VENDOR: LENOVO",
+"           DMI_BIOS_VERSION: G4ET37WW (1.12 )",
+"              DMI_BIOS_DATE: 05/29/2012",
+"             DMI_SYS_VENDOR: LENOVO",
+"           DMI_PRODUCT_NAME: 2429BQ1",
+"        DMI_PRODUCT_VERSION: ThinkPad T530",
+"         DMI_PRODUCT_SERIAL: R9R91HZ",
+"           DMI_PRODUCT_UUID: 568DFA01-5180-11CB-B851-BD06085ADDB0",
+"           DMI_BOARD_VENDOR: LENOVO",
+"             DMI_BOARD_NAME: 2429BQ1",
+"          DMI_BOARD_VERSION: Not Available",
+"           DMI_BOARD_SERIAL: 1ZLV127F17M",
+"        DMI_BOARD_ASSET_TAG: Not Available",
+"         DMI_CHASSIS_VENDOR: LENOVO",
+"           DMI_CHASSIS_TYPE: 10",
+"        DMI_CHASSIS_VERSION: Not Available",
+"         DMI_CHASSIS_SERIAL: R9R91HZ",
+"      DMI_CHASSIS_ASSET_TAG: RH0004111",
 NULL               
 };
 
