@@ -1845,7 +1845,7 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 	char buf[BUFSIZE];
 	char *ptr;
 	ulong *uptr;
-	int xen_core, vmcoreinfo, eraseinfo, qemuinfo;
+	int xen_core, vmcoreinfo, vmcoreinfo_xen, eraseinfo, qemuinfo;
 	uint64_t remaining, notesize;
 
 	note = (Elf32_Nhdr *)((char *)nd->elf32 + offset);
@@ -1940,7 +1940,10 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 #endif
 	default:
 		xen_core = STRNEQ(buf, "XEN CORE") || STRNEQ(buf, "Xen");
-		vmcoreinfo = STRNEQ(buf, "VMCOREINFO");
+		if (STRNEQ(buf, "VMCOREINFO_XEN"))
+			vmcoreinfo_xen = TRUE;
+		else
+			vmcoreinfo = STRNEQ(buf, "VMCOREINFO");
 		eraseinfo = STRNEQ(buf, "ERASEINFO");
 		qemuinfo = STRNEQ(buf, "QEMU");
 		if (xen_core) {
@@ -1963,7 +1966,9 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 		} else if (qemuinfo) {
 			pc->flags2 |= QEMU_MEM_DUMP_ELF;
 			netdump_print("(QEMUCPUState)\n");
-		} else
+		} else if (vmcoreinfo_xen)
+			netdump_print("(unused)\n");
+		else
 			netdump_print("(?)\n");
 		break;
 
@@ -2014,7 +2019,7 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 		}
 	}
 
-	if (vmcoreinfo || eraseinfo) {
+	if (vmcoreinfo || eraseinfo || vmcoreinfo_xen) {
                 netdump_print("                         ");
                 ptr += note->n_namesz + 1;
                 for (i = 0; i < note->n_descsz; i++, ptr++) {
@@ -2064,14 +2069,14 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 	char *ptr;
 	ulonglong *uptr;
 	int *iptr;
-	int xen_core, vmcoreinfo, eraseinfo, qemuinfo;
+	int xen_core, vmcoreinfo, vmcoreinfo_xen, eraseinfo, qemuinfo;
 	uint64_t remaining, notesize;
 
 	note = (Elf64_Nhdr *)((char *)nd->elf64 + offset);
 
         BZERO(buf, BUFSIZE);
         ptr = (char *)note + sizeof(Elf64_Nhdr);
-	xen_core = vmcoreinfo = eraseinfo = qemuinfo = FALSE;
+	xen_core = vmcoreinfo = vmcoreinfo_xen = eraseinfo = qemuinfo = FALSE;
 
 	if (ptr > (nd->elf_header + nd->header_size)) {
 		error(WARNING, 
@@ -2196,7 +2201,10 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 #endif
 	default:
 		xen_core = STRNEQ(buf, "XEN CORE") || STRNEQ(buf, "Xen");
-		vmcoreinfo = STRNEQ(buf, "VMCOREINFO");
+		if (STRNEQ(buf, "VMCOREINFO_XEN"))
+			vmcoreinfo_xen = TRUE;
+		else
+			vmcoreinfo = STRNEQ(buf, "VMCOREINFO");
 		eraseinfo = STRNEQ(buf, "ERASEINFO");
 		qemuinfo = STRNEQ(buf, "QEMU");
                 if (xen_core) {
@@ -2223,7 +2231,9 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 		} else if (qemuinfo) {
 			pc->flags2 |= QEMU_MEM_DUMP_ELF;
 			netdump_print("(QEMUCPUState)\n");
-                } else
+		} else if (vmcoreinfo_xen)
+			netdump_print("(unused)\n");
+                else
                         netdump_print("(?)\n");
                 break;
 
@@ -2302,7 +2312,7 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 				lf = 0;
 			netdump_print("%08lx ", *iptr++);
 		}
-	} else if (vmcoreinfo || eraseinfo) {
+	} else if (vmcoreinfo || eraseinfo || vmcoreinfo_xen) {
 		netdump_print("                         ");
 		ptr += note->n_namesz + 1;
 		for (i = 0; i < note->n_descsz; i++, ptr++) {
