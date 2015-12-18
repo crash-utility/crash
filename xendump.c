@@ -1260,7 +1260,7 @@ xc_core_create_pfn_tables(void)
 			    "cannot create xen pfn-to-mfn mapping\n");
 	}
 
-	if (xd->flags & XC_CORE_ELF)
+	if (xd->flags & XC_CORE_PFN_CREATE)
 		xc_core_elf_pfn_init();
 
 	xd->flags &= ~(XC_CORE_P2M_CREATE|XC_CORE_PFN_CREATE);
@@ -2557,7 +2557,7 @@ xc_core_dump_Elf32_Shdr(Elf32_Off offset, int store)
 	if (STREQ(name, ".xen_p2m")) {
 		xd->xc_core.header.xch_index_offset =
 			(off_t)shdr.sh_offset;
-		xd->flags |= XC_CORE_P2M_CREATE;
+		xd->flags |= XC_CORE_PFN_CREATE;
 	}
 
 	if (STREQ(name, ".xen_pages"))
@@ -2659,7 +2659,7 @@ xc_core_dump_Elf64_Shdr(Elf64_Off offset, int store)
 	if (STREQ(name, ".xen_p2m")) {
 		xd->xc_core.header.xch_index_offset =
 			(off_t)shdr.sh_offset;
-		xd->flags |= XC_CORE_P2M_CREATE;
+		xd->flags |= XC_CORE_PFN_CREATE;
 	}
 
 	if (STREQ(name, ".xen_pages"))
