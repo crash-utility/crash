@@ -2520,7 +2520,9 @@ show_options(void)
 	fprintf(fp, "      namelist: %s\n", pc->namelist);
 	fprintf(fp, "      dumpfile: %s\n", pc->dumpfile);
 	fprintf(fp, "        unwind: %s\n", kt->flags & DWARF_UNWIND ? "on" : "off");
-	fprintf(fp, " zero_excluded: %s\n", *diskdump_flags & ZERO_EXCLUDED ? "on" : "off");
+	fprintf(fp, " zero_excluded: %s\n",
+		(*diskdump_flags & ZERO_EXCLUDED) || sadump_is_zero_excluded() ?
+		"on" : "off");
 	fprintf(fp, "     null-stop: %s\n", *gdb_stop_print_at_null ? "on" : "off");
 	fprintf(fp, "           gdb: %s\n", pc->flags2 & GDB_CMD_MODE ? "on" : "off");
 	fprintf(fp, "         scope: %lx ", pc->scope);

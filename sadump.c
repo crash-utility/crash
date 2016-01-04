@@ -394,7 +394,13 @@ restart:
 	}
 
 	sd->filename = file;
-	sd->flags = flags;
+
+	/*
+	 * Switch to zero excluded mode by default on sadump-related
+	 * formats because some Fujitsu troubleshooting software
+	 * assumes the behavior.
+	 */
+	sd->flags = flags | SADUMP_ZERO_EXCLUDED;
 
 	if (machine_type("X86"))
 		sd->machine_type = EM_386;
