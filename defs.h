@@ -1,8 +1,8 @@
 /* defs.h - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015 David Anderson
- * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2016 David Anderson
+ * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -3129,6 +3129,9 @@ struct arm64_stackframe {
 #define VMEMMAP_END_2_6_31         0xffffeaffffffffff
 #define MODULES_VADDR_2_6_31       0xffffffffa0000000
 #define MODULES_END_2_6_31         0xffffffffff000000
+
+#define VSYSCALL_START             0xffffffffff600000
+#define VSYSCALL_END               0xffffffffffe00000
 
 #define PTOV(X)               ((unsigned long)(X)+(machdep->kvbase))
 #define VTOP(X)               x86_64_VTOP((ulong)(X))

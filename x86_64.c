@@ -1,7 +1,7 @@
 /* x86_64.c -- core analysis suite
  *
- * Copyright (C) 2004-2015 David Anderson
- * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2016 David Anderson
+ * Copyright (C) 2004-2016 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1309,7 +1309,8 @@ x86_64_IS_VMALLOC_ADDR(ulong vaddr)
 	return ((vaddr >= VMALLOC_START && vaddr <= VMALLOC_END) ||
                 ((machdep->flags & VMEMMAP) && 
 		 (vaddr >= VMEMMAP_VADDR && vaddr <= VMEMMAP_END)) ||
-                (vaddr >= MODULES_VADDR && vaddr <= MODULES_END));
+                (vaddr >= MODULES_VADDR && vaddr <= MODULES_END) ||
+		(vaddr >= VSYSCALL_START && vaddr < VSYSCALL_END));
 }
 
 static int 
