@@ -993,6 +993,25 @@ arm64_stackframe_init(void)
 #define PSR_MODE_EL3h   0x0000000d
 #define PSR_MODE_MASK   0x0000000f
 
+/* Architecturally defined mapping between AArch32 and AArch64 registers */
+#define compat_usr(x)   regs[(x)]
+#define compat_fp       regs[11]
+#define compat_sp       regs[13]
+#define compat_lr       regs[14]
+
+#define user_mode(ptregs) \
+	(((ptregs)->pstate & PSR_MODE_MASK) == PSR_MODE_EL0t)
+
+#define compat_user_mode(ptregs)  \
+	(((ptregs)->pstate & (PSR_MODE32_BIT | PSR_MODE_MASK)) == \
+	 (PSR_MODE32_BIT | PSR_MODE_EL0t))
+
+#define user_stack_pointer(ptregs) \
+	(!compat_user_mode(ptregs) ? (ptregs)->sp : (ptregs)->compat_sp)
+
+#define user_frame_pointer(ptregs) \
+	(!compat_user_mode(ptregs) ? (ptregs)->regs[29] : (ptregs)->compat_fp)
+
 static int
 arm64_is_kernel_exception_frame(struct bt_info *bt, ulong stkptr)
 {
@@ -1348,13 +1367,22 @@ arm64_get_dumpfile_stackframe(struct bt_info *bt, struct arm64_stackframe *frame
 	}
 
 	ptregs = &ms->panic_task_regs[bt->tc->processor];
-	frame->sp = ptregs->sp;
 	frame->pc = ptregs->pc;
-	frame->fp = ptregs->regs[29];
-
-	if (!is_kernel_text(frame->pc) && 
-	    in_user_stack(bt->tc->task, frame->sp))
+	if (user_mode(ptregs)) {
+		frame->sp = user_stack_pointer(ptregs);
+		frame->fp = user_frame_pointer(ptregs);
+		if (is_kernel_text(frame->pc) ||
+		    !in_user_stack(bt->tc->task, frame->sp)) {
+			error(WARNING, "Corrupt prstatus? pstate=0x%lx, but no user frame found\n",
+										ptregs->pstate);
+			bt->flags |= BT_REGS_NOT_FOUND;
+			return FALSE;
+		}
 		bt->flags |= BT_USER_SPACE;
+	} else {
+		frame->sp = ptregs->sp;
+		frame->fp = ptregs->regs[29];
+	}
 
 	if (arm64_in_kdump_text(bt, frame))
 		bt->flags |= BT_KDUMP_ADJUST;
@@ -1473,7 +1501,9 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode, FILE *o
 			i < 10 ? " " : "", i);
 		fprintf(ofp, is_64_bit ? "%016lx" : "%08lx",
 			(ulong)regs->regs[i]);
-		if ((i == 0) || ((r % rows) == 0))
+		if ((i == 0) && !is_64_bit)
+			fprintf(ofp, "\n");
+		else if ((i == 0) || ((r % rows) == 0))
 			fprintf(ofp, "\n    ");
 		else
 			fprintf(ofp, "%s", is_64_bit ? "  " : " "); 
