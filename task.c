@@ -1,8 +1,8 @@
 /* task.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015 David Anderson
- * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2016 David Anderson
+ * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -4019,11 +4019,12 @@ start_time_timespec(void)
 {
         char buf[BUFSIZE];
 
-	switch(tt->flags & (TIMESPEC | NO_TIMESPEC))
+	switch(tt->flags & (TIMESPEC | NO_TIMESPEC | START_TIME_NSECS))
 	{
 	case TIMESPEC:
 		return TRUE;
 	case NO_TIMESPEC:
+	case START_TIME_NSECS:
 		return FALSE;
 	default:
 		break;
@@ -4050,6 +4051,11 @@ start_time_timespec(void)
 
         close_tmpfile();
 
+	if ((tt->flags & NO_TIMESPEC) && (SIZE(task_struct_start_time) == 8)) {
+		tt->flags &= ~NO_TIMESPEC;
+		tt->flags |= START_TIME_NSECS;
+	}
+
         return (tt->flags & TIMESPEC ? TRUE : FALSE);
 }
 
@@ -4059,8 +4065,10 @@ convert_start_time(ulonglong start_time, ulonglong current)
 	ulong tmp1, tmp2;
 	ulonglong wrapped;
 
-        switch(tt->flags & (TIMESPEC | NO_TIMESPEC))
+        switch(tt->flags & (TIMESPEC | NO_TIMESPEC | START_TIME_NSECS))
         {
+	case START_TIME_NSECS:
+		start_time /= 1000000000ULL;  /* FALLTHROUGH */
         case TIMESPEC:
 		if ((start_time * (ulonglong)machdep->hz) > current)
 			return 0;
@@ -6943,6 +6951,9 @@ dump_task_table(int verbose)
         if (tt->flags & NO_TIMESPEC)
                 sprintf(&buf[strlen(buf)], 
 			"%sNO_TIMESPEC", others++ ? "|" : "");
+        if (tt->flags & START_TIME_NSECS)
+                sprintf(&buf[strlen(buf)], 
+			"%sSTART_TIME_NSECS", others++ ? "|" : "");
         if (tt->flags & ACTIVE_ONLY)
                 sprintf(&buf[strlen(buf)], 
 			"%sACTIVE_ONLY", others++ ? "|" : "");

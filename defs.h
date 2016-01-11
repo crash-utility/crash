@@ -844,6 +844,7 @@ struct task_table {                      /* kernel/local task table data */
 #define TIMESPEC          (0x1000)
 #define NO_TIMESPEC       (0x2000)
 #define ACTIVE_ONLY       (0x4000)
+#define START_TIME_NSECS  (0x8000)
 
 #define TASK_SLUSH (20)
 
