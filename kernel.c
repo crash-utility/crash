@@ -3291,16 +3291,45 @@ module_init(void)
         	MEMBER_OFFSET_INIT(module_gpl_syms, "module", "gpl_syms");
         	MEMBER_OFFSET_INIT(module_num_gpl_syms, "module", 
 			"num_gpl_syms");
-        	MEMBER_OFFSET_INIT(module_module_core, "module", 
-			"module_core");
-        	MEMBER_OFFSET_INIT(module_core_size, "module", 
-			"core_size");
-        	MEMBER_OFFSET_INIT(module_core_text_size, "module", 
-			"core_text_size");
-		MEMBER_OFFSET_INIT(module_module_init, "module", "module_init");
-		MEMBER_OFFSET_INIT(module_init_size, "module", "init_size");
-		MEMBER_OFFSET_INIT(module_init_text_size, "module", 
-			"init_text_size");
+
+		if (MEMBER_EXISTS("module", "module_core")) {
+			MEMBER_OFFSET_INIT(module_core_size, "module",
+					   "core_size");
+			MEMBER_OFFSET_INIT(module_init_size, "module",
+					   "init_size");
+
+			MEMBER_OFFSET_INIT(module_core_text_size, "module",
+					   "core_text_size");
+			MEMBER_OFFSET_INIT(module_init_text_size, "module",
+					   "init_text_size");
+
+			MEMBER_OFFSET_INIT(module_module_core, "module",
+					   "module_core");
+			MEMBER_OFFSET_INIT(module_module_init, "module",
+					   "module_init");
+		} else {
+			ASSIGN_OFFSET(module_core_size) =
+				MEMBER_OFFSET("module", "core_layout") +
+				MEMBER_OFFSET("module_layout", "size");
+			ASSIGN_OFFSET(module_init_size) =
+				MEMBER_OFFSET("module", "init_layout") +
+				MEMBER_OFFSET("module_layout", "size");
+
+			ASSIGN_OFFSET(module_core_text_size) =
+				MEMBER_OFFSET("module", "core_layout") +
+				MEMBER_OFFSET("module_layout", "text_size");
+			ASSIGN_OFFSET(module_init_text_size) =
+				MEMBER_OFFSET("module", "init_layout") +
+				MEMBER_OFFSET("module_layout", "text_size");
+
+			ASSIGN_OFFSET(module_module_core) =
+				MEMBER_OFFSET("module", "core_layout") +
+				MEMBER_OFFSET("module_layout", "base");
+			ASSIGN_OFFSET(module_module_init) =
+				MEMBER_OFFSET("module", "init_layout") +
+				MEMBER_OFFSET("module_layout", "base");
+		}
+
 		MEMBER_OFFSET_INIT(module_percpu, "module", "percpu");
 
 		/*
