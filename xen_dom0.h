@@ -68,6 +68,8 @@ struct xen_kdump_data {
 
 #define P2M_FAILURE ((physaddr_t)(0xffffffffffffffffLL))
 
+extern struct xen_kdump_data *xkd;
+
 void dump_xen_kdump_data(FILE *);
 struct xen_kdump_data *get_xen_kdump_data(void);
 

@@ -20,7 +20,8 @@
 #include "xen_dom0.h"
 
 static struct xen_kdump_data xen_kdump_data = { 0 };
-static struct xen_kdump_data *xkd = &xen_kdump_data;
+
+struct xen_kdump_data *xkd = &xen_kdump_data;
 
 void
 dump_xen_kdump_data(FILE *fp)
