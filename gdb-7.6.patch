@@ -1909,3 +1909,35 @@
  
  		    func (stream, "%d", imm);
  		  }
+diff -up gdb-7.6/bfd/elf64-ppc.c.orig gdb-7.6/bfd/elf64-ppc.c
+--- gdb-7.6/bfd/elf64-ppc.c.orig	2016-02-02 11:04:25.436527347 -0500
++++ gdb-7.6/bfd/elf64-ppc.c	2016-02-02 11:11:51.926468454 -0500
+@@ -11743,7 +11743,7 @@ ppc64_elf_size_stubs (struct bfd_link_in
+ 	     stub_sec = stub_sec->next)
+ 	  if ((stub_sec->flags & SEC_LINKER_CREATED) == 0)
+ 	    stub_sec->size = ((stub_sec->size + (1 << htab->plt_stub_align) - 1)
+-			      & (-1 << htab->plt_stub_align));
++			      & -(1 << htab->plt_stub_align));
+ 
+       for (stub_sec = htab->stub_bfd->sections;
+ 	   stub_sec != NULL;
+@@ -12093,7 +12093,7 @@ ppc64_elf_build_stubs (bfd_boolean emit_
+ 	 stub_sec = stub_sec->next)
+       if ((stub_sec->flags & SEC_LINKER_CREATED) == 0)
+ 	stub_sec->size = ((stub_sec->size + (1 << htab->plt_stub_align) - 1)
+-			  & (-1 << htab->plt_stub_align));
++			  & -(1 << htab->plt_stub_align));
+ 
+   for (stub_sec = htab->stub_bfd->sections;
+        stub_sec != NULL;
+--- gdb-7.6/include/opcode/ppc.h.orig
++++ gdb-7.6/include/opcode/ppc.h
+@@ -278,7 +278,7 @@ extern const unsigned int num_powerpc_op
+ /* Use with the shift field of a struct powerpc_operand to indicate
+      that BITM and SHIFT cannot be used to determine where the operand
+      goes in the insn.  */
+-#define PPC_OPSHIFT_INV (-1 << 31)
++#define PPC_OPSHIFT_INV (-1U << 31)
+ 
+ /* Values defined for the flags field of a struct powerpc_operand.  */
+ 
