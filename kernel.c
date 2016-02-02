@@ -8179,7 +8179,7 @@ do_timer_list(ulong vec_kvaddr,
 	int timer_cnt;
         struct list_data list_data, *ld;
 	long sz;
-	ulong offset;
+	ulong offset = 0;
 
 	tdx = 0;
 	td = option ? (struct timer_data *)option : NULL;
@@ -8208,7 +8208,7 @@ do_timer_list(ulong vec_kvaddr,
 		goto new_timer_list_format;
 	}
 
-	if (VALID_MEMBER(timer_list_next) >= 0)
+	if (VALID_MEMBER(timer_list_next))
 		offset = OFFSET(timer_list_next);
 	else
 		error(FATAL, "no timer_list next, list, or entry members?\n");

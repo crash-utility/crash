@@ -1240,9 +1240,10 @@ lkcd_uncompress_gzip(unsigned char *dest, ulong destlen,
 	switch (uncompress(dest, &retlen, source, sourcelen)) 
 	{
 	case Z_OK:
-		if (retlen == destlen)
+		if (retlen == destlen) {
                         rc = TRUE;
                         break;
+		}
 
 		lkcd_print("uncompress: returned length not page size: %ld\n",
 				retlen);

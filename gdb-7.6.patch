@@ -1876,3 +1876,25 @@
    for (i = strlen (obuf) + prefix_length; i < 6; i++)
      oappend (" ");
    oappend (" ");
+--- gdb-7.6/bfd/coff-i386.c.orig
++++ gdb-7.6/bfd/coff-i386.c
+@@ -141,7 +141,7 @@ coff_i386_reloc (bfd *abfd,
+ #define DOIT(x) \
+   x = ((x & ~howto->dst_mask) | (((x & howto->src_mask) + diff) & howto->dst_mask))
+ 
+-    if (diff != 0)
++  if (diff != 0)
+       {
+ 	reloc_howto_type *howto = reloc_entry->howto;
+ 	unsigned char *addr = (unsigned char *) data + reloc_entry->address;
+--- gdb-7.6/bfd/coff-x86_64.c.orig
++++ gdb-7.6/bfd/coff-x86_64.c
+@@ -139,7 +139,7 @@ coff_amd64_reloc (bfd *abfd,
+ #define DOIT(x) \
+   x = ((x & ~howto->dst_mask) | (((x & howto->src_mask) + diff) & howto->dst_mask))
+ 
+-    if (diff != 0)
++  if (diff != 0)
+       {
+ 	reloc_howto_type *howto = reloc_entry->howto;
+ 	unsigned char *addr = (unsigned char *) data + reloc_entry->address;

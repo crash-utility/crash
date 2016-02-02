@@ -2318,19 +2318,19 @@ x86_64_eframe_search(struct bt_info *bt)
 				continue;
                 	if (ms->stkinfo.ibase[c] == 0)
                         	break;
-                                bt->hp->esp = ms->stkinfo.ibase[c];
-                                fprintf(fp, "CPU %d IRQ STACK:", c);
+                        bt->hp->esp = ms->stkinfo.ibase[c];
+                        fprintf(fp, "CPU %d IRQ STACK:", c);
 
-				if (hide_offline_cpu(c)) {
-					fprintf(fp, " [OFFLINE]\n\n");
-					continue;
-				} else
-					fprintf(fp, "\n");
+			if (hide_offline_cpu(c)) {
+				fprintf(fp, " [OFFLINE]\n\n");
+				continue;
+			} else
+				fprintf(fp, "\n");
 
-                                if ((cnt = x86_64_eframe_search(bt)))
-					fprintf(fp, "\n");
-				else
-                                        fprintf(fp, "(none found)\n\n");
+                        if ((cnt = x86_64_eframe_search(bt)))
+				fprintf(fp, "\n");
+			else
+                                fprintf(fp, "(none found)\n\n");
                 }
 
         	for (c = 0; c < kt->cpus; c++) {
