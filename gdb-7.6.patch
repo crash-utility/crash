@@ -1898,3 +1898,14 @@
        {
  	reloc_howto_type *howto = reloc_entry->howto;
  	unsigned char *addr = (unsigned char *) data + reloc_entry->address;
+--- gdb-7.6/opcodes/arm-dis.c.orig
++++ gdb-7.6/opcodes/arm-dis.c
+@@ -2103,7 +2103,7 @@ print_insn_coprocessor (bfd_vma pc,
+ 
+ 		    /* Is ``imm'' a negative number?  */
+ 		    if (imm & 0x40)
+-		      imm |= (-1 << 7);
++		      imm -= 0x80;
+ 
+ 		    func (stream, "%d", imm);
+ 		  }
