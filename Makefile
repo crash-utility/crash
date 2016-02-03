@@ -233,7 +233,7 @@ gdb_merge: force
 	@rm -f ${PROGRAM}
 	@if [ ! -f ${GDB}/config.status ]; then \
 	  (cd ${GDB}; ./configure ${GDB_CONF_FLAGS} --with-separate-debug-dir=/usr/lib/debug \
-	    --with-bugurl="" --with-expat=no --with-python=no; \
+	    --with-bugurl="" --with-expat=no --with-python=no --disable-sim; \
 	  make --no-print-directory CRASH_TARGET=${TARGET}; echo ${TARGET} > crash.target) \
 	else make --no-print-directory rebuild; fi
 	@if [ ! -f ${PROGRAM} ]; then \
