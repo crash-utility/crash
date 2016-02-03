@@ -1941,3 +1941,24 @@ diff -up gdb-7.6/bfd/elf64-ppc.c.orig gdb-7.6/bfd/elf64-ppc.c
  
  /* Values defined for the flags field of a struct powerpc_operand.  */
  
+--- gdb-7.6/opcodes/mips-dis.c.orig
++++ gdb-7.6/opcodes/mips-dis.c
+@@ -245,18 +245,6 @@ static const char * const mips_cp0_names
+   "c0_taglo",     "c0_taghi",     "c0_errorepc",  "$31"
+ };
+ 
+-static const struct mips_cp0sel_name mips_cp0sel_names_mipsr5900[] =
+-{
+-  { 24, 2, "c0_iab"			},
+-  { 24, 3, "c0_iabm"		},
+-  { 24, 4, "c0_dab"			},
+-  { 24, 5, "c0_dabm"		},
+-  { 24, 6, "c0_dvb"			},
+-  { 24, 7, "c0_dvbm"		},
+-  { 25, 1, "c0_perfcnt,1"	},
+-  { 25, 2, "c0_perfcnt,2"	}
+-};
+-
+ static const char * const mips_cp0_names_mips3264[32] =
+ {
+   "c0_index",     "c0_random",    "c0_entrylo0",  "c0_entrylo1",
