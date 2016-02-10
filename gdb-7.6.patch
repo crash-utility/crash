@@ -1962,3 +1962,85 @@ diff -up gdb-7.6/bfd/elf64-ppc.c.orig gdb-7.6/bfd/elf64-ppc.c
  static const char * const mips_cp0_names_mips3264[32] =
  {
    "c0_index",     "c0_random",    "c0_entrylo0",  "c0_entrylo1",
+--- gdb-7.6/gdb/ada-lang.c.orig
++++ gdb-7.6/gdb/ada-lang.c
+@@ -10503,7 +10503,7 @@ ada_evaluate_subexp (struct type *expect
+         }
+       else
+         arg1 = ada_value_struct_elt (arg1, &exp->elts[pc + 2].string, 0);
+-        arg1 = unwrap_value (arg1);
++      arg1 = unwrap_value (arg1);
+         return ada_to_fixed_value (arg1);
+ 
+     case OP_TYPE:
+--- gdb-7.6/gdb/linux-record.c.orig
++++ gdb-7.6/gdb/linux-record.c
+@@ -112,7 +112,7 @@ record_linux_sockaddr (struct regcache *
+                             "memory at addr = 0x%s len = %d.\n",
+                             phex_nz (len, tdep->size_pointer),
+                             tdep->size_int);
+-        return -1;
++      return -1;
+     }
+   addrlen = (int) extract_unsigned_integer (a, tdep->size_int, byte_order);
+   if (addrlen <= 0 || addrlen > tdep->size_sockaddr)
+@@ -150,7 +150,7 @@ record_linux_msghdr (struct regcache *re
+                             "len = %d.\n",
+                             phex_nz (addr, tdep->size_pointer),
+                             tdep->size_msghdr);
+-        return -1;
++      return -1;
+     }
+ 
+   /* msg_name msg_namelen */
+@@ -186,7 +186,7 @@ record_linux_msghdr (struct regcache *re
+                                     "len = %d.\n",
+                                     phex_nz (addr,tdep->size_pointer),
+                                     tdep->size_iovec);
+-                return -1;
++              return -1;
+             }
+           tmpaddr = (CORE_ADDR) extract_unsigned_integer (iov,
+                                                           tdep->size_pointer,
+@@ -948,7 +948,7 @@ Do you want to stop the program?"),
+                                         "memory at addr = 0x%s len = %d.\n",
+                                         OUTPUT_REG (tmpulongest, tdep->arg2),
+                                         tdep->size_ulong);
+-                    return -1;
++                  return -1;
+                 }
+               tmpulongest = extract_unsigned_integer (a, tdep->size_ulong,
+                                                       byte_order);
+--- gdb-7.6/gdb/inflow.c.orig
++++ gdb-7.6/gdb/inflow.c
+@@ -391,7 +391,7 @@ terminal_ours_1 (int output_only)
+   if (tinfo->run_terminal != NULL || gdb_has_a_terminal () == 0)
+     return;
+ 
+-    {
++  {
+ #ifdef SIGTTOU
+       /* Ignore this signal since it will happen when we try to set the
+          pgrp.  */
+--- gdb-7.6/gdb/printcmd.c.orig
++++ gdb-7.6/gdb/printcmd.c
+@@ -1045,7 +1045,7 @@ print_command_2 (char *exp, int inspect,
+   else
+     val = access_value_history (0);
+ 
+-    printf_filtered ("%d %d %d %d %d %d\n",
++  printf_filtered ("%d %d %d %d %d %d\n",
+       TYPE_CODE (check_typedef(value_type (val))),
+       TYPE_UNSIGNED (check_typedef(value_type (val))),
+       TYPE_LENGTH (check_typedef(value_type(val))),
+--- gdb-7.6/gdb/c-typeprint.c.orig
++++ gdb-7.6/gdb/c-typeprint.c
+@@ -1293,7 +1293,7 @@ c_type_print_base (struct type *type, st
+ 	      if (TYPE_NFIELDS (type) != 0 || TYPE_NFN_FIELDS (type) != 0)
+ 		fprintf_filtered (stream, "\n");
+ 
+-		for (i = 0; i < TYPE_TYPEDEF_FIELD_COUNT (type); i++)
++	      for (i = 0; i < TYPE_TYPEDEF_FIELD_COUNT (type); i++)
+ 		  {
+ 		    struct type *target = TYPE_TYPEDEF_FIELD_TYPE (type, i);
+ 
