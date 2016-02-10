@@ -1,8 +1,8 @@
 /*
  * arm64.c - core analysis suite
  *
- * Copyright (C) 2012-2015 David Anderson
- * Copyright (C) 2012-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2012-2016 David Anderson
+ * Copyright (C) 2012-2016 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,6 +36,7 @@ static int arm64_uvtop(struct task_context *, ulong, physaddr_t *, int);
 static int arm64_vtop_2level_64k(ulong, ulong, physaddr_t *, int);
 static int arm64_vtop_3level_4k(ulong, ulong, physaddr_t *, int);
 static ulong arm64_get_task_pgd(ulong);
+static void arm64_irq_stack_init(void);
 static void arm64_stackframe_init(void);
 static int arm64_eframe_search(struct bt_info *);
 static int arm64_is_kernel_exception_frame(struct bt_info *, ulong);
@@ -47,9 +48,11 @@ static void arm64_display_full_frame(struct bt_info *, ulong);
 static int arm64_unwind_frame(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_dumpfile_stackframe(struct bt_info *, struct arm64_stackframe *);
 static int arm64_in_kdump_text(struct bt_info *, struct arm64_stackframe *);
+static int arm64_in_kdump_text_on_irq_stack(struct bt_info *);
+static void arm64_switch_stack(struct bt_info *, struct arm64_stackframe *, FILE *);
 static int arm64_get_stackframe(struct bt_info *, struct arm64_stackframe *);
 static void arm64_get_stack_frame(struct bt_info *, ulong *, ulong *);
-static void arm64_print_exception_frame(struct bt_info *, ulong, int, FILE *ofp);
+static void arm64_print_exception_frame(struct bt_info *, ulong, int, FILE *);
 static void arm64_do_bt_reference_check(struct bt_info *, ulong, char *);
 static int arm64_translate_pte(ulong, void *, ulonglong);
 static ulong arm64_vmalloc_start(void);
@@ -60,6 +63,9 @@ static void arm64_display_machine_stats(void);
 static int arm64_get_smp_cpus(void);
 static void arm64_clear_machdep_cache(void);
 static int arm64_in_alternate_stack(int, ulong);
+static int arm64_on_irq_stack(int, ulong);
+static void arm64_set_irq_stack(struct bt_info *);
+static void arm64_set_process_stack(struct bt_info *);
 static int arm64_get_kvaddr_ranges(struct vaddr_range *);
 static int arm64_get_crash_notes(void);
 static void arm64_calc_VA_BITS(void);
@@ -297,6 +303,7 @@ arm64_init(int when)
 		if (!machdep->hz)
 			machdep->hz = 100;
 
+		arm64_irq_stack_init();
 		arm64_stackframe_init();
 		break;
 
@@ -348,6 +355,9 @@ arm64_verify_symbol(const char *name, ulong value, char type)
 	if ((type == 'A') && STRNEQ(name, "__crc_"))
 		return FALSE;
 
+	if ((type == 'N') && strstr(name, "$d"))
+		return FALSE;
+
 	if (!(machdep->flags & KSYMS_START) && STREQ(name, "idmap_pg_dir"))
 		machdep->flags |= KSYMS_START;
 
@@ -375,6 +385,8 @@ arm64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sVMEMMAP", others++ ? "|" : "");
 	if (machdep->flags & KDUMP_ENABLED)
 		fprintf(fp, "%sKDUMP_ENABLED", others++ ? "|" : "");
+	if (machdep->flags & IRQ_STACKS)
+		fprintf(fp, "%sIRQ_STACKS", others++ ? "|" : "");
 	if (machdep->flags & MACHDEP_BT_TEXT)
 		fprintf(fp, "%sMACHDEP_BT_TEXT", others++ ? "|" : "");
 	fprintf(fp, ")\n");
@@ -495,7 +507,16 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "       crash_kexec_end: %lx\n", ms->crash_kexec_end);
 	fprintf(fp, "  crash_save_cpu_start: %lx\n", ms->crash_save_cpu_start);
 	fprintf(fp, "    crash_save_cpu_end: %lx\n", ms->crash_save_cpu_end);
-        fprintf(fp, "          kernel_flags: %lx\n", ms->kernel_flags);
+	fprintf(fp, "          kernel_flags: %lx\n", ms->kernel_flags);
+	if (machdep->flags & IRQ_STACKS) {
+		fprintf(fp, "        irq_stack_size: %ld\n", ms->irq_stack_size);
+		for (i = 0; i < kt->cpus; i++)
+			fprintf(fp, "         irq_stacks[%d]: %lx\n", 
+				i, ms->irq_stacks[i]);
+	} else {
+		fprintf(fp, "        irq_stack_size: (unused)\n");
+		fprintf(fp, "            irq_stacks: (unused)\n");
+	}
 }
 
 
@@ -891,6 +912,44 @@ arm64_processor_speed(void)
 	return 0;
 };
 
+/*
+ *  Gather IRQ stack values.
+ */
+static void
+arm64_irq_stack_init(void)
+{
+	int i;
+	struct syment *sp;
+	struct gnu_request request, *req;
+	req = &request;
+	struct machine_specific *ms = machdep->machspec;
+
+	if (!symbol_exists("irq_stack") ||
+	    !(sp = per_cpu_symbol_search("irq_stack")) ||
+	    !get_symbol_type("irq_stack", NULL, req) ||
+	    (req->typecode != TYPE_CODE_ARRAY) ||
+	    (req->target_typecode != TYPE_CODE_INT))
+		return;
+
+	if (CRASHDEBUG(1)) {
+		fprintf(fp, "irq_stack: \n");
+		fprintf(fp, "  type: %s\n", 
+			(req->typecode == TYPE_CODE_ARRAY) ? "TYPE_CODE_ARRAY" : "other");
+		fprintf(fp, "  target_typecode: %s\n", 
+			req->target_typecode == TYPE_CODE_INT ? "TYPE_CODE_INT" : "other");
+		fprintf(fp, "  target_length: %ld\n", req->target_length);
+		fprintf(fp, "  length: %ld\n", req->length);
+	}
+
+	ms->irq_stack_size = req->length;
+	if (!(ms->irq_stacks = (ulong *)malloc((size_t)(kt->cpus * sizeof(ulong)))))
+		error(FATAL, "cannot malloc irq_stack addresses\n");
+
+	for (i = 0; i < kt->cpus; i++)
+		ms->irq_stacks[i] = kt->__per_cpu_offset[i] + sp->value;
+
+	machdep->flags |= IRQ_STACKS;
+}
 
 /*
  *  Gather and verify all of the backtrace requirements.
@@ -1037,7 +1096,45 @@ arm64_is_kernel_exception_frame(struct bt_info *bt, ulong stkptr)
 static int 
 arm64_eframe_search(struct bt_info *bt)
 {
+	int c;
 	ulong ptr, count;
+	struct machine_specific *ms;
+
+	if (bt->flags & BT_EFRAME_SEARCH2) {
+		if (!(machdep->flags & IRQ_STACKS)) 
+			error(FATAL, "IRQ stacks do not exist in this kernel\n");
+
+		ms = machdep->machspec;
+
+		for (c = 0; c < kt->cpus; c++) {
+			if ((bt->flags & BT_CPUMASK) && 
+			    !(NUM_IN_BITMAP(bt->cpumask, c)))
+				continue;
+
+			fprintf(fp, "CPU %d IRQ STACK:", c);
+			bt->stackbase = ms->irq_stacks[c];
+			bt->stacktop = bt->stackbase + ms->irq_stack_size;
+			alter_stackbuf(bt);
+			count = 0;
+
+			for (ptr = bt->stackbase; ptr < bt->stacktop - SIZE(pt_regs); ptr++) {
+				if (arm64_is_kernel_exception_frame(bt, ptr)) {
+					fprintf(fp, "%s\nKERNEL-MODE EXCEPTION FRAME AT: %lx\n", 
+						count ? "" : "\n", ptr); 
+					arm64_print_exception_frame(bt, ptr, KERNEL_MODE, fp);
+					count++;
+				}
+			}
+
+			if (count)
+				fprintf(fp, "\n");
+			else
+				fprintf(fp, "(none found)\n\n");
+		}
+
+		return 0;
+	}
+
 
 	count = 0;
 	for (ptr = bt->stackbase; ptr < bt->stacktop - SIZE(pt_regs); ptr++) {
@@ -1155,7 +1252,12 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 {
 	unsigned long high, low, fp;
 	unsigned long stack_mask;
-	
+	unsigned long irq_stack_ptr, orig_sp, sp_in;
+	struct arm64_pt_regs *ptregs;
+	struct machine_specific *ms;
+
+	sp_in = frame->sp;
+
 	stack_mask = (unsigned long)(ARM64_STACK_SIZE) - 1;
 	fp = frame->fp;
 
@@ -1168,6 +1270,44 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 	frame->sp = fp + 0x10;
 	frame->fp = GET_STACK_ULONG(fp);
 	frame->pc = GET_STACK_ULONG(fp + 8);
+
+	/*
+	 * The kernel's manner of determining the end of the IRQ stack:
+	 *
+	 *  #define THREAD_SIZE        16384
+	 *  #define THREAD_START_SP    (THREAD_SIZE - 16)
+	 *  #define IRQ_STACK_START_SP THREAD_START_SP
+	 *  #define IRQ_STACK_PTR(cpu) ((unsigned long)per_cpu(irq_stack, cpu) + IRQ_STACK_START_SP)
+	 *  #define IRQ_STACK_TO_TASK_STACK(ptr) (*((unsigned long *)((ptr) - 0x08)))
+	 *
+	 *  irq_stack_ptr = IRQ_STACK_PTR(raw_smp_processor_id());
+	 *  orig_sp = IRQ_STACK_TO_TASK_STACK(irq_stack_ptr);   (pt_regs pointer on process stack)
+	 */
+	if (machdep->flags & IRQ_STACKS) {
+		ms = machdep->machspec;
+		irq_stack_ptr = ms->irq_stacks[bt->tc->processor] + ms->irq_stack_size - 16;
+
+		if (frame->sp == irq_stack_ptr) {
+			orig_sp = GET_STACK_ULONG(irq_stack_ptr - 8);
+			arm64_set_process_stack(bt);
+			if (INSTACK(orig_sp, bt) && INSTACK(frame->fp, bt)) {
+				ptregs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(orig_sp))];
+				frame->sp = orig_sp;
+				frame->pc = ptregs->pc;
+				bt->bptr = sp_in;
+				if (CRASHDEBUG(1))
+					error(INFO, 
+					    "arm64_unwind_frame: switch stacks: fp: %lx sp: %lx  pc: %lx\n",
+						frame->fp, frame->sp, frame->pc);
+			} else {
+				error(WARNING, 
+				    "arm64_unwind_frame: on IRQ stack: oriq_sp: %lx%s fp: %lx%s\n",
+					orig_sp, INSTACK(orig_sp, bt) ? "" : " (?)",
+					frame->fp, INSTACK(frame->fp, bt) ? "" : " (?)");
+				return FALSE;
+			}
+		}
+	}
 
 	return TRUE;
 }
@@ -1191,11 +1331,19 @@ arm64_back_trace_cmd(struct bt_info *bt)
 	 */
 
 	if (bt->flags & BT_KDUMP_ADJUST) {
+		if (arm64_on_irq_stack(bt->tc->processor, bt->bptr)) {
+			arm64_set_irq_stack(bt);
+			bt->flags |= BT_IRQSTACK;
+		}
 		stackframe.fp = GET_STACK_ULONG(bt->bptr - 8);
 		stackframe.pc = GET_STACK_ULONG(bt->bptr);
 		stackframe.sp = bt->bptr + 8;
 		bt->frameptr = stackframe.sp;
 	} else if (bt->hp && bt->hp->esp) {
+		if (arm64_on_irq_stack(bt->tc->processor, bt->hp->esp)) {
+			arm64_set_irq_stack(bt);
+			bt->flags |= BT_IRQSTACK;
+		}
 		stackframe.fp = GET_STACK_ULONG(bt->hp->esp - 8);
 		stackframe.pc = bt->hp->eip ? 
 			bt->hp->eip : GET_STACK_ULONG(bt->hp->esp);
@@ -1256,6 +1404,13 @@ arm64_back_trace_cmd(struct bt_info *bt)
 
 		if (arm64_in_exception_text(bt->instptr) && INSTACK(stackframe.fp, bt))
 			exception_frame = stackframe.fp - SIZE(pt_regs);
+
+		if ((bt->flags & BT_IRQSTACK) &&
+		    !arm64_on_irq_stack(bt->tc->processor, stackframe.sp)) {
+			arm64_switch_stack(bt, &stackframe, ofp);
+			bt->flags &= ~BT_IRQSTACK;
+		}
+
 
 		level++;
 	}
@@ -1354,6 +1509,86 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 }
 
 static int
+arm64_in_kdump_text_on_irq_stack(struct bt_info *bt)
+{
+	int cpu;
+	ulong stackbase;
+	char *stackbuf;
+	ulong *ptr, *start, *base;
+	struct machine_specific *ms;
+
+	if ((machdep->flags & (IRQ_STACKS|KDUMP_ENABLED)) != (IRQ_STACKS|KDUMP_ENABLED))
+		return FALSE;
+
+	ms = machdep->machspec;
+	cpu = bt->tc->processor;
+	stackbase = ms->irq_stacks[cpu];
+	stackbuf = GETBUF(ms->irq_stack_size);
+
+	if (!readmem(stackbase, KVADDR, stackbuf,
+	    ms->irq_stack_size, "IRQ stack contents", RETURN_ON_ERROR)) {
+		error(INFO, "read of IRQ stack at %lx failed\n", stackbase);
+		FREEBUF(stackbuf);
+		return FALSE;
+	}
+
+	base = (ulong *)stackbuf;
+	start = (ulong *)(stackbuf + ms->irq_stack_size);
+
+	for (ptr = start - 8; ptr >= base; ptr--) {
+		if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+			bt->bptr = ((ulong)ptr - (ulong)base) + stackbase;
+			if (CRASHDEBUG(1))
+				fprintf(fp, "%lx: %lx (crash_kexec on IRQ stack)\n", 
+					bt->bptr, *ptr);
+			FREEBUF(stackbuf);
+			return TRUE;
+		}
+		if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
+			bt->bptr = ((ulong)ptr - (ulong)base) + stackbase;
+			if (CRASHDEBUG(1))
+				fprintf(fp, "%lx: %lx (crash_save_cpu on IRQ stack)\n", 
+					bt->bptr, *ptr);
+			FREEBUF(stackbuf);
+			return TRUE;
+		}
+	} 
+
+	FREEBUF(stackbuf);
+	return FALSE;
+}
+
+static void 
+arm64_switch_stack(struct bt_info *bt, struct arm64_stackframe *frame, FILE *ofp)
+{
+	int i;
+	ulong stacktop, words, addr;
+	ulong *stackbuf;
+	char buf[BUFSIZE];
+	struct machine_specific *ms = machdep->machspec;
+
+	if (bt->flags & BT_FULL) {
+		stacktop = ms->irq_stacks[bt->tc->processor] + ms->irq_stack_size;
+		words = (stacktop - bt->bptr) / sizeof(ulong);
+		stackbuf = (ulong *)GETBUF(words * sizeof(ulong));
+		readmem(bt->bptr, KVADDR, stackbuf, words * sizeof(long), 
+			"top of IRQ stack", FAULT_ON_ERROR);
+
+		addr = bt->bptr;
+		for (i = 0; i < words; i++) {
+			if (!(i & 1))
+				fprintf(ofp, "%s    %lx: ", i ? "\n" : "", addr);
+			fprintf(ofp, "%s ", format_stack_entry(bt, buf, stackbuf[i], 0));
+			addr += sizeof(ulong);
+		}
+		fprintf(ofp, "\n");
+		FREEBUF(stackbuf);
+	}
+	fprintf(ofp, "--- <IRQ stack> ---\n");
+	arm64_print_exception_frame(bt, frame->sp, KERNEL_MODE, ofp);
+}
+
+static int
 arm64_get_dumpfile_stackframe(struct bt_info *bt, struct arm64_stackframe *frame)
 {
 	struct machine_specific *ms = machdep->machspec;
@@ -1373,8 +1608,9 @@ arm64_get_dumpfile_stackframe(struct bt_info *bt, struct arm64_stackframe *frame
 		frame->fp = user_frame_pointer(ptregs);
 		if (is_kernel_text(frame->pc) ||
 		    !in_user_stack(bt->tc->task, frame->sp)) {
-			error(WARNING, "Corrupt prstatus? pstate=0x%lx, but no user frame found\n",
-										ptregs->pstate);
+			error(WARNING, 
+			    "corrupt prstatus? pstate=0x%lx, but no user frame found\n",
+				ptregs->pstate);
 			bt->flags |= BT_REGS_NOT_FOUND;
 			return FALSE;
 		}
@@ -1384,7 +1620,8 @@ arm64_get_dumpfile_stackframe(struct bt_info *bt, struct arm64_stackframe *frame
 		frame->fp = ptregs->regs[29];
 	}
 
-	if (arm64_in_kdump_text(bt, frame))
+	if (arm64_in_kdump_text(bt, frame) || 
+	    arm64_in_kdump_text_on_irq_stack(bt))
 		bt->flags |= BT_KDUMP_ADJUST;
 
 	return TRUE;
@@ -1435,7 +1672,10 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode, FILE *o
 	ulong LR, SP, offset;
 	char buf[BUFSIZE];
 
-	if (CRASHDEBUG(1))
+	if (bt->flags & BT_FULL)
+		arm64_display_full_frame(bt, pt_regs);
+
+	if (CRASHDEBUG(1)) 
 		fprintf(ofp, "pt_regs: %lx\n", pt_regs);
 
 	regs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(pt_regs))];
@@ -1773,11 +2013,12 @@ arm64_cmd_mach(void)
 static void
 arm64_display_machine_stats(void)
 {
+	int i, pad;
 	struct new_utsname *uts;
 	char buf[BUFSIZE];
 	ulong mhz;
 
-	uts = &kt->utsname;
+	uts = &kt->utsname; 
 
 	fprintf(fp, "       MACHINE TYPE: %s\n", uts->machine);
 	fprintf(fp, "        MEMORY SIZE: %s\n", get_memory_size(buf));
@@ -1791,6 +2032,16 @@ arm64_display_machine_stats(void)
 	fprintf(fp, "KERNEL MODULES BASE: %lx\n", machdep->machspec->modules_vaddr);
         fprintf(fp, "KERNEL VMEMMAP BASE: %lx\n", machdep->machspec->vmemmap_vaddr);
 	fprintf(fp, "  KERNEL STACK SIZE: %ld\n", STACKSIZE());
+	if (machdep->machspec->irq_stack_size) {
+		fprintf(fp, "     IRQ STACK SIZE: %ld\n", 
+			machdep->machspec->irq_stack_size);
+		fprintf(fp, "         IRQ STACKS:\n");
+		for (i = 0; i < kt->cpus; i++) {
+			pad = (i < 10) ? 3 : (i < 100) ? 2 : (i < 1000) ? 1 : 0; 
+			fprintf(fp, "%s           CPU %d: %lx\n", space(pad), i, 
+				machdep->machspec->irq_stacks[i]);
+		}
+	}
 }
 
 static int
@@ -1933,10 +2184,42 @@ arm64_clear_machdep_cache(void) {
 }
 
 static int
+arm64_on_irq_stack(int cpu, ulong stkptr)
+{
+	return arm64_in_alternate_stack(cpu, stkptr);
+}
+
+static int
 arm64_in_alternate_stack(int cpu, ulong stkptr)
 {
-	NOT_IMPLEMENTED(INFO);
+	struct machine_specific *ms = machdep->machspec;
+
+	if (!ms->irq_stack_size || (cpu >= kt->cpus))
+		return FALSE;
+
+	if ((stkptr >= ms->irq_stacks[cpu]) &&
+	    (stkptr < (ms->irq_stacks[cpu] + ms->irq_stack_size)))
+		return TRUE;
+
 	return FALSE;
+}
+
+static void
+arm64_set_irq_stack(struct bt_info *bt)
+{
+	struct machine_specific *ms = machdep->machspec;
+
+	bt->stackbase = ms->irq_stacks[bt->tc->processor];
+	bt->stacktop = bt->stackbase + ms->irq_stack_size;
+	alter_stackbuf(bt);
+}
+
+static void
+arm64_set_process_stack(struct bt_info *bt)
+{
+	bt->stackbase = GET_STACKBASE(bt->task);
+	bt->stacktop = GET_STACKTOP(bt->task);
+	alter_stackbuf(bt);
 }
 
 

@@ -2868,6 +2868,7 @@ typedef signed int s32;
 #define VM_L2_64K     (0x4)
 #define VM_L3_4K      (0x8)
 #define KDUMP_ENABLED (0x10)
+#define IRQ_STACKS    (0x20)
 
 /* 
  * sources: Documentation/arm64/memory.txt 
@@ -2955,6 +2956,8 @@ struct machine_specific {
 	ulong crash_save_cpu_start;
 	ulong crash_save_cpu_end;
 	ulong kernel_flags;
+	ulong irq_stack_size;
+	ulong *irq_stacks;
 };
 
 struct arm64_stackframe {

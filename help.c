@@ -1,8 +1,8 @@
 /* help.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015 David Anderson
- * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2016 David Anderson
+ * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1770,9 +1770,10 @@ char *help_bt[] = {
 "           fails or the -t option starts too high in the process stack).",
 "       -l  show file and line number of each stack trace text location.",
 "       -e  search the stack for possible kernel and user mode exception frames.",
-"       -E  search the IRQ stacks (x86, x86_64 and ppc64), and the exception",
-"           stacks (x86_64) for possible exception frames; all other arguments",
-"           will be ignored since this is not a context-sensitive operation.",
+"       -E  search the IRQ stacks (x86, x86_64, arm64, and ppc64), and the",
+"           exception stacks (x86_64) for possible exception frames; all other",
+"           arguments except for -c will be ignored since this is not a context-",
+"           sensitive operation.",
 "       -f  display all stack data contained in a frame; this option can be",
 "           used to determine the arguments passed to each function; on ia64,",
 "           the argument register contents are dumped.",
