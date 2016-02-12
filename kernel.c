@@ -802,6 +802,14 @@ cpu_map_type(char *name)
         if (kernel_symbol_exists(map_symbol))
 		return "mask";
 
+	sprintf(map_symbol, "__cpu_%s_map", name);
+	if (kernel_symbol_exists(map_symbol))
+		return "map";
+
+        sprintf(map_symbol, "__cpu_%s_mask", name);
+        if (kernel_symbol_exists(map_symbol))
+		return "mask";
+
 	return NULL;
 }
 
