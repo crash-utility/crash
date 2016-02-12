@@ -679,6 +679,22 @@ kernel_init()
 			kt->flags |= KALLSYMS_V2;
 	}
 
+	if (INVALID_MEMBER(module_num_symtab) && 
+	    MEMBER_EXISTS("module", "core_kallsyms")) {
+		ASSIGN_OFFSET(module_num_symtab) =
+			MEMBER_OFFSET("module", "core_kallsyms") +
+			MEMBER_OFFSET("mod_kallsyms", "num_symtab");
+		ASSIGN_OFFSET(module_symtab) =
+			MEMBER_OFFSET("module", "core_kallsyms") +
+			MEMBER_OFFSET("mod_kallsyms", "symtab");
+		ASSIGN_OFFSET(module_strtab) =
+			MEMBER_OFFSET("module", "core_kallsyms") +
+			MEMBER_OFFSET("mod_kallsyms", "strtab");
+
+		if (!(kt->flags & NO_KALLSYMS))
+			kt->flags |= KALLSYMS_V2;
+	}
+
 	if (!(kt->flags & DWARF_UNWIND))
 		kt->flags |= NO_DWARF_UNWIND; 
 
