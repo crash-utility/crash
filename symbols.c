@@ -1,8 +1,8 @@
 /* symbols.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015 David Anderson
- * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2016 David Anderson
+ * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,6 +38,7 @@ static char * get_section(ulong vaddr, char *buf);
 static void symbol_dump(ulong, char *);
 static void check_for_dups(struct load_module *);
 static struct syment *kallsyms_module_symbol(struct load_module *, symbol_info *);
+static int kallsyms_module_function_size(struct syment *, struct load_module *, ulong *);
 static void store_load_module_symbols \
 	(bfd *, int, void *, long, uint, ulong, char *);
 static int load_module_index(struct syment *);
@@ -2104,22 +2105,27 @@ struct elf_common {
 	ulong st_value;
 	ulong st_shndx;
 	unsigned char st_info;
+	ulong st_size;
 };
 
-static void Elf32_Sym_to_common(Elf32_Sym *e32, struct elf_common *ec)
+static void 
+Elf32_Sym_to_common(Elf32_Sym *e32, struct elf_common *ec)
 {
 	ec->st_name = (ulong)e32->st_name;
 	ec->st_value = (ulong)e32->st_value;
 	ec->st_shndx = (ulong)e32->st_shndx;
 	ec->st_info = e32->st_info;
+	ec->st_size = (ulong)e32->st_size;
 }
 
-static void Elf64_Sym_to_common(Elf64_Sym *e64, struct elf_common *ec)
+static void 
+Elf64_Sym_to_common(Elf64_Sym *e64, struct elf_common *ec)
 {
 	ec->st_name = (ulong)e64->st_name;
 	ec->st_value = (ulong)e64->st_value;
 	ec->st_shndx = (ulong)e64->st_shndx;
 	ec->st_info = e64->st_info;
+	ec->st_size = (ulong)e64->st_size;
 }
 
 static int
@@ -2832,9 +2838,19 @@ get_text_function_range(ulong vaddr, ulong *low, ulong *high)
 {
 	struct syment *sp;
 	struct gnu_request gnu_request, *req = &gnu_request;
+	struct load_module *lm;
+	ulong size;
 
 	if (!(sp = value_search(vaddr, NULL)))
 		return FALSE;
+
+	if (module_symbol(vaddr, NULL, &lm, NULL, 0)) {
+		if (kallsyms_module_function_size(sp, lm, &size)) {
+			*low = sp->value;
+			*high = sp->value + size;
+			return TRUE;
+		}
+	}
 
 	BZERO(req, sizeof(struct gnu_request));
 	req->command = GNU_GET_FUNCTION_RANGE;
@@ -2851,6 +2867,97 @@ get_text_function_range(ulong vaddr, ulong *low, ulong *high)
 	*high = req->addr2;
 
 	return TRUE;
+}
+
+/*
+ *  Get the text size of a module function from kallsyms. 
+ */
+static int 
+kallsyms_module_function_size(struct syment *sp, struct load_module *lm, ulong *size)
+{
+	int i;
+	ulong nksyms, ksymtab, st_size;
+	char *ptr, *module_buf, *module_buf_init, *modbuf, *locsymtab;
+	struct elf_common elf_common, *ec;
+
+	if (!(lm->mod_flags & MOD_KALLSYMS) || !(kt->flags & KALLSYMS_V2))
+		return FALSE;
+
+	module_buf = GETBUF(lm->mod_size);
+	modbuf = module_buf + (lm->module_struct - lm->mod_base);
+
+	if (!readmem(lm->mod_base, KVADDR, module_buf, lm->mod_size,
+	    "module (kallsyms)", RETURN_ON_ERROR|QUIET)) {
+		FREEBUF(module_buf);
+		return FALSE;
+	}
+
+	if (lm->mod_init_size > 0) {
+		module_buf_init = GETBUF(lm->mod_init_size);
+		if (!readmem(lm->mod_init_module_ptr, KVADDR, module_buf_init, 
+		    lm->mod_init_size, "module init (kallsyms)", 
+		    RETURN_ON_ERROR|QUIET)) {
+			FREEBUF(module_buf_init);
+			module_buf_init = NULL;
+		}
+	} else
+	 	module_buf_init = NULL;
+
+	if (THIS_KERNEL_VERSION >= LINUX(2,6,27))
+		nksyms = UINT(modbuf + OFFSET(module_num_symtab));
+	else
+		nksyms = ULONG(modbuf + OFFSET(module_num_symtab));
+
+        ksymtab = ULONG(modbuf + OFFSET(module_symtab));
+        if (!IN_MODULE(ksymtab, lm) && !IN_MODULE_INIT(ksymtab, lm)) {
+                FREEBUF(module_buf);
+                if (module_buf_init)
+                        FREEBUF(module_buf_init);
+                return FALSE;
+        }
+
+        if (IN_MODULE(ksymtab, lm))
+                locsymtab = module_buf + (ksymtab - lm->mod_base);
+        else
+                locsymtab = module_buf_init + (ksymtab - lm->mod_init_module_ptr);
+
+	st_size = 0;
+	ec = &elf_common;
+	BZERO(&elf_common, sizeof(struct elf_common));
+
+        for (i = 1; i < nksyms; i++) {  /* ELF starts real symbols at 1 */
+                switch (BITS())
+                {
+                case 32:
+                        ptr = locsymtab + (i * sizeof(Elf32_Sym));
+                        Elf32_Sym_to_common((Elf32_Sym *)ptr, ec);
+                        break;
+                case 64:
+                        ptr = locsymtab + (i * sizeof(Elf64_Sym));
+                        Elf64_Sym_to_common((Elf64_Sym *)ptr, ec);
+                        break;
+                }
+
+		if (sp->value == ec->st_value) {
+			if (CRASHDEBUG(1))
+				fprintf(fp, "kallsyms_module_function_size: "
+				    "st_value: %lx  st_size: %ld\n", 
+					ec->st_value, ec->st_size);
+			st_size = ec->st_size;
+			break;
+		}
+	}
+
+	if (module_buf_init)
+		FREEBUF(module_buf_init);
+	FREEBUF(module_buf);
+
+	if (st_size) {
+		*size = st_size;
+		return TRUE;
+	}
+
+	return FALSE;
 }
 
 /*
