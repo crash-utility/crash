@@ -523,6 +523,7 @@ kernel_init()
 	if (VALID_STRUCT(irq_data)) {
 		MEMBER_OFFSET_INIT(irq_data_chip, "irq_data", "chip");
 		MEMBER_OFFSET_INIT(irq_data_affinity, "irq_data", "affinity");
+		MEMBER_OFFSET_INIT(irq_desc_irq_data, "irq_desc", "irq_data");
 	}
 
         STRUCT_SIZE_INIT(irq_cpustat_t, "irq_cpustat_t");
@@ -6841,10 +6842,13 @@ generic_show_interrupts(int irq, ulong *cpus)
 		readmem(irq_desc_addr + OFFSET(irq_desc_t_chip), KVADDR,
 		        &handler, sizeof(long), "irq_desc chip",
 		        FAULT_ON_ERROR);
-	else if (VALID_MEMBER(irq_data_chip))
-		readmem(irq_desc_addr + OFFSET(irq_data_chip), KVADDR,
-		        &handler, sizeof(long), "irq_data chip",
-		        FAULT_ON_ERROR);
+	else if (VALID_MEMBER(irq_data_chip)) {
+		tmp = irq_desc_addr + OFFSET(irq_data_chip);
+		if (VALID_MEMBER(irq_desc_irq_data))
+			tmp += OFFSET(irq_desc_irq_data);
+		readmem(tmp, KVADDR, &handler, sizeof(long), "irq_data chip",
+			FAULT_ON_ERROR);
+	}
 
 	fprintf(fp, "%3d: ", irq);
 

@@ -8831,6 +8831,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(irq_data_chip));
 	fprintf(fp, "             irq_data_affinity: %ld\n",
 		OFFSET(irq_data_affinity));
+	fprintf(fp, "             irq_desc_irq_data: %ld\n",
+		OFFSET(irq_desc_irq_data));
 	fprintf(fp, "              kernel_stat_irqs: %ld\n",
 		OFFSET(kernel_stat_irqs));
 
