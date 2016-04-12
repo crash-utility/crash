@@ -1951,6 +1951,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long address_space_page_tree;
 	long page_compound_head;
 	long irq_desc_irq_data;
+	long kmem_cache_node_total_objects;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

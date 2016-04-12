@@ -9163,6 +9163,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(kmem_cache_node_partial));
         fprintf(fp, "          kmem_cache_node_full: %ld\n",
                 OFFSET(kmem_cache_node_full));
+        fprintf(fp, "          kmem_cache_node_total_objects: %ld\n",
+                OFFSET(kmem_cache_node_total_objects));
 
         fprintf(fp, "       kmem_cache_cpu_freelist: %ld\n",
                 OFFSET(kmem_cache_cpu_freelist));
