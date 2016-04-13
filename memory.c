@@ -1,8 +1,8 @@
 /* memory.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015 David Anderson
- * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2016 David Anderson
+ * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -17955,7 +17955,7 @@ count_cpu_partial(struct meminfo *si, int cpu)
 					if (__BYTE_ORDER == __BIG_ENDIAN)
 						cpu_partial_objects >>= 1;
 				}
-				if (cpu_partial_objects == (ushort)(-1))
+				if (cpu_partial_objects == (short)(-1))
 					return 0;
 				free_objects +=
 					cpu_partial_objects - cpu_partial_inuse;
@@ -18726,7 +18726,7 @@ count_partial(ulong node, struct meminfo *si, ulong *free)
 					objects >>= 1;
 			}
 
-			if (objects == (ushort)(-1)) {
+			if (objects == (short)(-1)) {
 				error(INFO, "%s: slab: %lx invalid page.objects: -1\n",
 					si->curname, last);
 				hq_close();
