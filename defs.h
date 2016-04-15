@@ -4120,30 +4120,39 @@ struct gnu_request {
 	ulong task;
 	ulong debug;
 	struct stack_hook *hookp;
+	struct global_iterator {
+    		int finished; 
+		int block_index;
+    		struct symtab *symtab;
+    		struct symbol *sym;
+    		struct objfile *obj;
+  	} global_iterator;
 };
 
 /*
  *  GNU commands
  */
-#define GNU_DATATYPE_INIT        (1)
-#define GNU_DISASSEMBLE          (2)
-#define GNU_GET_LINE_NUMBER      (3)
-#define GNU_PASS_THROUGH         (4)
-#define GNU_GET_DATATYPE         (5)
-#define GNU_COMMAND_EXISTS       (6)
-#define GNU_STACK_TRACE          (7)
-#define GNU_ALPHA_FRAME_OFFSET   (8)
-#define GNU_FUNCTION_NUMARGS     (9)
-#define GNU_RESOLVE_TEXT_ADDR    (10)
-#define GNU_ADD_SYMBOL_FILE      (11)
-#define GNU_DELETE_SYMBOL_FILE   (12)
-#define GNU_VERSION              (13)
-#define GNU_PATCH_SYMBOL_VALUES  (14)
-#define GNU_GET_SYMBOL_TYPE      (15)
-#define GNU_USER_PRINT_OPTION 	 (16)
-#define GNU_SET_CRASH_BLOCK      (17)
-#define GNU_GET_FUNCTION_RANGE   (18)
-#define GNU_DEBUG_COMMAND       (100)
+#define GNU_DATATYPE_INIT           (1)
+#define GNU_DISASSEMBLE             (2)
+#define GNU_GET_LINE_NUMBER         (3)
+#define GNU_PASS_THROUGH            (4)
+#define GNU_GET_DATATYPE            (5)
+#define GNU_COMMAND_EXISTS          (6)
+#define GNU_STACK_TRACE             (7)
+#define GNU_ALPHA_FRAME_OFFSET      (8)
+#define GNU_FUNCTION_NUMARGS        (9)
+#define GNU_RESOLVE_TEXT_ADDR       (10)
+#define GNU_ADD_SYMBOL_FILE         (11)
+#define GNU_DELETE_SYMBOL_FILE      (12)
+#define GNU_VERSION                 (13)
+#define GNU_PATCH_SYMBOL_VALUES     (14)
+#define GNU_GET_SYMBOL_TYPE         (15)
+#define GNU_USER_PRINT_OPTION       (16)
+#define GNU_SET_CRASH_BLOCK         (17)
+#define GNU_GET_FUNCTION_RANGE      (18)
+#define GNU_GET_NEXT_DATATYPE       (19)
+#define GNU_LOOKUP_STRUCT_CONTENTS  (20)
+#define GNU_DEBUG_COMMAND           (100)
 /*
  *  GNU flags
  */

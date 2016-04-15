@@ -2044,3 +2044,165 @@ diff -up gdb-7.6/bfd/elf64-ppc.c.orig gdb-7.6/bfd/elf64-ppc.c
  		  {
  		    struct type *target = TYPE_TYPEDEF_FIELD_TYPE (type, i);
  
+--- gdb-7.6/gdb/symtab.c.orig
++++ gdb-7.6/gdb/symtab.c
+@@ -5139,6 +5139,8 @@ static void get_user_print_option_addres
+ extern int get_frame_offset(CORE_ADDR);
+ static void gdb_set_crash_block(struct gnu_request *);
+ void gdb_command_funnel(struct gnu_request *);
++static long lookup_struct_contents(struct gnu_request *);
++static void iterate_datatypes(struct gnu_request *);
+ 
+ struct objfile *gdb_kernel_objfile = { 0 };
+ 
+@@ -5242,6 +5244,14 @@ gdb_command_funnel(struct gnu_request *r
+ 			req->flags |= GNU_COMMAND_FAILED;
+ 		break;
+ 
++	case GNU_LOOKUP_STRUCT_CONTENTS:
++		req->value = lookup_struct_contents(req);
++		break;
++
++	case GNU_GET_NEXT_DATATYPE:
++		iterate_datatypes(req);
++		break;
++
+ 	default:
+ 		req->flags |= GNU_COMMAND_FAILED;
+ 		break;
+@@ -5779,4 +5789,135 @@ gdb_get_crash_block(void)
+ 	else
+ 		return NULL;
+ }
++
++static long
++lookup_struct_contents(struct gnu_request *req)
++{
++  int i;
++  long r;
++  struct field *f;
++  struct main_type *m;
++  const char *n;
++  struct main_type *top_m = (struct main_type *)req->addr;
++  char *type_name = req->type_name;
++
++  if (!top_m || !type_name)
++    return 0;
++
++  for (i = 0; i < top_m->nfields; i++)
++    {
++      f = top_m->flds_bnds.fields + i;
++      if (!f->type)
++        continue;
++      m = f->type->main_type;
++
++      // If the field is an array, check the target type -
++      // it might be structure, or might not be.
++      // - struct request_sock *syn_table[0];
++      //   here m->target_type->main_type->code is expected
++      //   to be TYPE_CODE_PTR
++      // - struct list_head vec[TVN_SIZE];
++      //   here m->target_type->main_type->code should be
++      //   TYPE_CODE_STRUCT
++      if (m->code == TYPE_CODE_ARRAY && m->target_type)
++        m = m->target_type->main_type;
++
++      /* Here is a recursion.
++       * If we have struct variable (not pointer),
++       * scan this inner structure
++       */
++      if (m->code == TYPE_CODE_STRUCT) {
++        req->addr = (ulong)m;
++        r = lookup_struct_contents(req);
++        req->addr = (ulong)top_m;
++        if (r)
++          return 1;
++      }
++
++      if (m->code == TYPE_CODE_PTR && m->target_type)
++        m = m->target_type->main_type;
++      if (m->name)
++        n = m->name;
++      else if (m->tag_name)
++        n = m->tag_name;
++      else
++        continue;
++
++      if (strstr(n, type_name))
++        return 1;
++    }
++
++  return 0;
++}
++
++static void
++iterate_datatypes (struct gnu_request *req)
++{
++  static struct block_iterator bi; // Keeping this static will simplify code
++  struct block *b;
++  int do_return = 0;
++  struct global_iterator *gi = &req->global_iterator;
++
++  if (gi->finished)
++    return;
++
++  if (gi->obj == NULL)
++    {
++      gi->obj = current_program_space->objfiles;
++      gi->symtab = NULL;
++      do_return = 1;  // The initial case - we don't need to make next step.
++    }
++
++  for (; gi->obj; gi->obj = gi->obj->next, gi->symtab = NULL)
++    {
++      if (gi->symtab == NULL)
++        {
++          // Symtab `symtab` is nullified for every objfile
++          if (gi->obj->sf)
++            gi->obj->sf->qf->expand_all_symtabs(gi->obj);
++          gi->symtab = gi->obj->symtabs;
++          gi->sym = NULL;
++        }
++
++      for (; gi->symtab; gi->symtab = gi->symtab->next, gi->block_index = -1)
++        {
++          if (!gi->symtab->primary)
++            continue;
++
++          if (gi->block_index == -1)
++            {
++              gi->block_index = GLOBAL_BLOCK;
++              gi->sym = NULL;
++            }
++          for (; gi->block_index <= STATIC_BLOCK; gi->block_index++, gi->sym = NULL)
++            {
++              if (!gi->sym)
++                {
++                  b = BLOCKVECTOR_BLOCK(BLOCKVECTOR(gi->symtab), gi->block_index);
++                  gi->sym = block_iterator_first(b, &bi);
++                }
++              for (; gi->sym; gi->sym = block_iterator_next(&bi))
++                {
++                  QUIT;
++
++                  if (SYMBOL_CLASS (gi->sym) != LOC_TYPEDEF)
++                    continue;
++
++                  // Iteration 1 (do_return == 0): initialization
++                  // Iteration 2 (do_return == 1): iterate symbol
++                  if (do_return++ == 0)
++                    continue;
++
++                  // Yield the current symbol and its size
++                  req->addr = (ulong)(gi->sym->type->main_type);
++                  req->name = (char *)(gi->sym->ginfo.name);
++                  req->length = gi->sym->type->length;
++
++                  return;
++                }
++            }
++        }
++    }
++  gi->finished = 1; 
++}
+ #endif

@@ -33,6 +33,10 @@ static void strip_module_symbol_end(char *s);
 static int compare_syms(const void *, const void *);
 static int compare_mods(const void *, const void *);
 static int compare_prios(const void *v1, const void *v2);
+static int compare_size_name(const void *, const void *);
+struct type_request;
+static void append_struct_symbol (struct type_request *, struct gnu_request *);
+static void request_types(ulong, ulong, char *);
 static asection *get_kernel_section(char *);
 static char * get_section(ulong vaddr, char *buf);
 static void symbol_dump(ulong, char *);
@@ -6636,6 +6640,107 @@ dump_datatype_member(FILE *ofp, struct datatype_member *dm)
 	fprintf(ofp, "\n");
 }
 
+struct type_request {
+	int cnt;	    /* current number of entries in types array */
+	int idx;	    /* index to next entry in types array */
+	struct type_info {  /* dynamically-sized array of collected types */
+		char *name;
+		ulong size;
+	} *types;
+};
+
+static int
+compare_size_name(const void *va, const void *vb) {
+	struct type_info *a, *b;
+
+	a = (struct type_info *)va;
+	b = (struct type_info *)vb;
+
+        if (a->size == b->size)
+                return strcmp(a->name, b->name);
+        else
+                return a->size < b->size ? -1 : 1;
+}
+
+static void
+append_struct_symbol (struct type_request *treq,  struct gnu_request *req)
+{
+	int i; 
+	long s;
+
+	for (i = 0; i < treq->idx; i++)
+		if (treq->types[i].name == req->name)
+			break;
+
+	if (i < treq->idx) // We've already collected this type
+		return;
+
+	if (treq->idx == treq->cnt) {
+		s = sizeof(struct type_info) * treq->cnt;
+		treq->types = (void *)resizebuf((void *)treq->types, s, s * 3);
+		treq->cnt *= 3;
+	}
+
+	treq->types[treq->idx].name = req->name;
+	treq->types[treq->idx].size = req->length;
+	treq->idx++;
+}
+
+static void
+request_types(ulong lowest, ulong highest, char *member_name)
+{
+	int i, len;
+	char buf[BUFSIZE];
+	struct type_request typereq;
+	struct gnu_request request = {0};
+
+	typereq.idx = 0;
+	typereq.cnt = 16;
+	typereq.types = (void *)GETBUF(16 * sizeof(struct type_info));
+
+#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0)
+	error(FATAL, "-r option not supported with this version of gdb\n");
+#else
+	request.type_name = member_name;
+#endif
+
+	while (!request.global_iterator.finished) {
+		request.command = GNU_GET_NEXT_DATATYPE;
+		gdb_interface(&request);
+		if (highest && 
+		    !(lowest <= request.length && request.length <= highest))
+			continue;
+
+		if (member_name) {
+			request.command = GNU_LOOKUP_STRUCT_CONTENTS;
+			gdb_interface(&request);
+			if (!request.value)
+				continue;
+		}
+
+		append_struct_symbol(&typereq, &request);		
+	}
+
+	qsort(typereq.types, typereq.idx, sizeof(struct type_info), compare_size_name);
+
+	if (typereq.idx == 0)
+		fprintf(fp, "(none found)\n");
+	else {
+		sprintf(buf, "%ld", typereq.types[typereq.idx-1].size);
+		len = MAX(strlen(buf), strlen("SIZE"));
+		fprintf(fp, "%s  TYPE\n",
+			mkstring(buf, len, RJUST, "SIZE"));
+
+		for (i = 0; i < typereq.idx; i++)
+			fprintf(fp, "%s  %s\n", 
+				mkstring(buf, len, RJUST|LONG_DEC, 
+				MKSTR(typereq.types[i].size)),
+				typereq.types[i].name);
+	}
+
+	FREEBUF(typereq.types);
+}
+
 /*
  *  This command displays the definition of structures, unions, typedefs or
  *  text/data symbols:  
@@ -6650,25 +6755,47 @@ dump_datatype_member(FILE *ofp, struct datatype_member *dm)
  *     declaration is displayed.
  *  5. For a kernel symbol name, the output is the same as if the "sym" command
  *     was used.
+ *  6. If the -r and -m are given, then the structures/unions of specified size
+ *     and/or contain a member type.
  */
 void
 cmd_whatis(void)
 {
+	int c, do_request;
         struct datatype_member datatype_member, *dm;
 	struct syment *sp;
-        char buf[BUFSIZE];
+	char buf[BUFSIZE], *pl, *ph, *member;
 	long len;
-	int c;
+	ulong lowest, highest;
         ulong flags;
 
         dm = &datatype_member;
 	flags = 0;
+	lowest = highest = 0;
+	pl = buf;
+	member = NULL;
+	do_request = FALSE;
 
-        while ((c = getopt(argcnt, args, "o")) != EOF) {
+        while ((c = getopt(argcnt, args, "om:r:")) != EOF) {
                 switch(c)
                 {
 		case 'o':
 			flags |= SHOW_OFFSET;
+			break;
+
+		case 'm':
+			member = optarg;
+			do_request = TRUE;
+			break;
+
+		case 'r':
+			strncpy(buf, optarg, 15);
+			if ((ph = strstr(buf, "-")) != NULL)
+				*(ph++) = '\0';
+			highest = lowest = stol(pl, FAULT_ON_ERROR, NULL);
+			if (ph)
+				highest = stol(ph, FAULT_ON_ERROR, NULL);
+			do_request = TRUE;
 			break;
 
                 default:
@@ -6676,6 +6803,11 @@ cmd_whatis(void)
                         break;
                 }
         }
+
+	if (!argerrs && do_request) {
+		request_types(lowest, highest, member);
+		return;
+	}
 
         if (argerrs || !args[optind])
                 cmd_usage(pc->curcmd, SYNOPSIS);
