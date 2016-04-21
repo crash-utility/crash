@@ -17948,12 +17948,12 @@ slub_page_objects(struct meminfo *si, ulong page)
 		if (CRASHDEBUG(1) && (objects != si->objects))
 			error(NOTE, "%s: slab: %lx oo objects: %ld "
 			      "slab objects: %d\n",
-			      si->curname, si->slab,
+			      si->curname, page,
 			      si->objects, objects);
 
 		if (objects == (ushort)(-1)) {
 			error(INFO, "%s: slab: %lx invalid page.objects: -1\n",
-			      si->curname, si->slab);
+			      si->curname, page);
 			return 0;
 		}
 	} else
@@ -18011,7 +18011,7 @@ get_kmem_cache_slub_data(long cmd, struct meminfo *si)
 {
 	int i, n, node;
 	ulong total_objects, total_slabs, free_objects;
-	ulong cpu_slab_ptr, node_ptr, cpu_freelist;
+	ulong cpu_slab_ptr, node_ptr, cpu_freelist, orig_slab;
 	ulong node_nr_partial, node_nr_slabs, node_total_objects;
 	int full_slabs, objects, node_total_avail;
 	long p;
@@ -18040,14 +18040,22 @@ get_kmem_cache_slub_data(long cmd, struct meminfo *si)
 
 		switch (cmd)
 		{
-		case GET_SLUB_OBJECTS:
+		case GET_SLUB_OBJECTS: {
+			/* For better error report, set cur slab to si->slab. */
+			orig_slab = si->slab;
+			si->slab = cpu_slab_ptr;
+
 			if (!readmem(cpu_slab_ptr + OFFSET(page_inuse), 
-			    KVADDR, &inuse, sizeof(short), 
-			    "page inuse", RETURN_ON_ERROR))
+				     KVADDR, &inuse, sizeof(short),
+				     "page inuse", RETURN_ON_ERROR)) {
+				si->slab = orig_slab;
 				return FALSE;
+			}
 			objects = slub_page_objects(si, cpu_slab_ptr);
-			if (!objects)
+			if (!objects) {
+				si->slab = orig_slab;
 				return FALSE;
+			}
 
 			free_objects += objects - inuse;
 			free_objects += count_free_objects(si, cpu_freelist);
@@ -18056,6 +18064,9 @@ get_kmem_cache_slub_data(long cmd, struct meminfo *si)
 			if (!node_total_avail)
 				total_objects += inuse;
 			total_slabs++;
+
+			si->slab = orig_slab;
+		}
 			break;
 
 		case GET_SLUB_SLABS:
