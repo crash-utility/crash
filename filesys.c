@@ -16,6 +16,7 @@
  */
 
 #include "defs.h"
+#include <sys/sysmacros.h>
 #include <linux/major.h>
 #include <regex.h>
 #include <sys/utsname.h>
