@@ -3,8 +3,8 @@
 # Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
 #       www.missioncriticallinux.com, info@missioncriticallinux.com
 #
-# Copyright (C) 2002-2013 David Anderson
-# Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+# Copyright (C) 2002-2016 David Anderson
+# Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -245,7 +245,7 @@ rebuild:
 	  touch ${GDB}/${GDB}.patch; fi
 	@if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ] && \
 	  [ "`sum ${GDB}.patch`" != "`sum ${GDB}/${GDB}.patch`" ]; then \
-	  (patch -N -p0 -r- < ${GDB}.patch; cp ${GDB}.patch ${GDB}; cd ${GDB}; \
+	  (patch -N -p0 -r- --fuzz=0 < ${GDB}.patch; cp ${GDB}.patch ${GDB}; cd ${GDB}; \
 	  make --no-print-directory CRASH_TARGET=${TARGET}) \
 	else (cd ${GDB}/gdb; make --no-print-directory CRASH_TARGET=${TARGET}); fi
 
