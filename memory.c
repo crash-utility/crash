@@ -17914,15 +17914,63 @@ bailout:
 	FREEBUF(si->cache_buf);
 }
 
+static ushort 
+slub_page_objects(struct meminfo *si, ulong page)
+{
+	ulong objects_vaddr;
+	ushort objects;
+
+	/*
+	 *  Pre-2.6.27, the object count and order were fixed in the
+	 *  kmem_cache structure.  Now they may change, say if a high
+	 *  order slab allocation fails, so the per-slab object count
+	 *  is kept in the slab.
+	 */
+	if (VALID_MEMBER(page_objects)) {
+		objects_vaddr = page + OFFSET(page_objects);
+		if (si->flags & SLAB_BITFIELD)
+			objects_vaddr += sizeof(ushort);
+		if (!readmem(objects_vaddr, KVADDR, &objects,
+			     sizeof(ushort), "page.objects", RETURN_ON_ERROR))
+			return 0;
+		/*
+		 *  Strip page.frozen bit.
+		 */
+		if (si->flags & SLAB_BITFIELD) {
+			if (__BYTE_ORDER == __LITTLE_ENDIAN) {
+				objects <<= 1;
+				objects >>= 1;
+			}
+			if (__BYTE_ORDER == __BIG_ENDIAN)
+				objects >>= 1;
+		}
+
+		if (CRASHDEBUG(1) && (objects != si->objects))
+			error(NOTE, "%s: slab: %lx oo objects: %ld "
+			      "slab objects: %d\n",
+			      si->curname, si->slab,
+			      si->objects, objects);
+
+		if (objects == (ushort)(-1)) {
+			error(INFO, "%s: slab: %lx invalid page.objects: -1\n",
+			      si->curname, si->slab);
+			return 0;
+		}
+	} else
+		objects = (ushort)si->objects;
+
+	return objects;
+}
+
 static short 
 count_cpu_partial(struct meminfo *si, int cpu)
 {
 	short cpu_partial_inuse, cpu_partial_objects, free_objects;
-	ulong cpu_partial, objects_vaddr;
+	ulong cpu_partial;
 
 	free_objects = 0;
 
-	if (VALID_MEMBER(kmem_cache_cpu_partial)) {
+	if (VALID_MEMBER(kmem_cache_cpu_partial) && VALID_MEMBER(page_objects)) {
 		readmem(ULONG(si->cache_buf + OFFSET(kmem_cache_cpu_slab)) +
 			kt->__per_cpu_offset[cpu] + OFFSET(kmem_cache_cpu_partial),
 			KVADDR, &cpu_partial, sizeof(ulong),
@@ -17939,27 +17987,13 @@ count_cpu_partial(struct meminfo *si, int cpu)
 				return 0;
 			if (cpu_partial_inuse == -1)
 				return 0;
-			if (VALID_MEMBER(page_objects)) {
-				objects_vaddr = cpu_partial + OFFSET(page_objects);
-				if (si->flags & SLAB_BITFIELD)
-					objects_vaddr += sizeof(ushort);
-				if (!readmem(objects_vaddr, KVADDR,
-				    &cpu_partial_objects, sizeof(ushort),
-				    "page.objects", RETURN_ON_ERROR))
-					return 0;
-				if (si->flags & SLAB_BITFIELD) {
-					if (__BYTE_ORDER == __LITTLE_ENDIAN) {
-						cpu_partial_objects <<= 1;
-						cpu_partial_objects >>= 1;
-					}
-					if (__BYTE_ORDER == __BIG_ENDIAN)
-						cpu_partial_objects >>= 1;
-				}
-				if (cpu_partial_objects == (short)(-1))
-					return 0;
-				free_objects +=
-					cpu_partial_objects - cpu_partial_inuse;
-			}
+
+			cpu_partial_objects = slub_page_objects(si,
+								cpu_partial);
+			if (!cpu_partial_objects)
+				return 0;
+			free_objects += cpu_partial_objects - cpu_partial_inuse;
+
 			readmem(cpu_partial + OFFSET(page_next), KVADDR,
 				&cpu_partial, sizeof(ulong), "page.next",
 				RETURN_ON_ERROR);
@@ -18011,14 +18045,12 @@ get_kmem_cache_slub_data(long cmd, struct meminfo *si)
 			    KVADDR, &inuse, sizeof(short), 
 			    "page inuse", RETURN_ON_ERROR))
 				return FALSE;
-			if (!cpu_freelist)
-				if (!readmem(cpu_slab_ptr + OFFSET(page_freelist),
-				    KVADDR, &cpu_freelist, sizeof(ulong),
-				    "page freelist", RETURN_ON_ERROR))
-					return FALSE;
+			objects = slub_page_objects(si, cpu_slab_ptr);
+			if (!objects)
+				return FALSE;
 
-			free_objects +=
-				count_free_objects(si, cpu_freelist);
+			free_objects += objects - inuse;
+			free_objects += count_free_objects(si, cpu_freelist);
 			free_objects += count_cpu_partial(si, i);
 
 			if (!node_total_avail)
@@ -18255,7 +18287,7 @@ static int
 do_slab_slub(struct meminfo *si, int verbose)
 {
 	physaddr_t paddr; 
-	ulong vaddr, objects_vaddr;
+	ulong vaddr;
 	ushort inuse, objects; 
 	ulong freelist, cpu_freelist, cpu_slab_ptr;
 	int i, free_objects, cpu_slab, is_free, node;
@@ -18287,50 +18319,17 @@ do_slab_slub(struct meminfo *si, int verbose)
 	if (!readmem(si->slab + OFFSET(page_freelist), KVADDR, &freelist,
 	    sizeof(void *), "page.freelist", RETURN_ON_ERROR))
 		return FALSE;
-	/* 
-	 *  Pre-2.6.27, the object count and order were fixed in the
-	 *  kmem_cache structure.  Now they may change, say if a high
-	 *  order slab allocation fails, so the per-slab object count
-	 *  is kept in the slab.
-	 */
-	if (VALID_MEMBER(page_objects)) {
-		objects_vaddr = si->slab + OFFSET(page_objects);
-		if (si->flags & SLAB_BITFIELD)
-			objects_vaddr += sizeof(ushort);
-		if (!readmem(objects_vaddr, KVADDR, &objects,
-		    sizeof(ushort), "page.objects", RETURN_ON_ERROR))
-			return FALSE;
-		/*
-		 *  Strip page.frozen bit.
-		 */
-		if (si->flags & SLAB_BITFIELD) {
-			if (__BYTE_ORDER == __LITTLE_ENDIAN) {
-				objects <<= 1;
-				objects >>= 1;
-			}
-			if (__BYTE_ORDER == __BIG_ENDIAN)
-				objects >>= 1;
-		}
 
-		if (CRASHDEBUG(1) && (objects != si->objects))
-			error(NOTE, "%s: slab: %lx oo objects: %ld "
-			    "slab objects: %d\n",
-				si->curname, si->slab, 
-				si->objects, objects);
-
-		if (objects == (ushort)(-1)) {
-			error(INFO, "%s: slab: %lx invalid page.objects: -1\n",
-				si->curname, si->slab);
-			return FALSE;
-		}
-	} else
-		objects = (ushort)si->objects;
+	objects = slub_page_objects(si, si->slab);
+	if (!objects)
+		return FALSE;
 
 	if (!verbose) {
 		DUMP_SLAB_INFO_SLUB();
 		return TRUE;
 	}
 
+	cpu_freelist = 0;
 	for (i = 0, cpu_slab = -1; i < kt->cpus; i++) {
 		cpu_slab_ptr = get_cpu_slab_ptr(si, i, &cpu_freelist);
 
@@ -18342,11 +18341,15 @@ do_slab_slub(struct meminfo *si, int verbose)
 			 *  Later slub scheme uses the per-cpu freelist
 			 *  so count the free objects by hand.
 			 */
-			if (cpu_freelist)
-				freelist = cpu_freelist;
-			if ((free_objects = count_free_objects(si, freelist)) < 0)
+			if ((free_objects = count_free_objects(si, cpu_freelist)) < 0)
 				return FALSE;
-			inuse = si->objects - free_objects;
+			/*
+			 * If the object is freed on foreign cpu, the
+			 * object is liked to page->freelist.
+			 */
+			if (freelist)
+				free_objects += objects - inuse;
+			inuse = objects - free_objects;
 			break;
 		}
 	}
@@ -18377,28 +18380,31 @@ do_slab_slub(struct meminfo *si, int verbose)
 	for (p = vaddr; p < vaddr + objects * si->size; p += si->size) {
 		hq_open();
 		is_free = FALSE;
-		for (is_free = 0, q = freelist; q; 
-			q = get_freepointer(si, (void *)q)) {
+		/* Search an object on both of freelist and cpu_freelist */
+		ulong lists[] = { freelist, cpu_freelist, };
+		for (i = 0; i < sizeof(lists) / sizeof(lists[0]); i++) {
+			for (is_free = 0, q = lists[i]; q;
+			     q = get_freepointer(si, (void *)q)) {
 
-			if (q == BADADDR) {
-				hq_close();
-				return FALSE;
+				if (q == BADADDR) {
+					hq_close();
+					return FALSE;
+				}
+				if (q & PAGE_MAPPING_ANON)
+					break;
+				if (p == q) {
+					is_free = TRUE;
+					goto found_object;
+				}
+				if (!hq_enter(q)) {
+					hq_close();
+					error(INFO, "%s: slab: %lx duplicate freelist object: %lx\n",
+					      si->curname, si->slab, q);
+					return FALSE;
+				}
 			}
-			if (q & PAGE_MAPPING_ANON)
-				break;
-			if (p == q) {
-				is_free = TRUE;
-				break;
-			}
-			if (!hq_enter(q)) {
-				hq_close();
-				error(INFO, 
-				    "%s: slab: %lx duplicate freelist object: %lx\n",
-					si->curname, si->slab, q);
-				return FALSE;
-			}
-
 		}
+	found_object:
 		hq_close();
 
 		if (si->flags & ADDRESS_SPECIFIED) {
@@ -18677,7 +18683,7 @@ compound_head(ulong page)
 long 
 count_partial(ulong node, struct meminfo *si, ulong *free)
 {
-	ulong list_head, next, last, objects_vaddr;
+	ulong list_head, next, last;
 	short inuse, objects;
 	ulong total_inuse;
 	ulong count = 0;
@@ -18708,31 +18714,11 @@ count_partial(ulong node, struct meminfo *si, ulong *free)
 		total_inuse += inuse;
 
 		if (VALID_MEMBER(page_objects)) {
-			objects_vaddr = last + OFFSET(page_objects);
-			if (si->flags & SLAB_BITFIELD)
-				objects_vaddr += sizeof(ushort);
-			if (!readmem(objects_vaddr, KVADDR, &objects,
-			    sizeof(ushort), "page.objects", RETURN_ON_ERROR)) {
+			objects = slub_page_objects(si, last);
+			if (!objects) {
 				hq_close();
 				return -1;
 			}
-
-			if (si->flags & SLAB_BITFIELD) {
-				if (__BYTE_ORDER == __LITTLE_ENDIAN) {
-					objects <<= 1;
-					objects >>= 1;
-				}
-				if (__BYTE_ORDER == __BIG_ENDIAN)
-					objects >>= 1;
-			}
-
-			if (objects == (short)(-1)) {
-				error(INFO, "%s: slab: %lx invalid page.objects: -1\n",
-					si->curname, last);
-				hq_close();
-				return -1;
-			}
-
 			*free += objects - inuse;
 		}
 
