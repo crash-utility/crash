@@ -15572,6 +15572,8 @@ get_swapdev(ulong type, char *buf)
 	unsigned int i, swap_info_len;
 	ulong swap_info, swap_info_ptr, swap_file;
 	ulong vfsmnt;
+	char *devname;
+	char buf1[BUFSIZE];
 
 	swap_info_init();
 
@@ -15613,8 +15615,13 @@ get_swapdev(ulong type, char *buf)
 				OFFSET(swap_info_struct_swap_vfsmnt));
         		get_pathname(swap_file, buf, BUFSIZE, 1, vfsmnt);
                 } else if (VALID_MEMBER (swap_info_struct_old_block_size)) {
-                        get_pathname(file_to_dentry(swap_file),
-                        	buf, BUFSIZE, 1, 0);
+			devname = vfsmount_devname(file_to_vfsmnt(swap_file),
+				buf1, BUFSIZE);
+			get_pathname(file_to_dentry(swap_file),
+				buf, BUFSIZE, 1, file_to_vfsmnt(swap_file));
+			if ((STREQ(devname, "devtmpfs") || STREQ(devname, "udev")) 
+			    && !STRNEQ(buf, "/dev/"))
+				string_insert("/dev", buf);
 		} else {
         		get_pathname(swap_file, buf, BUFSIZE, 1, 0);
 		}
