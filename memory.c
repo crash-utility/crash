@@ -15550,6 +15550,9 @@ swap_location(ulonglong pte, char *buf)
         if (!pte)
                 return NULL;
 
+	if (!symbol_exists("nr_swapfiles") || !symbol_exists("swap_info"))
+		return NULL;
+
 	if (THIS_KERNEL_VERSION >= LINUX(2,6,0))
 		sprintf(buf, "%s  OFFSET: %lld", 
 			get_swapdev(__swp_type(pte), swapdev), (ulonglong)__swp_offset(pte));
@@ -15569,12 +15572,6 @@ get_swapdev(ulong type, char *buf)
 	unsigned int i, swap_info_len;
 	ulong swap_info, swap_info_ptr, swap_file;
 	ulong vfsmnt;
-
-        if (!symbol_exists("nr_swapfiles"))
-                error(FATAL, "nr_swapfiles doesn't exist in this kernel!\n");
-
-        if (!symbol_exists("swap_info"))
-                error(FATAL, "swap_info doesn't exist in this kernel!\n");
 
 	swap_info_init();
 
