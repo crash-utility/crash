@@ -2815,7 +2815,7 @@ typedef u64 pte_t;
 
 typedef signed int s32;
 
-/* 
+/*
  * 3-levels / 4K pages
  */
 #define PTRS_PER_PGD_L3_4K   (512)
@@ -2823,10 +2823,23 @@ typedef signed int s32;
 #define PTRS_PER_PTE_L3_4K   (512)
 #define PGDIR_SHIFT_L3_4K    (30)
 #define PGDIR_SIZE_L3_4K     ((1UL) << PGDIR_SHIFT_L3_4K)
-#define PGDIR_MASK_L3 4K     (~(PGDIR_SIZE_L3_4K-1))
+#define PGDIR_MASK_L3_4K     (~(PGDIR_SIZE_L3_4K-1))
 #define PMD_SHIFT_L3_4K      (21)
-#define PMD_SIZE_L3_4K       (1UL << PMD_SHIFT_4K)
-#define PMD_MASK_L3 4K       (~(PMD_SIZE_4K-1))
+#define PMD_SIZE_L3_4K       (1UL << PMD_SHIFT_L3_4K)
+#define PMD_MASK_L3_4K       (~(PMD_SIZE_L3_4K-1))
+
+/*
+ * 3-levels / 64K pages
+ */
+#define PTRS_PER_PGD_L3_64K  (64)
+#define PTRS_PER_PMD_L3_64K  (8192)
+#define PTRS_PER_PTE_L3_64K  (8192)
+#define PGDIR_SHIFT_L3_64K   (42)
+#define PGDIR_SIZE_L3_64K    ((1UL) << PGDIR_SHIFT_L3_64K)
+#define PGDIR_MASK_L3_64K    (~(PGDIR_SIZE_L3_64K-1))
+#define PMD_SHIFT_L3_64K     (29)
+#define PMD_SIZE_L3_64K      (1UL << PMD_SHIFT_L3_64K)
+#define PMD_MASK_L3_64K      (~(PMD_SIZE_L3_64K-1))
 
 /*
  * 2-levels / 64K pages
@@ -2868,9 +2881,10 @@ typedef signed int s32;
 #define KSYMS_START   (0x1)
 #define PHYS_OFFSET   (0x2)
 #define VM_L2_64K     (0x4)
-#define VM_L3_4K      (0x8)
-#define KDUMP_ENABLED (0x10)
-#define IRQ_STACKS    (0x20)
+#define VM_L3_64K     (0x8)
+#define VM_L3_4K      (0x10)
+#define KDUMP_ENABLED (0x20)
+#define IRQ_STACKS    (0x40)
 
 /* 
  * sources: Documentation/arm64/memory.txt 
