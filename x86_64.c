@@ -1431,7 +1431,8 @@ x86_64_uvtop_level4(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, in
 	pte = ULONG(machdep->ptbl + PAGEOFFSET(ptep));
 	if (verbose)
 		fprintf(fp, "   PTE: %lx => %lx\n", (ulong)ptep, pte);
-	if (!(pte & (_PAGE_PRESENT))) {
+
+	if (!(pte & (_PAGE_PRESENT | _PAGE_PROTNONE))) {
 		*paddr = pte;
 
 		if (pte && verbose) {
