@@ -10088,6 +10088,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(page_cache_bucket));
         fprintf(fp, "                       pt_regs: %ld\n", SIZE(pt_regs));
         fprintf(fp, "                   task_struct: %ld\n", SIZE(task_struct));
+        fprintf(fp, "             task_struct_flags: %ld\n", SIZE(task_struct_flags));
         fprintf(fp, "                   thread_info: %ld\n", SIZE(thread_info));
         fprintf(fp, "                 softirq_state: %ld\n", 
 		SIZE(softirq_state));

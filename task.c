@@ -249,6 +249,7 @@ task_init(void)
 	MEMBER_OFFSET_INIT(task_struct_active_mm, "task_struct", "active_mm");
 	MEMBER_OFFSET_INIT(task_struct_next_run, "task_struct", "next_run");
 	MEMBER_OFFSET_INIT(task_struct_flags, "task_struct", "flags");
+	MEMBER_SIZE_INIT(task_struct_flags, "task_struct", "flags");
         MEMBER_OFFSET_INIT(task_struct_pidhash_next,
                 "task_struct", "pidhash_next");
 	MEMBER_OFFSET_INIT(task_struct_pgrp, "task_struct", "pgrp");
@@ -5266,8 +5267,15 @@ task_flags(ulong task)
 
 	fill_task_struct(task);
 
-	flags = tt->last_task_read ?
-		 ULONG(tt->task_struct + OFFSET(task_struct_flags)) : 0;
+	if (tt->last_task_read) {
+		if (SIZE(task_struct_flags) == sizeof(unsigned int))
+			flags = UINT(tt->task_struct +
+				     OFFSET(task_struct_flags));
+		else
+			flags = ULONG(tt->task_struct +
+				      OFFSET(task_struct_flags));
+	} else
+		flags = 0;
 
 	return flags;
 }

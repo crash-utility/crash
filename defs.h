@@ -2093,6 +2093,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long hrtimer_base;
 	long tnt;
 	long trace_print_flags;
+	long task_struct_flags;
 };
 
 struct array_table {
