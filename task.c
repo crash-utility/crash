@@ -2369,7 +2369,10 @@ store_context(struct task_context *tc, ulong task, char *tp)
 
         tc->pid = (ulong)(*pid_addr);
 	strlcpy(tc->comm, comm_addr, TASK_COMM_LEN); 
-        tc->processor = *processor_addr;
+	if (machine_type("SPARC64"))
+		tc->processor = *(unsigned short *)processor_addr;
+	else
+		tc->processor = *processor_addr;
         tc->ptask = *parent_addr;
         tc->mm_struct = *mm_addr;
         tc->task = task;
@@ -7287,6 +7290,11 @@ get_idle_threads(ulong *tasklist, int nr_cpus)
 	    VALID_MEMBER(runqueue_idle)) {
 		runqbuf = GETBUF(SIZE(runqueue));
 		for (i = 0; i < nr_cpus; i++) {
+			if (machine_type("SPARC64") && 
+			    cpu_map_addr("possible") &&
+			    !(in_cpu_map(POSSIBLE, i)))
+				continue;
+
 			if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF))
 				runq = rq_sp->value + kt->__per_cpu_offset[i];
 			else

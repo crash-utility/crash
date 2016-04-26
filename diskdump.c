@@ -730,6 +730,8 @@ restart:
 		dd->machine_type = EM_S390;
 	else if (machine_type("ARM64"))
 		dd->machine_type = EM_AARCH64;
+	else if (machine_type("SPARC64"))
+		dd->machine_type = EM_SPARCV9;
 	else {
 		error(INFO, "%s: unsupported machine type: %s\n", 
 			DISKDUMP_VALID() ? "diskdump" : "compressed kdump",
@@ -1382,6 +1384,31 @@ get_diskdump_regs_arm64(struct bt_info *bt, ulong *eip, ulong *esp)
 	machdep->get_stack_frame(bt, eip, esp);
 }
 
+static void
+get_diskdump_regs_sparc64(struct bt_info *bt, ulong *eip, ulong *esp)
+{
+	Elf64_Nhdr *note;
+	int len;
+
+	if (KDUMP_CMPRS_VALID() &&
+		(bt->task == tt->panic_task ||
+		(is_task_active(bt->task) && dd->num_prstatus_notes > 1))) {
+		note  = (Elf64_Nhdr *)dd->nt_prstatus_percpu[bt->tc->processor];
+		if (!note)
+			error(FATAL,
+				    "cannot determine NT_PRSTATUS ELF note "
+				    "for %s task: %lx\n",
+					(bt->task == tt->panic_task) ?
+					"panic" : "active", bt->task);
+		len = sizeof(Elf64_Nhdr);
+		len = roundup(len + note->n_namesz, 4);
+		bt->machdep = (void *)((char *)note + len +
+			MEMBER_OFFSET("elf_prstatus", "pr_reg"));
+	}
+
+	machdep->get_stack_frame(bt, eip, esp);
+}
+
 /*
  *  Send the request to the proper architecture hander.
  */
@@ -1430,6 +1457,10 @@ get_diskdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 
 	case EM_AARCH64:
 		get_diskdump_regs_arm64(bt, eip, esp);
+		break;
+
+	case EM_SPARCV9:
+		get_diskdump_regs_sparc64(bt, eip, esp);
 		break;
 
 	default:
@@ -1577,7 +1608,8 @@ dump_note_offsets(FILE *fp)
 		for (tot = cnt = 0; tot < size; tot += len) {
 			qemu = FALSE;
 			if (machine_type("X86_64") || machine_type("S390X") ||
-			    machine_type("ARM64") || machine_type("PPC64")) {
+			    machine_type("ARM64") || machine_type("PPC64") ||
+			    machine_type("SPARC64")) {
 				note64 = (void *)dd->notes_buf + tot;
 				len = sizeof(Elf64_Nhdr);
 				if (STRNEQ((char *)note64 + len, "QEMU"))
@@ -1684,6 +1716,8 @@ __diskdump_memory_dump(FILE *fp)
 		fprintf(fp, "(EM_S390)\n"); break;
 	case EM_AARCH64:
 		fprintf(fp, "(EM_AARCH64)\n"); break;
+	case EM_SPARCV9:
+		fprintf(fp, "(EM_SPARCV9)\n"); break;
 	default:
 		fprintf(fp, "(unknown)\n"); break;
 	}
