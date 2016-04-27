@@ -2965,6 +2965,7 @@ typedef signed int s32;
 
 #define _SECTION_SIZE_BITS      30
 #define _MAX_PHYSMEM_BITS       40
+#define _MAX_PHYSMEM_BITS_3_17  48
 
 typedef unsigned long long __u64;
 typedef unsigned long long u64;

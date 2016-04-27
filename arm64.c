@@ -267,7 +267,10 @@ arm64_init(int when)
 	case POST_GDB:
 		arm64_calc_virtual_memory_ranges();
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
-		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+		if (THIS_KERNEL_VERSION >= LINUX(3,17,0))
+			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_3_17;
+		else
+			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
 		ms = machdep->machspec;
 
 		if (THIS_KERNEL_VERSION >= LINUX(4,0,0)) {
