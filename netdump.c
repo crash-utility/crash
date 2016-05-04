@@ -4458,11 +4458,14 @@ kdump_backup_region_init(void)
 	} else
 		return;
 
-	if (!readmem(symbol_value("kexec_crash_image"), KVADDR,
-		     &kexec_crash_image_p, sizeof(ulong),
-		     "kexec backup region: kexec_crash_image",
-		     QUIET|RETURN_ON_ERROR))
-		goto error;
+	if (symbol_exists("kexec_crash_image")) {
+		if (!readmem(symbol_value("kexec_crash_image"), KVADDR,
+			     &kexec_crash_image_p, sizeof(ulong),
+			     "kexec backup region: kexec_crash_image",
+			     QUIET|RETURN_ON_ERROR))
+			goto error;
+	} else
+		kexec_crash_image_p = 0;
 
 	if (!kexec_crash_image_p) {
 		if (CRASHDEBUG(1))
