@@ -59,29 +59,19 @@ static void alloc_elf_header(Elf64_Ehdr *ehdr, ushort e_machine)
 	ehdr->e_shstrndx = 0;
 }
 
-static int alloc_program_headers(Elf64_Phdr *phdr)
+static void alloc_program_headers(Elf64_Phdr *phdr)
 {
 	unsigned int i;
-	struct stat64 st;
 
 	for (i = 0; i < nodes; i++) {
 		phdr[i].p_type = PT_LOAD;
-
-		if (0 > stat64(ramdump[i].path, &st)) {
-			error(INFO, "ramdump stat failed\n");
-			return -1;
-		}
-
-		phdr[i].p_filesz = st.st_size;
+		phdr[i].p_filesz = ramdump[i].end_paddr + 1 - ramdump[i].start_paddr;
 		phdr[i].p_memsz = phdr[i].p_filesz;
 		phdr[i].p_vaddr = 0;
 		phdr[i].p_paddr = ramdump[i].start_paddr;
-		ramdump[i].end_paddr = ramdump[i].start_paddr + st.st_size - 1;
 		phdr[i].p_flags = PF_R | PF_W | PF_X;
 		phdr[i].p_align = 0;
 	}
-
-	return 0;
 }
 
 static char *write_elf(Elf64_Phdr *load, Elf64_Ehdr *e_head, size_t data_offset)
@@ -219,8 +209,7 @@ char *ramdump_to_elf(void)
 
 	load = (Elf64_Phdr *)ptr;
 
-	if (alloc_program_headers(load))
-		goto end;
+	alloc_program_headers(load);
 
 	offset += sizeof(Elf64_Phdr) * nodes;
 	ptr += sizeof(Elf64_Phdr) * nodes;
@@ -238,17 +227,25 @@ char *ramdump_to_elf(void)
 	}
 
 	e_file = write_elf(load, e_head, data_offset);
-end:
+
 	free(e_head);
 	return e_file;
 }
+
+#define PREFIX(ptr, pat)				\
+	(strncmp((ptr), (pat), sizeof(pat)-1) ?	 0 :	\
+			((ptr) += sizeof(pat)-1, 1))
 
 int is_ramdump(char *p)
 {
 	char *x = NULL, *y = NULL, *pat;
 	size_t len;
 	char *pattern;
+	struct stat64 st;
+	int is_live;
 	int err = 0;
+
+	is_live = PREFIX(p, "live:");
 
 	if (nodes || !strchr(p, '@'))
 		return 0;
@@ -277,11 +274,20 @@ int is_ramdump(char *p)
 						"ramdump %s open failed:%s\n",
 						ramdump[nodes - 1].path,
 						strerror(errno));
+			if (fstat64(ramdump[nodes - 1].rfd, &st) < 0)
+				error(FATAL, "ramdump stat failed\n");
+			ramdump[nodes - 1].end_paddr =
+				ramdump[nodes - 1].start_paddr + st.st_size - 1;
 		}
 
 		pat = NULL;
 	}
 
+	if (nodes && is_live) {
+		pc->flags |= LIVE_SYSTEM;
+		pc->dumpfile = ramdump[0].path;
+		pc->live_memsrc = pc->dumpfile;
+	}
 	return nodes;
 }
 

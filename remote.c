@@ -2537,7 +2537,7 @@ remote_fd_init(void)
                 	error(INFO, "too many dumpfile/memory arguments\n");
 			program_usage(SHORT_FORM);
 		}
-		pc->flags |= MEMSRC_LOCAL;
+		pc->flags2 |= MEMSRC_LOCAL;
 		if (pc->flags & (DEVMEM|MEMMOD)) {
 			if (!get_proc_version())
                         	error(INFO, "/proc/version: %s\n", 
@@ -3025,7 +3025,7 @@ dumpfile_save:
 		return FALSE;
 	}
 
-        if (pc->flags & MEMSRC_LOCAL) {
+        if (pc->flags2 & MEMSRC_LOCAL) {
                 error(INFO, "%s is a local file\n", pc->dumpfile);
 		return FALSE;
 	}

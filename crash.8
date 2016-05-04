@@ -140,7 +140,10 @@ contents.  Multiple MEMORY-IMAGE@ADDRESS ordered pairs may be entered,
 with each dumpfile containing a contiguous block of RAM, where the ADDRESS
 value is the physical start address of the block expressed in hexadecimal.
 The physical address value(s) will be used to create a temporary ELF header
-in /var/tmp, which will only exist during the crash session.
+in /var/tmp, which will only exist during the crash session.  If a raw RAM
+dumpile represents a live memory source, such as that specified by the QEMU
+mem-path argument of a memory-backend-file object, then "live:" must be
+prepended to the MEMORY-IMAGE name.
 .TP
 .BI mapfile
 If the NAMELIST file is not the same kernel that is

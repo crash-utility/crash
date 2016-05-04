@@ -494,7 +494,8 @@ task_init(void)
 		tt->flags &= ~(TASK_REFRESH|TASK_REFRESH_OFF);
 
 	if (ACTIVE()) {
-		active_pid = REMOTE() ? pc->server_pid : pc->program_pid; 
+		active_pid = REMOTE() ? pc->server_pid :
+			LOCAL_ACTIVE() ? pc->program_pid : 1;
 		set_context(NO_TASK, active_pid);
 		tt->this_task = pid_to_task(active_pid);
 	}
@@ -5369,17 +5370,15 @@ is_task_active(ulong task)
 {
 	int has_cpu;
 
+	if (LOCAL_ACTIVE() && (task == tt->this_task))
+		return TRUE;
 	if (DUMPFILE() && is_panic_thread(task))
 		return TRUE;
 
         fill_task_struct(task);
 
-	has_cpu = tt->last_task_read ? 
+	has_cpu = tt->last_task_read ?
 		task_has_cpu(task, tt->task_struct) : 0;
-
-	if (!(kt->flags & SMP) && !has_cpu && ACTIVE() && 
-	    (task == tt->this_task))
-		has_cpu = TRUE;
 
 	return(has_cpu);
 }

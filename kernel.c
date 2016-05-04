@@ -2800,8 +2800,7 @@ back_trace(struct bt_info *bt)
 		return;
 	}
 
-	if (LIVE() && !(bt->flags & BT_EFRAME_SEARCH) && 
-            ((bt->task == tt->this_task) || is_task_active(bt->task))) {
+	if (LIVE() && !(bt->flags & BT_EFRAME_SEARCH) && is_task_active(bt->task)) {
 
 		if (BT_REFERENCE_CHECK(bt) ||
 		    bt->flags & (BT_TEXT_SYMBOLS_PRINT|BT_TEXT_SYMBOLS_NOPRINT))
@@ -2901,6 +2900,10 @@ back_trace(struct bt_info *bt)
 	}
 
 	if (ACTIVE() && !INSTACK(esp, bt)) {
+		if (!LOCAL_ACTIVE()) {
+			error(INFO, "task no longer exists\n");
+			return;
+		}
 		sprintf(buf, "/proc/%ld", bt->tc->pid); 
 		if (!file_exists(buf, NULL))
 			error(INFO, "task no longer exists\n");
@@ -8449,7 +8452,7 @@ panic_this_kernel(void)
 {
 	pid_t zero_pid = 0;
 
-	if (DUMPFILE())
+	if (!LOCAL_ACTIVE())
 		error(FATAL, "cannot panic a dumpfile!\n");
 
 	if (!(pc->flags & MFD_RDWR) || (pc->flags & MEMMOD))

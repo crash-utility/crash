@@ -223,7 +223,7 @@ struct number_option {
 #define DEVMEM                (0x2000000ULL)
 #define REM_LIVE_SYSTEM       (0x4000000ULL)
 #define NAMELIST_LOCAL        (0x8000000ULL)
-#define MEMSRC_LOCAL         (0x10000000ULL)
+#define LIVE_RAMDUMP         (0x10000000ULL)
 #define NAMELIST_SAVED       (0x20000000ULL)
 #define DUMPFILE_SAVED       (0x40000000ULL)
 #define UNLINK_NAMELIST      (0x80000000ULL) 
@@ -262,10 +262,11 @@ struct number_option {
 #define PROC_KCORE   (0x8000000000000000ULL)
 
 #define ACTIVE()            (pc->flags & LIVE_SYSTEM)
+#define LOCAL_ACTIVE()      ((pc->flags & (LIVE_SYSTEM|LIVE_RAMDUMP)) == LIVE_SYSTEM)
 #define DUMPFILE()          (!(pc->flags & LIVE_SYSTEM))
 #define LIVE()              (pc->flags2 & LIVE_DUMP || pc->flags & LIVE_SYSTEM)
-#define MEMORY_SOURCES (NETDUMP|KDUMP|MCLXCD|LKCD|DEVMEM|S390D|MEMMOD|DISKDUMP|XENDUMP|CRASHBUILTIN|KVMDUMP|PROC_KCORE|SADUMP|VMWARE_VMSS)
-#define DUMPFILE_TYPES      (DISKDUMP|NETDUMP|KDUMP|MCLXCD|LKCD|S390D|XENDUMP|KVMDUMP|SADUMP|VMWARE_VMSS)
+#define MEMORY_SOURCES (NETDUMP|KDUMP|MCLXCD|LKCD|DEVMEM|S390D|MEMMOD|DISKDUMP|XENDUMP|CRASHBUILTIN|KVMDUMP|PROC_KCORE|SADUMP|VMWARE_VMSS|LIVE_RAMDUMP)
+#define DUMPFILE_TYPES      (DISKDUMP|NETDUMP|KDUMP|MCLXCD|LKCD|S390D|XENDUMP|KVMDUMP|SADUMP|VMWARE_VMSS|LIVE_RAMDUMP)
 #define REMOTE()            (pc->flags2 & REMOTE_DAEMON)
 #define REMOTE_ACTIVE()     (pc->flags & REM_LIVE_SYSTEM) 
 #define REMOTE_DUMPFILE() \
@@ -534,6 +535,7 @@ struct program_context {
 #define SNAP        (0x20000ULL)
 #define EXCLUDED_VMEMMAP (0x40000ULL)
 #define is_excluded_vmemmap() (pc->flags2 & EXCLUDED_VMEMMAP)
+#define MEMSRC_LOCAL         (0x80000ULL)
 	char *cleanup;
 	char *namelist_orig;
 	char *namelist_debug_orig;

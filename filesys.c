@@ -1,8 +1,8 @@
 /* filesys.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015 David Anderson
- * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2016 David Anderson
+ * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -134,7 +134,7 @@ fd_init(void)
 			pc->nfd = -1;
 		}
 
-		if (ACTIVE() && !(pc->namelist_debug || pc->system_map)) {
+		if (LOCAL_ACTIVE() && !(pc->namelist_debug || pc->system_map)) {
 			memory_source_init();
 			match_proc_version();
 		}
@@ -162,13 +162,13 @@ fd_init(void)
 static void
 memory_source_init(void)
 {
-	if (REMOTE() && !(pc->flags & MEMSRC_LOCAL))
+	if (REMOTE() && !(pc->flags2 & MEMSRC_LOCAL))
 		return;
 
 	if (pc->flags & KERNEL_DEBUG_QUERY)
 		return;
 
-        if (ACTIVE()) {
+        if (LOCAL_ACTIVE()) {
 		if (pc->mfd != -1)  /* already been here */
 			return;
 

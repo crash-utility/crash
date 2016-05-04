@@ -6054,7 +6054,7 @@ x86_64_calc_phys_base(void)
 		}
 	}
 
-	if (ACTIVE()) {
+	if (LOCAL_ACTIVE()) {
 	        if ((iomem = fopen("/proc/iomem", "r")) == NULL)
 	                return;
 	

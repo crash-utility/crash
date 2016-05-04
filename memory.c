@@ -16470,6 +16470,7 @@ memory_page_size(void)
 	case CRASHBUILTIN:
 	case KVMDUMP:
 	case PROC_KCORE:
+	case LIVE_RAMDUMP:
 		psz = (uint)getpagesize();  
 		break;
 
