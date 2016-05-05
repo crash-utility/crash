@@ -2206,3 +2206,20 @@ diff -up gdb-7.6/bfd/elf64-ppc.c.orig gdb-7.6/bfd/elf64-ppc.c
 +  gi->finished = 1; 
 +}
  #endif
+--- gdb-7.6/bfd/elf64-s390.c.orig
++++ gdb-7.6/bfd/elf64-s390.c
+@@ -323,10 +323,10 @@ elf_s390_reloc_name_lookup (bfd *abfd AT
+ 	&& strcasecmp (elf_howto_table[i].name, r_name) == 0)
+       return &elf_howto_table[i];
+ 
+-    if (strcasecmp (elf64_s390_vtinherit_howto.name, r_name) == 0)
+-      return &elf64_s390_vtinherit_howto;
+-    if (strcasecmp (elf64_s390_vtentry_howto.name, r_name) == 0)
+-      return &elf64_s390_vtentry_howto;
++  if (strcasecmp (elf64_s390_vtinherit_howto.name, r_name) == 0)
++    return &elf64_s390_vtinherit_howto;
++  if (strcasecmp (elf64_s390_vtentry_howto.name, r_name) == 0)
++    return &elf64_s390_vtentry_howto;
+ 
+   return NULL;
+ }
