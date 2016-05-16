@@ -208,6 +208,16 @@ get_string (FILE *fp, char *name)
 	name[sz] = 0;
 	return sz;
 }
+static int
+get_string_len (FILE *fp, char *name, uint32_t sz)
+{
+	size_t items ATTRIBUTE_UNUSED;
+	if (sz == EOF)
+		return -1;
+	items = fread (name, sz, 1, fp);
+	name[sz] = 0;
+	return sz;
+}
 
 static void
 ram_read_blocks (FILE *fp, uint64_t size)
@@ -924,6 +934,8 @@ qemu_load (const struct qemu_device_loader *devices, uint32_t required_features,
 	struct qemu_device_list *result = NULL;
 	struct qemu_device *last = NULL;;
 	size_t items ATTRIBUTE_UNUSED;
+	uint32_t footerSecId ATTRIBUTE_UNUSED;
+	char name[257];
 
 	switch (get_be32 (fp)) {
 	case QEMU_VM_FILE_MAGIC:
@@ -961,6 +973,15 @@ qemu_load (const struct qemu_device_loader *devices, uint32_t required_features,
 			break;
 		if (sec == QEMU_VM_EOF)
 			break;
+		if (sec == QEMU_VM_SECTION_FOOTER) {
+			footerSecId = get_be32 (fp);
+			continue;
+                }
+		if (sec == QEMU_VM_CONFIGURATION) {
+			uint32_t len = get_be32 (fp);
+			get_string_len (fp, name, len);
+			continue;
+                }
 
 		d = device_get (devices, result, sec, fp);
 		if (!d)
