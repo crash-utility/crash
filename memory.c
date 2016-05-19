@@ -6352,8 +6352,13 @@ page_flags_init_from_pageflag_names(void)
 			break;
 		}
 
+		if ((mask == 0UL) && !name) {   /* Linux 4.6 and later */
+			len--;
+			break;
+		}
+
 		if (!read_string((ulong)name, namebuf, BUFSIZE-1)) {
-			error(INFO, "failed to read pageflag_names entry\n",
+			error(INFO, "failed to read pageflag_names entry (i: %d  name: \"%s\"  mask: %ld)\n",
 				i, name, mask);
 			goto pageflags_fail;
 		}
