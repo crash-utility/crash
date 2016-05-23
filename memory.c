@@ -434,6 +434,10 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(page_count, "page", "_count");
 		if (INVALID_MEMBER(page_count))
 			ANON_MEMBER_OFFSET_INIT(page_count, "page", "_count");
+		if (INVALID_MEMBER(page_count))
+			MEMBER_OFFSET_INIT(page_count, "page", "_refcount");
+		if (INVALID_MEMBER(page_count))
+			ANON_MEMBER_OFFSET_INIT(page_count, "page", "_refcount");
 	}
 	MEMBER_OFFSET_INIT(page_flags, "page", "flags");
 	MEMBER_SIZE_INIT(page_flags, "page", "flags");
