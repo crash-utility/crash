@@ -1709,13 +1709,17 @@ arm64_get_dumpfile_stackframe(struct bt_info *bt, struct arm64_stackframe *frame
 		if (is_kernel_text(frame->pc) ||
 		    !in_user_stack(bt->tc->task, frame->sp)) {
 			error(WARNING, 
-			    "corrupt prstatus? pstate=0x%lx, but no user frame found\n",
+			    "corrupt NT_PRSTATUS? pstate: 0x%lx, but no user frame found\n",
 				ptregs->pstate);
+			if (is_kernel_text(frame->pc) && 
+			    INSTACK(frame->sp, bt) && INSTACK(frame->fp, bt))
+				goto try_kernel;
 			bt->flags |= BT_REGS_NOT_FOUND;
 			return FALSE;
 		}
 		bt->flags |= BT_USER_SPACE;
 	} else {
+try_kernel:
 		frame->sp = ptregs->sp;
 		frame->fp = ptregs->regs[29];
 	}
