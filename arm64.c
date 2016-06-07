@@ -50,7 +50,7 @@ static int arm64_unwind_frame(struct bt_info *, struct arm64_stackframe *);
 static int arm64_get_dumpfile_stackframe(struct bt_info *, struct arm64_stackframe *);
 static int arm64_in_kdump_text(struct bt_info *, struct arm64_stackframe *);
 static int arm64_in_kdump_text_on_irq_stack(struct bt_info *);
-static void arm64_switch_stack(struct bt_info *, struct arm64_stackframe *, FILE *);
+static int arm64_switch_stack(struct bt_info *, struct arm64_stackframe *, FILE *);
 static int arm64_get_stackframe(struct bt_info *, struct arm64_stackframe *);
 static void arm64_get_stack_frame(struct bt_info *, ulong *, ulong *);
 static void arm64_print_exception_frame(struct bt_info *, ulong, int, FILE *);
@@ -1390,7 +1390,7 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 		if (frame->sp == irq_stack_ptr) {
 			orig_sp = GET_STACK_ULONG(irq_stack_ptr - 8);
 			arm64_set_process_stack(bt);
-			if (INSTACK(orig_sp, bt) && INSTACK(frame->fp, bt)) {
+			if (INSTACK(orig_sp, bt) && (INSTACK(frame->fp, bt) || (frame->fp == 0))) {
 				ptregs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(orig_sp))];
 				frame->sp = orig_sp;
 				frame->pc = ptregs->pc;
@@ -1507,8 +1507,9 @@ arm64_back_trace_cmd(struct bt_info *bt)
 
 		if ((bt->flags & BT_IRQSTACK) &&
 		    !arm64_on_irq_stack(bt->tc->processor, stackframe.sp)) {
-			arm64_switch_stack(bt, &stackframe, ofp);
 			bt->flags &= ~BT_IRQSTACK;
+			if (arm64_switch_stack(bt, &stackframe, ofp) == USER_MODE)
+				break;
 		}
 
 
@@ -1658,7 +1659,7 @@ arm64_in_kdump_text_on_irq_stack(struct bt_info *bt)
 	return FALSE;
 }
 
-static void 
+static int 
 arm64_switch_stack(struct bt_info *bt, struct arm64_stackframe *frame, FILE *ofp)
 {
 	int i;
@@ -1685,7 +1686,12 @@ arm64_switch_stack(struct bt_info *bt, struct arm64_stackframe *frame, FILE *ofp
 		FREEBUF(stackbuf);
 	}
 	fprintf(ofp, "--- <IRQ stack> ---\n");
+
+	if (frame->fp == 0)
+		return USER_MODE;
+
 	arm64_print_exception_frame(bt, frame->sp, KERNEL_MODE, ofp);
+	return KERNEL_MODE;
 }
 
 static int
