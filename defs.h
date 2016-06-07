@@ -1054,7 +1054,7 @@ extern struct machdep_table *machdep;
             readmem((ulonglong)((ulong)(PGD)), TYPE, machdep->pgd,          \
                     SIZE, "pgd page", FAULT_ON_ERROR);                      \
             machdep->last_pgd_read = (ulong)(PGD);                          \
-    }								            
+    }
 
 #define FILL_PUD(PUD, TYPE, SIZE) 					    \
     if (!IS_LAST_PUD_READ(PUD)) {                                           \
@@ -1068,7 +1068,7 @@ extern struct machdep_table *machdep;
             readmem((ulonglong)(PMD), TYPE, machdep->pmd,                   \
 	            SIZE, "pmd page", FAULT_ON_ERROR);                      \
             machdep->last_pmd_read = (ulong)(PMD);                          \
-    }					                                    
+    }
 
 #define FILL_PTBL(PTBL, TYPE, SIZE)			           	    \
     if (!IS_LAST_PTBL_READ(PTBL)) {                                         \
@@ -2884,6 +2884,28 @@ typedef signed int s32;
 #define PMD_MASK_L3_4K       (~(PMD_SIZE_L3_4K-1))
 
 /*
+ * 4-levels / 4K pages
+ * 48-bit VA
+ */
+#define PTRS_PER_PGD_L4_4K   ((1UL) << (48 - 39))
+#define PTRS_PER_PUD_L4_4K   (512)
+#define PTRS_PER_PMD_L4_4K   (512)
+#define PTRS_PER_PTE_L4_4K   (512)
+#define PGDIR_SHIFT_L4_4K    (39)
+#define PGDIR_SIZE_L4_4K     ((1UL) << PGDIR_SHIFT_L4_4K)
+#define PGDIR_MASK_L4_4K     (~(PGDIR_SIZE_L4_4K-1))
+#define PUD_SHIFT_L4_4K      (30)
+#define PUD_SIZE_L4_4K       ((1UL) << PUD_SHIFT_L4_4K)
+#define PUD_MASK_L4_4K       (~(PUD_SIZE_L4_4K-1))
+#define PMD_SHIFT_L4_4K      (21)
+#define PMD_SIZE_L4_4K       (1UL << PMD_SHIFT_L4_4K)
+#define PMD_MASK_L4_4K       (~(PMD_SIZE_L4_4K-1))
+
+#define PGDIR_SIZE_48VA      (1UL << ((48 - 39) + 3))
+#define PGDIR_MASK_48VA      (~(PGDIR_SIZE_48VA - 1))
+#define PGDIR_OFFSET_48VA(X) (((ulong)(X)) & (PGDIR_SIZE_48VA - 1))
+
+/*
  * 3-levels / 64K pages
  */
 #define PTRS_PER_PGD_L3_64K  (64)
@@ -2940,6 +2962,7 @@ typedef signed int s32;
 #define VM_L3_4K      (0x10)
 #define KDUMP_ENABLED (0x20)
 #define IRQ_STACKS    (0x40)
+#define VM_L4_4K      (0x80)
 
 /* 
  * sources: Documentation/arm64/memory.txt 
