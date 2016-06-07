@@ -3030,6 +3030,8 @@ struct machine_specific {
 	ulong kernel_flags;
 	ulong irq_stack_size;
 	ulong *irq_stacks;
+	ulong __irqentry_text_start;
+	ulong __irqentry_text_end;
 };
 
 struct arm64_stackframe {

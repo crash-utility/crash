@@ -506,6 +506,8 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "           phys_offset: %lx\n", ms->phys_offset);
 	fprintf(fp, "__exception_text_start: %lx\n", ms->__exception_text_start);
 	fprintf(fp, "  __exception_text_end: %lx\n", ms->__exception_text_end);
+	fprintf(fp, " __irqentry_text_start: %lx\n", ms->__irqentry_text_start);
+	fprintf(fp, "   __irqentry_text_end: %lx\n", ms->__irqentry_text_end);
 	fprintf(fp, "       panic_task_regs: %lx\n", (ulong)ms->panic_task_regs);
 	fprintf(fp, "         PTE_PROT_NONE: %lx\n", ms->PTE_PROT_NONE);
 	fprintf(fp, "              PTE_FILE: ");
@@ -1071,6 +1073,11 @@ arm64_stackframe_init(void)
 		symbol_value("__exception_text_start");
 	machdep->machspec->__exception_text_end = 
 		symbol_value("__exception_text_end");
+	if ((sp1 = kernel_symbol_search("__irqentry_text_start")) &&
+	    (sp2 = kernel_symbol_search("__irqentry_text_end"))) {
+		machdep->machspec->__irqentry_text_start = sp1->value; 
+		machdep->machspec->__irqentry_text_end = sp2->value; 
+	} 
 
 	if ((sp1 = kernel_symbol_search("crash_kexec")) &&
 	    (sp1n = next_symbol(NULL, sp1)) && 
@@ -1261,8 +1268,16 @@ arm64_in_exception_text(ulong ptr)
 {
 	struct machine_specific *ms = machdep->machspec;
 
-        return((ptr >= ms->__exception_text_start) &&
-               (ptr < ms->__exception_text_end));
+	if ((ptr >= ms->__exception_text_start) &&
+	    (ptr < ms->__exception_text_end))
+		return TRUE;
+
+	if (ms->__irqentry_text_start && ms->__irqentry_text_end &&
+	    ((ptr >= ms->__irqentry_text_start) && 
+	    (ptr < ms->__irqentry_text_end)))
+		return TRUE;
+
+	return FALSE;
 }
 
 #define BACKTRACE_CONTINUE        (1)
@@ -1502,8 +1517,11 @@ arm64_back_trace_cmd(struct bt_info *bt)
 		if (!arm64_unwind_frame(bt, &stackframe))
 			break;
 
-		if (arm64_in_exception_text(bt->instptr) && INSTACK(stackframe.fp, bt))
-			exception_frame = stackframe.fp - SIZE(pt_regs);
+		if (arm64_in_exception_text(bt->instptr) && INSTACK(stackframe.fp, bt)) {
+			if (!(bt->flags & BT_IRQSTACK) ||
+			    (((stackframe.sp + SIZE(pt_regs)) < bt->stacktop)))
+				exception_frame = stackframe.fp - SIZE(pt_regs);
+		}
 
 		if ((bt->flags & BT_IRQSTACK) &&
 		    !arm64_on_irq_stack(bt->tc->processor, stackframe.sp)) {
