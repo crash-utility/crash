@@ -175,6 +175,7 @@ char *program_usage_info[] = {
     "      phys_base=<physical-address>",
     "    ARM64:",
     "      phys_offset=<physical-address>",
+    "      kimage_voffset=<kimage_voffset-value>",
     "",
     "  -x     ",
     "    Automatically load extension modules from a particular directory.",

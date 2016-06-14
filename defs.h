@@ -2846,8 +2846,8 @@ typedef u64 pte_t;
 
 #define PTOV(X) \
 	((unsigned long)(X)-(machdep->machspec->phys_offset)+(machdep->machspec->page_offset))
-#define VTOP(X) \
-	((unsigned long)(X)-(machdep->machspec->page_offset)+(machdep->machspec->phys_offset))
+
+#define VTOP(X)               arm64_VTOP((ulong)(X))
 
 #define USERSPACE_TOP   (machdep->machspec->userspace_top)
 #define PAGE_OFFSET     (machdep->machspec->page_offset)
@@ -2962,19 +2962,24 @@ typedef signed int s32;
 #define VM_L3_4K      (0x10)
 #define KDUMP_ENABLED (0x20)
 #define IRQ_STACKS    (0x40)
-#define VM_L4_4K      (0x80)
+#define NEW_VMEMMAP   (0x80)
+#define VM_L4_4K      (0x100)
 
 /* 
  * sources: Documentation/arm64/memory.txt 
  *          arch/arm64/include/asm/memory.h 
  *          arch/arm64/include/asm/pgtable.h
  */
-
-#define ARM64_PAGE_OFFSET    ((0xffffffffffffffffUL) << (machdep->machspec->VA_BITS - 1))
+#define ARM64_VA_START       ((0xffffffffffffffffUL) \
+					<< machdep->machspec->VA_BITS)
+#define ARM64_PAGE_OFFSET    ((0xffffffffffffffffUL) \
+					<< (machdep->machspec->VA_BITS - 1))
 #define ARM64_USERSPACE_TOP  ((1UL) << machdep->machspec->VA_BITS)
-#define ARM64_MODULES_VADDR  (ARM64_PAGE_OFFSET - MEGABYTES(64))
-#define ARM64_MODULES_END    (ARM64_PAGE_OFFSET - 1)
-#define ARM64_VMALLOC_START  ((0xffffffffffffffffUL) << machdep->machspec->VA_BITS)
+
+/* only used for v4.6 or later */
+#define ARM64_MODULES_VSIZE     MEGABYTES(128)
+#define ARM64_KASAN_SHADOW_SIZE (1UL << (machdep->machspec->VA_BITS - 3))
+
 /*
  * The following 3 definitions are the original values, but are obsolete
  * for 3.17 and later kernels because they are now build-time calculations.
@@ -3055,6 +3060,10 @@ struct machine_specific {
 	ulong *irq_stacks;
 	ulong __irqentry_text_start;
 	ulong __irqentry_text_end;
+	/* only needed for v4.6 or later kernel */
+	ulong kimage_voffset;
+	ulong kimage_text;
+	ulong kimage_end;
 };
 
 struct arm64_stackframe {
@@ -5412,6 +5421,7 @@ void unwind_backtrace(struct bt_info *);
 #ifdef ARM64
 void arm64_init(int);
 void arm64_dump_machdep_table(ulong);
+ulong arm64_VTOP(ulong);
 int arm64_IS_VMALLOC_ADDR(ulong);
 ulong arm64_swp_type(ulong);
 ulong arm64_swp_offset(ulong);

@@ -227,9 +227,10 @@ main(int argc, char **argv)
 						optarg);
 				}
 			} else if (STREQ(long_options[option_index].name, "kaslr")) {
-				if (!machine_type("X86_64"))
-					error(INFO, "--kaslr only valid "
-						"with X86_64 machine type.\n");
+				if (!machine_type("X86_64") &&
+				    !machine_type("ARM64"))
+					error(INFO, "--kaslr not valid "
+						"with this machine type.\n");
 				else if (STREQ(optarg, "auto"))
 					kt->flags2 |= (RELOC_AUTO|KASLR);
 				else {

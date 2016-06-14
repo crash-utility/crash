@@ -593,7 +593,8 @@ kaslr_init(void)
 {
 	char *string;
 
-	if (!machine_type("X86_64") || (kt->flags & RELOC_SET))
+	if ((!machine_type("X86_64") && !machine_type("ARM64")) ||
+	    (kt->flags & RELOC_SET))
 		return;
 
 	/*
@@ -712,7 +713,7 @@ store_symbols(bfd *abfd, int dynamic, void *minisyms, long symcount,
 	if (machine_type("X86")) {
 		if (!(kt->flags & RELOC_SET))
 			kt->flags |= RELOC_FORCE;
-	} else if (machine_type("X86_64")) {
+	} else if (machine_type("X86_64") || machine_type("ARM64")) {
 		if ((kt->flags2 & RELOC_AUTO) && !(kt->flags & RELOC_SET))
 			derive_kaslr_offset(abfd, dynamic, from,
 				fromend, size, store);
@@ -783,7 +784,8 @@ store_sysmap_symbols(void)
                 error(FATAL, "symbol table namespace malloc: %s\n",
                         strerror(errno));
 
-	if (!machine_type("X86") && !machine_type("X86_64"))
+	if (!machine_type("X86") && !machine_type("X86_64") &&
+	    !machine_type("ARM64"))
 		kt->flags &= ~RELOC_SET;
 
 	first = 0;
@@ -833,7 +835,7 @@ store_sysmap_symbols(void)
 }
 
 /*
- *  Handle x86 kernels configured such that the vmlinux symbols
+ *  Handle x86/arm64 kernels configured such that the vmlinux symbols
  *  are not as loaded into the kernel (not unity-mapped).
  */
 static ulong
@@ -4681,7 +4683,7 @@ value_search(ulong value, ulong *offset)
 	if ((sp = machdep->value_to_symbol(value, offset)))
 		return sp;
 
-	if (IS_VMALLOC_ADDR(value)) 
+	if (IS_VMALLOC_ADDR(value))
 		goto check_modules;
 
 	if ((sp = symval_hash_search(value)) == NULL)
