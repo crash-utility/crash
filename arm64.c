@@ -1511,13 +1511,14 @@ arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackfr
                                 value_to_symstr(frame->pc, buf, bt->radix);
         }
 
-	if (bt->flags & BT_FULL) {
-		arm64_display_full_frame(bt, frame->sp);
-		bt->frameptr = frame->sp;
+	if ((bt->flags & BT_FULL) && level) {
+		arm64_display_full_frame(bt, frame->fp);
+		bt->frameptr = frame->fp;
 	}
 
         fprintf(ofp, "%s#%d [%8lx] %s at %lx", level < 10 ? " " : "", level,
-                frame->sp, name_plus_offset ? name_plus_offset : name, frame->pc);
+                frame->fp ? frame->fp : bt->stacktop - USER_EFRAME_OFFSET, 
+		name_plus_offset ? name_plus_offset : name, frame->pc);
 
 	if (BT_REFERENCE_CHECK(bt))
 		arm64_do_bt_reference_check(bt, frame->pc, name);
@@ -1551,8 +1552,12 @@ arm64_display_full_frame(struct bt_info *bt, ulong sp)
 	if (bt->frameptr == sp)
 		return;
 
-	if (!INSTACK(sp, bt) || !INSTACK(bt->frameptr, bt))
-		return;
+	if (!INSTACK(sp, bt) || !INSTACK(bt->frameptr, bt)) {
+		if (sp == 0)
+			sp = bt->stacktop - USER_EFRAME_OFFSET;
+		else
+			return;
+	}
 
 	words = (sp - bt->frameptr) / sizeof(ulong);
 
@@ -1575,11 +1580,9 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 {
 	unsigned long high, low, fp;
 	unsigned long stack_mask;
-	unsigned long irq_stack_ptr, orig_sp, sp_in;
+	unsigned long irq_stack_ptr, orig_sp;
 	struct arm64_pt_regs *ptregs;
 	struct machine_specific *ms;
-
-	sp_in = frame->sp;
 
 	stack_mask = (unsigned long)(ARM64_STACK_SIZE) - 1;
 	fp = frame->fp;
@@ -1617,7 +1620,7 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 				ptregs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(orig_sp))];
 				frame->sp = orig_sp;
 				frame->pc = ptregs->pc;
-				bt->bptr = sp_in;
+				bt->bptr = fp;
 				if (CRASHDEBUG(1))
 					error(INFO, 
 					    "arm64_unwind_frame: switch stacks: fp: %lx sp: %lx  pc: %lx\n",
@@ -1634,6 +1637,50 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 
 	return TRUE;
 }
+
+/* 
+ *  A layout of a stack frame in a function looks like:
+ *  
+ *           stack grows to lower addresses.
+ *             /|\
+ *              |
+ *           |      |
+ *  new sp   +------+ <---
+ *           |dyn   |   |
+ *           | vars |   |
+ *  new fp   +- - - +   |
+ *           |old fp|   | a function's stack frame
+ *           |old lr|   |
+ *           |static|   |
+ *           |  vars|   |
+ *  old sp   +------+ <---
+ *           |dyn   |
+ *           | vars |
+ *  old fp   +------+
+ *           |      |
+ *  
+ *  - On function entry, sp is decremented down to new fp.
+ *
+ *  - and old fp and sp are saved into this stack frame.
+ *    "Static" local variables are allocated at the same time.
+ *
+ *  - Later on, "dynamic" local variables may be allocated on a stack.
+ *    But those dynamic variables are rarely used in the kernel image,
+ *    and, as a matter of fact, sp is equal to fp in almost all functions.
+ *    (not 100% though.)
+ *
+ *  - Currently, sp is determined in arm64_unwind_frame() by
+ *         sp = a callee's fp + 0x10
+ *    where 0x10 stands for a saved area for fp and sp
+ *
+ *  - As you can see, however, this calculated sp still points to the top of
+ *    callee's static local variables and doesn't match with a *real* sp.
+ *
+ *  - So, generally, dumping a stack from this calculated sp to the next frame's
+ *    sp shows "callee's static local variables", old fp and sp.
+ *
+ *  Diagram and explanation courtesy of Takahiro Akashi
+ */  
 
 static void 
 arm64_back_trace_cmd(struct bt_info *bt)
@@ -2007,9 +2054,6 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode, FILE *o
 	struct syment *sp;
 	ulong LR, SP, offset;
 	char buf[BUFSIZE];
-
-	if (bt->flags & BT_FULL)
-		arm64_display_full_frame(bt, pt_regs);
 
 	if (CRASHDEBUG(1)) 
 		fprintf(ofp, "pt_regs: %lx\n", pt_regs);
