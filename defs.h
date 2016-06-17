@@ -2917,6 +2917,7 @@ typedef signed int s32;
 #define PMD_SHIFT_L3_64K     (29)
 #define PMD_SIZE_L3_64K      (1UL << PMD_SHIFT_L3_64K)
 #define PMD_MASK_L3_64K      (~(PMD_SIZE_L3_64K-1))
+#define PGDIR_OFFSET_L3_64K(X) (((ulong)(X)) & ((PTRS_PER_PGD_L3_64K * 8) - 1))
 
 /*
  * 2-levels / 64K pages

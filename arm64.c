@@ -992,7 +992,7 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	pgd_base = (ulong *)pgd;
 	FILL_PGD(pgd_base, KVADDR, PTRS_PER_PGD_L3_64K * sizeof(ulong));
 	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L3_64K) & (PTRS_PER_PGD_L3_64K - 1));
-        pgd_val = ULONG(machdep->pgd + PAGEOFFSET(pgd_ptr));
+        pgd_val = ULONG(machdep->pgd + PGDIR_OFFSET_L3_64K(pgd_ptr));
         if (verbose)
                 fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
 	if (!pgd_val)
