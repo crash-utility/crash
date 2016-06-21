@@ -4041,7 +4041,9 @@ rdtree_iteration(ulong node_p, struct tree_data *td, char *ppos, ulong indexnum,
 			if (hq_enter(slot))
 				td->count++;
 			else
-				error(FATAL, "\nduplicate tree entry: %lx\n", node_p);
+				error(FATAL, 
+				    "\nduplicate tree entry: radix_tree_node: %lx  slots[%d]: %lx\n", 
+					node_p, index, slot);
 
 			if (td->flags & VERBOSE)
 				fprintf(fp, "%lx\n",slot);
