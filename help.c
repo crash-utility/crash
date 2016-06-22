@@ -1749,7 +1749,7 @@ NULL
 char *help_bt[] = {
 "bt",
 "backtrace",
-"[-a|-c cpu(s)|-g|-r|-t|-T|-l|-e|-E|-f|-F|-o|-O] [-R ref] [-s [-x|d]]"
+"[-a|-c cpu(s)|-g|-r|-t|-T|-l|-e|-E|-f|-F|-o|-O|-v] [-R ref] [-s [-x|d]]"
 "\n     [-I ip] [-S sp] [pid | task]",
 "  Display a kernel stack backtrace.  If no arguments are given, the stack",
 "  trace of the current context will be displayed.\n",
@@ -1788,6 +1788,10 @@ char *help_bt[] = {
 "           is entered twice, and the stack data references a slab cache object,",
 "           both the address and the name of the slab cache will be displayed",
 "           in brackets.",
+"       -v  check the kernel stack of all tasks for evidence of stack overflows.",
+"           It does so by verifying the thread_info.task pointer, ensuring that",
+"           the thread_info.cpu is a valid cpu number, and checking the end of ",
+"           the stack for the STACK_END_MAGIC value.",
 "       -o  x86: use old backtrace method, permissible only on kernels that were",
 "           compiled without the -fomit-frame_pointer.",
 "           x86_64: use old backtrace method, which dumps potentially stale",
@@ -2072,6 +2076,12 @@ char *help_bt[] = {
 "        ffff810072b47f38: 00002b141825d000 sys_write+69  ",
 "     #5 [ffff810072b47f40] sys_write at ffffffff80078f75",
 "    ...",
+"",
+"  Check the kernel stack of all tasks for evidence of a stack overflow:\n",
+"    %s> bt -v",
+"    PID: 5823   TASK: ffff88102aae0040  CPU: 1   COMMAND: \"flush-253:0\"",
+"    possible stack overflow: thread_info.task: 102efb5adc0 != ffff88102aae0040",
+"    possible stack overflow: 40ffffffff != STACK_END_MAGIC",
 NULL               
 };
 

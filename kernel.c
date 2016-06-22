@@ -2335,7 +2335,7 @@ cmd_bt(void)
 	if (kt->flags & USE_OLD_BT)
 		bt->flags |= BT_OLD_BACK_TRACE;
 
-	while ((c = getopt(argcnt, args, "D:fFI:S:c:aAloreEgstTdxR:O")) != EOF) {
+	while ((c = getopt(argcnt, args, "D:fFI:S:c:aAloreEgstTdxR:Ov")) != EOF) {
                 switch (c)
 		{
 		case 'f':
@@ -2511,6 +2511,12 @@ cmd_bt(void)
 		case 't':
 			bt->flags |= BT_TEXT_SYMBOLS;
 			break;
+
+		case 'v':
+			if (XEN_HYPER_MODE())
+				option_not_supported(c);
+			check_stack_overflow();
+			return;
 
 		default:
 			argerrs++;

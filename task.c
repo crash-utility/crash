@@ -108,6 +108,7 @@ static void sort_context_array_by_last_run(void);
 static void show_ps_summary(ulong);
 static void irqstacks_init(void);
 static void parse_task_thread(int argcnt, char *arglist[], struct task_context *);
+static void stack_overflow_check_init(void);
 
 /*
  *  Figure out how much space will be required to hold the task context
@@ -514,6 +515,8 @@ task_init(void)
 
 	if (pc->flags & SILENT)
 		initialize_task_state();
+
+	stack_overflow_check_init();
 
 	tt->flags |= TASK_INIT_DONE;
 }
@@ -6995,6 +6998,7 @@ dump_task_table(int verbose)
 	fprintf(fp, "       init_pid_ns: %lx\n", tt->init_pid_ns);
 	fprintf(fp, "         filepages: %ld\n", tt->filepages);
 	fprintf(fp, "         anonpages: %ld\n", tt->anonpages);
+	fprintf(fp, "   stack_end_magic: %lx\n", tt->stack_end_magic);
 
 
 	wrap = sizeof(void *) == SIZEOF_32BIT ? 8 : 4;
@@ -10069,4 +10073,126 @@ generic_get_stacktop(ulong task)
         return task_to_stackbase(task) + STACKSIZE();
 }
 
+#define STACK_END_MAGIC 0x57AC6E9D
 
+static void
+stack_overflow_check_init(void)
+{
+	int pid;
+	struct task_context *tc;
+	ulong magic;
+
+	if (!(tt->flags & THREAD_INFO))
+		return;
+
+	for (pid = 1; pid < 10; pid++) {
+ 		if (!(tc = pid_to_context(pid)))
+			continue;
+
+		if (!readmem(tc->thread_info + SIZE(thread_info), KVADDR, 
+	    	    &magic, sizeof(long), "stack magic", 
+		    RETURN_ON_ERROR|QUIET))
+			continue;
+
+		if (magic == STACK_END_MAGIC) {
+			tt->stack_end_magic = STACK_END_MAGIC;
+			break;
+		}
+	}
+}
+
+/*
+ *  Check thread_info.task and thread_info.cpu members, 
+ *  and the STACK_END_MAGIC location.
+ */
+void 
+check_stack_overflow(void)
+{
+	int i, overflow, cpu_size, cpu, total;
+	char buf[BUFSIZE];
+	ulong magic, task;
+	struct task_context *tc;
+
+	if (!tt->stack_end_magic && 
+	    INVALID_MEMBER(thread_info_task) && 
+	    INVALID_MEMBER(thread_info_cpu))
+		option_not_supported('v');
+
+	cpu_size = VALID_MEMBER(thread_info_cpu) ? 
+		MEMBER_SIZE("thread_info", "cpu") : 0;
+
+	tc = FIRST_CONTEXT();
+	for (i = total = 0; i < RUNNING_TASKS(); i++, tc++) {
+		if (!readmem(tc->thread_info, KVADDR, buf, 
+		    SIZE(thread_info) + sizeof(ulong), 
+		    "stack overflow check", RETURN_ON_ERROR))
+			continue;
+
+		overflow = 0;
+
+		if (VALID_MEMBER(thread_info_task)) {
+			task = ULONG(buf + OFFSET(thread_info_task));
+			if (task != tc->task) {
+				print_task_header(fp, tc, 0);
+				fprintf(fp, 
+				    "  possible stack overflow: thread_info.task: %lx != %lx\n",
+					task, tc->task);
+				overflow++; total++;
+			}
+		}
+
+		if (VALID_MEMBER(thread_info_cpu)) {
+			switch (cpu_size)
+			{
+			case 1:
+				cpu = UCHAR(buf + OFFSET(thread_info_cpu));
+				break;
+			case 2:
+				cpu = USHORT(buf + OFFSET(thread_info_cpu));
+				break;
+			case 4:
+				cpu = UINT(buf + OFFSET(thread_info_cpu));
+				break;
+			default:
+				cpu = 0;
+				break;
+			}
+			if (cpu >= kt->cpus) {
+				if (!overflow)
+					print_task_header(fp, tc, 0);
+				fprintf(fp, 
+				    "  possible stack overflow: thread_info.cpu: %d >= %d\n",
+					cpu, kt->cpus);
+				overflow++; total++;
+			}
+		}
+
+		if (!tt->stack_end_magic)
+			continue;
+
+		magic = ULONG(buf + SIZE(thread_info));
+
+		if (tc->pid == 0) {
+			if (kernel_symbol_exists("init_task")) {
+				if (tc->task == symbol_value("init_task"))
+					continue;
+			} else 
+				continue;
+		}
+
+		if (magic != STACK_END_MAGIC) {
+			if (!overflow)
+				print_task_header(fp, tc, 0);
+			fprintf(fp, 
+			    "  possible stack overflow: %lx: %lx != STACK_END_MAGIC\n",
+				tc->thread_info + SIZE(thread_info), magic);
+			overflow++, total++;
+		}
+
+		if (overflow)
+			fprintf(fp, "\n");
+	}
+
+	if (!total)
+		fprintf(fp, "No stack overflows detected\n");
+}

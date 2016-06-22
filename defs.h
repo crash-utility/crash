@@ -840,6 +840,7 @@ struct task_table {                      /* kernel/local task table data */
 	ulong tgid_cache_hits;
 	long filepages;
 	long anonpages;
+	ulong stack_end_magic;
 };
 
 #define TASK_INIT_DONE       (0x1)
@@ -5181,6 +5182,7 @@ void sort_context_array(void);
 void sort_tgid_array(void);
 int sort_by_tgid(const void *, const void *);
 int in_irq_ctx(ulonglong, int, ulong);
+void check_stack_overflow(void);
 
 /*
  *  extensions.c
