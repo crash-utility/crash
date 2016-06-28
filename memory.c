@@ -4621,7 +4621,7 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
         tm->total_vm = ULONG(tt->mm_struct + OFFSET(mm_struct_total_vm));
         tm->pgd_addr = ULONG(tt->mm_struct + OFFSET(mm_struct_pgd));
 
-	if (is_kernel_thread(task))
+	if (is_kernel_thread(task) && !tm->rss)
 		return;
 
 	tm->pct_physmem = ((double)(tm->rss*100)) /

@@ -478,6 +478,8 @@ task_init(void)
                 tt->flags |= PIDHASH;
 	}
 
+	tt->pf_kthread = UNINITIALIZED;
+
 	/*
 	 *  Get the IRQ stacks info if it's configured.
 	 */
@@ -6999,7 +7001,19 @@ dump_task_table(int verbose)
 	fprintf(fp, "         filepages: %ld\n", tt->filepages);
 	fprintf(fp, "         anonpages: %ld\n", tt->anonpages);
 	fprintf(fp, "   stack_end_magic: %lx\n", tt->stack_end_magic);
-
+	fprintf(fp, "        pf_kthread: %lx ", tt->pf_kthread);
+	switch (tt->pf_kthread) 
+	{
+	case UNINITIALIZED:
+		fprintf(fp, "(UNINITIALIZED)\n"); 
+		break;
+	case 0:
+		fprintf(fp, "(n/a)\n"); 
+		break;
+	default:
+		fprintf(fp, "(PF_KTHREAD)\n"); 
+		break;
+	}
 
 	wrap = sizeof(void *) == SIZEOF_32BIT ? 8 : 4;
 	flen = sizeof(void *) == SIZEOF_32BIT ? 8 : 16;
@@ -7232,6 +7246,28 @@ is_kernel_thread(ulong task)
 {
 	struct task_context *tc;
 	ulong mm;
+
+        if (tt->pf_kthread == UNINITIALIZED) {
+		if (THIS_KERNEL_VERSION >= LINUX(2,6,27)) {
+			tt->pf_kthread = PF_KTHREAD;
+
+			if ((tc = pid_to_context(0)) &&
+			    !(task_flags(tc->task) & PF_KTHREAD)) {
+				error(WARNING, "pid 0: PF_KTHREAD not set?\n");
+				tt->pf_kthread = 0;
+			}
+			if ((tc = pid_to_context(1)) && 
+			    task_mm(tc->task, FALSE) &&
+			    (task_flags(tc->task) & PF_KTHREAD)) {
+				error(WARNING, "pid 1: PF_KTHREAD set?\n");
+				tt->pf_kthread = 0;
+			}
+		} else
+			tt->pf_kthread = 0;
+	}
+
+	if (tt->pf_kthread)
+		return (task_flags(task) & tt->pf_kthread ? TRUE : FALSE);
 
 	tc = task_to_context(task);
 

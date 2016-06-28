@@ -841,6 +841,7 @@ struct task_table {                      /* kernel/local task table data */
 	long filepages;
 	long anonpages;
 	ulong stack_end_magic;
+	ulong pf_kthread;
 };
 
 #define TASK_INIT_DONE       (0x1)
@@ -4438,7 +4439,11 @@ enum type_code {
 #endif
 };
 
+/*
+ * include/linux/sched.h
+ */
 #define PF_EXITING 0x00000004  /* getting shut down */
+#define PF_KTHREAD 0x00200000  /* I am a kernel thread */
 
 extern long _ZOMBIE_;
 #define IS_ZOMBIE(task)   (task_state(task) & _ZOMBIE_)
