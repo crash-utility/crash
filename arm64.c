@@ -1401,6 +1401,8 @@ arm64_is_kernel_exception_frame(struct bt_info *bt, ulong stkptr)
 		{
 		case PSR_MODE_EL1t:
 		case PSR_MODE_EL1h:
+		case PSR_MODE_EL2t:
+		case PSR_MODE_EL2h:
 			return TRUE;
 		}
 	}
