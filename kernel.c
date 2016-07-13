@@ -2332,8 +2332,8 @@ cmd_bt(void)
 	bt = &bt_info;
 	BZERO(bt, sizeof(struct bt_info));
 
-	if (kt->flags & USE_OLD_BT)
-		bt->flags |= BT_OLD_BACK_TRACE;
+	if (kt->flags & USE_OPT_BT)
+		bt->flags |= BT_OPT_BACK_TRACE;
 
 	while ((c = getopt(argcnt, args, "D:fFI:S:c:aAloreEgstTdxR:Ov")) != EOF) {
                 switch (c)
@@ -2350,16 +2350,17 @@ cmd_bt(void)
 			break;
 
 		case 'o':
-			if (XEN_HYPER_MODE())
+			if (!(machine_type("X86") || machine_type("X86_64") || machine_type("ARM64")) ||
+			    XEN_HYPER_MODE())
 				option_not_supported(c);
-			bt->flags |= BT_OLD_BACK_TRACE;
+			bt->flags |= BT_OPT_BACK_TRACE;
 			break;
 
 		case 'O':
-			if (!(machine_type("X86") || machine_type("X86_64")) ||
+			if (!(machine_type("X86") || machine_type("X86_64") || machine_type("ARM64")) ||
 			    XEN_HYPER_MODE()) 
 				option_not_supported(c);
-			else if (kt->flags & USE_OLD_BT) { 
+			else if (kt->flags & USE_OPT_BT) { 
 				/* 
 				 *  Make this setting idempotent across the use of
 				 *  $HOME/.crashrc, ./.crashrc, and "-i input" files. 
@@ -2367,14 +2368,17 @@ cmd_bt(void)
 				 *  leave it alone.
 			 	 */
 				if (pc->flags & INIT_IFILE) {
-					error(INFO, "use old bt method by default (already set)\n");
+					error(INFO, "use %s bt method by default (already set)\n",
+						machine_type("ARM64") ? "optional" : "old");
 					return;
 				}
-				kt->flags &= ~USE_OLD_BT;
-				error(INFO, "use new bt method by default\n");
+				kt->flags &= ~USE_OPT_BT;
+				error(INFO, "use %s bt method by default\n",
+					machine_type("ARM64") ? "original" : "new");
 			} else {
-				kt->flags |= USE_OLD_BT;
-				error(INFO, "use old bt method by default\n");
+				kt->flags |= USE_OPT_BT;
+				error(INFO, "use %s bt method by default\n",
+					machine_type("ARM64") ? "optional" : "old");
 			}
 			return;
 
@@ -5609,8 +5613,8 @@ dump_kernel_table(int verbose)
 		fprintf(fp, "%sKMOD_V2", others++ ? "|" : "");
 	if (kt->flags & KALLSYMS_V2)
 		fprintf(fp, "%sKALLSYMS_V2", others++ ? "|" : "");
-	if (kt->flags & USE_OLD_BT)
-		fprintf(fp, "%sUSE_OLD_BT", others++ ? "|" : "");
+	if (kt->flags & USE_OPT_BT)
+		fprintf(fp, "%sUSE_OPT_BT", others++ ? "|" : "");
 	if (kt->flags & ARCH_XEN)
 		fprintf(fp, "%sARCH_XEN", others++ ? "|" : "");
 	if (kt->flags & ARCH_PVOPS_XEN)

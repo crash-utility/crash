@@ -43,17 +43,23 @@ static void arm64_stackframe_init(void);
 static int arm64_eframe_search(struct bt_info *);
 static int arm64_is_kernel_exception_frame(struct bt_info *, ulong);
 static int arm64_in_exception_text(ulong);
+static int arm64_in_exp_entry(ulong);
 static void arm64_back_trace_cmd(struct bt_info *);
+static void arm64_back_trace_cmd_v2(struct bt_info *);
 static void arm64_print_text_symbols(struct bt_info *, struct arm64_stackframe *, FILE *);
 static int arm64_print_stackframe_entry(struct bt_info *, int, struct arm64_stackframe *, FILE *);
+static int arm64_print_stackframe_entry_v2(struct bt_info *, int, struct arm64_stackframe *, FILE *);
 static void arm64_display_full_frame(struct bt_info *, ulong);
+static void arm64_display_full_frame_v2(struct bt_info *, struct arm64_stackframe *, struct arm64_stackframe *);
 static int arm64_unwind_frame(struct bt_info *, struct arm64_stackframe *);
+static int arm64_unwind_frame_v2(struct bt_info *, struct arm64_stackframe *, FILE *);
 static int arm64_get_dumpfile_stackframe(struct bt_info *, struct arm64_stackframe *);
 static int arm64_in_kdump_text(struct bt_info *, struct arm64_stackframe *);
 static int arm64_in_kdump_text_on_irq_stack(struct bt_info *);
 static int arm64_switch_stack(struct bt_info *, struct arm64_stackframe *, FILE *);
 static int arm64_get_stackframe(struct bt_info *, struct arm64_stackframe *);
 static void arm64_get_stack_frame(struct bt_info *, ulong *, ulong *);
+static void arm64_gen_hidden_frame(struct bt_info *bt, ulong, struct arm64_stackframe *);
 static void arm64_print_exception_frame(struct bt_info *, ulong, int, FILE *);
 static void arm64_do_bt_reference_check(struct bt_info *, ulong, char *);
 static int arm64_translate_pte(ulong, void *, ulonglong);
@@ -482,7 +488,8 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "                bits: %d\n", machdep->bits);
 	fprintf(fp, "             nr_irqs: %d\n", machdep->nr_irqs);
 	fprintf(fp, "       eframe_search: arm64_eframe_search()\n");
-	fprintf(fp, "          back_trace: arm64_back_trace_cmd()\n");
+	fprintf(fp, "          back_trace: arm64_back_trace_cmd() (default: %s method)\n",
+		kt->flags & USE_OPT_BT ? "optional" : "original");
 	fprintf(fp, "  in_alternate_stack: arm64_in_alternate_stack()\n");
 	fprintf(fp, "     processor_speed: arm64_processor_speed()\n");
 	fprintf(fp, "               uvtop: arm64_uvtop()->%s()\n",
@@ -580,6 +587,10 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "  __exception_text_end: %lx\n", ms->__exception_text_end);
 	fprintf(fp, " __irqentry_text_start: %lx\n", ms->__irqentry_text_start);
 	fprintf(fp, "   __irqentry_text_end: %lx\n", ms->__irqentry_text_end);
+	fprintf(fp, "      exp_entry1_start: %lx\n", ms->exp_entry1_start);
+	fprintf(fp, "        exp_entry1_end: %lx\n", ms->exp_entry1_end);
+	fprintf(fp, "      exp_entry2_start: %lx\n", ms->exp_entry2_start);
+	fprintf(fp, "        exp_entry2_end: %lx\n", ms->exp_entry2_end);
 	fprintf(fp, "       panic_task_regs: %lx\n", (ulong)ms->panic_task_regs);
 	fprintf(fp, "         PTE_PROT_NONE: %lx\n", ms->PTE_PROT_NONE);
 	fprintf(fp, "              PTE_FILE: ");
@@ -606,6 +617,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "  crash_save_cpu_start: %lx\n", ms->crash_save_cpu_start);
 	fprintf(fp, "    crash_save_cpu_end: %lx\n", ms->crash_save_cpu_end);
 	fprintf(fp, "          kernel_flags: %lx\n", ms->kernel_flags);
+	fprintf(fp, "          irq_stackbuf: %lx\n", (ulong)ms->irq_stackbuf);
 	if (machdep->flags & IRQ_STACKS) {
 		fprintf(fp, "        irq_stack_size: %ld\n", ms->irq_stack_size);
 		for (i = 0; i < kt->cpus; i++)
@@ -1286,6 +1298,15 @@ arm64_stackframe_init(void)
 		machdep->machspec->__irqentry_text_start = sp1->value; 
 		machdep->machspec->__irqentry_text_end = sp2->value; 
 	} 
+	if ((sp1 = kernel_symbol_search("vectors")) &&
+	    (sp1n = kernel_symbol_search("cpu_switch_to")) &&
+	    (sp2 = kernel_symbol_search("ret_fast_syscall")) &&
+	    (sp2n = kernel_symbol_search("sys_rt_sigreturn_wrapper"))) {
+		machdep->machspec->exp_entry1_start = sp1->value;
+		machdep->machspec->exp_entry1_end = sp1n->value;
+		machdep->machspec->exp_entry2_start = sp2->value;
+		machdep->machspec->exp_entry2_end = sp2n->value;
+	}
 
 	if ((sp1 = kernel_symbol_search("crash_kexec")) &&
 	    (sp1n = next_symbol(NULL, sp1)) && 
@@ -1490,6 +1511,19 @@ arm64_in_exception_text(ulong ptr)
 	return FALSE;
 }
 
+static int
+arm64_in_exp_entry(ulong addr)
+{
+	struct machine_specific *ms;
+
+	ms = machdep->machspec;
+	if ((ms->exp_entry1_start <= addr) && (addr < ms->exp_entry1_end))
+		return TRUE;
+	if ((ms->exp_entry2_start <= addr) && (addr < ms->exp_entry2_end))
+		return TRUE;
+	return FALSE;
+}
+
 #define BACKTRACE_CONTINUE        (1)
 #define BACKTRACE_COMPLETE_KERNEL (2)
 #define BACKTRACE_COMPLETE_USER   (3)
@@ -1498,45 +1532,110 @@ static int
 arm64_print_stackframe_entry(struct bt_info *bt, int level, struct arm64_stackframe *frame, FILE *ofp)
 {
 	char *name, *name_plus_offset;
-	ulong symbol_offset;
+	ulong branch_pc, symbol_offset;
 	struct syment *sp;
 	struct load_module *lm;
 	char buf[BUFSIZE];
 
-        name = closest_symbol(frame->pc);
+        /*
+         * if pc comes from a saved lr, it actually points to an instruction
+         * after branch. To avoid any confusion, decrement pc by 4.
+         * See, for example, "bl schedule" before ret_to_user().
+         */
+	branch_pc = frame->pc - 4;
+        name = closest_symbol(branch_pc);
         name_plus_offset = NULL;
 
         if (bt->flags & BT_SYMBOL_OFFSET) {
-                sp = value_search(frame->pc, &symbol_offset);
-                if (sp && symbol_offset)
-                        name_plus_offset =
-                                value_to_symstr(frame->pc, buf, bt->radix);
+               	sp = value_search(branch_pc, &symbol_offset);
+               	if (sp && symbol_offset)
+                       	name_plus_offset =
+                               	value_to_symstr(branch_pc, buf, bt->radix);
         }
 
-	if ((bt->flags & BT_FULL) && level) {
-		arm64_display_full_frame(bt, frame->fp);
+	if (!INSTACK(frame->fp, bt) && IN_TASK_VMA(bt->task, frame->fp))
+		frame->fp = 0;
+
+	if (bt->flags & BT_FULL) {
+		if (level) 
+			arm64_display_full_frame(bt, frame->fp);
 		bt->frameptr = frame->fp;
 	}
 
         fprintf(ofp, "%s#%d [%8lx] %s at %lx", level < 10 ? " " : "", level,
                 frame->fp ? frame->fp : bt->stacktop - USER_EFRAME_OFFSET, 
-		name_plus_offset ? name_plus_offset : name, frame->pc);
+		name_plus_offset ? name_plus_offset : name, branch_pc); 
 
-	if (BT_REFERENCE_CHECK(bt))
-		arm64_do_bt_reference_check(bt, frame->pc, name);
+	if (BT_REFERENCE_CHECK(bt)) {
+		arm64_do_bt_reference_check(bt, frame->pc, closest_symbol(frame->pc));
+		arm64_do_bt_reference_check(bt, branch_pc, name);
+	}
 
-	if (module_symbol(frame->pc, NULL, &lm, NULL, 0))
+	if (module_symbol(branch_pc, NULL, &lm, NULL, 0))
 		fprintf(ofp, " [%s]", lm->mod_name);
 
 	fprintf(ofp, "\n");
 
 	if (bt->flags & BT_LINE_NUMBERS) {
-		get_line_number(frame->pc, buf, FALSE);
+		get_line_number(branch_pc, buf, FALSE);
 		if (strlen(buf))
 			fprintf(ofp, "    %s\n", buf);
 	}
 
 	if (STREQ(name, "start_kernel") || STREQ(name, "secondary_start_kernel") ||
+	    STREQ(name, "kthread") || STREQ(name, "kthreadd"))
+		return BACKTRACE_COMPLETE_KERNEL;
+
+	return BACKTRACE_CONTINUE;
+}
+
+static int 
+arm64_print_stackframe_entry_v2(struct bt_info *bt, int level, struct arm64_stackframe *frame, FILE *ofp)
+{
+	char *name, *name_plus_offset;
+	ulong pc, symbol_offset;
+	struct syment *sp;
+	struct load_module *lm;
+	char buf[BUFSIZE];
+
+	/*
+	 * if pc comes from a saved lr, it actually points to an instruction
+	 * after branch. To avoid any confusion, decrement pc by 4.
+	 * See, for example, "bl schedule" before ret_to_user().
+	 */
+	pc = frame->pc - 0x4;
+	name = closest_symbol(pc);
+        name_plus_offset = NULL;
+
+        if (bt->flags & BT_SYMBOL_OFFSET) {
+		sp = value_search(pc, &symbol_offset);
+                if (sp && symbol_offset)
+			name_plus_offset = value_to_symstr(pc, buf, bt->radix);
+        }
+
+	if (bt->flags & BT_USER_EFRAME)
+		frame->fp = 0;
+
+        fprintf(ofp, "%s#%d [%8lx] %s at %lx", level < 10 ? " " : "", level,
+                frame->fp ? frame->fp : bt->stacktop - USER_EFRAME_OFFSET, 
+		name_plus_offset ? name_plus_offset : name, pc);
+
+	if (BT_REFERENCE_CHECK(bt))
+		arm64_do_bt_reference_check(bt, pc, name);
+
+	if (module_symbol(pc, NULL, &lm, NULL, 0))
+		fprintf(ofp, " [%s]", lm->mod_name);
+
+	fprintf(ofp, "\n");
+
+	if (bt->flags & BT_LINE_NUMBERS) {
+		get_line_number(pc, buf, FALSE);
+		if (strlen(buf))
+			fprintf(ofp, "    %s\n", buf);
+	}
+
+	if (STREQ(name, "start_kernel") ||
+	    STREQ(name, "secondary_start_kernel") ||
 	    STREQ(name, "kthread") || STREQ(name, "kthreadd"))
 		return BACKTRACE_COMPLETE_KERNEL;
 
@@ -1575,6 +1674,68 @@ arm64_display_full_frame(struct bt_info *bt, ulong sp)
 		addr += sizeof(ulong);
 	}
 	fprintf(fp, "\n");
+}
+
+static void
+arm64_display_full_frame_v2(struct bt_info *bt, struct arm64_stackframe *cur,
+						struct arm64_stackframe *next)
+{
+	struct machine_specific *ms;
+	ulong next_fp, stackbase;
+	char *stackbuf;
+	int i, u_idx;
+	ulong *up;
+	ulong words, addr;
+	char buf[BUFSIZE];
+
+	stackbase = bt->stackbase;
+	stackbuf = bt->stackbuf;
+	ms = machdep->machspec;
+
+	/* Calc next fp for dump */
+	if (next->fp == 0)
+		/* last stackframe on kernel tack */
+		next_fp = bt->stacktop - 0x10;
+	else if (!INSTACK(cur->sp, bt)) {
+		/* We have just switched over stacks */
+		next_fp = ms->irq_stacks[bt->tc->processor]
+				+ ms->irq_stack_size - 0x10;
+
+		/*
+		 * We are already buffering a process stack.
+		 * So use an old buffer for IRQ stack.
+		 */
+		stackbase = ms->irq_stacks[bt->tc->processor];
+		stackbuf = ms->irq_stackbuf;
+	} else
+		next_fp = next->fp;
+
+	if (CRASHDEBUG(1))
+		fprintf(fp, "    frame <%016lx:%016lx>\n", cur->fp, next_fp);
+
+	/* Check here because we want to see a debug message above. */
+	if (!(bt->flags & BT_FULL))
+		return;
+	if (next_fp <= cur->fp)
+		return;
+
+	/* Dump */
+	words = (next_fp - cur->fp) / sizeof(ulong);
+	addr = cur->fp;
+	u_idx = (cur->fp - stackbase)/sizeof(ulong);
+	for (i = 0; i < words; i++, u_idx++) {
+		if (!(i & 1)) 
+			fprintf(fp, "%s    %lx: ", i ? "\n" : "", addr);
+
+		up = (ulong *)(&stackbuf[u_idx*sizeof(ulong)]);
+		fprintf(fp, "%s ", format_stack_entry(bt, buf, *up, 0));
+
+		addr += sizeof(ulong);
+	}
+	fprintf(fp, "\n");
+
+	if (stackbuf == ms->irq_stackbuf)
+		FREEBUF(stackbuf);
 }
 
 static int 
@@ -1640,9 +1801,266 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 	return TRUE;
 }
 
-/* 
+/*
+ * The following figure shows how unwinding can be done.
+ * Here we assume that the callstack order is:
+ *    #(X-1)    ppc (previous PC)
+ *    #X        cpc (current PC)
+ * <  #(X+  1)  epc (Exception entry) >
+ *    #(X+1/2)  npc (Next PC)
+ *    #(X+2/3)  Npc (One before Next)
+ *    #(X+3/4)  NNpc (One before 'Npc')
+ * and unwind frames from #X to #(X+1).
+ * When we add a faked frame for exception entry (exception frame)
+ * as #(X+1), the next frame for npc will be recognized as #(x+2).
+ *
+ * (1)Normal stackframe:
+ *     +------+
+ *     | pfp  |
+ *     | cpc  |
+ * psp +      +
+ *     |      |
+ *     |      |
+ * pfp +------+ <--- :prev stackframe = <pfp, psp, ppc>
+ *     | cfp  |
+ *     | npc  |
+ * csp +      +
+ *     |      |
+ *     |      |
+ * cfp +------+ <--- :curr stackframe = <cfp, csp, cpc>
+ *     | nfp  |                             cfp = *pfp
+ *     | Npc  |                             csp = pfp + 0x10
+ * nsp +      +
+ *     |      |
+ *     |      |
+ * nfp +------+ <--- :next stackframe = <nfp, nsp, npc>
+ *     |      |
+ *
+ * (2)Exception on the same (IRQ or process) stack:
+ *     +------+
+ *     | pfp  |
+ *     | cpc  |
+ * psp +      +
+ *     |      |
+ *     |      |
+ * pfp +------+ <--- :prev stackframe = <pfp, psp, ppc>
+ *     | cfp  |
+ *     | npc  |
+ * csp +      +
+ *     |      |
+ *     |      |
+ * cfp +------+ <--- :curr stackframe = <cfp, csp, cpc>
+ *     | nfp  |
+ *     | epc  |
+ *     +      +
+ *     |      |
+ *     |      |       faked(*)
+ * esp +------+ <--- :excp stackframe = <---, esp, epc
+ *     |      |                           esp = nsp - sizeof(pt_regs)
+ *     |      |
+ *     | Npc  |            (*) If we didn't add this frame, the next frame
+ *     | nfp  |                would be
+ *     | nsp  |                    <nfp, nfp + 0x10, epc>
+ *     | npc  |                and the frame below for npc would be lost.
+ * nsp +      +
+ *     |      |
+ * nfp +------+ <--- :task stackframe = <nfp, nsp, npc>
+ *     | Nfp  |
+ *     | NNpc |
+ * Nsp +      +
+ *     |      |
+ * Nfp +------+ <--- :task stackframe = <Nfp, Nsp, Npc>
+ *     | NNfp |
+ *
+ * (3)Interrupt:
+ *     +------+
+ *     | cfp  |
+ *     | ipc  |
+ * csp +      +
+ *     |      |
+ *     |      |
+ * cfp +------+ <--- :curr stackframe = <cfp, csp, cpc>
+ *     | ifp  |
+ *     | epc  |
+ * isp +      +
+ *     |      |
+ *     |      |       (*)
+ * ifp +------+ <--- :irq stackframe = <ifp, isp, epc>
+ *     | nfp  |                            ifp == IRQ_STACK_PTR
+ *     | esp  |            (*) Before the kernel enters an irq handler, frame
+ * top +------+                pointer moves to the top of IRQ stack.
+ *     IRQ stack               So we have to skip this frame in unwinding.
+ *
+ *                    faked
+ * esp +------+ <--- :excp stackframe = <---, esp, epc>
+ *     |      |                            esp = nsp - sizeof(pt_regs)
+ *     |      |
+ *     | Npc  |
+ *     | nfp  |
+ *     | nsp  |
+ *     | npc  |
+ * nsp +      +
+ *     |      |
+ * nfp +------+ <--- :task stackframe = <nfp, nsp, npc>
+ *     | Nfp  |
+ *     | NNpc |
+ * Nsp +      +
+ *     |      |
+ * Nfp +------+ <--- :task stackframe = <Nfp, Nsp, Npc>
+ *     | NNfp |
+ */
+
+static struct arm64_stackframe ext_frame;
+
+static int
+arm64_unwind_frame_v2(struct bt_info *bt, struct arm64_stackframe *frame,
+								FILE *ofp)
+{
+	unsigned long high, low, fp;
+	unsigned long stack_mask;
+	unsigned long irq_stack_ptr;
+	struct machine_specific *ms;
+
+	stack_mask = (unsigned long)(ARM64_STACK_SIZE) - 1;
+	fp = frame->fp;
+
+	low  = frame->sp;
+	high = (low + stack_mask) & ~(stack_mask);
+
+	if (fp < low || fp > high || fp & 0xf)
+		return FALSE;
+
+	if (CRASHDEBUG(1))
+		fprintf(ofp, "    cur fp:%016lx sp:%016lx pc:%016lx\n",
+					frame->fp, frame->sp, frame->pc);
+
+	if (ext_frame.pc) {
+		/*
+		 * The previous frame was a dummy for exception entry.
+		 * So complement a missing (task) stackframe now.
+		*/
+		frame->fp = ext_frame.fp;
+		frame->sp = ext_frame.sp;
+		frame->pc = ext_frame.pc;
+
+		ext_frame.pc = 0; /* back to normal unwinding */
+
+		goto unwind_done;
+	}
+
+	frame->pc = GET_STACK_ULONG(fp + 8);
+	if (!arm64_in_exp_entry(frame->pc)) {
+		/* (1) Normal stack frame */
+
+		frame->sp = fp + 0x10;
+		frame->fp = GET_STACK_ULONG(fp);
+	} else {
+		/*
+		 * We are in exception entry code, and so
+		 *   - add a faked frame for exception entry, and
+		 *   - prepare for a stackframe hidden by exception
+		 */
+
+		ext_frame.fp = GET_STACK_ULONG(fp);
+		/*
+		 * Note:
+		 * In the following code, we determine a stack pointer for
+		 * exception entry based on ext_frame.fp because we have
+		 * no way to know a ext_frame.sp.
+		 * Fortunately, this will work fine for most functions
+		 * in the kernel.
+		 */
+		if (ext_frame.fp == 0) {
+			/*
+			 * (2)
+			 * Either on process stack or on IRQ stack,
+			 * the next frame is the last one on process stack.
+			 */
+
+			frame->sp = bt->stacktop
+				    - sizeof(struct arm64_pt_regs) - 0x10;
+			frame->fp = frame->sp;
+		} else if (!arm64_on_irq_stack(bt->tc->processor, frame->sp)) {
+			/*
+			 * (2)
+			 * We are on process stack. Just add a faked frame
+			 */
+
+			if (!arm64_on_irq_stack(bt->tc->processor, ext_frame.fp))
+				frame->sp = ext_frame.fp
+					    - sizeof(struct arm64_pt_regs);
+			else {
+				/*
+				 * FIXME: very exceptional case
+				 * We are already back on process stack, but
+				 * a saved frame pointer indicates that we are
+				 * on IRQ stack. Unfortunately this can happen
+				 * when some functions are called after
+				 * an irq handler is done because irq_exit()
+				 * doesn't restore a frame pointer (x29).
+				 * Those functions include
+				 *    - do_notify_resume()
+				 *    - trace_hardirqs_off()
+				 *    - schedule()
+				 *
+				 * We have no perfect way to determine a true
+				 * stack pointer value here.
+				 * 0x20 is a stackframe size of schedule().
+				 * Really ugly
+				 */
+				frame->sp = frame->fp + 0x20;
+				fprintf(ofp, " (Next exception frame might be wrong)\n");
+			}
+
+			frame->fp = frame->sp;
+		} else {
+			/* We are on IRQ stack */
+
+			ms = machdep->machspec;
+			irq_stack_ptr = ms->irq_stacks[bt->tc->processor]
+						+ ms->irq_stack_size - 0x20;
+			if (ext_frame.fp != irq_stack_ptr) {
+				/* (2) Just add a faked frame */
+
+				frame->sp = ext_frame.fp
+					    - sizeof(struct arm64_pt_regs);
+				frame->fp = frame->sp;
+			} else {
+				/*
+				 * (3)
+				 * Switch from IRQ stack to process stack
+				 */
+
+				frame->sp = GET_STACK_ULONG(irq_stack_ptr + 8);
+				frame->fp = frame->sp;
+
+				/*
+				 * Keep a buffer for a while until
+				 * displaying the last frame on IRQ stack
+				 * at next arm64_print_stackframe_entry_v2()
+				 */
+				if (bt->flags & BT_FULL)
+					ms->irq_stackbuf = bt->stackbuf;
+
+				arm64_set_process_stack(bt);
+			}
+		}
+
+		/* prepare for a stackframe hidden by exception */
+		arm64_gen_hidden_frame(bt, frame->sp, &ext_frame);
+	}
+
+unwind_done:
+	if (CRASHDEBUG(1))
+		fprintf(ofp, "    nxt fp:%016lx sp:%016lx pc:%016lx\n",
+					frame->fp, frame->sp, frame->pc);
+
+	return TRUE;
+}
+
+/*
  *  A layout of a stack frame in a function looks like:
- *  
+ *
  *           stack grows to lower addresses.
  *             /|\
  *              |
@@ -1660,7 +2078,7 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
  *           | vars |
  *  old fp   +------+
  *           |      |
- *  
+ *
  *  - On function entry, sp is decremented down to new fp.
  *
  *  - and old fp and sp are saved into this stack frame.
@@ -1682,7 +2100,7 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
  *    sp shows "callee's static local variables", old fp and sp.
  *
  *  Diagram and explanation courtesy of Takahiro Akashi
- */  
+ */
 
 static void 
 arm64_back_trace_cmd(struct bt_info *bt)
@@ -1691,6 +2109,11 @@ arm64_back_trace_cmd(struct bt_info *bt)
 	int level;
 	ulong exception_frame;
 	FILE *ofp;
+
+	if (bt->flags & BT_OPT_BACK_TRACE) {
+		arm64_back_trace_cmd_v2(bt);
+		return;
+	}
 
 	ofp = BT_REFERENCE_CHECK(bt) ? pc->nullfp : fp;
 
@@ -1801,6 +2224,133 @@ complete_user:
 		fprintf(ofp, " #0 [user space]\n");
 }
 
+static void 
+arm64_back_trace_cmd_v2(struct bt_info *bt)
+{
+	struct arm64_stackframe stackframe, cur_frame;
+	int level, mode;
+	ulong exception_frame;
+	FILE *ofp;
+
+	ofp = BT_REFERENCE_CHECK(bt) ? pc->nullfp : fp;
+
+	/*
+	 *  stackframes are created from 3 contiguous stack addresses:
+	 *
+	 *     x: contains stackframe.fp -- points to next triplet
+	 *   x+8: contains stackframe.pc -- text return address
+	 *  x+16: is the stackframe.sp address 
+	 */
+
+	if (bt->flags & BT_KDUMP_ADJUST) {
+		if (arm64_on_irq_stack(bt->tc->processor, bt->bptr)) {
+			arm64_set_irq_stack(bt);
+			bt->flags |= BT_IRQSTACK;
+		}
+		stackframe.fp = GET_STACK_ULONG(bt->bptr);
+		stackframe.pc = GET_STACK_ULONG(bt->bptr + 8);
+		stackframe.sp = bt->bptr + 16;
+		bt->frameptr = stackframe.fp;
+	} else {
+		stackframe.sp = bt->stkptr;
+		stackframe.pc = bt->instptr;
+		stackframe.fp = bt->frameptr;
+	}
+
+	if (bt->flags & BT_TEXT_SYMBOLS) {
+		arm64_print_text_symbols(bt, &stackframe, ofp);
+                if (BT_REFERENCE_FOUND(bt)) {
+                        print_task_header(fp, task_to_context(bt->task), 0);
+			arm64_print_text_symbols(bt, &stackframe, fp);
+                        fprintf(fp, "\n");
+                }
+		return;
+        }
+
+	if (bt->flags & BT_REGS_NOT_FOUND)
+		return;
+
+	if (!(bt->flags & BT_KDUMP_ADJUST)) {
+		if (bt->flags & BT_USER_SPACE) {
+user_space:
+			exception_frame = bt->stacktop - USER_EFRAME_OFFSET;
+			arm64_print_exception_frame(bt, exception_frame,
+							USER_MODE, ofp);
+//			fprintf(ofp, " #0 [user space]\n");
+
+			return;
+		}
+
+		if (DUMPFILE() && is_task_active(bt->task)) {
+			exception_frame = stackframe.fp - SIZE(pt_regs);
+			if (arm64_is_kernel_exception_frame(bt, exception_frame))
+				arm64_print_exception_frame(bt, exception_frame, 
+					KERNEL_MODE, ofp);
+		}
+	}
+
+	for (level = 0;; level++) {
+		bt->instptr = stackframe.pc;
+
+		/*
+		 * Show one-line stackframe info
+		 */
+		if (arm64_print_stackframe_entry_v2(bt, level, &stackframe, ofp)
+		    == BACKTRACE_COMPLETE_KERNEL)
+			break;
+
+		cur_frame = stackframe;
+		if (!arm64_unwind_frame_v2(bt, &stackframe, ofp))
+			break;
+
+		/*
+		 * Dump the contents of the current stackframe.
+		 * We need to know the next stackframe to determine
+		 * the dump range:
+		 *    <cur_frame.fp:stackframe.fp>
+		 */
+		arm64_display_full_frame_v2(bt, &cur_frame, &stackframe);
+
+		/*
+		 * If we are in a normal stackframe, just continue,
+		 * otherwise show an exception frame.
+		 * Since exception entry code doesn't have a real
+		 * stackframe, we fake a dummy frame here.
+		 */
+		if (!arm64_in_exp_entry(stackframe.pc))
+			continue;
+
+		if (!INSTACK(cur_frame.sp, bt))
+			fprintf(ofp, "--- <IRQ stack> ---\n");
+
+		arm64_print_stackframe_entry_v2(bt, ++level, &stackframe, ofp);
+		if (bt->flags & BT_USER_EFRAME)
+			goto user_space;
+		cur_frame = stackframe;
+		arm64_unwind_frame_v2(bt, &stackframe, ofp);
+
+		/*
+		 * and don't show the contenxts. Instead,
+		 * show an exception frame below
+		 */
+
+		if (!INSTACK(cur_frame.sp, bt)) {
+			/* This check is a safeguard. See unwind_frame().  */
+			error(WARNING,
+				"stack pointer for exception frame is wrong\n");
+			return;
+		}
+		mode = (stackframe.pc < machdep->machspec->userspace_top) ?
+				USER_MODE : KERNEL_MODE;
+//		fprintf(ofp, "--- <Exception in %s> ---\n",
+//				mode == KERNEL_MODE ? "kernel" : "user");
+		arm64_print_exception_frame(bt, cur_frame.sp, mode, ofp);
+
+		if (mode == USER_MODE)
+			break;
+	}
+}
+
 static void
 arm64_print_text_symbols(struct bt_info *bt, struct arm64_stackframe *frame, FILE *ofp)
 {
@@ -1867,17 +2417,38 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 
 	ms = machdep->machspec;
 	for (ptr = start - 8; ptr >= base; ptr--) {
-		if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
-			bt->bptr = ((ulong)ptr - (ulong)base) + bt->tc->thread_info;
-			if (CRASHDEBUG(1))
-				fprintf(fp, "%lx: %lx (crash_kexec)\n", bt->bptr, *ptr);
-			return TRUE;
-		}
-		if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
-			bt->bptr = ((ulong)ptr - (ulong)base) + bt->tc->thread_info;
-			if (CRASHDEBUG(1))
-				fprintf(fp, "%lx: %lx (crash_save_cpu)\n", bt->bptr, *ptr);
-			return TRUE;
+		if (bt->flags & BT_OPT_BACK_TRACE) {
+			if ((*ptr >= ms->crash_kexec_start) &&
+			    (*ptr < ms->crash_kexec_end) &&
+			    INSTACK(*(ptr - 1), bt)) {
+				bt->bptr = ((ulong)(ptr - 1) - (ulong)base)
+					   + bt->tc->thread_info;
+				if (CRASHDEBUG(1))
+					fprintf(fp, "%lx: %lx (crash_kexec)\n", bt->bptr, *ptr);
+				return TRUE;
+			}
+			if ((*ptr >= ms->crash_save_cpu_start) &&
+			    (*ptr < ms->crash_save_cpu_end) &&
+			    INSTACK(*(ptr - 1), bt)) {
+				bt->bptr = ((ulong)(ptr - 1) - (ulong)base)
+					   + bt->tc->thread_info;
+				if (CRASHDEBUG(1))
+					fprintf(fp, "%lx: %lx (crash_save_cpu)\n", bt->bptr, *ptr);
+				return TRUE;
+			}
+		} else {
+			if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+				bt->bptr = ((ulong)ptr - (ulong)base) + bt->tc->thread_info;
+				if (CRASHDEBUG(1))
+					fprintf(fp, "%lx: %lx (crash_kexec)\n", bt->bptr, *ptr);
+				return TRUE;
+			}
+			if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
+				bt->bptr = ((ulong)ptr - (ulong)base) + bt->tc->thread_info;
+				if (CRASHDEBUG(1))
+					fprintf(fp, "%lx: %lx (crash_save_cpu)\n", bt->bptr, *ptr);
+				return TRUE;
+			}
 		}
 	} 
 
@@ -1912,21 +2483,44 @@ arm64_in_kdump_text_on_irq_stack(struct bt_info *bt)
 	start = (ulong *)(stackbuf + ms->irq_stack_size);
 
 	for (ptr = start - 8; ptr >= base; ptr--) {
-		if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
-			bt->bptr = ((ulong)ptr - (ulong)base) + stackbase;
-			if (CRASHDEBUG(1))
-				fprintf(fp, "%lx: %lx (crash_kexec on IRQ stack)\n", 
-					bt->bptr, *ptr);
-			FREEBUF(stackbuf);
-			return TRUE;
-		}
-		if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
-			bt->bptr = ((ulong)ptr - (ulong)base) + stackbase;
-			if (CRASHDEBUG(1))
-				fprintf(fp, "%lx: %lx (crash_save_cpu on IRQ stack)\n", 
-					bt->bptr, *ptr);
-			FREEBUF(stackbuf);
-			return TRUE;
+		if (bt->flags & BT_OPT_BACK_TRACE) {
+			if ((*ptr >= ms->crash_kexec_start) &&
+			    (*ptr < ms->crash_kexec_end) &&
+			    INSTACK(*(ptr - 1), bt)) {
+				bt->bptr = ((ulong)(ptr - 1) - (ulong)base) + stackbase;
+				if (CRASHDEBUG(1))
+					fprintf(fp, "%lx: %lx (crash_kexec on IRQ stack)\n", 
+						bt->bptr, *ptr);
+				FREEBUF(stackbuf);
+				return TRUE;
+			}
+			if ((*ptr >= ms->crash_save_cpu_start) &&
+			    (*ptr < ms->crash_save_cpu_end) &&
+			    INSTACK(*(ptr - 1), bt)) {
+				bt->bptr = ((ulong)(ptr - 1) - (ulong)base) + stackbase;
+				if (CRASHDEBUG(1))
+					fprintf(fp, "%lx: %lx (crash_save_cpu on IRQ stack)\n", 
+						bt->bptr, *ptr);
+				FREEBUF(stackbuf);
+				return TRUE;
+			}
+		} else {
+			if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+				bt->bptr = ((ulong)ptr - (ulong)base) + stackbase;
+				if (CRASHDEBUG(1))
+					fprintf(fp, "%lx: %lx (crash_kexec on IRQ stack)\n", 
+						bt->bptr, *ptr);
+				FREEBUF(stackbuf);
+				return TRUE;
+			}
+			if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
+				bt->bptr = ((ulong)ptr - (ulong)base) + stackbase;
+				if (CRASHDEBUG(1))
+					fprintf(fp, "%lx: %lx (crash_save_cpu on IRQ stack)\n", 
+						bt->bptr, *ptr);
+				FREEBUF(stackbuf);
+				return TRUE;
+			}
 		}
 	} 
 
@@ -2049,6 +2643,25 @@ arm64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 }
 
 static void
+arm64_gen_hidden_frame(struct bt_info *bt, ulong sp,
+					struct arm64_stackframe *frame)
+{
+	struct arm64_pt_regs *ptregs;
+
+	if (IN_TASK_VMA(bt->task, sp)) {
+		bt->flags |= BT_USER_EFRAME;
+		return;
+	}
+
+	ptregs = (struct arm64_pt_regs *)
+		 &bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(sp))];
+
+	frame->pc = ptregs->pc;
+	frame->fp = ptregs->regs[29];
+	frame->sp = ptregs->sp;
+}
+
+static void
 arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode, FILE *ofp)
 {
 	int i, r, rows, top_reg, is_64_bit;
@@ -2060,7 +2673,8 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode, FILE *o
 	if (CRASHDEBUG(1)) 
 		fprintf(ofp, "pt_regs: %lx\n", pt_regs);
 
-	regs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(pt_regs))];
+	regs = (struct arm64_pt_regs *)
+	       &bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(pt_regs))];
 
 	if ((mode == USER_MODE) && (regs->pstate & PSR_MODE32_BIT)) {
 		LR = regs->regs[14];
@@ -2126,17 +2740,18 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode, FILE *o
 		if ((i == 0) && !is_64_bit)
 			fprintf(ofp, "\n");
 		else if ((i == 0) || ((r % rows) == 0))
-			fprintf(ofp, "\n    ");
+			fprintf(ofp, "\n%s", 
+				(i == 0) && (mode == KERNEL_MODE) ? "" : "    "); 
 		else
 			fprintf(ofp, "%s", is_64_bit ? "  " : " "); 
 	}
 
 	if (is_64_bit) {
-		fprintf(ofp, "ORIG_X0: %016lx  SYSCALLNO: %lx",
-			(ulong)regs->orig_x0, (ulong)regs->syscallno);
-		if (mode == USER_MODE)
-			fprintf(ofp, "  PSTATE: %08lx", (ulong)regs->pstate);
-		fprintf(ofp, "\n");
+		if (mode == USER_MODE) {
+			fprintf(ofp, "ORIG_X0: %016lx  SYSCALLNO: %lx",
+				(ulong)regs->orig_x0, (ulong)regs->syscallno);
+			fprintf(ofp, "  PSTATE: %08lx\n", (ulong)regs->pstate);
+		}
 	}
 
 	if (is_kernel_text(regs->pc) && (bt->flags & BT_LINE_NUMBERS)) {

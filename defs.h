@@ -616,6 +616,7 @@ struct new_utsname {
 #define TVEC_BASES_V2 (0x4000)
 #define GCC_3_3_3     (0x8000)
 #define USE_OLD_BT   (0x10000)
+#define USE_OPT_BT   (0x10000)
 #define ARCH_XEN     (0x20000)
 #define NO_IKCONFIG  (0x40000)
 #define DWARF_UNWIND (0x80000)
@@ -3061,8 +3062,14 @@ struct machine_specific {
 	ulong kernel_flags;
 	ulong irq_stack_size;
 	ulong *irq_stacks;
+	char  *irq_stackbuf;
 	ulong __irqentry_text_start;
 	ulong __irqentry_text_end;
+	/* for exception vector code */
+	ulong exp_entry1_start;
+	ulong exp_entry1_end;
+	ulong exp_entry2_start;
+	ulong exp_entry2_end;
 	/* only needed for v4.6 or later kernel */
 	ulong kimage_voffset;
 	ulong kimage_text;
@@ -5280,6 +5287,7 @@ ulong cpu_map_addr(const char *type);
 #define BT_ERROR_MASK  (BT_LOOP_TRAP|BT_WRAP_TRAP|BT_KERNEL_THREAD|BT_CPU_IDLE)
 #define BT_UNWIND_ERROR      (0x2000000ULL)
 #define BT_OLD_BACK_TRACE    (0x4000000ULL)
+#define BT_OPT_BACK_TRACE    (0x4000000ULL)
 #define BT_FRAMESIZE_DEBUG   (0x8000000ULL)
 #define BT_CONTEXT_SWITCH   (0x10000000ULL)
 #define BT_HARDIRQ          (0x20000000ULL)

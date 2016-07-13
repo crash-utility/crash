@@ -6385,8 +6385,8 @@ foreach(struct foreach_data *fd)
 					bt->flags |= BT_TEXT_SYMBOLS_ALL;
 				}
 				if ((fd->flags & FOREACH_o_FLAG) ||
-				    (kt->flags & USE_OLD_BT))
-					bt->flags |= BT_OLD_BACK_TRACE;
+				    (kt->flags & USE_OPT_BT))
+					bt->flags |= BT_OPT_BACK_TRACE;
                                 if (fd->flags & FOREACH_e_FLAG)
                                         bt->flags |= BT_EFRAME_SEARCH;
 #ifdef GDB_5_3
