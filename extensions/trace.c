@@ -1015,8 +1015,6 @@ static void ftrace_destroy_event_types(void)
 	free(ftrace_common_fields);
 }
 
-#define TRACE_EVENT_FL_TRACEPOINT 0x40
-
 static
 int ftrace_get_event_type_name(ulong call, char *name, int len)
 {
@@ -1024,8 +1022,9 @@ int ftrace_get_event_type_name(ulong call, char *name, int len)
 	static int name_offset;
 	static int flags_offset;
 	static int tp_name_offset;
-	uint flags;
+	static long tracepoint_flag;
 
+	uint flags;
 	ulong name_addr;
 
 	if (inited)
@@ -1051,6 +1050,9 @@ int ftrace_get_event_type_name(ulong call, char *name, int len)
 	if (tp_name_offset < 0)
 		return -1;
 
+	if (!enumerator_value("TRACE_EVENT_FL_TRACEPOINT", &tracepoint_flag))
+		return -1;
+
 	inited = 2;
 
 work:
@@ -1067,7 +1069,7 @@ work:
 			     RETURN_ON_ERROR))
 			return -1;
 
-		if (flags & TRACE_EVENT_FL_TRACEPOINT) {
+		if (flags & (uint)tracepoint_flag) {
 			if (!readmem(name_addr + tp_name_offset, KVADDR,
 				     &name_addr, sizeof(name_addr),
 				     "read tracepoint name", RETURN_ON_ERROR))
