@@ -1817,7 +1817,7 @@ cmd_dis(void)
 				FREEBUF(req);
 				return;
 			}
-                } else if (hexadecimal(args[optind], 0)) {
+                } else if (hexadecimal(args[optind], 0) && !symbol_exists(args[optind])) {
 			req->buf = args[optind];
                         req->addr = htol(args[optind], FAULT_ON_ERROR, NULL);
 			sp = value_search(req->addr, &offset);
