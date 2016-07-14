@@ -3927,7 +3927,8 @@ cmd_sym(void)
 			sp = NULL;
 			show_flags &= ~SHOW_MODULE;
 
-			if (clean_arg() && hexadecimal(args[optind], 0)) {
+			if (clean_arg() && 
+			    (!symbol_exists(args[optind]) && hexadecimal(args[optind], 0))) {
 				errflag = 0;
 				value = htol(args[optind], RETURN_ON_ERROR,
 					&errflag);
