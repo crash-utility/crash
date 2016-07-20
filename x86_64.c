@@ -4073,6 +4073,8 @@ x86_64_exception_frame(ulong flags, ulong kvaddr, char *local,
 
         if ((flags & EFRAME_PRINT) && BT_REFERENCE_CHECK(bt)) {
                 x86_64_do_bt_reference_check(bt, rip, NULL);
+		if ((sp = value_search(rip, &offset))) 
+			x86_64_do_bt_reference_check(bt, 0, sp->name);
                 x86_64_do_bt_reference_check(bt, rsp, NULL);
                 x86_64_do_bt_reference_check(bt, cs, NULL);
                 x86_64_do_bt_reference_check(bt, ss, NULL);
