@@ -2762,6 +2762,8 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode, FILE *o
 
 	if (BT_REFERENCE_CHECK(bt)) {
 		arm64_do_bt_reference_check(bt, regs->pc, NULL);
+		if ((sp = value_search(regs->pc, &offset))) 
+			arm64_do_bt_reference_check(bt, 0, sp->name);
 		arm64_do_bt_reference_check(bt, LR, NULL);
 		arm64_do_bt_reference_check(bt, SP, NULL);
 		arm64_do_bt_reference_check(bt, regs->pstate, NULL);
