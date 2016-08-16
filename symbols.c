@@ -1420,9 +1420,11 @@ store_module_symbols_v1(ulong total, int mods_installed)
 		for (i = first = last = 0; i < nsyms; i++) {
 			modsym = (struct module_symbol *)
 			    (modsymbuf + (i * sizeof(struct module_symbol)));
-			if (!first)
+			if (!first
+			    || first > (ulong)modsym->name)
 				first = (ulong)modsym->name;
-			last = (ulong)modsym->name;
+			if ((ulong)modsym->name > last)
+				last = (ulong)modsym->name;
 		}
 
 		if (last > first) {
@@ -1443,14 +1445,10 @@ store_module_symbols_v1(ulong total, int mods_installed)
 		} else
 			strbuf = NULL;
 
-		for (i = first = last = 0; i < nsyms; i++) {
+		for (i = 0; i < nsyms; i++) {
 
 			modsym = (struct module_symbol *)
 			    (modsymbuf + (i * sizeof(struct module_symbol)));
-
-			if (!first) 
-				first = (ulong)modsym->name;
-			last = (ulong)modsym->name;
 
 			BZERO(buf1, BUFSIZE);
 
@@ -1724,9 +1722,11 @@ store_module_symbols_v2(ulong total, int mods_installed)
 		for (i = first = last = 0; i < nsyms; i++) {
 			modsym = (struct kernel_symbol *)
 			    (modsymbuf + (i * sizeof(struct kernel_symbol)));
-			if (!first)
+			if (!first
+			    || first > (ulong)modsym->name)
 				first = (ulong)modsym->name;
-			last = (ulong)modsym->name;
+			if ((ulong)modsym->name > last)
+				last = (ulong)modsym->name;
 		}
 
 		if (last > first) {
@@ -1747,14 +1747,11 @@ store_module_symbols_v2(ulong total, int mods_installed)
 		} else 
 			strbuf = NULL;
 
-		for (i = first = last = 0; i < nsyms; i++) {
+
+		for (i = 0; i < nsyms; i++) {
 
 			modsym = (struct kernel_symbol *)
 			    (modsymbuf + (i * sizeof(struct kernel_symbol)));
-
-			if (!first) 
-				first = (ulong)modsym->name;
-			last = (ulong)modsym->name;
 
 			BZERO(buf1, BUFSIZE);
 
@@ -1799,9 +1796,11 @@ store_module_symbols_v2(ulong total, int mods_installed)
 		for (i = first = last = 0; i < ngplsyms; i++) {
 			modsym = (struct kernel_symbol *)
 			    (modsymbuf + (i * sizeof(struct kernel_symbol)));
-			if (!first)
+			if (!first
+			    || first > (ulong)modsym->name)
 				first = (ulong)modsym->name;
-			last = (ulong)modsym->name;
+			if ((ulong)modsym->name > last)
+				last = (ulong)modsym->name;
 		}
 
 		if (last > first) {
@@ -1822,14 +1821,10 @@ store_module_symbols_v2(ulong total, int mods_installed)
 		} else 
 			strbuf = NULL;
 
-		for (i = first = last = 0; i < ngplsyms; i++) {
+		for (i = 0; i < ngplsyms; i++) {
 
 			modsym = (struct kernel_symbol *)
 			    (modsymbuf + (i * sizeof(struct kernel_symbol)));
-
-			if (!first) 
-				first = (ulong)modsym->name;
-			last = (ulong)modsym->name;
 
 			BZERO(buf1, BUFSIZE);
 
