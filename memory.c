@@ -8302,12 +8302,12 @@ dump_kmeminfo(void)
 			fprintf(fp, "%13s  %7ld  %11s         ----\n", 
 				"TOTAL SWAP", totalswap_pages, 
 				pages_to_size(totalswap_pages, buf));
-				pct = totalswap_pages ? (totalused_pages * 100) /
-				totalswap_pages : 100;
+			pct = totalswap_pages ? (totalused_pages * 100) /
+				totalswap_pages : 0;
 			fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL SWAP\n",
 				"SWAP USED", totalused_pages,
 				pages_to_size(totalused_pages, buf), pct);
-		 		pct = totalswap_pages ? 
+	 		pct = totalswap_pages ? 
 				((totalswap_pages - totalused_pages) *
 				100) / totalswap_pages : 0;
 			fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL SWAP\n", 
