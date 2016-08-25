@@ -2223,3 +2223,79 @@ diff -up gdb-7.6/bfd/elf64-ppc.c.orig gdb-7.6/bfd/elf64-ppc.c
  
    return NULL;
  }
+--- gdb-7.6/gdb/symtab.c.orig
++++ gdb-7.6/gdb/symtab.c
+@@ -5122,7 +5122,7 @@ When enabled, debugging messages are pri
+ #define GDB_COMMON
+ #include "../../defs.h"
+ 
+-static void get_member_data(struct gnu_request *, struct type *);
++static void get_member_data(struct gnu_request *, struct type *, long, int);
+ static void dump_enum(struct type *, struct gnu_request *);
+ static void eval_enum(struct type *, struct gnu_request *);
+ static void gdb_get_line_number(struct gnu_request *);
+@@ -5327,7 +5327,7 @@ gdb_get_datatype(struct gnu_request *req
+                 req->typecode = TYPE_CODE(sym->type);
+                 req->length = TYPE_LENGTH(sym->type);
+ 		if (req->member)
+-			get_member_data(req, sym->type);
++			get_member_data(req, sym->type, 0, 1);
+ 			
+ 		if (TYPE_CODE(sym->type) == TYPE_CODE_ENUM) {
+ 			if (req->flags & GNU_PRINT_ENUMERATORS) 
+@@ -5397,7 +5397,7 @@ gdb_get_datatype(struct gnu_request *req
+ 		}
+ 
+                 if (req->member) 
+-                	get_member_data(req, type); 
++                	get_member_data(req, type, 0, 1); 
+ 		
+ 		break;
+ 
+@@ -5480,7 +5480,7 @@ eval_enum(struct type *type, struct gnu_
+  *  member field, and when found, return its relevant data.
+  */
+ static void
+-get_member_data(struct gnu_request *req, struct type *type)
++get_member_data(struct gnu_request *req, struct type *type, long offset, int is_first)
+ {
+ 	register short i;
+ 	struct field *nextfield;
+@@ -5492,7 +5492,7 @@ get_member_data(struct gnu_request *req,
+ 	nfields = TYPE_MAIN_TYPE(type)->nfields;
+ 	nextfield = TYPE_MAIN_TYPE(type)->flds_bnds.fields;
+ 
+-        if (nfields == 0) {
++	if (nfields == 0 && is_first /* The first call */) {
+ 		struct type *newtype;
+                 newtype = lookup_transparent_type(req->name);
+                 if (newtype) {
+@@ -5505,13 +5505,18 @@ get_member_data(struct gnu_request *req,
+ 
+ 	for (i = 0; i < nfields; i++) {
+ 		if (STREQ(req->member, nextfield->name)) {
+-			req->member_offset = nextfield->loc.bitpos;
++			req->member_offset = offset + nextfield->loc.bitpos;
+ 			req->member_length = TYPE_LENGTH(nextfield->type);
+ 			req->member_typecode = TYPE_CODE(nextfield->type);
+ 			if ((req->member_typecode == TYPE_CODE_TYPEDEF) &&
+ 			    (typedef_type = check_typedef(nextfield->type))) 
+         			req->member_length = TYPE_LENGTH(typedef_type);
+ 			return;
++		} else if (*nextfield->name == 0) { /* Anonymous struct/union */
++			get_member_data(req, nextfield->type,
++			    offset + nextfield->loc.bitpos, 0);
++			if (req->member_offset != -1)
++				return;
+ 		}
+ 		nextfield++;
+ 	}
+@@ -5706,7 +5711,7 @@ gdb_get_symbol_type(struct gnu_request *
+ 	}
+ 
+ 	if (req->member) 
+-		get_member_data(req, type);
++		get_member_data(req, type, 0, 1);
+ 
+         do_cleanups (old_chain);
+ }
