@@ -694,9 +694,15 @@ vm_init(void)
 		/*
 		 *  Common to slab/slub
 		 */
-		ANON_MEMBER_OFFSET_INIT(page_slab, "page", "slab_cache");
-		ANON_MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
-		ANON_MEMBER_OFFSET_INIT(page_first_page, "page", "first_page");
+		MEMBER_OFFSET_INIT(page_slab, "page", "slab_cache");
+		if (INVALID_MEMBER(page_slab))
+			ANON_MEMBER_OFFSET_INIT(page_slab, "page", "slab_cache");
+		MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
+		if (INVALID_MEMBER(page_slab_page))
+			ANON_MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
+		MEMBER_OFFSET_INIT(page_first_page, "page", "first_page");
+		if (INVALID_MEMBER(page_first_page))
+			ANON_MEMBER_OFFSET_INIT(page_first_page, "page", "first_page");
 
 	} else if (MEMBER_EXISTS("kmem_cache", "cpu_slab") &&
 		STRUCT_EXISTS("kmem_cache_node")) {
@@ -723,16 +729,32 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_page, "kmem_cache_cpu", "page");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_node, "kmem_cache_cpu", "node");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_partial, "kmem_cache_cpu", "partial");
-		ANON_MEMBER_OFFSET_INIT(page_inuse, "page", "inuse");
-		ANON_MEMBER_OFFSET_INIT(page_offset, "page", "offset");
-		ANON_MEMBER_OFFSET_INIT(page_slab, "page", "slab");
+		MEMBER_OFFSET_INIT(page_inuse, "page", "inuse");
+		if (INVALID_MEMBER(page_inuse))
+			ANON_MEMBER_OFFSET_INIT(page_inuse, "page", "inuse");
+		MEMBER_OFFSET_INIT(page_offset, "page", "offset");
+		if (INVALID_MEMBER(page_offset))
+			ANON_MEMBER_OFFSET_INIT(page_offset, "page", "offset");
+		MEMBER_OFFSET_INIT(page_slab, "page", "slab");
 		if (INVALID_MEMBER(page_slab))
-			ANON_MEMBER_OFFSET_INIT(page_slab, "page", "slab_cache");
-		ANON_MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
-		ANON_MEMBER_OFFSET_INIT(page_first_page, "page", "first_page");
-		ANON_MEMBER_OFFSET_INIT(page_freelist, "page", "freelist");
+			ANON_MEMBER_OFFSET_INIT(page_slab, "page", "slab");
+		if (INVALID_MEMBER(page_slab)) {
+			MEMBER_OFFSET_INIT(page_slab, "page", "slab_cache");
+			if (INVALID_MEMBER(page_slab))
+				ANON_MEMBER_OFFSET_INIT(page_slab, "page", "slab_cache");
+		}
+		MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
+		if (INVALID_MEMBER(page_slab_page))
+			ANON_MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
+		MEMBER_OFFSET_INIT(page_first_page, "page", "first_page");
+		if (INVALID_MEMBER(page_first_page))
+			ANON_MEMBER_OFFSET_INIT(page_first_page, "page", "first_page");
+		MEMBER_OFFSET_INIT(page_freelist, "page", "freelist");
+		if (INVALID_MEMBER(page_freelist))
+			ANON_MEMBER_OFFSET_INIT(page_freelist, "page", "freelist");
 		if (INVALID_MEMBER(kmem_cache_objects)) {
 			MEMBER_OFFSET_INIT(kmem_cache_oo, "kmem_cache", "oo");
+			/* NOTE: returns offset of containing bitfield */
 			ANON_MEMBER_OFFSET_INIT(page_objects, "page", "objects");
 		}
 		if (VALID_MEMBER(kmem_cache_node)) {

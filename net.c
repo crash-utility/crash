@@ -1,8 +1,8 @@
 /* net.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015 David Anderson
- * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2016 David Anderson
+ * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -241,14 +241,21 @@ net_init(void)
 						ANON_MEMBER_OFFSET_INIT(inet_opt_rcv_saddr, "sock_common",
 							"skc_rcv_saddr");
 					MEMBER_OFFSET_INIT(inet_opt_dport, "inet_sock", "inet_dport");
-					if (INVALID_MEMBER(inet_opt_dport))
-						ANON_MEMBER_OFFSET_INIT(inet_opt_dport, "sock_common", 
+					if (INVALID_MEMBER(inet_opt_dport)) {
+						MEMBER_OFFSET_INIT(inet_opt_dport, "sock_common", 
 							"skc_dport");
+						if (INVALID_MEMBER(inet_opt_dport))
+							ANON_MEMBER_OFFSET_INIT(inet_opt_dport, "sock_common", 
+								"skc_dport");
+					}
 					MEMBER_OFFSET_INIT(inet_opt_sport, "inet_sock", "inet_sport");
 					MEMBER_OFFSET_INIT(inet_opt_num, "inet_sock", "inet_num");
-					if (INVALID_MEMBER(inet_opt_num))
-						ANON_MEMBER_OFFSET_INIT(inet_opt_num, "sock_common", 
+					if (INVALID_MEMBER(inet_opt_num)) {
+						MEMBER_OFFSET_INIT(inet_opt_num, "sock_common", "skc_num");
+						if (INVALID_MEMBER(inet_opt_num))
+							ANON_MEMBER_OFFSET_INIT(inet_opt_num, "sock_common", 
 							"skc_num");
+					}
 				}
 			}	
 
