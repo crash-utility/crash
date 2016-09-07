@@ -5172,7 +5172,7 @@ NULL
 char *help__list[] = {
 "list",
 "linked list",
-"[[-o] offset][-e end][-s struct[.member[,member] [-l offset]] -[xd]] "
+"[[-o] offset][-e end][-[s|S] struct[.member[,member] [-l offset]] -[x|d]]"
 "\n       [-r|-h|-H] start",
 " ",
 "  This command dumps the contents of a linked list.  The entries in a linked",
@@ -5254,6 +5254,9 @@ char *help__list[] = {
 "               \"struct.member.member\" or \"struct.member[index]\"; embedded",
 "               member specifications may extend beyond one level deep by ",
 "               expressing the argument as \"struct.member.member.member...\".",
+"    -S struct  Similar to -s, but instead of parsing gdb output, member values",
+"               are read directly from memory, so the command works much faster",
+"               for 1-, 2-, 4-, and 8-byte members.",
 "    -l offset  Only used in conjunction with -s, if the start address argument",
 "               is a pointer to an embedded list head (or any other similar list",
 "               linkage structure whose first member points to the next linkage",
@@ -5570,7 +5573,7 @@ NULL
 char *help_tree[] = {
 "tree",
 "display radix tree or red-black tree",
-"-t [radix|rbtree] [-r offset] [-s struct[.member[,member]] -[x|d]]\n          [-o offset] [-p] [-N] start",
+"-t [radix|rbtree] [-r offset] [-[s|S] struct[.member[,member]] -[x|d]]\n          [-o offset] [-p] [-N] start",
 "  This command dumps the contents of a radix tree or a red-black tree.",
 "  The arguments are as follows:\n",
 "    -t type  The type of tree to dump; the type string can be either ",
@@ -5600,6 +5603,9 @@ char *help_tree[] = {
 "             or \"struct.member[index]\"; embedded member specifications may",
 "             extend beyond one level deep by expressing the struct argument as", 
 "             \"struct.member.member.member...\".",
+"  -S struct  Similar to -s, but instead of parsing gdb output, member values",
+"             are read directly from memory, so the command works much faster", 
+"             for 1-, 2-, 4-, and 8-byte members.",
 "         -x  Override default output format with hexadecimal format.",
 "         -d  Override default output format with decimal format.",
 "         -p  Display the node's position information, showing the relationship",

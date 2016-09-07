@@ -2408,6 +2408,8 @@ struct list_data {             /* generic structure used by do_list() to walk */
 #define LIST_ALLOCATE       (VERBOSE << 10)
 #define LIST_CALLBACK       (VERBOSE << 11)
 #define CALLBACK_RETURN     (VERBOSE << 12)
+#define LIST_PARSE_MEMBER   (VERBOSE << 13)
+#define LIST_READ_MEMBER    (VERBOSE << 14)
 
 struct tree_data {
 	ulong flags;
@@ -2424,6 +2426,8 @@ struct tree_data {
 #define TREE_POSITION_DISPLAY     (VERBOSE << 4)
 #define TREE_STRUCT_RADIX_10      (VERBOSE << 5)
 #define TREE_STRUCT_RADIX_16      (VERBOSE << 6)
+#define TREE_PARSE_MEMBER         (VERBOSE << 7)
+#define TREE_READ_MEMBER          (VERBOSE << 8)
 
 #define ALIAS_RUNTIME  (1)
 #define ALIAS_RCLOCAL  (2)
@@ -4920,6 +4924,7 @@ int fill_struct_member_data(struct struct_member_data *);
 void parse_for_member_extended(struct datatype_member *, ulong);
 void add_to_downsized(char *);
 int is_downsized(char *);
+int is_string(char *, char *);
 
 /*  
  *  memory.c 

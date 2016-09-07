@@ -28,6 +28,17 @@ static void rbtree_iteration(ulong, struct tree_data *, char *);
 static void rdtree_iteration(ulong, struct tree_data *, char *, ulong, uint);
 static void dump_struct_members_for_tree(struct tree_data *, int, ulong);
 
+struct req_entry {
+	char *arg, *name, **member;
+	int *is_str, *is_ptr;
+	ulong *width, *offset;
+	int count;
+};
+
+static void print_value(struct req_entry *, unsigned int, ulong, unsigned int);
+static struct req_entry *fill_member_offsets(char *);
+static void dump_struct_members_fast(struct req_entry *, int, ulong);
+
 /*
  *  General purpose error reporting routine.  Type INFO prints the message
  *  and returns.  Type FATAL aborts the command in progress, and longjmps
@@ -3229,7 +3240,7 @@ cmd_list(void)
 	BZERO(ld, sizeof(struct list_data));
 	struct_list_offset = 0;
 
-        while ((c = getopt(argcnt, args, "Hhrs:e:o:xdl:")) != EOF) {
+	while ((c = getopt(argcnt, args, "Hhrs:S:e:o:xdl:")) != EOF) {
                 switch(c)
 		{
 		case 'H':
@@ -3246,9 +3257,13 @@ cmd_list(void)
 			break;
 
 		case 's':
-			if (ld->structname_args++ == 0) 
+		case 'S':
+			if (ld->structname_args++ == 0)
 				hq_open();
 			hq_enter((ulong)optarg);
+			ld->flags |= (c == 's') ? LIST_PARSE_MEMBER : LIST_READ_MEMBER;
+			if (count_bits_long(ld->flags & (LIST_PARSE_MEMBER|LIST_READ_MEMBER)) > 1)
+				error(FATAL, "-S and -s options are mutually exclusive\n");
 			break;
 
 		case 'l':
@@ -3319,7 +3334,7 @@ cmd_list(void)
 		hq_close(); 
 		ld->struct_list_offset = struct_list_offset;
 	} else if (struct_list_offset) {
-		error(INFO, "-l option can only be used with -s option\n");
+		error(INFO, "-l option can only be used with -s or -S option\n");
 		cmd_usage(pc->curcmd, SYNOPSIS);
 	}
 
@@ -3483,6 +3498,128 @@ next_arg:
 		FREEBUF(ld->structname);
 }
 
+void
+dump_struct_members_fast(struct req_entry *e, int radix, ulong p)
+{
+	unsigned int i;
+	char b[BUFSIZE];
+
+	if (!(e && IS_KVADDR(p)))
+		return;
+
+	if (!radix)
+		radix = *gdb_output_radix;
+
+	for (i = 0; i < e->count; i++) {
+		if (0 < e->width[i] && (e->width[i] <= 8 || e->is_str[i])) {
+			print_value(e, i, p, e->is_ptr[i] ? 16 : radix);
+		} else if (e->width[i] == 0 || e->width[i] > 8) {
+			snprintf(b, BUFSIZE, "%s.%s", e->name, e->member[i]);
+			dump_struct_member(b, p, radix);
+		}
+	}
+}
+
+static struct req_entry *
+fill_member_offsets(char *arg)
+{
+	int j;
+	char *p, m;
+	struct req_entry *e;
+	char buf[BUFSIZE];
+
+	if (!(arg && *arg))
+		return NULL;
+
+	j = count_chars(arg, ',') + 1;
+	e = (struct req_entry *)GETBUF(sizeof(*e));
+
+	e->arg = GETBUF(strlen(arg + 1));
+	strcpy(e->arg, arg);
+
+	m = ((p = strchr(e->arg, '.')) != NULL);
+	if (!p++)
+		p = e->arg + strlen(e->arg) + 1;
+
+	e->name = GETBUF(p - e->arg);
+	strncpy(e->name, e->arg, p - e->arg - 1);
+
+	if (!m)
+		return e;
+
+	e->count  = count_chars(p, ',') + 1;
+	e->width  = (ulong *)GETBUF(e->count * sizeof(ulong));
+	e->is_ptr = (int *)GETBUF(e->count * sizeof(int));
+	e->is_str = (int *)GETBUF(e->count * sizeof(int));
+	e->member = (char **)GETBUF(e->count * sizeof(char *));
+	e->offset = (ulong *)GETBUF(e->count * sizeof(ulong));
+
+	replace_string(p, ",", ' ');
+	parse_line(p, e->member);
+
+	for (j = 0; j < e->count; j++) {
+		e->offset[j] = MEMBER_OFFSET(e->name, e->member[j]);
+		if (e->offset[j] == INVALID_OFFSET)
+			e->offset[j] = ANON_MEMBER_OFFSET(e->name, e->member[j]);
+		if (e->offset[j] == INVALID_OFFSET)
+			error(FATAL, "Can't get offset of '%s.%s'\n",
+				e->name, e->member[j]);
+
+		e->is_ptr[j] = MEMBER_TYPE(e->name, e->member[j]) == TYPE_CODE_PTR;
+		e->is_str[j] = is_string(e->name, e->member[j]);
+
+		/* Dirty hack for obtaining size of particular field */
+		snprintf(buf, BUFSIZE, "%s + 1", e->member[j]);
+		e->width[j] = ANON_MEMBER_OFFSET(e->name, buf) - e->offset[j];
+	}
+
+	return e;
+}
+
+static void
+print_value(struct req_entry *e, unsigned int i, ulong addr, unsigned int radix)
+{
+	union { uint64_t v64; uint32_t v32;
+		uint16_t v16; uint8_t v8;
+	} v;
+	char buf[BUFSIZE];
+	struct syment *sym;
+
+	addr += e->offset[i];
+
+	/* Read up to 8 bytes, counters, pointers, etc. */
+	if (e->width[i] <= 8 && !readmem(addr, KVADDR, &v, e->width[i],
+	    "structure value", RETURN_ON_ERROR | QUIET)) {
+		error(INFO, "cannot access member: %s at %lx\n", e->member[i], addr);
+		return;
+	}
+	snprintf(buf, BUFSIZE, "  %%s = %s%%%s%s",
+		 (radix == 16 ? "0x" : ""),
+		 (e->width[i] == 8 ? "l" : ""),
+		 (radix == 16 ? "x" : "u" )
+		);
+
+	switch (e->width[i]) {
+		case 1: fprintf(fp, buf, e->member[i], v.v8); break;
+		case 2: fprintf(fp, buf, e->member[i], v.v16); break;
+		case 4: fprintf(fp, buf, e->member[i], v.v32); break;
+		case 8: fprintf(fp, buf, e->member[i], v.v64); break;
+	}
+
+
+	if (e->is_str[i]) {
+		if (e->is_ptr[i]) {
+			read_string(v.v64, buf, BUFSIZE);
+			fprintf(fp, "  \"%s\"", buf);
+		} else {
+			read_string(addr, buf, e->width[i]);
+			fprintf(fp, "  %s = \"%s\"", e->member[i], buf);
+		}
+	} else if ((sym = value_search(v.v64, 0)) && is_symbol_text(sym))
+		fprintf(fp, " <%s>", sym->name);
+
+	fprintf(fp, "\n");
+}
 
 /*
  *  Does the work for cmd_list() and any other function that requires the
@@ -3491,10 +3628,11 @@ next_arg:
 int
 do_list(struct list_data *ld)
 {
-	ulong next, last, first;
+	ulong next, last, first, offset;
 	ulong searchfor, readflag;
 	int i, count, others, close_hq_on_return;
 	unsigned int radix;
+	struct req_entry **e = NULL;
 
 	if (CRASHDEBUG(1)) {
 		others = 0;
@@ -3580,6 +3718,14 @@ do_list(struct list_data *ld)
 	if (ld->header)
 		fprintf(fp, "%s", ld->header);
 
+	offset = ld->list_head_offset + ld->struct_list_offset;
+
+	if (ld->structname && (ld->flags & LIST_READ_MEMBER)) {
+		e = (struct req_entry **)GETBUF(sizeof(*e) * ld->structname_args);
+		for (i = 0; i < ld->structname_args; i++)
+			e[i] = fill_member_offsets(ld->structname[i]);
+	}
+
 	while (1) {
 		if (ld->flags & VERBOSE) {
 			fprintf(fp, "%lx\n", next - ld->list_head_offset);
@@ -3589,12 +3735,15 @@ do_list(struct list_data *ld)
 					switch (count_chars(ld->structname[i], '.'))
 					{
 					case 0:
-						dump_struct(ld->structname[i], 
-							next - ld->list_head_offset - ld->struct_list_offset,
-							radix);
+						dump_struct(ld->structname[i],
+							next - offset, radix);
 						break;
 					default:
-						dump_struct_members(ld, i, next);
+						if (ld->flags & LIST_PARSE_MEMBER)
+							dump_struct_members(ld, i, next);
+						else if (ld->flags & LIST_READ_MEMBER)
+							dump_struct_members_fast(e[i],
+								radix, next - offset);
 						break;
 					}
 				}
@@ -3745,7 +3894,7 @@ cmd_tree()
 	td = &tree_data;
 	BZERO(td, sizeof(struct tree_data));
 
-	while ((c = getopt(argcnt, args, "xdt:r:o:s:pN")) != EOF) {
+	while ((c = getopt(argcnt, args, "xdt:r:o:s:S:pN")) != EOF) {
 		switch (c)
 		{
 		case 't':
@@ -3799,9 +3948,13 @@ cmd_tree()
 			break;
 
 		case 's':
+		case 'S':
 			if (td->structname_args++ == 0) 
 				hq_open();
 			hq_enter((ulong)optarg);
+			td->flags |= (c == 's') ? TREE_PARSE_MEMBER : TREE_READ_MEMBER;
+			if (count_bits_long(td->flags & (TREE_PARSE_MEMBER|TREE_READ_MEMBER)) > 1)
+				error(FATAL, "-S and -s options are mutually exclusive\n");
 			break;
 
 		case 'p':
@@ -4025,6 +4178,7 @@ rdtree_iteration(ulong node_p, struct tree_data *td, char *ppos, ulong indexnum,
 	int i, index;
 	uint print_radix;
 	char pos[BUFSIZE];
+	static struct req_entry **e = NULL;
 
 	if (indexnum != -1)
 		sprintf(pos, "%s/%ld", ppos, indexnum);
@@ -4038,6 +4192,17 @@ rdtree_iteration(ulong node_p, struct tree_data *td, char *ppos, ulong indexnum,
 		if (!slot)
 			continue;
 		if (height == 1) {
+			if (!td->count && td->structname_args) {
+				/*
+				 * Retrieve all members' info only once (count == 0)
+				 * After last iteration all memory will be freed up
+				 */
+				e = (struct req_entry **)GETBUF(sizeof(*e) *
+					td->structname_args);
+				for (i = 0; i < td->structname_args; i++)
+					e[i] = fill_member_offsets(td->structname[i]);
+			}
+
 			if (hq_enter(slot))
 				td->count++;
 			else
@@ -4066,9 +4231,12 @@ rdtree_iteration(ulong node_p, struct tree_data *td, char *ppos, ulong indexnum,
 						dump_struct(td->structname[i],
 							slot, print_radix);
 						break;
-                                        default:
-						dump_struct_members_for_tree(td, i,
-							slot);
+					default:
+						if (td->flags & TREE_PARSE_MEMBER)
+							dump_struct_members_for_tree(td, i,
+								slot);
+						else if (td->flags & TREE_READ_MEMBER)
+							dump_struct_members_fast(e[i], print_radix, slot);
 						break;
 					}
 				}
@@ -4109,9 +4277,21 @@ rbtree_iteration(ulong node_p, struct tree_data *td, char *pos)
 	uint print_radix;
 	ulong struct_p, left_p, right_p;
 	char left_pos[BUFSIZE], right_pos[BUFSIZE];
+	static struct req_entry **e;
 
 	if (!node_p)
 		return;
+
+	if (!td->count && td->structname_args) {
+		/*
+		 * Retrieve all members' info only once (count == 0)
+		 * After last iteration all memory will be freed up
+		 */
+		e = (struct req_entry **)GETBUF(sizeof(*e) *
+			td->structname_args);
+		for (i = 0; i < td->structname_args; i++)
+			e[i] = fill_member_offsets(td->structname[i]);
+	}
 
 	if (hq_enter(node_p))
 		td->count++;
@@ -4140,8 +4320,12 @@ rbtree_iteration(ulong node_p, struct tree_data *td, char *pos)
 			case 0:
 				dump_struct(td->structname[i], struct_p, print_radix);
 				break;
-                        default:
-				dump_struct_members_for_tree(td, i, struct_p);
+			default:
+				if (td->flags & TREE_PARSE_MEMBER)
+					dump_struct_members_for_tree(td, i, struct_p);
+				else if (td->flags & TREE_READ_MEMBER)
+					dump_struct_members_fast(e[i], print_radix,
+						struct_p);
 				break;
 			}
 		}
