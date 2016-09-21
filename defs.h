@@ -1087,6 +1087,7 @@ extern struct machdep_table *machdep;
 #define POST_INIT  (4)
 #define POST_VM    (5)
 #define LOG_ONLY   (6)
+#define POST_RELOC (7)
 
 #define FOREACH_BT     (1)
 #define FOREACH_VM     (2)
@@ -5584,6 +5585,7 @@ struct machine_specific {
 #define FRAMEPOINTER (0x200)
 #define GART_REGION  (0x400)
 #define NESTED_NMI   (0x800)
+#define RANDOMIZED  (0x1000)
 
 #define VM_FLAGS (VM_ORIG|VM_2_6_11|VM_XEN|VM_XEN_RHEL4)
 

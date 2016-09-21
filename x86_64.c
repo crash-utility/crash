@@ -282,6 +282,23 @@ x86_64_init(int when)
 		x86_64_calc_phys_base();
 		break;
 
+	case POST_RELOC:
+		/*
+		 *  Check for CONFIG_RANDOMIZE_MEMORY, and set page_offset here.
+		 *  The remainder of the virtual address range setups will get
+		 *  done below in POST_GDB.
+		 */
+		if (kernel_symbol_exists("page_offset_base") &&
+		    kernel_symbol_exists("vmalloc_base")) {
+			machdep->flags |= RANDOMIZED;
+			readmem(symbol_value("page_offset_base"), KVADDR,
+				&machdep->machspec->page_offset, sizeof(ulong),
+				"page_offset_base", FAULT_ON_ERROR);
+			machdep->kvbase = machdep->machspec->page_offset;
+			machdep->identity_map_base = machdep->machspec->page_offset;
+		}
+		break;
+
 	case POST_GDB:
 		if (THIS_KERNEL_VERSION >= LINUX(2,6,26) &&
 		    THIS_KERNEL_VERSION < LINUX(2,6,31)) {
@@ -292,12 +309,24 @@ x86_64_init(int when)
 			machdep->machspec->modules_end = MODULES_END_2_6_27;
 		}
 		if (THIS_KERNEL_VERSION >= LINUX(2,6,31)) {
-			machdep->machspec->vmalloc_start_addr = VMALLOC_START_ADDR_2_6_31;
-			machdep->machspec->vmalloc_end = VMALLOC_END_2_6_31;
-			machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
-			machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
-			machdep->machspec->modules_vaddr = MODULES_VADDR_2_6_31;
-			machdep->machspec->modules_end = MODULES_END_2_6_31;
+			if (machdep->flags & RANDOMIZED) {
+				readmem(symbol_value("vmalloc_base"), KVADDR,
+					&machdep->machspec->vmalloc_start_addr,
+					sizeof(ulong), "vmalloc_base", FAULT_ON_ERROR);
+				machdep->machspec->vmalloc_end =
+					machdep->machspec->vmalloc_start_addr + (32UL << 40) - 1;
+				machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
+				machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
+				machdep->machspec->modules_vaddr = __START_KERNEL_map + GIGABYTES(1);
+				machdep->machspec->modules_end = MODULES_END_2_6_31;
+			} else {
+				machdep->machspec->vmalloc_start_addr = VMALLOC_START_ADDR_2_6_31;
+				machdep->machspec->vmalloc_end = VMALLOC_END_2_6_31;
+				machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
+				machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
+				machdep->machspec->modules_vaddr = MODULES_VADDR_2_6_31;
+				machdep->machspec->modules_end = MODULES_END_2_6_31;
+			}
 		}
                 STRUCT_SIZE_INIT(cpuinfo_x86, "cpuinfo_x86");
 		/* 
@@ -614,6 +643,8 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sGART_REGION", others++ ? "|" : "");
 	if (machdep->flags & NESTED_NMI)
 		fprintf(fp, "%sNESTED_NMI", others++ ? "|" : "");
+	if (machdep->flags & RANDOMIZED)
+		fprintf(fp, "%sRANDOMIZED", others++ ? "|" : "");
         fprintf(fp, ")\n");
 
 	fprintf(fp, "             kvbase: %lx\n", machdep->kvbase);

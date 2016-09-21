@@ -752,6 +752,7 @@ main_loop(void)
 
         if (!(pc->flags & GDB_INIT)) {
 		gdb_session_init();
+		machdep_init(POST_RELOC);
 		show_untrusted_files();
 		kdump_backup_region_init();
 		if (XEN_HYPER_MODE()) {
