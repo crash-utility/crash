@@ -5838,6 +5838,22 @@ swap32(uint32_t val, int swap)
 		return val;
 }
 
+uint64_t
+swap64(uint64_t val, int swap)
+{
+	if (swap)
+		return (((val & 0x00000000000000ffULL) << 56) |
+			((val & 0x000000000000ff00ULL) << 40) |
+			((val & 0x0000000000ff0000ULL) << 24) |
+			((val & 0x00000000ff000000ULL) <<  8) |
+			((val & 0x000000ff00000000ULL) >>  8) |
+			((val & 0x0000ff0000000000ULL) >> 24) |
+			((val & 0x00ff000000000000ULL) >> 40) |
+			((val & 0xff00000000000000ULL) >> 56));
+	else
+		return val;
+}
+
 /*
  *  Get a sufficiently large buffer for cpumask.
  *  You should call FREEBUF() on the result when you no longer need it.

@@ -3788,7 +3788,7 @@ struct efi_memory_desc_t {
 #define PMD_MASK        (~((1UL << PMD_SHIFT) - 1))
 
 /* shift to put page number into pte */
-#define PTE_SHIFT 16
+#define PTE_RPN_SHIFT_DEFAULT 16
 #define PMD_TO_PTEPAGE_SHIFT 2  /* Used for 2.6 or later */
 
 #define PTE_INDEX_SIZE  9
@@ -3810,7 +3810,11 @@ struct efi_memory_desc_t {
 #define PMD_INDEX_SIZE_L4_4K  7
 #define PUD_INDEX_SIZE_L4_4K  7
 #define PGD_INDEX_SIZE_L4_4K  9
-#define PTE_SHIFT_L4_4K  17
+#define PUD_INDEX_SIZE_L4_4K_3_7  9
+#define PTE_RPN_SHIFT_L4_4K  17
+#define PTE_RPN_SHIFT_L4_4K_4_5  18
+#define PGD_MASKED_BITS_4K  0
+#define PUD_MASKED_BITS_4K  0
 #define PMD_MASKED_BITS_4K  0
 
 /* 64K pagesize */
@@ -3821,24 +3825,44 @@ struct efi_memory_desc_t {
 #define PTE_INDEX_SIZE_L4_64K_3_10  8
 #define PMD_INDEX_SIZE_L4_64K_3_10  10
 #define PGD_INDEX_SIZE_L4_64K_3_10  12
-#define PTE_SHIFT_L4_64K_V1  32
-#define PTE_SHIFT_L4_64K_V2  30
-#define PTE_SHIFT_L4_BOOK3E_64K 28
-#define PTE_SHIFT_L4_BOOK3E_4K 24
+#define PMD_INDEX_SIZE_L4_64K_4_6  5
+#define PUD_INDEX_SIZE_L4_64K_4_6  5
+#define PTE_RPN_SHIFT_L4_64K_V1  32
+#define PTE_RPN_SHIFT_L4_64K_V2  30
+#define PTE_RPN_SHIFT_L4_BOOK3E_64K 28
+#define PTE_RPN_SHIFT_L4_BOOK3E_4K 24
+#define PGD_MASKED_BITS_64K  0
+#define PUD_MASKED_BITS_64K  0x1ff
 #define PMD_MASKED_BITS_64K  0x1ff
+#define PMD_MASKED_BITS_64K_3_11 0xfff
+#define PMD_MASKED_BITS_BOOK3E_64K_4_5 0x7ff
+#define PGD_MASKED_BITS_64K_4_6  0xc0000000000000ffUL
+#define PUD_MASKED_BITS_64K_4_6  0xc0000000000000ffUL
+#define PMD_MASKED_BITS_64K_4_6  0xc0000000000000ffUL
+
+#define PTE_RPN_MASK_DEFAULT  0xffffffffffffffffUL
+#define PTE_RPN_SIZE_L4_4_6   (PAGESIZE() == PPC64_64K_PAGE_SIZE ? 41 : 45)
+#define PTE_RPN_MASK_L4_4_6   (((1UL << PTE_RPN_SIZE_L4_4_6) - 1) << PAGESHIFT())
+#define PTE_RPN_SHIFT_L4_4_6  PAGESHIFT()
 
 #define PD_HUGE           0x8000000000000000
 #define HUGE_PTE_MASK     0x03
 #define HUGEPD_SHIFT_MASK 0x3f
-#define L4_MASK           (THIS_KERNEL_VERSION >= LINUX(3,10,0) ? 0xfff : 0x1ff)
-#define L4_OFFSET(vaddr)  ((vaddr >> (machdep->machspec->l4_shift)) & L4_MASK)
+#define HUGEPD_ADDR_MASK  (0x0fffffffffffffffUL & ~HUGEPD_SHIFT_MASK)
+
+#define PGD_MASK_L4		\
+	(THIS_KERNEL_VERSION >= LINUX(3,10,0) ? (machdep->ptrs_per_pgd - 1) : 0x1ff)
 
 #define PGD_OFFSET_L4(vaddr)	\
+	((vaddr >> (machdep->machspec->l4_shift)) & PGD_MASK_L4)
+
+#define PUD_OFFSET_L4(vaddr)	\
 	((vaddr >> (machdep->machspec->l3_shift)) & (machdep->machspec->ptrs_per_l3 - 1))
 
 #define PMD_OFFSET_L4(vaddr)	\
 	((vaddr >> (machdep->machspec->l2_shift)) & (machdep->machspec->ptrs_per_l2 - 1))
 
+#define _PAGE_PTE       (machdep->machspec->_page_pte)          /* distinguishes PTEs from pointers */
 #define _PAGE_PRESENT   (machdep->machspec->_page_present)      /* software: pte contains a translation */
 #define _PAGE_USER      (machdep->machspec->_page_user)         /* matches one of the PP bits */
 #define _PAGE_RW        (machdep->machspec->_page_rw)           /* software: user write access allowed */
@@ -3848,6 +3872,9 @@ struct efi_memory_desc_t {
 #define _PAGE_WRITETHRU (machdep->machspec->_page_writethru)    /* W: cache write-through */
 #define _PAGE_DIRTY     (machdep->machspec->_page_dirty)        /* C: page changed */
 #define _PAGE_ACCESSED  (machdep->machspec->_page_accessed)     /* R: page referenced */
+
+#define PTE_RPN_MASK    (machdep->machspec->pte_rpn_mask)
+#define PTE_RPN_SHIFT   (machdep->machspec->pte_rpn_shift)
 
 #define TIF_SIGPENDING (2)
 
@@ -4795,6 +4822,7 @@ int calculate(char *, ulong *, ulonglong *, ulong);
 int endian_mismatch(char *, char, ulong);
 uint16_t swap16(uint16_t, int);
 uint32_t swap32(uint32_t, int);
+uint64_t swap64(uint64_t, int);
 ulong *get_cpumask_buf(void);
 int make_cpumask(char *, ulong *, int, int *);
 size_t strlcpy(char *, char *, size_t);
@@ -5668,14 +5696,13 @@ struct machine_specific {
         ulong hwintrstack[NR_CPUS];
         char *hwstackbuf;
         uint hwstacksize;
-        char *level4;
-        ulong last_level4_read;
 
 	uint l4_index_size;
 	uint l3_index_size;
 	uint l2_index_size;
 	uint l1_index_size;
 
+	uint ptrs_per_l4;
 	uint ptrs_per_l3;
 	uint ptrs_per_l2;
 	uint ptrs_per_l1;
@@ -5685,13 +5712,17 @@ struct machine_specific {
 	uint l2_shift;
 	uint l1_shift;
 
-	uint pte_shift;
-	uint l2_masked_bits;
+	uint pte_rpn_shift;
+	ulong pte_rpn_mask;
+	ulong pgd_masked_bits;
+	ulong pud_masked_bits;
+	ulong pmd_masked_bits;
 
 	int vmemmap_cnt;
 	int vmemmap_psize;
 	ulong vmemmap_base;
 	struct ppc64_vmemmap *vmemmap_list;
+	ulong _page_pte;
 	ulong _page_present;
 	ulong _page_user;
 	ulong _page_rw;
@@ -5705,23 +5736,16 @@ struct machine_specific {
 	int (*is_vmaddr)(ulong);
 };
 
-#define IS_LAST_L4_READ(l4)   ((ulong)(l4) == machdep->machspec->last_level4_read)
-
-#define FILL_L4(L4, TYPE, SIZE) 						\
-    if (!IS_LAST_L4_READ(L4)) {							\
-            readmem((ulonglong)((ulong)(L4)), TYPE, machdep->machspec->level4,	\
-                    SIZE, "level4 page", FAULT_ON_ERROR);			\
-            machdep->machspec->last_level4_read = (ulong)(L4);			\
-    }								            
-
 void ppc64_init(int);
 void ppc64_dump_machdep_table(ulong);
 #define display_idt_table() \
         error(FATAL, "-d option is not applicable to PowerPC architecture\n")
-#define KSYMS_START (0x1)
-#define VM_ORIG     (0x2)
-#define VMEMMAP_AWARE (0x4)
-#define BOOK3E (0x8)
+#define KSYMS_START     (0x1)
+#define VM_ORIG         (0x2)
+#define VMEMMAP_AWARE   (0x4)
+#define BOOK3E          (0x8)
+#define PHYS_ENTRY_L4   (0x10)
+#define SWAP_ENTRY_L4   (0x20)
 
 #define REGION_SHIFT       (60UL)
 #define REGION_ID(addr)    (((unsigned long)(addr)) >> REGION_SHIFT)
