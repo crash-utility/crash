@@ -9430,6 +9430,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(tvec_s_vec));
         fprintf(fp, "             tvec_t_base_s_tv1: %ld\n",
                 OFFSET(tvec_t_base_s_tv1));
+	fprintf(fp, "            timer_base_vectors: %ld\n",
+                OFFSET(timer_base_vectors));
 
         fprintf(fp, "               wait_queue_task: %ld\n", 
         	OFFSET(wait_queue_task));
@@ -10320,6 +10322,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(hrtimer_clock_base));
 	fprintf(fp, "                  hrtimer_base: %ld\n",
 		SIZE(hrtimer_base));
+	fprintf(fp, "                    timer_base: %ld\n",
+		SIZE(timer_base));
 	fprintf(fp, "                           tnt: %ld\n",
 		SIZE(tnt));
 

@@ -47,10 +47,13 @@ static void dump_timer_data(void);
 static void dump_timer_data_tvec_bases_v1(void);
 static void dump_timer_data_tvec_bases_v2(void);
 static void dump_timer_data_tvec_bases_v3(void);
+static void dump_timer_data_timer_bases(void);
 struct tv_range;
 static void init_tv_ranges(struct tv_range *, int, int, int);
 static int do_timer_list(ulong,int, ulong *, void *,ulong *,struct tv_range *);
-static int do_timer_list_v3(ulong,int, ulong *, void *,ulong *);
+static int do_timer_list_v3(ulong, int, ulong *, void *,ulong *);
+struct timer_bases_data;
+static int do_timer_list_v4(struct timer_bases_data *);
 static int compare_timer_data(const void *, const void *);
 static void panic_this_kernel(void);
 static void dump_waitq(ulong, char *);
@@ -568,7 +571,11 @@ kernel_init()
 		}
 	}
 
-	if (per_cpu_symbol_search("per_cpu__tvec_bases")) {
+	if (per_cpu_symbol_search("timer_bases")) {
+		kt->flags2 |= TIMER_BASES;
+		MEMBER_OFFSET_INIT(timer_base_vectors, "timer_base", "vectors");
+		STRUCT_SIZE_INIT(timer_base, "timer_base");
+	} else if (per_cpu_symbol_search("per_cpu__tvec_bases")) {
 		if (MEMBER_EXISTS("tvec_base", "migration_enabled"))
 			kt->flags2 |= TVEC_BASES_V3;
 		else
@@ -5658,6 +5665,8 @@ dump_kernel_table(int verbose)
 		fprintf(fp, "%sKASLR_CHECK", others++ ? "|" : "");
 	if (kt->flags2 & TVEC_BASES_V3)
 		fprintf(fp, "%sTVEC_BASES_V3", others++ ? "|" : "");
+	if (kt->flags2 & TIMER_BASES)
+		fprintf(fp, "%sTIMER_BASES", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
         fprintf(fp, "         stext: %lx\n", kt->stext);
@@ -7561,7 +7570,10 @@ dump_timer_data(void)
 	int flen, tdx, old_timers_exist;
         struct tv_range tv[TVN];
 
-	if (kt->flags2 & TVEC_BASES_V3) {
+	if (kt->flags2 & TIMER_BASES) {
+		dump_timer_data_timer_bases();
+		return;
+	} else if (kt->flags2 & TVEC_BASES_V3) {
 		dump_timer_data_tvec_bases_v3();
 		return;
 	} else if (kt->flags & TVEC_BASES_V2) {
@@ -7867,6 +7879,7 @@ next_cpu:
 	        fprintf(fp, "TVEC_BASES[%d]: [OFFLINE]\n", cpu);
 		if (++cpu < kt->cpus)
 			goto next_cpu;
+		return;
 	}
 
 
@@ -8008,6 +8021,7 @@ next_cpu:
 	        fprintf(fp, "TVEC_BASES[%d]: [OFFLINE]\n", cpu);
 		if (++cpu < kt->cpus)
 			goto next_cpu;
+		return;
 	}
 
 	count = 0;
@@ -8447,6 +8461,217 @@ do_timer_list_v3(ulong vec_kvaddr,
 
 	return(td ? tdx : count);
 }
+
+#define TIMERS_CHUNK (100)
+
+struct timer_bases_data {
+	int total, cnt, num_vectors;
+	ulong *vectors;
+	ulong timer_base;
+	struct timer_data *timers; 
+};
+
+static int
+do_timer_list_v4(struct timer_bases_data *data)
+{
+	int i, t, timer_cnt, found;
+	struct list_data list_data, *ld;
+	ulong *timer_list;
+	ulong expires, function;
+	char *timer_list_buf;
+
+	timer_list_buf = GETBUF(SIZE(timer_list));
+	ld = &list_data;
+
+	for (i = found = 0; i < data->num_vectors; i++) {
+		if (data->vectors[i] == 0)
+			continue;
+
+		if (CRASHDEBUG(1))
+			fprintf(fp, "%lx vectors[%d]: %lx\n", 
+			    data->timer_base + OFFSET(timer_base_vectors) + (i * sizeof(void *)), 
+				i, data->vectors[i]);
+
+		BZERO(ld, sizeof(struct list_data));
+		ld->start = data->vectors[i];
+		ld->list_head_offset = OFFSET(timer_list_entry);
+		ld->end = 0;
+		ld->flags = RETURN_ON_LIST_ERROR;
+
+		hq_open();
+		if ((timer_cnt = do_list(ld)) == -1) {
+			/* Ignore chains with errors */
+			if (CRASHDEBUG(1))
+				error(INFO, 
+		"ignoring faulty timer_list in timer_base.vector[%d] list\n",
+					i);
+			hq_close();
+			continue; 
+		}
+		if (!timer_cnt) {
+			hq_close();
+			continue;
+		}
+
+		timer_list = (ulong *)GETBUF(timer_cnt * sizeof(ulong));
+		timer_cnt = retrieve_list(timer_list, timer_cnt);
+		hq_close();
+
+		for (t = 0; t < timer_cnt; t++) {
+			if (CRASHDEBUG(1))
+				fprintf(fp, "  %lx\n", timer_list[t]);
+
+			if (!readmem(timer_list[t], KVADDR, timer_list_buf,
+			    SIZE(timer_list), "timer_list buffer", QUIET|RETURN_ON_ERROR))
+				continue;
+
+			expires = ULONG(timer_list_buf + OFFSET(timer_list_expires));
+			function = ULONG(timer_list_buf + OFFSET(timer_list_function));
+
+			data->timers[data->cnt].address = timer_list[t];
+			data->timers[data->cnt].expires = expires;
+			data->timers[data->cnt].function = function;
+			data->cnt++;
+
+			if (data->cnt == data->total) {
+				data->timers = (struct timer_data *)
+					resizebuf((char *)data->timers, 
+					data->total, data->total * 2);
+				data->total *= 2;
+			}
+
+			found++;
+	 	}
+
+		FREEBUF(timer_list);
+
+	}
+
+	FREEBUF(timer_list_buf);
+
+	return found;
+}
+
+/*
+ *  Linux 4.8 timers use new timer_bases[][]
+ */
+static void
+dump_timer_data_timer_bases(void)
+{
+	int i, cpu, flen, base, nr_bases, found, display;
+	struct syment *sp;
+	ulong timer_base, jiffies, function;
+	struct timer_bases_data data;
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+
+	if (!(data.num_vectors = get_array_length("timer_base.vectors", NULL, 0)))
+		error(FATAL, "cannot determine timer_base.vectors[] array size\n");
+	data.vectors = (ulong *)GETBUF(data.num_vectors * sizeof(void *));
+	data.timers = (struct timer_data *)GETBUF(sizeof(struct timer_data) * TIMERS_CHUNK);
+	data.total = TIMERS_CHUNK;
+	data.cnt = 0;
+
+	nr_bases = kernel_symbol_exists("sysctl_timer_migration") ? 2 : 1;
+	cpu = 0;
+
+	get_symbol_data("jiffies", sizeof(ulong), &jiffies);
+	sprintf(buf1, "%ld", jiffies);
+	flen = MAX(strlen(buf1), strlen("JIFFIES"));
+	fprintf(fp, "%s\n", mkstring(buf1, flen, LJUST, "JIFFIES"));
+	fprintf(fp, "%s\n\n", mkstring(buf1, flen,
+		RJUST|LONG_DEC,MKSTR(jiffies)));
+
+next_cpu:
+	/*
+	 * hide data of offline cpu and goto next cpu
+	 */
+	if (hide_offline_cpu(cpu)) {
+		fprintf(fp, "TIMER_BASES[%d]: [OFFLINE]\n", cpu);
+		if (++cpu < kt->cpus)
+			goto next_cpu;
+		goto done;
+	}
+
+	base = 0;
+
+	sp = per_cpu_symbol_search("per_cpu__timer_bases");
+	if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF))
+		timer_base = sp->value + kt->__per_cpu_offset[cpu];
+	else
+		timer_base = sp->value;
+
+	if (cpu)
+		fprintf(fp, "\n");
+next_base:
+
+	fprintf(fp, "TIMER_BASES[%d][%s]: %lx\n", cpu,  
+		base == 0 ? "BASE_STD" : "BASE_DEF", timer_base);
+
+	readmem(timer_base + OFFSET(timer_base_vectors), KVADDR, data.vectors, 
+		data.num_vectors * sizeof(void *), "timer_base.vectors[]", FAULT_ON_ERROR); 
+	data.cnt = 0;
+	data.timer_base = timer_base;
+
+	found = do_timer_list_v4(&data);
+	
+	qsort(data.timers, found, sizeof(struct timer_data), compare_timer_data);
+
+	fprintf(fp, "  %s     TIMER_LIST     FUNCTION\n",
+		mkstring(buf1, flen, LJUST, "EXPIRES"));
+
+	for (i = 0; i < found; i++) {
+		display = FALSE;
+
+		if (is_kernel_text(data.timers[i].function)) {
+			display = TRUE;
+			function = data.timers[i].function;
+		} else {
+			if (readmem(data.timers[i].function, KVADDR, &function,
+			    sizeof(ulong), "timer function",
+			    RETURN_ON_ERROR|QUIET) && is_kernel_text(function))
+				display = TRUE;
+			else {
+				if (LIVE()) {
+					if (CRASHDEBUG(1))
+						fprintf(fp, "(invalid/stale entry at %lx)\n", 
+							data.timers[i].address);
+					display = FALSE;
+				} else {
+					function = data.timers[i].function;
+					display = TRUE;
+				}
+			}
+		}
+
+		if (display) {
+			fprintf(fp, "  %s", 
+				mkstring(buf1, flen, RJUST|LONG_DEC, MKSTR(data.timers[i].expires)));
+			mkstring(buf1, VADDR_PRLEN, RJUST|LONG_HEX, MKSTR(data.timers[i].address));
+			fprintf(fp, "  %s  ", mkstring(buf2, 16, CENTER, buf1));
+			fprintf(fp, "%s  <%s>\n",
+				mkstring(buf1, VADDR_PRLEN, RJUST|LONG_HEX, 
+				MKSTR(data.timers[i].function)),
+				value_to_symstr(function, buf2, 0));
+		}
+	}
+
+	if (!found)
+		fprintf(fp, "  (none)\n");
+
+	if ((nr_bases == 2) && (base == 0)) {
+		base++;
+		timer_base += SIZE(timer_base);
+		goto next_base;
+	}
+
+	if (++cpu < kt->cpus)
+		goto next_cpu;
+done:
+	FREEBUF(data.vectors);
+	FREEBUF(data.timers);
+}
+
 
 /*
  *  Panic a live system by exploiting this code in do_exit():

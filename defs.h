@@ -642,6 +642,7 @@ struct new_utsname {
 #define KASLR_CHECK                 (0x4ULL)
 #define GET_TIMESTAMP               (0x8ULL)
 #define TVEC_BASES_V3              (0x10ULL)
+#define TIMER_BASES                (0x20ULL)
 
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
@@ -1969,6 +1970,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long page_compound_head;
 	long irq_desc_irq_data;
 	long kmem_cache_node_total_objects;
+	long timer_base_vectors;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2111,6 +2113,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long tnt;
 	long trace_print_flags;
 	long task_struct_flags;
+	long timer_base;
 };
 
 struct array_table {
