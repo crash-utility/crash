@@ -71,7 +71,8 @@ static inline uint get_ptetype(ulong pte)
 
 	if (is_hugepage(pte))
 		pte_type = 1;
-	else if (is_hugepd(pte))
+	else if (!(machdep->flags & RADIX_MMU) &&
+	    (PAGESIZE() != PPC64_64K_PAGE_SIZE) && is_hugepd(pte))
 		pte_type = 2;
 
 	return pte_type;
@@ -298,6 +299,7 @@ ppc64_init(int when)
 			machdep->kvbase = BOOK3E_VMBASE;
 		} else
 			machdep->kvbase = symbol_value("_stext");
+
                 if (symbol_exists("__hash_page_64K"))
                         machdep->pagesize = PPC64_64K_PAGE_SIZE;
                 else
@@ -336,11 +338,18 @@ ppc64_init(int when)
 		machdep->value_to_symbol = generic_machdep_value_to_symbol;
 		machdep->get_kvaddr_ranges = ppc64_get_kvaddr_ranges;
 		machdep->init_kernel_pgd = NULL;
+
 		if (symbol_exists("vmemmap_populate")) {
+			if (symbol_exists("vmemmap")) {
+				get_symbol_data("vmemmap", sizeof(void *),
+					&machdep->machspec->vmemmap_base);
+			} else
+				machdep->machspec->vmemmap_base =
+					VMEMMAP_REGION_ID << REGION_SHIFT;
+
 			machdep->flags |= VMEMMAP;
-			machdep->machspec->vmemmap_base = 
-				VMEMMAP_REGION_ID << REGION_SHIFT;
 		}
+
 		machdep->get_irq_affinity = generic_get_irq_affinity;
 		machdep->show_interrupts = generic_show_interrupts;
 		break;
@@ -348,6 +357,23 @@ ppc64_init(int when)
 	case POST_GDB:
 		if (!(machdep->flags & BOOK3E)) {
 			struct machine_specific *m = machdep->machspec;
+
+			/*
+			 * On Power ISA 3.0 based server processors, a kernel can
+			 * run with radix MMU or standard MMU. Set the flag,
+			 * if it is radix MMU.
+			 */
+			if (symbol_exists("cur_cpu_spec") &&
+			    MEMBER_EXISTS("cpu_spec", "mmu_features")) {
+				ulong cur_cpu_spec;
+				uint mmu_features, offset;
+
+				get_symbol_data("cur_cpu_spec", sizeof(void *), &cur_cpu_spec);
+				offset = MEMBER_OFFSET("cpu_spec", "mmu_features");
+				readmem(cur_cpu_spec + offset, KVADDR, &mmu_features,
+					sizeof(uint), "cpu mmu features", FAULT_ON_ERROR);
+				machdep->flags |= (mmu_features & RADIX_MMU);
+			}
 
 			/*
 			 * Starting with v3.14 we no longer use _PAGE_COHERENT
@@ -410,7 +436,13 @@ ppc64_init(int when)
 			struct machine_specific *m = machdep->machspec;
 			if (machdep->pagesize == 65536) {
 				/* 64K pagesize */
-				if (!(machdep->flags & BOOK3E) &&
+				if (machdep->flags & RADIX_MMU) {
+					m->l1_index_size = PTE_INDEX_SIZE_RADIX_64K;
+					m->l2_index_size = PMD_INDEX_SIZE_RADIX_64K;
+					m->l3_index_size = PUD_INDEX_SIZE_RADIX_64K;
+					m->l4_index_size = PGD_INDEX_SIZE_RADIX_64K;
+
+				} else if (!(machdep->flags & BOOK3E) &&
 				    (THIS_KERNEL_VERSION >= LINUX(4,6,0))) {
 					m->l1_index_size = PTE_INDEX_SIZE_L4_64K_3_10;
 					m->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_6;
@@ -452,29 +484,44 @@ ppc64_init(int when)
 				}
 			} else {
 				/* 4K pagesize */
-				m->l1_index_size = PTE_INDEX_SIZE_L4_4K;
-				m->l2_index_size = PMD_INDEX_SIZE_L4_4K;
-				if (THIS_KERNEL_VERSION >= LINUX(3,7,0))
-					m->l3_index_size = PUD_INDEX_SIZE_L4_4K_3_7;
-				else
-					m->l3_index_size = PUD_INDEX_SIZE_L4_4K;
-				m->l4_index_size = PGD_INDEX_SIZE_L4_4K;
+				if (machdep->flags & RADIX_MMU) {
+					m->l1_index_size = PTE_INDEX_SIZE_RADIX_4K;
+					m->l2_index_size = PMD_INDEX_SIZE_RADIX_4K;
+					m->l3_index_size = PUD_INDEX_SIZE_RADIX_4K;
+					m->l4_index_size = PGD_INDEX_SIZE_RADIX_4K;
 
-				if (machdep->flags & BOOK3E)
-					m->pte_rpn_shift = PTE_RPN_SHIFT_L4_BOOK3E_4K;
-				else
-					m->pte_rpn_shift = THIS_KERNEL_VERSION >= LINUX(4,5,0) ?
-						PTE_RPN_SHIFT_L4_4K_4_5 : PTE_RPN_SHIFT_L4_4K;
+				} else {
+					m->l1_index_size = PTE_INDEX_SIZE_L4_4K;
+					m->l2_index_size = PMD_INDEX_SIZE_L4_4K;
+					if (THIS_KERNEL_VERSION >= LINUX(3,7,0))
+						m->l3_index_size = PUD_INDEX_SIZE_L4_4K_3_7;
+					else
+						m->l3_index_size = PUD_INDEX_SIZE_L4_4K;
+					m->l4_index_size = PGD_INDEX_SIZE_L4_4K;
+
+					if (machdep->flags & BOOK3E)
+						m->pte_rpn_shift = PTE_RPN_SHIFT_L4_BOOK3E_4K;
+					else
+						m->pte_rpn_shift = THIS_KERNEL_VERSION >= LINUX(4,5,0) ?
+							PTE_RPN_SHIFT_L4_4K_4_5 : PTE_RPN_SHIFT_L4_4K;
+				}
+
 				m->pgd_masked_bits = PGD_MASKED_BITS_4K;
 				m->pud_masked_bits = PUD_MASKED_BITS_4K;
 				m->pmd_masked_bits = PMD_MASKED_BITS_4K;
 			}
 
 			m->pte_rpn_mask = PTE_RPN_MASK_DEFAULT;
-			if (!(machdep->flags & BOOK3E) &&
-			    (THIS_KERNEL_VERSION >= LINUX(4,6,0))) {
-				m->pte_rpn_mask = PTE_RPN_MASK_L4_4_6;
-				m->pte_rpn_shift = PTE_RPN_SHIFT_L4_4_6;
+			if (!(machdep->flags & BOOK3E)) {
+				if (THIS_KERNEL_VERSION >= LINUX(4,6,0)) {
+					m->pte_rpn_mask = PTE_RPN_MASK_L4_4_6;
+					m->pte_rpn_shift = PTE_RPN_SHIFT_L4_4_6;
+				}
+				if (THIS_KERNEL_VERSION >= LINUX(4,7,0)) {
+					m->pgd_masked_bits = PGD_MASKED_BITS_4_7;
+					m->pud_masked_bits = PUD_MASKED_BITS_4_7;
+					m->pmd_masked_bits = PMD_MASKED_BITS_4_7;
+				}
 			}
 
 			/* Compute ptrs per each level */
@@ -642,6 +689,14 @@ ppc64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sVMEMMAP", others++ ? "|" : "");
 	if (machdep->flags & VMEMMAP_AWARE)
 		fprintf(fp, "%sVMEMMAP_AWARE", others++ ? "|" : "");
+	if (machdep->flags & BOOK3E)
+		fprintf(fp, "%sBOOK3E", others++ ? "|" : "");
+	if (machdep->flags & PHYS_ENTRY_L4)
+		fprintf(fp, "%sPHYS_ENTRY_L4", others++ ? "|" : "");
+	if (machdep->flags & SWAP_ENTRY_L4)
+		fprintf(fp, "%sSWAP_ENTRY_L4", others++ ? "|" : "");
+	if (machdep->flags & RADIX_MMU)
+		fprintf(fp, "%sRADIX_MMU", others++ ? "|" : "");
         fprintf(fp, ")\n");
 
 	fprintf(fp, "             kvbase: %lx\n", machdep->kvbase);

@@ -3814,6 +3814,10 @@ struct efi_memory_desc_t {
 #define PUD_INDEX_SIZE_L4_4K  7
 #define PGD_INDEX_SIZE_L4_4K  9
 #define PUD_INDEX_SIZE_L4_4K_3_7  9
+#define PTE_INDEX_SIZE_RADIX_4K  9
+#define PMD_INDEX_SIZE_RADIX_4K  9
+#define PUD_INDEX_SIZE_RADIX_4K  9
+#define PGD_INDEX_SIZE_RADIX_4K  13
 #define PTE_RPN_SHIFT_L4_4K  17
 #define PTE_RPN_SHIFT_L4_4K_4_5  18
 #define PGD_MASKED_BITS_4K  0
@@ -3830,6 +3834,10 @@ struct efi_memory_desc_t {
 #define PGD_INDEX_SIZE_L4_64K_3_10  12
 #define PMD_INDEX_SIZE_L4_64K_4_6  5
 #define PUD_INDEX_SIZE_L4_64K_4_6  5
+#define PTE_INDEX_SIZE_RADIX_64K  5
+#define PMD_INDEX_SIZE_RADIX_64K  9
+#define PUD_INDEX_SIZE_RADIX_64K  9
+#define PGD_INDEX_SIZE_RADIX_64K  13
 #define PTE_RPN_SHIFT_L4_64K_V1  32
 #define PTE_RPN_SHIFT_L4_64K_V2  30
 #define PTE_RPN_SHIFT_L4_BOOK3E_64K 28
@@ -3847,6 +3855,10 @@ struct efi_memory_desc_t {
 #define PTE_RPN_SIZE_L4_4_6   (PAGESIZE() == PPC64_64K_PAGE_SIZE ? 41 : 45)
 #define PTE_RPN_MASK_L4_4_6   (((1UL << PTE_RPN_SIZE_L4_4_6) - 1) << PAGESHIFT())
 #define PTE_RPN_SHIFT_L4_4_6  PAGESHIFT()
+
+#define PGD_MASKED_BITS_4_7  0xc0000000000000ffUL
+#define PUD_MASKED_BITS_4_7  0xc0000000000000ffUL
+#define PMD_MASKED_BITS_4_7  0xc0000000000000ffUL
 
 #define PD_HUGE           0x8000000000000000
 #define HUGE_PTE_MASK     0x03
@@ -5749,6 +5761,11 @@ void ppc64_dump_machdep_table(ulong);
 #define BOOK3E          (0x8)
 #define PHYS_ENTRY_L4   (0x10)
 #define SWAP_ENTRY_L4   (0x20)
+/*
+ * The flag bit for radix MMU in cpu_spec.mmu_features
+ * in the kernel is also 0x40.
+ */
+#define RADIX_MMU       (0x40)
 
 #define REGION_SHIFT       (60UL)
 #define REGION_ID(addr)    (((unsigned long)(addr)) >> REGION_SHIFT)
