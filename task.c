@@ -4167,7 +4167,7 @@ parent_list(ulong task)
 	while (child != parent) {
 		child = task_list[cnt++] = parent;
 		parent = parent_of(child);
-		if (cnt == reserved) {
+		if ((cnt * sizeof(ulong)) == reserved) {
 			RESIZEBUF(buffer, reserved, reserved * 2);
 			reserved *= 2;
 			task_list = (ulong *)buffer;

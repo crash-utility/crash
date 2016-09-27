@@ -6716,7 +6716,7 @@ append_struct_symbol (struct type_request *treq,  struct gnu_request *req)
 
 	if (treq->idx == treq->cnt) {
 		s = sizeof(struct type_info) * treq->cnt;
-		treq->types = (void *)resizebuf((void *)treq->types, s, s * 3);
+		RESIZEBUF(treq->types, s, s * 3);
 		treq->cnt *= 3;
 	}
 

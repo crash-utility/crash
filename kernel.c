@@ -8478,6 +8478,7 @@ do_timer_list_v4(struct timer_bases_data *data)
 	struct list_data list_data, *ld;
 	ulong *timer_list;
 	ulong expires, function;
+	long oldsize;
 	char *timer_list_buf;
 
 	timer_list_buf = GETBUF(SIZE(timer_list));
@@ -8534,9 +8535,8 @@ do_timer_list_v4(struct timer_bases_data *data)
 			data->cnt++;
 
 			if (data->cnt == data->total) {
-				data->timers = (struct timer_data *)
-					resizebuf((char *)data->timers, 
-					data->total, data->total * 2);
+				oldsize = data->total * sizeof(struct timer_data);
+				RESIZEBUF(data->timers, oldsize, oldsize * 2);
 				data->total *= 2;
 			}
 

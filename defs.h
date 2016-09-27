@@ -4817,7 +4817,7 @@ char *resizebuf(char *, long, long);
 char *strdupbuf(char *);
 #define GETBUF(X)   getbuf((long)(X))
 #define FREEBUF(X)  freebuf((char *)(X))
-#define RESIZEBUF(X,Y,Z) (X) = resizebuf((char *)(X), (long)(Y), (long)(Z));
+#define RESIZEBUF(X,Y,Z) (X) = (typeof(X))resizebuf((char *)(X), (long)(Y), (long)(Z));
 #define STRDUPBUF(X) strdupbuf((char *)(X))
 void sigsetup(int, void *, struct sigaction *, struct sigaction *);
 #define SIGACTION(s, h, a, o) sigsetup(s, h, a, o)
