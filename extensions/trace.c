@@ -1030,30 +1030,27 @@ int ftrace_get_event_type_name(ulong call, char *name, int len)
 	if (inited)
 		goto work;
 
-	inited = 1;
-	name_offset = MAX(MEMBER_OFFSET("ftrace_event_call", "name"),
-		MEMBER_OFFSET("trace_event_call", "name"));
-	if (name_offset >= 0)
-		goto work;
+	name_offset = MAX(MEMBER_OFFSET("ftrace_event_call", "tp"),
+		MEMBER_OFFSET("trace_event_call", "tp"));
+	if (name_offset >= 0) {
+		flags_offset = MAX(MEMBER_OFFSET("ftrace_event_call", "flags"),
+			MEMBER_OFFSET("trace_event_call", "flags"));
+		if (flags_offset < 0)
+			return -1;
 
-	name_offset = MAX(ANON_MEMBER_OFFSET("ftrace_event_call", "name"),
-		ANON_MEMBER_OFFSET("trace_event_call", "name"));
-	if (name_offset < 0)
-		return -1;
+		tp_name_offset = MEMBER_OFFSET("tracepoint", "name");
+		if (tp_name_offset < 0)
+			return -1;
 
-	flags_offset = MAX(MEMBER_OFFSET("ftrace_event_call", "flags"),
-		MEMBER_OFFSET("trace_event_call", "flags"));
-	if (flags_offset < 0)
-		return -1;
+		if (!enumerator_value("TRACE_EVENT_FL_TRACEPOINT", &tracepoint_flag))
+			return -1;
 
-	tp_name_offset = MEMBER_OFFSET("tracepoint", "name");
-	if (tp_name_offset < 0)
-		return -1;
-
-	if (!enumerator_value("TRACE_EVENT_FL_TRACEPOINT", &tracepoint_flag))
-		return -1;
-
-	inited = 2;
+		inited = 2;
+	} else {
+		name_offset = MAX(MEMBER_OFFSET("ftrace_event_call", "name"),
+			MEMBER_OFFSET("trace_event_call", "name"));
+		inited = 1;
+	}
 
 work:
 	if (name_offset < 0)
