@@ -81,6 +81,7 @@ static void cmd_datatype_common(ulong);
 static void do_datatype_addr(struct datatype_member *, ulong, int,
 			     ulong, char **, int);
 static void process_gdb_output(char *, unsigned, const char *, int);
+static char *expr_type_name(const char *);
 static int display_per_cpu_info(struct syment *, int, char *);
 static struct load_module *get_module_percpu_sym_owner(struct syment *);
 static int is_percpu_symbol(struct syment *);
@@ -6112,6 +6113,7 @@ cmd_datatype_common(ulong flags)
         char *separator;
         char *structname, *members;
         char *memberlist[MAXARGS];
+        char *typename;
 
         dm = &datatype_member;
 	count = 0xdeadbeef;
@@ -6244,6 +6246,15 @@ cmd_datatype_common(ulong flags)
 				      "%s is not percpu; cpuspec ignored.\n",
 				      sp->name);
 				cpuspec = NULL;
+			}
+			if (cpuspec) {
+				if ((typename = expr_type_name(sp->name))) {
+				    	if (LASTCHAR(typename) == '*')
+						error(WARNING,
+						    "percpu symbol \"%s\" is of type pointer\n",
+							sp->name);
+					FREEBUF(typename);
+				}
 			}
 	                addr = sp->value;
 			aflag++;
