@@ -2247,10 +2247,11 @@ store_module_kallsyms_v2(struct load_module *lm, int start, int curr,
 			continue;
 
 		/*
-		 * On ARM we have linker mapping symbols like '$a' and '$d'.
+		 * On ARM/ARM64 we have linker mapping symbols like '$a'
+		 * or '$x' for ARM64, and '$d'.
 		 * Make sure that these don't end up into our symbol list.
 		 */
-		if (machine_type("ARM") &&
+		if ((machine_type("ARM") || machine_type("ARM64")) &&
 		    !machdep->verify_symbol(nameptr, ec->st_value, ec->st_info))
 			continue;
 
