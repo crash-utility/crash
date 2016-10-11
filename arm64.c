@@ -2928,6 +2928,60 @@ arm64_is_task_addr(ulong task)
 		return (IS_KVADDR(task) && (ALIGNED_STACK_OFFSET(task) == 0));
 }
 
+static ulong
+PLT_veneer_to_kvaddr(ulong value)
+{
+	uint32_t insn;
+	ulong addr = 0;
+	int i;
+
+	/*
+	 * PLT veneer always looks:
+         *   movn x16, #0x....
+         *   movk x16, #0x...., lsl #16
+         *   movk x16, #0x...., lsl #32
+         *   br   x16
+	 */
+	for (i = 0; i < 4; i++) {
+		if (!readmem(value + i * sizeof(insn), KVADDR, &insn,
+		    sizeof(insn), "PLT veneer", RETURN_ON_ERROR)) {
+			error(WARNING, "cannot read PLT veneer instruction at %lx\n", 
+				value + i * sizeof(insn));
+			return value;
+		}
+		switch (i) {
+		case 0:
+			if ((insn & 0xffe0001f) != 0x92800010)
+				goto not_plt;
+			addr = ~((ulong)(insn & 0x1fffe0) >> 5);
+			break;
+		case 1:
+			if ((insn & 0xffe0001f) != 0xf2a00010)
+				goto not_plt;
+			addr &= 0xffffffff0000ffff;
+			addr |= (ulong)(insn & 0x1fffe0) << (16 - 5);
+			break;
+		case 2:
+			if ((insn & 0xffe0001f) != 0xf2c00010)
+				goto not_plt;
+			addr &= 0xffff0000ffffffff;
+			addr |= (ulong)(insn & 0x1fffe0) << (32 - 5);
+			break;
+		case 3:
+			if (insn != 0xd61f0200)
+				goto not_plt;
+			break;
+		default:
+			return value; /* to avoid any warnings */
+		}
+	}
+
+	return addr;
+
+not_plt:
+	return value;
+}
+
 /*
  * Filter dissassembly output if the output radix is not gdb's default 10
  */
@@ -2975,6 +3029,22 @@ arm64_dis_filter(ulong vaddr, char *inbuf, unsigned int output_radix)
 			value_to_symstr(value, buf2, output_radix));
 
 		sprintf(p1, "%s", buf1);
+	}
+
+	if (IS_MODULE_VADDR(vaddr)) {
+		ulong orig_value;
+
+		p1 = &inbuf[strlen(inbuf)-1];
+		strcpy(buf1, inbuf);
+		argc = parse_line(buf1, argv);
+
+		if ((STREQ(argv[argc-2], "b") || STREQ(argv[argc-2], "bl")) &&
+		    extract_hex(argv[argc-1], &orig_value, NULLCHAR, TRUE)) {
+			value = PLT_veneer_to_kvaddr(orig_value);
+			sprintf(p1, " <%s%s>\n",
+				value == orig_value ? "" : "plt:",
+				value_to_symstr(value, buf2, output_radix));
+		}
 	}
 
 	console("    %s", inbuf);
