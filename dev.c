@@ -3800,18 +3800,84 @@ again:
 	return i->get_gendisk(klist_node_address);
 }
 
+static int
+use_mq_interface(unsigned long q)
+{
+	unsigned long mq_ops;
+
+	if (!VALID_MEMBER(request_queue_mq_ops))
+		return 0;
+
+	readmem(q + OFFSET(request_queue_mq_ops), KVADDR, &mq_ops,
+		sizeof(ulong), "request_queue.mq_ops", FAULT_ON_ERROR);
+
+	if (mq_ops == 0)
+		return 0;
+	else
+		return 1;
+}
+
+static void
+get_one_mctx_diskio(unsigned long mctx, struct diskio *io)
+{
+	unsigned long dispatch[2];
+	unsigned long comp[2];
+
+	readmem(mctx + OFFSET(blk_mq_ctx_rq_dispatched),
+		KVADDR, dispatch, sizeof(ulong) * 2, "blk_mq_ctx.rq_dispatched",
+		FAULT_ON_ERROR);
+
+	readmem(mctx + OFFSET(blk_mq_ctx_rq_completed),
+		KVADDR, comp, sizeof(ulong) * 2, "blk_mq_ctx.rq_completed",
+		FAULT_ON_ERROR);
+
+	io->read = (dispatch[0] - comp[0]);
+	io->write = (dispatch[1] - comp[1]);
+}
+
+static void
+get_mq_diskio(unsigned long q, unsigned long *mq_count)
+{
+	int cpu;
+	unsigned long queue_ctx;
+	unsigned long mctx_addr;
+	struct diskio tmp;
+
+	memset(&tmp, 0x00, sizeof(struct diskio));
+
+	readmem(q + OFFSET(request_queue_queue_ctx), KVADDR, &queue_ctx,
+		sizeof(ulong), "request_queue.queue_ctx",
+		FAULT_ON_ERROR);
+
+	for (cpu = 0; cpu < kt->cpus; cpu++) {
+		if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF)) {
+			mctx_addr = queue_ctx + kt->__per_cpu_offset[cpu];
+			get_one_mctx_diskio(mctx_addr, &tmp);
+			mq_count[0] += tmp.read;
+			mq_count[1] += tmp.write;
+		}
+	}
+}
+
 /* read request_queue.rq.count[2] */
 static void 
 get_diskio_1(unsigned long rq, struct diskio *io)
 {
 	int count[2];
+	unsigned long mq_count[2] = { 0 };
 
-	readmem(rq + OFFSET(request_queue_rq) + OFFSET(request_list_count),
-		KVADDR, count, sizeof(int) * 2, "request_list.count",
-		FAULT_ON_ERROR);
+	if (!use_mq_interface(rq)) {
+		readmem(rq + OFFSET(request_queue_rq) +
+			OFFSET(request_list_count), KVADDR, count,
+			sizeof(int) * 2, "request_list.count", FAULT_ON_ERROR);
 
-	io->read = count[0];
-	io->write = count[1];
+		io->read = count[0];
+		io->write = count[1];
+	} else {
+		get_mq_diskio(rq, mq_count);
+		io->read = mq_count[0];
+		io->write = mq_count[1];
+	}
 }
 
 /* request_queue.in_flight contains total requests */
@@ -3961,9 +4027,8 @@ display_one_diskio(struct iter *i, unsigned long gendisk)
 	readmem(gendisk + OFFSET(gendisk_major), KVADDR, &major, sizeof(int),
 		"gen_disk.major", FAULT_ON_ERROR);
 	i->get_diskio(queue_addr, &io);
-	in_flight = i->get_in_flight(queue_addr);
 
-	fprintf(fp, "%s%s%s  %s%s%s%s  %s%5d%s%s%s%s%s%5u\n",
+	fprintf(fp, "%s%s%s  %s%s%s%s  %s%5d%s%s%s%s%s",
 		mkstring(buf0, 5, RJUST|INT_DEC, (char *)(unsigned long)major),
 		space(MINSPACE),
 		mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, (char *)gendisk),
@@ -3980,8 +4045,13 @@ display_one_diskio(struct iter *i, unsigned long gendisk)
 		space(MINSPACE),
 		mkstring(buf5, 5, RJUST|INT_DEC,
 			(char *)(unsigned long)io.write),
-		space(MINSPACE),
-		in_flight);
+		space(MINSPACE));
+
+	if (!use_mq_interface(queue_addr)) {
+		in_flight = i->get_in_flight(queue_addr);
+		fprintf(fp, "%5u\n", in_flight);
+	} else
+		fprintf(fp, "%s\n", "N/A(MQ)");
 }
 
 static void 
@@ -4056,6 +4126,16 @@ void diskio_init(void)
 		MEMBER_OFFSET_INIT(request_queue_rq, "request_queue", "rq");
 	else
 		MEMBER_OFFSET_INIT(request_queue_rq, "request_queue", "root_rl");
+	if (MEMBER_EXISTS("request_queue", "mq_ops")) {
+		MEMBER_OFFSET_INIT(request_queue_mq_ops, "request_queue",
+			"mq_ops");
+		ANON_MEMBER_OFFSET_INIT(request_queue_queue_ctx,
+			"request_queue", "queue_ctx");
+		MEMBER_OFFSET_INIT(blk_mq_ctx_rq_dispatched, "blk_mq_ctx",
+			"rq_dispatched");
+		MEMBER_OFFSET_INIT(blk_mq_ctx_rq_completed, "blk_mq_ctx",
+			"rq_completed");
+	}
 	MEMBER_OFFSET_INIT(subsys_private_klist_devices, "subsys_private",
 		"klist_devices");
 	MEMBER_OFFSET_INIT(subsystem_kset, "subsystem", "kset");

@@ -9924,6 +9924,14 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(request_queue_in_flight));
 	fprintf(fp, "              request_queue_rq: %ld\n",
 		OFFSET(request_queue_rq));
+	fprintf(fp, "          request_queue_mq_ops: %ld\n",
+		OFFSET(request_queue_mq_ops));
+	fprintf(fp, "       request_queue_queue_ctx: %ld\n",
+		OFFSET(request_queue_queue_ctx));
+	fprintf(fp, "      blk_mq_ctx_rq_dispatched: %ld\n",
+		OFFSET(blk_mq_ctx_rq_dispatched));
+	fprintf(fp, "       blk_mq_ctx_rq_completed: %ld\n",
+		OFFSET(blk_mq_ctx_rq_completed));
 	fprintf(fp, "  subsys_private_klist_devices: %ld\n",
 		OFFSET(subsys_private_klist_devices));
 	fprintf(fp, "                subsystem_kset: %ld\n",

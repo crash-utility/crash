@@ -1971,6 +1971,10 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long irq_desc_irq_data;
 	long kmem_cache_node_total_objects;
 	long timer_base_vectors;
+	long request_queue_mq_ops;
+	long request_queue_queue_ctx;
+	long blk_mq_ctx_rq_dispatched;
+	long blk_mq_ctx_rq_completed;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
