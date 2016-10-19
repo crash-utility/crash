@@ -3125,6 +3125,9 @@ struct arm64_stackframe {
 #define __swp_offset(entry)	SWP_OFFSET(entry)
 
 #define TIF_SIGPENDING		(2)
+
+#define _SECTION_SIZE_BITS	26
+#define _MAX_PHYSMEM_BITS	32
 #endif  /* MIPS */
 
 #ifdef X86
