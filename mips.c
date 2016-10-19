@@ -57,6 +57,7 @@ static struct machine_specific mips_machine_specific = { 0 };
 static void
 mips_display_machine_stats(void)
 {
+	fprintf(fp, "                 HZ: %d\n", machdep->hz);
         fprintf(fp, "          PAGE SIZE: %d\n", PAGESIZE());
 	fprintf(fp, "\n");
 
@@ -776,6 +777,7 @@ mips_dump_machdep_table(ulong arg)
 	fprintf(fp, "       ptrs_per_pgd: %lu\n", PTRS_PER_PGD);
 	fprintf(fp, "       ptrs_per_pte: %d\n", PTRS_PER_PTE);
 	fprintf(fp, "          stacksize: %ld\n", machdep->stacksize);
+	fprintf(fp, "                 hz: %d\n", machdep->hz);
 	fprintf(fp, "            memsize: %lld (0x%llx)\n",
 		machdep->memsize, machdep->memsize);
 	fprintf(fp, "               bits: %d\n", machdep->bits);
@@ -904,6 +906,9 @@ mips_init(int when)
 		ARRAY_LENGTH_INIT(machdep->nr_irqs, irq_desc,
 			"irq_desc", NULL, 0);
 		mips_stackframe_init();
+
+		if (!machdep->hz)
+			machdep->hz = 100;
 		break;
 	}
 }
