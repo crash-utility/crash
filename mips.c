@@ -54,6 +54,11 @@ typedef ulong pte_t;
 
 static struct machine_specific mips_machine_specific = { 0 };
 
+/*
+ * Holds registers during the crash.
+ */
+static struct mips_regset *panic_task_regs;
+
 static void
 mips_display_machine_stats(void)
 {
@@ -533,6 +538,9 @@ mips_back_trace_cmd(struct bt_info *bt)
 	struct mips_unwind_frame current, previous;
 	int level = 0;
 
+	if (bt->flags & BT_REGS_NOT_FOUND)
+		return;
+
 	previous.sp = previous.pc = previous.ra = 0;
 
 	current.pc = bt->instptr;
@@ -629,22 +637,35 @@ mips_back_trace_cmd(struct bt_info *bt)
 	}
 }
 
-static void
+static int
 mips_dumpfile_stack_frame(struct bt_info *bt, ulong *nip, ulong *ksp)
 {
+	const struct machine_specific *ms = machdep->machspec;
 	struct mips_regset *regs;
+	ulong epc, r29;
 
-	regs = bt->machdep;
-	if (!regs) {
-		fprintf(fp, "0%lx: Register values not available\n",
-			bt->task);
-		return;
+	if (!ms->crash_task_regs) {
+		bt->flags |= BT_REGS_NOT_FOUND;
+		return FALSE;
+	}
+
+	regs = &ms->crash_task_regs[bt->tc->processor];
+	epc = regs->regs[MIPS32_EF_CPU0_EPC];
+	r29 = regs->regs[MIPS32_EF_R29];
+
+	if (!epc && !r29) {
+		bt->flags |= BT_REGS_NOT_FOUND;
+		return FALSE;
 	}
 
 	if (nip)
-		*nip = regs->regs[MIPS32_EF_CPU0_EPC];
+		*nip = epc;
 	if (ksp)
-		*ksp = regs->regs[MIPS32_EF_R29];
+		*ksp = r29;
+
+	bt->machdep = regs;
+
+	return TRUE;
 }
 
 static int
@@ -698,14 +719,20 @@ mips_stackframe_init(void)
 static void
 mips_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 {
+	int ret;
+
 	*pcp = 0;
 	*spp = 0;
+	bt->machdep = NULL;
 
 	if (DUMPFILE() && is_task_active(bt->task))
-		mips_dumpfile_stack_frame(bt, pcp, spp);
+		ret = mips_dumpfile_stack_frame(bt, pcp, spp);
 	else
-		mips_get_frame(bt, pcp, spp);
+		ret = mips_get_frame(bt, pcp, spp);
 
+	if (!ret)
+		error(WARNING, "cannot determine starting stack frame for task %lx\n",
+			bt->task);
 }
 
 static int
@@ -745,6 +772,178 @@ static ulong
 mips_vmalloc_start(void)
 {
 	return first_vmalloc_address();
+}
+
+/*
+ * Retrieve task registers for the time of the crash.
+ */
+static int
+mips_get_crash_notes(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong crash_notes;
+	Elf32_Nhdr *note;
+	ulong offset;
+	char *buf, *p;
+	ulong *notes_ptrs;
+	ulong i;
+
+	if (!symbol_exists("crash_notes"))
+		return FALSE;
+
+	crash_notes = symbol_value("crash_notes");
+
+	notes_ptrs = (ulong *)GETBUF(kt->cpus*sizeof(notes_ptrs[0]));
+
+	/*
+	 * Read crash_notes for the first CPU. crash_notes are in standard ELF
+	 * note format.
+	 */
+	if (!readmem(crash_notes, KVADDR, &notes_ptrs[kt->cpus-1],
+	    sizeof(notes_ptrs[kt->cpus-1]), "crash_notes",
+		     RETURN_ON_ERROR)) {
+		error(WARNING, "cannot read crash_notes\n");
+		FREEBUF(notes_ptrs);
+		return FALSE;
+	}
+
+	if (symbol_exists("__per_cpu_offset")) {
+
+		/* Add __per_cpu_offset for each cpu to form the pointer to the notes */
+		for (i = 0; i<kt->cpus; i++)
+			notes_ptrs[i] = notes_ptrs[kt->cpus-1] + kt->__per_cpu_offset[i];
+	}
+
+	buf = GETBUF(SIZE(note_buf));
+
+	if (!(panic_task_regs = calloc((size_t)kt->cpus, sizeof(*panic_task_regs))))
+		error(FATAL, "cannot calloc panic_task_regs space\n");
+
+	for  (i=0;i<kt->cpus;i++) {
+
+		if (!readmem(notes_ptrs[i], KVADDR, buf, SIZE(note_buf), "note_buf_t",
+			     RETURN_ON_ERROR)) {
+			error(WARNING, "failed to read note_buf_t\n");
+			goto fail;
+		}
+
+		/*
+		 * Do some sanity checks for this note before reading registers from it.
+		 */
+		note = (Elf32_Nhdr *)buf;
+		p = buf + sizeof(Elf32_Nhdr);
+
+		/*
+		 * dumpfiles created with qemu won't have crash_notes, but there will
+		 * be elf notes; dumpfiles created by kdump do not create notes for
+		 * offline cpus.
+		 */
+		if (note->n_namesz == 0 && (DISKDUMP_DUMPFILE() || KDUMP_DUMPFILE())) {
+			if (DISKDUMP_DUMPFILE())
+				note = diskdump_get_prstatus_percpu(i);
+			else if (KDUMP_DUMPFILE())
+				note = netdump_get_prstatus_percpu(i);
+			if (note) {
+				/*
+				 * SIZE(note_buf) accounts for a "final note", which is a
+				 * trailing empty elf note header.
+				 */
+				long notesz = SIZE(note_buf) - sizeof(Elf32_Nhdr);
+
+				if (sizeof(Elf32_Nhdr) + roundup(note->n_namesz, 4) +
+				    note->n_descsz == notesz)
+					BCOPY((char *)note, buf, notesz);
+			} else {
+				error(WARNING,
+					"cannot find NT_PRSTATUS note for cpu: %d\n", i);
+				continue;
+			}
+		}
+
+		if (note->n_type != NT_PRSTATUS) {
+			error(WARNING, "invalid note (n_type != NT_PRSTATUS)\n");
+			goto fail;
+		}
+		if (p[0] != 'C' || p[1] != 'O' || p[2] != 'R' || p[3] != 'E') {
+			error(WARNING, "invalid note (name != \"CORE\"\n");
+			goto fail;
+		}
+
+		/*
+		 * Find correct location of note data. This contains elf_prstatus
+		 * structure which has registers etc. for the crashed task.
+		 */
+		offset = sizeof(Elf32_Nhdr);
+		offset = roundup(offset + note->n_namesz, 4);
+		p = buf + offset; /* start of elf_prstatus */
+
+		BCOPY(p + OFFSET(elf_prstatus_pr_reg), &panic_task_regs[i],
+		      sizeof(panic_task_regs[i]));
+	}
+
+	/*
+	 * And finally we have the registers for the crashed task. This is
+	 * used later on when dumping backtrace.
+	 */
+	ms->crash_task_regs = panic_task_regs;
+
+	FREEBUF(buf);
+	FREEBUF(notes_ptrs);
+	return TRUE;
+
+fail:
+	FREEBUF(buf);
+	FREEBUF(notes_ptrs);
+	free(panic_task_regs);
+	return FALSE;
+}
+
+static int mips_get_elf_notes(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	int i;
+
+	if (!DISKDUMP_DUMPFILE() && !KDUMP_DUMPFILE())
+		return FALSE;
+
+	panic_task_regs = calloc(kt->cpus, sizeof(*panic_task_regs));
+	if (!panic_task_regs)
+		error(FATAL, "cannot calloc panic_task_regs space\n");
+
+	for (i = 0; i < kt->cpus; i++) {
+		Elf32_Nhdr *note = NULL;
+		size_t len;
+
+		if (DISKDUMP_DUMPFILE())
+			note = diskdump_get_prstatus_percpu(i);
+		else if (KDUMP_DUMPFILE())
+			note = netdump_get_prstatus_percpu(i);
+
+		if (!note)
+			error(WARNING,
+			      "cannot find NT_PRSTATUS note for cpu: %d\n", i);
+
+		len = sizeof(Elf32_Nhdr);
+		len = roundup(len + note->n_namesz, 4);
+
+		BCOPY((char *)note + len + OFFSET(elf_prstatus_pr_reg),
+		      &panic_task_regs[i], sizeof(panic_task_regs[i]));
+	}
+
+	ms->crash_task_regs = panic_task_regs;
+
+	return TRUE;
+}
+
+static int mips_init_active_task_regs(void)
+{
+	int retval;
+
+	retval = mips_get_crash_notes();
+	if (retval == TRUE)
+		return retval;
+
+	return mips_get_elf_notes();
 }
 
 static int
@@ -911,7 +1110,23 @@ mips_init(int when)
 
 		if (!machdep->hz)
 			machdep->hz = 100;
+
+		MEMBER_OFFSET_INIT(elf_prstatus_pr_reg, "elf_prstatus",
+				   "pr_reg");
+
+		STRUCT_SIZE_INIT(note_buf, "note_buf_t");
 		break;
+	case POST_VM:
+		/*
+		 * crash_notes contains machine specific information about the
+		 * crash. In particular, it contains CPU registers at the time
+		 * of the crash. We need this information to extract correct
+		 * backtraces from the panic task.
+		 */
+		if (!ACTIVE() && !mips_init_active_task_regs())
+			error(WARNING,
+			    "cannot retrieve registers for active task%s\n\n",
+				kt->cpus > 1 ? "s" : "");
 	}
 }
 

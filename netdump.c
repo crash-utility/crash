@@ -40,6 +40,7 @@ static void get_netdump_regs_ppc(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_ppc64(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_arm(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_arm64(struct bt_info *, ulong *, ulong *);
+static void get_netdump_regs_mips(struct bt_info *, ulong *, ulong *);
 static void check_dumpfile_size(char *);
 static int proc_kcore_init_32(FILE *fp);
 static int proc_kcore_init_64(FILE *fp);
@@ -2436,7 +2437,7 @@ get_netdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 		break;
 
 	case EM_MIPS:
-		return get_netdump_regs_32(bt, eip, esp);
+		return get_netdump_regs_mips(bt, eip, esp);
 		break;
 
 	default:
@@ -3624,6 +3625,12 @@ get_netdump_regs_arm(struct bt_info *bt, ulong *eip, ulong *esp)
 
 static void
 get_netdump_regs_arm64(struct bt_info *bt, ulong *eip, ulong *esp)
+{
+	machdep->get_stack_frame(bt, eip, esp);
+}
+
+static void
+get_netdump_regs_mips(struct bt_info *bt, ulong *eip, ulong *esp)
 {
 	machdep->get_stack_frame(bt, eip, esp);
 }

@@ -5992,6 +5992,8 @@ struct machine_specific {
 #define _PAGE_NO_EXEC   (machdep->machspec->_page_no_exec)
 #define _PAGE_DIRTY     (machdep->machspec->_page_dirty)
 #define _PFN_SHIFT      (machdep->machspec->_pfn_shift)
+
+	struct mips_regset *crash_task_regs;
 };
 #endif /* MIPS */
 
