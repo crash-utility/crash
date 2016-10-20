@@ -8540,6 +8540,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(sched_info_last_arrival));
         fprintf(fp, "       task_struct_thread_info: %ld\n",
                 OFFSET(task_struct_thread_info));
+        fprintf(fp, "             task_struct_stack: %ld\n",
+                OFFSET(task_struct_stack));
         fprintf(fp, "           task_struct_nsproxy: %ld\n",
                 OFFSET(task_struct_nsproxy));
         fprintf(fp, "              task_struct_rlim: %ld\n",

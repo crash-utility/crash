@@ -213,21 +213,43 @@ task_init(void)
 		get_idle_threads(&tt->idle_threads[0], kt->cpus);
 	}
 
-	if (MEMBER_EXISTS("task_struct", "thread_info"))
-        	MEMBER_OFFSET_INIT(task_struct_thread_info, "task_struct", 
-			"thread_info");
-	else if (MEMBER_EXISTS("task_struct", "stack"))
-        	MEMBER_OFFSET_INIT(task_struct_thread_info, "task_struct", 
-			"stack");
-	else
-		ASSIGN_OFFSET(task_struct_thread_info) = INVALID_OFFSET;
+	/*
+	 * Handle CONFIG_THREAD_INFO_IN_TASK changes
+	 */
+	MEMBER_OFFSET_INIT(task_struct_stack, "task_struct", "stack");
+	MEMBER_OFFSET_INIT(task_struct_thread_info, "task_struct", "thread_info");
 
 	if (VALID_MEMBER(task_struct_thread_info)) {
-        	MEMBER_OFFSET_INIT(thread_info_task, "thread_info", "task"); 
-        	MEMBER_OFFSET_INIT(thread_info_cpu, "thread_info", "cpu");
-        	MEMBER_OFFSET_INIT(thread_info_flags, "thread_info", "flags");
-        	MEMBER_OFFSET_INIT(thread_info_previous_esp, "thread_info", 
-			"previous_esp");
+		switch (MEMBER_TYPE("task_struct", "thread_info"))
+		{
+		case TYPE_CODE_PTR:
+			break;
+		case TYPE_CODE_STRUCT:
+			tt->flags |= THREAD_INFO_IN_TASK;
+			break;
+		default:
+			error(FATAL, 
+			    "unexpected type code for task_struct.thread_info: %ld\n",
+				MEMBER_TYPE("task_struct", "thread_info"));
+			break;
+		}
+	} else if (VALID_MEMBER(task_struct_stack))
+		MEMBER_OFFSET_INIT(task_struct_thread_info, "task_struct", "stack");
+
+	if (VALID_MEMBER(task_struct_thread_info)) {
+		if (tt->flags & THREAD_INFO_IN_TASK) {
+			MEMBER_OFFSET_INIT(thread_info_flags, "thread_info", "flags");
+			/* (unnecessary) reminders */
+			ASSIGN_OFFSET(thread_info_task) = INVALID_OFFSET;
+			ASSIGN_OFFSET(thread_info_cpu) = INVALID_OFFSET;
+			ASSIGN_OFFSET(thread_info_previous_esp) = INVALID_OFFSET;
+		} else {
+			MEMBER_OFFSET_INIT(thread_info_task, "thread_info", "task"); 
+			MEMBER_OFFSET_INIT(thread_info_cpu, "thread_info", "cpu");
+			MEMBER_OFFSET_INIT(thread_info_flags, "thread_info", "flags");
+			MEMBER_OFFSET_INIT(thread_info_previous_esp, "thread_info", 
+				"previous_esp");
+		}
 		STRUCT_SIZE_INIT(thread_info, "thread_info");
 		tt->flags |= THREAD_INFO;
 	}
@@ -2358,10 +2380,16 @@ store_context(struct task_context *tc, ulong task, char *tp)
 	tgid_addr = (pid_t *)(tp + OFFSET(task_struct_tgid));
         comm_addr = (char *)(tp + OFFSET(task_struct_comm));
 	if (tt->flags & THREAD_INFO) {
-		tc->thread_info = ULONG(tp + OFFSET(task_struct_thread_info));
+		if (tt->flags & THREAD_INFO_IN_TASK) 
+			tc->thread_info = task + OFFSET(task_struct_thread_info);
+		else
+			tc->thread_info = ULONG(tp + OFFSET(task_struct_thread_info));
 		fill_thread_info(tc->thread_info);
-		processor_addr = (int *) (tt->thread_info + 
-			OFFSET(thread_info_cpu));
+		if (tt->flags & THREAD_INFO_IN_TASK)
+                	processor_addr = (int *) (tp + OFFSET(task_struct_cpu));
+		else
+			processor_addr = (int *) (tt->thread_info + 
+				OFFSET(thread_info_cpu));
 	} else if (VALID_MEMBER(task_struct_processor))
                 processor_addr = (int *) (tp + OFFSET(task_struct_processor));
         else if (VALID_MEMBER(task_struct_cpu))
@@ -4480,7 +4508,13 @@ task_to_thread_info(ulong task)
 ulong
 task_to_stackbase(ulong task)
 {
-	if (tt->flags & THREAD_INFO)
+	ulong stackbase;
+
+	if (tt->flags & THREAD_INFO_IN_TASK) {
+		readmem(task + OFFSET(task_struct_stack), KVADDR, &stackbase,
+		    sizeof(void *), "task_struct.stack", FAULT_ON_ERROR);
+		return stackbase;
+	} else if (tt->flags & THREAD_INFO)
 		return task_to_thread_info(task);
 	else
 		return (task & ~(STACKSIZE()-1));
@@ -6957,6 +6991,9 @@ dump_task_table(int verbose)
         if (tt->flags & THREAD_INFO)
                 sprintf(&buf[strlen(buf)], 
 			"%sTHREAD_INFO", others++ ? "|" : "");
+        if (tt->flags & THREAD_INFO_IN_TASK)
+                sprintf(&buf[strlen(buf)], 
+			"%sTHREAD_INFO_IN_TASK", others++ ? "|" : "");
         if (tt->flags & IRQSTACKS)
                 sprintf(&buf[strlen(buf)], 
 			"%sIRQSTACKS", others++ ? "|" : "");
@@ -10116,7 +10153,7 @@ stack_overflow_check_init(void)
 {
 	int pid;
 	struct task_context *tc;
-	ulong magic;
+	ulong location, magic;
 
 	if (!(tt->flags & THREAD_INFO))
 		return;
@@ -10125,9 +10162,13 @@ stack_overflow_check_init(void)
  		if (!(tc = pid_to_context(pid)))
 			continue;
 
-		if (!readmem(tc->thread_info + SIZE(thread_info), KVADDR, 
-	    	    &magic, sizeof(long), "stack magic", 
-		    RETURN_ON_ERROR|QUIET))
+		if (tt->flags & THREAD_INFO_IN_TASK)
+			location = task_to_stackbase(tc->task);
+		else
+			location = tc->thread_info + SIZE(thread_info);
+
+		if (!readmem(location, KVADDR, &magic, sizeof(long), 
+		    "stack magic", RETURN_ON_ERROR|QUIET))
 			continue;
 
 		if (magic == STACK_END_MAGIC) {
@@ -10146,7 +10187,7 @@ check_stack_overflow(void)
 {
 	int i, overflow, cpu_size, cpu, total;
 	char buf[BUFSIZE];
-	ulong magic, task;
+	ulong magic, task, stackbase;
 	struct task_context *tc;
 
 	if (!tt->stack_end_magic && 
@@ -10159,12 +10200,19 @@ check_stack_overflow(void)
 
 	tc = FIRST_CONTEXT();
 	for (i = total = 0; i < RUNNING_TASKS(); i++, tc++) {
-		if (!readmem(tc->thread_info, KVADDR, buf, 
-		    SIZE(thread_info) + sizeof(ulong), 
-		    "stack overflow check", RETURN_ON_ERROR))
-			continue;
-
 		overflow = 0;
+
+		if (tt->flags & THREAD_INFO_IN_TASK) {
+			if (!readmem(task_to_stackbase(tc->task), KVADDR, &stackbase, 
+			    sizeof(ulong), "stack overflow check", RETURN_ON_ERROR))
+				continue;
+			goto check_stack_end_magic;
+		} else {
+			if (!readmem(tc->thread_info, KVADDR, buf, 
+			    SIZE(thread_info) + sizeof(ulong), 
+			    "stack overflow check", RETURN_ON_ERROR))
+				continue;
+		}
 
 		if (VALID_MEMBER(thread_info_task)) {
 			task = ULONG(buf + OFFSET(thread_info_task));
@@ -10203,10 +10251,14 @@ check_stack_overflow(void)
 			}
 		}
 
+check_stack_end_magic:
 		if (!tt->stack_end_magic)
 			continue;
 
-		magic = ULONG(buf + SIZE(thread_info));
+		if (tt->flags & THREAD_INFO_IN_TASK) 
+			magic = stackbase;
+		else
+			magic = ULONG(buf + SIZE(thread_info));
 
 		if (tc->pid == 0) {
 			if (kernel_symbol_exists("init_task")) {

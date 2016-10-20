@@ -862,6 +862,7 @@ struct task_table {                      /* kernel/local task table data */
 #define NO_TIMESPEC       (0x2000)
 #define ACTIVE_ONLY       (0x4000)
 #define START_TIME_NSECS  (0x8000)
+#define THREAD_INFO_IN_TASK (0x10000)
 
 #define TASK_SLUSH (20)
 
@@ -1975,6 +1976,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long request_queue_queue_ctx;
 	long blk_mq_ctx_rq_dispatched;
 	long blk_mq_ctx_rq_completed;
+	long task_struct_stack;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
