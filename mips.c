@@ -47,10 +47,15 @@ typedef ulong pte_t;
 
 #define MIPS_CPU_RIXI	0x00800000llu
 
-#define MIPS32_EF_R0	6
-#define MIPS32_EF_R29	35
-#define MIPS32_EF_R31	37
-#define MIPS32_EF_CPU0_EPC	40
+#define MIPS32_EF_R0		6
+#define MIPS32_EF_R29		35
+#define MIPS32_EF_R31		37
+#define MIPS32_EF_LO		38
+#define MIPS32_EF_HI		39
+#define MIPS32_EF_CP0_EPC	40
+#define MIPS32_EF_CP0_BADVADDR	41
+#define MIPS32_EF_CP0_STATUS	42
+#define MIPS32_EF_CP0_CAUSE	43
 
 static struct machine_specific mips_machine_specific = { 0 };
 
@@ -650,7 +655,7 @@ mips_dumpfile_stack_frame(struct bt_info *bt, ulong *nip, ulong *ksp)
 	}
 
 	regs = &ms->crash_task_regs[bt->tc->processor];
-	epc = regs->regs[MIPS32_EF_CPU0_EPC];
+	epc = regs->regs[MIPS32_EF_CP0_EPC];
 	r29 = regs->regs[MIPS32_EF_R29];
 
 	if (!epc && !r29) {
@@ -1130,4 +1135,87 @@ mips_init(int when)
 	}
 }
 
-#endif /* MIPS */
+void
+mips_display_regs_from_elf_notes(int cpu, FILE *ofp)
+{
+	const struct machine_specific *ms = machdep->machspec;
+	struct mips_regset *regs;
+
+	if (!ms->crash_task_regs) {
+		error(INFO, "registers not collected for cpu %d\n", cpu);
+		return;
+	}
+
+	regs = &ms->crash_task_regs[cpu];
+	if (!regs->regs[MIPS32_EF_R29] && !regs->regs[MIPS32_EF_CP0_EPC]) {
+		error(INFO, "registers not collected for cpu %d\n", cpu);
+		return;
+	}
+
+	fprintf(ofp,
+		"     R0: %08lx   R1: %08lx   R2: %08lx\n"
+		"     R3: %08lx   R4: %08lx   R5: %08lx\n"
+		"     R6: %08lx   R7: %08lx   R8: %08lx\n"
+		"     R9: %08lx  R10: %08lx  R11: %08lx\n"
+		"    R12: %08lx  R13: %08lx  R14: %08lx\n"
+		"    R15: %08lx  R16: %08lx  R17: %08lx\n"
+		"    R18: %08lx  R19: %08lx  R20: %08lx\n"
+		"    R21: %08lx  R22: %08lx  R23: %08lx\n"
+		"    R24: %08lx  R25: %08lx  R26: %08lx\n"
+		"    R27: %08lx  R28: %08lx  R29: %08lx\n"
+		"    R30: %08lx  R31: %08lx\n"
+		"       LO: %08lx        HI: %08lx\n"
+		"      EPC: %08lx  BADVADDR: %08lx\n"
+		"   STATUS: %08lx     CAUSE: %08lx\n",
+		regs->regs[MIPS32_EF_R0],
+		regs->regs[MIPS32_EF_R0 + 1],
+		regs->regs[MIPS32_EF_R0 + 2],
+		regs->regs[MIPS32_EF_R0 + 3],
+		regs->regs[MIPS32_EF_R0 + 4],
+		regs->regs[MIPS32_EF_R0 + 5],
+		regs->regs[MIPS32_EF_R0 + 6],
+		regs->regs[MIPS32_EF_R0 + 7],
+		regs->regs[MIPS32_EF_R0 + 8],
+		regs->regs[MIPS32_EF_R0 + 9],
+		regs->regs[MIPS32_EF_R0 + 10],
+		regs->regs[MIPS32_EF_R0 + 11],
+		regs->regs[MIPS32_EF_R0 + 12],
+		regs->regs[MIPS32_EF_R0 + 13],
+		regs->regs[MIPS32_EF_R0 + 14],
+		regs->regs[MIPS32_EF_R0 + 15],
+		regs->regs[MIPS32_EF_R0 + 16],
+		regs->regs[MIPS32_EF_R0 + 17],
+		regs->regs[MIPS32_EF_R0 + 18],
+		regs->regs[MIPS32_EF_R0 + 19],
+		regs->regs[MIPS32_EF_R0 + 20],
+		regs->regs[MIPS32_EF_R0 + 21],
+		regs->regs[MIPS32_EF_R0 + 22],
+		regs->regs[MIPS32_EF_R0 + 23],
+		regs->regs[MIPS32_EF_R0 + 24],
+		regs->regs[MIPS32_EF_R0 + 25],
+		regs->regs[MIPS32_EF_R0 + 26],
+		regs->regs[MIPS32_EF_R0 + 27],
+		regs->regs[MIPS32_EF_R0 + 28],
+		regs->regs[MIPS32_EF_R0 + 29],
+		regs->regs[MIPS32_EF_R0 + 30],
+		regs->regs[MIPS32_EF_R0 + 31],
+		regs->regs[MIPS32_EF_LO],
+		regs->regs[MIPS32_EF_HI],
+		regs->regs[MIPS32_EF_CP0_EPC],
+		regs->regs[MIPS32_EF_CP0_BADVADDR],
+		regs->regs[MIPS32_EF_CP0_STATUS],
+		regs->regs[MIPS32_EF_CP0_CAUSE]);
+}
+#else
+
+#include "defs.h"
+
+void
+mips_display_regs_from_elf_notes(int cpu, FILE *ofp)
+{
+	return;
+}
+
+#endif /* !MIPS */
+
+

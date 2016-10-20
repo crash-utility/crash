@@ -5933,6 +5933,11 @@ void s390x_dump_machdep_table(ulong);
 #define KSYMS_START (0x1)
 #endif
 
+/*
+ * mips.c
+ */
+void mips_display_regs_from_elf_notes(int, FILE *);
+
 #ifdef MIPS
 void mips_init(int);
 void mips_dump_machdep_table(ulong);

@@ -2505,7 +2505,8 @@ display_regs_from_elf_notes(int cpu, FILE *ofp)
 		}
 	}
 
-	if ((cpu - skipped_count) >= nd->num_prstatus_notes) {
+	if ((cpu - skipped_count) >= nd->num_prstatus_notes &&
+	     !machine_type("MIPS")) {
 		error(INFO, "registers not collected for cpu %d\n", cpu);
 		return;
 	}
@@ -2691,6 +2692,8 @@ display_regs_from_elf_notes(int cpu, FILE *ofp)
 			ULONG(user_regs + sizeof(ulong) * 32),
 			ULONG(user_regs + sizeof(ulong) * 33),
 			UINT(user_regs + sizeof(ulong) * 34));
+	} else if (machine_type("MIPS")) {
+		mips_display_regs_from_elf_notes(cpu, ofp);
 	}
 }
 
@@ -2700,7 +2703,8 @@ dump_registers_for_elf_dumpfiles(void)
         int c;
 
         if (!(machine_type("X86") || machine_type("X86_64") || 
-	    machine_type("ARM64") || machine_type("PPC64")))
+	    machine_type("ARM64") || machine_type("PPC64") ||
+	    machine_type("MIPS")))
                 error(FATAL, "-r option not supported for this dumpfile\n");
 
 	if (NETDUMP_DUMPFILE()) {
