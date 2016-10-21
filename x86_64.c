@@ -1164,7 +1164,8 @@ x86_64_ist_init(void)
 				    "orig_ist array", FAULT_ON_ERROR);
 
 				for (i = 0; i < MAX_EXCEPTION_STACKS; i++) {
-					if (ms->stkinfo.ebase[c][i] != estacks[i])
+					if (ms->stkinfo.ebase[c][i] && estacks[i] &&
+					    (ms->stkinfo.ebase[c][i] != estacks[i]))
 						error(WARNING, 
 						    "cpu %d %s stack: init_tss: %lx orig_ist: %lx\n", c,  
 							ms->stkinfo.exception_stacks[i],
