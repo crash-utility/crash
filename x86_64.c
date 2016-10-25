@@ -4963,24 +4963,25 @@ x86_64_dis_filter(ulong vaddr, char *inbuf, unsigned int output_radix)
 
 		sprintf(p1, "%s", buf1);
 	
-        } else if (STREQ(argv[argc-2], "callq") &&
-            hexadecimal(argv[argc-1], 0)) {
-            	/*
-             	 *  Update module code of the form:
-             	 *
-             	 *    callq  0xffffffffa0017aa0
+	} else if ((STREQ(argv[argc-2], "callq") || (argv[argc-2][0] == 'j')) &&
+	    hexadecimal(argv[argc-1], 0)) {
+		/*
+	 	 *  Update code of the form:
+	 	 *
+	 	 *    callq  <function-address>
+		 *    jmp    <function-address>  
+		 *    jCC    <function-address>  
 	      	 *
-             	 *  to show a bracketed direct call target.
-             	 */
-                p1 = &LASTCHAR(inbuf);
+	 	 *  to show a translated, bracketed, target.
+	 	 */
+		p1 = &LASTCHAR(inbuf);
 
-                if (extract_hex(argv[argc-1], &value, NULLCHAR, TRUE)) {
-                        sprintf(buf1, " <%s>\n",
-                                value_to_symstr(value, buf2, output_radix));
-                        if (IS_MODULE_VADDR(value) &&
-                            !strstr(buf2, "+"))
-                                sprintf(p1, "%s", buf1);
-                }
+		if (extract_hex(argv[argc-1], &value, NULLCHAR, TRUE)) {
+			sprintf(buf1, " <%s>\n",
+				value_to_symstr(value, buf2, output_radix));
+			if (!strstr(buf1, "<>"))
+				sprintf(p1, "%s", buf1);
+		}
         }
 
 	if (value_symbol(vaddr) &&
