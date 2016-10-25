@@ -324,7 +324,10 @@ x86_64_init(int when)
 				machdep->machspec->vmalloc_end = VMALLOC_END_2_6_31;
 				machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
 				machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
-				machdep->machspec->modules_vaddr = MODULES_VADDR_2_6_31;
+				if ((kt->flags2 & KASLR) && (THIS_KERNEL_VERSION >= LINUX(4,7,0)))
+					machdep->machspec->modules_vaddr = __START_KERNEL_map + GIGABYTES(1);
+				else
+					machdep->machspec->modules_vaddr = MODULES_VADDR_2_6_31;
 				machdep->machspec->modules_end = MODULES_END_2_6_31;
 			}
 		}
