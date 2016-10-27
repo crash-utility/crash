@@ -319,9 +319,18 @@ x86_64_init(int when)
 					&machdep->machspec->vmalloc_start_addr,
 					sizeof(ulong), "vmalloc_base", FAULT_ON_ERROR);
 				machdep->machspec->vmalloc_end =
-					machdep->machspec->vmalloc_start_addr + (32UL << 40) - 1;
-				machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
-				machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
+					machdep->machspec->vmalloc_start_addr + TERABYTES(32) - 1;
+				if (kernel_symbol_exists("vmemmap_base")) {
+					readmem(symbol_value("vmemmap_base"), KVADDR,
+						&machdep->machspec->vmemmap_vaddr, sizeof(ulong),
+						"vmemmap_base", FAULT_ON_ERROR);
+					machdep->machspec->vmemmap_end = 
+						machdep->machspec->vmemmap_vaddr +
+						TERABYTES(1) - 1;
+				} else {
+					machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
+					machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
+				}
 				machdep->machspec->modules_vaddr = __START_KERNEL_map + 
 					(machdep->machspec->kernel_image_size ?
 					machdep->machspec->kernel_image_size : GIGABYTES(1));

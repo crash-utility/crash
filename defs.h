@@ -4087,6 +4087,8 @@ struct machine_specific {
 #define KILOBYTES(x)  ((x) * (1024))
 #define MEGABYTES(x)  ((x) * (1048576))
 #define GIGABYTES(x)  ((x) * (1073741824))
+#define TB_SHIFT (40)
+#define TERABYTES(x) ((x) * (1UL << TB_SHIFT))
 
 #define MEGABYTE_MASK (MEGABYTES(1)-1)
 
