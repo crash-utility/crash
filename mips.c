@@ -422,7 +422,7 @@ mips_dump_backtrace_entry(struct bt_info *bt, struct syment *sym,
 			  struct mips_unwind_frame *current,
 			  struct mips_unwind_frame *previous, int level)
 {
-	const char *name = sym->name;
+	const char *name = sym ? sym->name : "(invalid)";
 	struct load_module *lm;
 	char *name_plus_offset;
 	char buf[BUFSIZE];
@@ -456,7 +456,7 @@ mips_dump_backtrace_entry(struct bt_info *bt, struct syment *sym,
 			fprintf(fp, "    %s\n", buf);
 	}
 
-	if (mips_is_exception_entry(sym)) {
+	if (sym && mips_is_exception_entry(sym)) {
 		char pt_regs[SIZE(pt_regs)];
 
 		GET_STACK_DATA(current->sp, &pt_regs, SIZE(pt_regs));
@@ -542,6 +542,7 @@ mips_back_trace_cmd(struct bt_info *bt)
 {
 	struct mips_unwind_frame current, previous;
 	int level = 0;
+	int invalid_ok = 1;
 
 	if (bt->flags & BT_REGS_NOT_FOUND)
 		return;
@@ -558,21 +559,23 @@ mips_back_trace_cmd(struct bt_info *bt)
 	}
 
 	while (INSTACK(current.sp, bt)) {
-		struct syment *symbol;
+		struct syment *symbol = NULL;
 		ulong offset;
 
 		if (CRASHDEBUG(8))
 			fprintf(fp, "level %d pc %#lx ra %#lx sp %lx\n",
 				level, current.pc, current.ra, current.sp);
 
-		if (!IS_KVADDR(current.pc))
+		if (!IS_KVADDR(current.pc) && !invalid_ok)
 			return;
 
 		symbol = value_search(current.pc, &offset);
-		if (!symbol) {
+		if (!symbol && !invalid_ok) {
 			error(FATAL, "PC is unknown symbol (%lx)", current.pc);
 			return;
 		}
+
+		invalid_ok = 0;
 
 		/*
 		 * If we get an address which points to the start of a
@@ -595,7 +598,7 @@ mips_back_trace_cmd(struct bt_info *bt)
 		 *    * ret_from_fork
 		 *    * ret_from_kernel_thread
 		 */
-		if (!current.ra && !offset && !STRNEQ(symbol->name, "ret_from")) {
+		if (!current.ra && !offset && symbol && !STRNEQ(symbol->name, "ret_from")) {
 			if (CRASHDEBUG(8))
 				fprintf(fp, "zero offset at %s, try previous symbol\n",
 					symbol->name);
@@ -607,7 +610,7 @@ mips_back_trace_cmd(struct bt_info *bt)
 			}
 		}
 
-		if (mips_is_exception_entry(symbol)) {
+		if (symbol && mips_is_exception_entry(symbol)) {
 			struct mips_pt_regs_main *mains;
 			struct mips_pt_regs_cp0 *cp0;
 			char pt_regs[SIZE(pt_regs)];
@@ -626,17 +629,29 @@ mips_back_trace_cmd(struct bt_info *bt)
 			if (CRASHDEBUG(8))
 				fprintf(fp, "exception pc %#lx ra %#lx sp %lx\n",
 					previous.pc, previous.ra, previous.sp);
-		} else {
+
+			/* The PC causing the exception may have been invalid */
+			invalid_ok = 1;
+		} else if (symbol) {
 			mips_analyze_function(symbol->value, offset, &current, &previous);
+		} else {
+			/*
+			 * The current PC is invalid.  Assume that the code
+			 * jumped through a invalid pointer and that the SP has
+			 * not been adjusted.
+			 */
+			previous.sp = current.sp;
 		}
 
 		mips_dump_backtrace_entry(bt, symbol, &current, &previous, level++);
-		if (!current.ra)
-			break;
 
 		current.pc = current.ra;
 		current.sp = previous.sp;
 		current.ra = previous.ra;
+
+		if (CRASHDEBUG(8))
+			fprintf(fp, "next %d pc %#lx ra %#lx sp %lx\n",
+				level, current.pc, current.ra, current.sp);
 
 		previous.sp = previous.pc = previous.ra = 0;
 	}
