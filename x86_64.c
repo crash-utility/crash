@@ -126,6 +126,7 @@ void
 x86_64_init(int when)
 {
 	int len, dim;
+	char *string;
 
         if (XEN_HYPER_MODE()) {
                 x86_64_init_hyper(when);
@@ -172,6 +173,10 @@ x86_64_init(int when)
 		machdep->get_kvaddr_ranges = x86_64_get_kvaddr_ranges;
                 if (machdep->cmdline_args[0])
                         parse_cmdline_args();
+		if ((string = pc->read_vmcoreinfo("NUMBER(KERNEL_IMAGE_SIZE)"))) {
+			machdep->machspec->kernel_image_size = dtol(string, QUIET, NULL);
+			free(string);
+		}
 		break;
 
 	case PRE_GDB:
@@ -317,7 +322,9 @@ x86_64_init(int when)
 					machdep->machspec->vmalloc_start_addr + (32UL << 40) - 1;
 				machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
 				machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
-				machdep->machspec->modules_vaddr = __START_KERNEL_map + GIGABYTES(1);
+				machdep->machspec->modules_vaddr = __START_KERNEL_map + 
+					(machdep->machspec->kernel_image_size ?
+					machdep->machspec->kernel_image_size : GIGABYTES(1));
 				machdep->machspec->modules_end = MODULES_END_2_6_31;
 			} else {
 				machdep->machspec->vmalloc_start_addr = VMALLOC_START_ADDR_2_6_31;
@@ -325,7 +332,9 @@ x86_64_init(int when)
 				machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
 				machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
 				if ((kt->flags2 & KASLR) && (THIS_KERNEL_VERSION >= LINUX(4,7,0)))
-					machdep->machspec->modules_vaddr = __START_KERNEL_map + GIGABYTES(1);
+					machdep->machspec->modules_vaddr = __START_KERNEL_map + 
+						(machdep->machspec->kernel_image_size ?
+						machdep->machspec->kernel_image_size : GIGABYTES(1));
 				else
 					machdep->machspec->modules_vaddr = MODULES_VADDR_2_6_31;
 				machdep->machspec->modules_end = MODULES_END_2_6_31;
@@ -754,6 +763,7 @@ x86_64_dump_machdep_table(ulong arg)
 	fprintf(fp, "              vmemmap_end: %016lx %s\n", (ulong)ms->vmemmap_end,
 		machdep->flags & VMEMMAP ? "" : "(unused)");
 	fprintf(fp, "                phys_base: %lx\n", (ulong)ms->phys_base);
+	fprintf(fp, "        kernel_image_size: %ldMB\n", ms->kernel_image_size/MEGABYTES(1));
 	fprintf(fp, "               GART_start: %lx\n", ms->GART_start);
 	fprintf(fp, "                 GART_end: %lx\n", ms->GART_end);
 	fprintf(fp, "                     pml4: %lx\n", (ulong)ms->pml4);
@@ -6193,11 +6203,16 @@ x86_64_calc_phys_base(void)
 		return;
 	}
 
+#define IN_KERNEL_REGION(vaddr) \
+	 (((vaddr) >= __START_KERNEL_map) && \
+	  ((vaddr) < (__START_KERNEL_map + machdep->machspec->kernel_image_size)))
+
 	if ((vd = get_kdump_vmcore_data())) {
                 for (i = 0; i < vd->num_pt_load_segments; i++) {
 			phdr = vd->load64 + i;
 			if ((phdr->p_vaddr >= __START_KERNEL_map) &&
-			    !(IS_VMALLOC_ADDR(phdr->p_vaddr))) {
+			    (IN_KERNEL_REGION(phdr->p_vaddr) || 
+			    !(IS_VMALLOC_ADDR(phdr->p_vaddr)))) {
 
 				machdep->machspec->phys_base = phdr->p_paddr - 
 				    (phdr->p_vaddr & ~(__START_KERNEL_map));

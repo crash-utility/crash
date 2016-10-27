@@ -5623,6 +5623,7 @@ struct machine_specific {
 	ulong page_protnone;
 	ulong GART_start;
 	ulong GART_end;
+	ulong kernel_image_size;
 };
 
 #define KSYMS_START    (0x1)
