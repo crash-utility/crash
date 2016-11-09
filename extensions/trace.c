@@ -38,6 +38,10 @@ static int trace_buffer_available;
  * max_buffer is supported
  */
 static int max_buffer_available;
+/*
+ * multiple trace instances are supported
+ */
+static int multiple_instances_available;
 
 #define koffset(struct, member) struct##_##member##_offset
 
@@ -78,6 +82,8 @@ static int koffset(ftrace_event_field, offset);
 static int koffset(ftrace_event_field, size);
 static int koffset(ftrace_event_field, is_signed);
 
+static int koffset(trace_array, name);
+
 static int koffset(POINTER_SYM, POINTER) = 0;
 
 struct ring_buffer_per_cpu {
@@ -101,16 +107,25 @@ struct ring_buffer_per_cpu {
 };
 
 static ulong global_trace;
-static ulong global_trace_buffer;
-static ulong global_max_buffer;
-static ulong global_ring_buffer;
-static unsigned global_pages;
-static struct ring_buffer_per_cpu *global_buffers;
-
 static ulong max_tr_trace;
-static ulong max_tr_ring_buffer;
-static unsigned max_tr_pages;
-static struct ring_buffer_per_cpu *max_tr_buffers;
+
+struct trace_instance {
+	char name[NAME_MAX + 1];
+	ulong trace_buffer;
+	ulong max_buffer;
+	ulong ring_buffer;
+	unsigned pages;
+	struct ring_buffer_per_cpu *buffers;
+
+	ulong max_tr_ring_buffer;
+	unsigned max_tr_pages;
+	struct ring_buffer_per_cpu *max_tr_buffers;
+};
+
+static ulong ftrace_trace_arrays;
+static struct trace_instance global_trace_instance;
+static struct trace_instance *trace_instances = NULL;
+static int instance_count;
 
 static ulong ftrace_events;
 static ulong current_trace;
@@ -228,6 +243,9 @@ static int init_offsets(void)
 	init_offset(ftrace_event_field, offset);
 	init_offset(ftrace_event_field, size);
 	init_offset(ftrace_event_field, is_signed);
+
+	if (MEMBER_EXISTS("trace_array", "name"))
+		init_offset(trace_array, name);
 
 	return 0;
 #undef init_offset
@@ -435,61 +453,137 @@ out_fail:
 	return -1;
 }
 
-static int ftrace_int_global_trace(void)
+static int ftrace_init_trace(struct trace_instance *ti, ulong instance_addr)
 {
 	if (trace_buffer_available) {
-		global_trace_buffer = global_trace + koffset(trace_array, trace_buffer);
-		read_value(global_ring_buffer, global_trace_buffer, trace_buffer, buffer);
+		ti->trace_buffer = instance_addr +
+				koffset(trace_array, trace_buffer);
+		read_value(ti->ring_buffer, ti->trace_buffer,
+				trace_buffer, buffer);
+
+		if (max_buffer_available) {
+			ti->max_buffer = instance_addr +
+					koffset(trace_array, max_buffer);
+			read_value(ti->max_tr_ring_buffer, ti->max_buffer,
+					trace_buffer, buffer);
+		}
 	} else {
-		read_value(global_ring_buffer, global_trace, trace_array, buffer);
-		read_value(global_pages, global_ring_buffer, ring_buffer, pages);
+		read_value(ti->ring_buffer, instance_addr, trace_array, buffer);
+		read_value(ti->pages, ti->ring_buffer, ring_buffer, pages);
+
+		read_value(ti->max_tr_ring_buffer, max_tr_trace, trace_array, buffer);
+		if (ti->max_tr_ring_buffer)
+			read_value(ti->max_tr_pages, ti->max_tr_ring_buffer, ring_buffer, pages);
 	}
 
-	global_buffers = calloc(sizeof(*global_buffers), nr_cpu_ids);
-	if (global_buffers == NULL)
+	ti->buffers = calloc(sizeof(*ti->buffers), nr_cpu_ids);
+	if (ti->buffers == NULL)
 		goto out_fail;
 
-	if (ftrace_init_buffers(global_buffers, global_ring_buffer,
-			global_pages) < 0)
+	if (ftrace_init_buffers(ti->buffers, ti->ring_buffer,
+			ti->pages) < 0)
+		goto out_fail;
+
+	ti->max_tr_buffers = calloc(sizeof(*ti->max_tr_buffers), nr_cpu_ids);
+	if (ti->max_tr_buffers == NULL)
+		goto out_fail;
+
+	if (ftrace_init_buffers(ti->max_tr_buffers, ti->max_tr_ring_buffer,
+			ti->max_tr_pages) < 0)
 		goto out_fail;
 
 	return 0;
 
 out_fail:
-	free(global_buffers);
+	free(ti->max_tr_buffers);
+	free(ti->buffers);
 	return -1;
 }
 
-static int ftrace_int_max_tr_trace(void)
+static void ftrace_destroy_all_instance_buffers()
 {
-	if (trace_buffer_available) {
-		if (!max_buffer_available)
-			return 0;
+	int i;
 
-		global_max_buffer = global_trace + koffset(trace_array, max_buffer);
-		read_value(max_tr_ring_buffer, global_max_buffer, trace_buffer, buffer);
-	} else {
-		read_value(max_tr_ring_buffer, max_tr_trace, trace_array, buffer);
+	for (i = 0; i < instance_count; i++)
+	{
+		struct trace_instance *ti = &trace_instances[i];
 
-		if (!max_tr_ring_buffer)
-			return 0;
+		if (ti->max_tr_ring_buffer) {
+			ftrace_destroy_buffers(ti->max_tr_buffers);
+			free(ti->max_tr_buffers);
+		}
 
-		read_value(max_tr_pages, max_tr_ring_buffer, ring_buffer, pages);
+		ftrace_destroy_buffers(ti->buffers);
+		free(ti->buffers);
 	}
+}
 
-	max_tr_buffers = calloc(sizeof(*max_tr_buffers), nr_cpu_ids);
-	if (max_tr_buffers == NULL)
-		goto out_fail;
+static void ftrace_destroy_instances()
+{
+	ftrace_destroy_all_instance_buffers();
+	free(trace_instances);
+}
 
-	if (ftrace_init_buffers(max_tr_buffers, max_tr_ring_buffer,
-			max_tr_pages) < 0)
-		goto out_fail;
+static int ftrace_init_instances()
+{
+	int i;
+	struct trace_instance *ti;
+	struct list_data list_data;
+	struct list_data *ld = &list_data;
+
+	if (!multiple_instances_available)
+		return 0;
+
+	BZERO(ld, sizeof(struct list_data));
+	ld->start = ftrace_trace_arrays;
+	ld->end = global_trace;
+	ld->flags = LIST_ALLOCATE;
+	instance_count = do_list(ld);
+
+	/* The do_list count includes the list_head, which is not a
+	 * proper instance */
+	instance_count--;
+	if (instance_count <= 0)
+		return 0;
+
+	trace_instances = calloc(sizeof(struct trace_instance), instance_count);
+
+	/* We start i at 1 to skip over the list_head and continue to the last
+	 * instance, which lies at index instance_count */
+	for (i = 1; i <= instance_count; i++)
+	{
+		ulong instance_ptr;
+		ulong name_addr;
+		int ret;
+
+		ti = &trace_instances[i-1];
+		instance_ptr = ld->list_ptr[i];
+		read_value(name_addr, instance_ptr, trace_array, name);
+		if (!name_addr)
+		{
+			console("Instance name is NULL\n");
+		}
+		else if (!read_string(name_addr, ti->name, sizeof(ti->name)))
+		{
+			console("Failed to read instance name at address %p\n", (void*)name_addr);
+			goto out_fail;
+		}
+
+		ret = ftrace_init_trace(ti, instance_ptr);
+		if (ret < 0)
+			goto out_fail;
+	}
+	FREEBUF(ld->list_ptr);
 
 	return 0;
 
 out_fail:
-	free(max_tr_buffers);
-	max_tr_ring_buffer = 0;
+	/* We've already freed the current instance's trace buffer info, so
+	 * we'll clear that out to avoid double freeing in
+	 * ftrace_destroy_instances() */
+	BZERO(ti, sizeof(struct trace_instance));
+	ftrace_destroy_instances();
+
 	return -1;
 }
 
@@ -504,7 +598,7 @@ static int ftrace_init_current_tracer(void)
 	} else {
 		read_value(addr, current_trace, POINTER_SYM, POINTER);
 	}
-	
+
 	read_value(addr, addr, tracer, name);
 	read_string(addr, tmp, 128);
 
@@ -524,15 +618,24 @@ static int ftrace_init(void)
 	struct syment *sym_max_tr_trace;
 	struct syment *sym_ftrace_events;
 	struct syment *sym_current_trace;
+	struct syment *sym_ftrace_trace_arrays;
 
 	sym_global_trace = symbol_search("global_trace");
 	sym_ftrace_events = symbol_search("ftrace_events");
+	sym_ftrace_trace_arrays = symbol_search("ftrace_trace_arrays");
 
 	if (sym_global_trace == NULL || sym_ftrace_events == NULL)
 		return -1;
 
 	global_trace = sym_global_trace->value;
 	ftrace_events = sym_ftrace_events->value;
+
+	if (sym_ftrace_trace_arrays)
+	{
+		multiple_instances_available = 1;
+		ftrace_trace_arrays = sym_ftrace_trace_arrays->value;
+	}
+
 
 	if (MEMBER_EXISTS("trace_array", "current_trace")) {
 		encapsulated_current_trace = 1;
@@ -564,28 +667,31 @@ static int ftrace_init(void)
 		return -1;
 	print_offsets();
 
-	if (ftrace_int_global_trace() < 0)
+	if (ftrace_init_trace(&global_trace_instance, global_trace) < 0)
 		goto out_0;
 
-	ftrace_int_max_tr_trace();
-
-	if (ftrace_init_event_types() < 0)
+	if (ftrace_init_instances() < 0)
 		goto out_1;
 
-	if (ftrace_init_current_tracer() < 0)
+	if (ftrace_init_event_types() < 0)
 		goto out_2;
+
+	if (ftrace_init_current_tracer() < 0)
+		goto out_3;
 
 	return 0;
 
-out_2:
+out_3:
 	ftrace_destroy_event_types();
+out_2:
+	ftrace_destroy_instances();
 out_1:
-	if (max_tr_ring_buffer) {
-		ftrace_destroy_buffers(max_tr_buffers);
-		free(max_tr_buffers);
+	if (global_trace_instance.max_tr_ring_buffer) {
+		ftrace_destroy_buffers(global_trace_instance.max_tr_buffers);
+		free(global_trace_instance.max_tr_buffers);
 	}
-	ftrace_destroy_buffers(global_buffers);
-	free(global_buffers);
+	ftrace_destroy_buffers(global_trace_instance.buffers);
+	free(global_trace_instance.buffers);
 out_0:
 	return -1;
 }
@@ -595,13 +701,15 @@ static void ftrace_destroy(void)
 	free(current_tracer_name);
 	ftrace_destroy_event_types();
 
-	if (max_tr_ring_buffer) {
-		ftrace_destroy_buffers(max_tr_buffers);
-		free(max_tr_buffers);
+	ftrace_destroy_instances();
+
+	if (global_trace_instance.max_tr_ring_buffer) {
+		ftrace_destroy_buffers(global_trace_instance.max_tr_buffers);
+		free(global_trace_instance.max_tr_buffers);
 	}
 
-	ftrace_destroy_buffers(global_buffers);
-	free(global_buffers);
+	ftrace_destroy_buffers(global_trace_instance.buffers);
+	free(global_trace_instance.buffers);
 }
 
 static int ftrace_dump_page(int fd, ulong page, void *page_tmp)
@@ -652,7 +760,8 @@ static int try_mkdir(const char *pathname, mode_t mode)
 	return 0;
 }
 
-static int ftrace_dump_buffers(const char *per_cpu_path)
+static int ftrace_dump_buffers(const char *per_cpu_path,
+                                struct trace_instance *ti)
 {
 	int i;
 	void *page_tmp;
@@ -664,7 +773,7 @@ static int ftrace_dump_buffers(const char *per_cpu_path)
 		return -1;
 
 	for (i = 0; i < nr_cpu_ids; i++) {
-		struct ring_buffer_per_cpu *cpu_buffer = &global_buffers[i];
+		struct ring_buffer_per_cpu *cpu_buffer = &ti->buffers[i];
 
 		if (!cpu_buffer->kaddr)
 			continue;
@@ -679,7 +788,7 @@ static int ftrace_dump_buffers(const char *per_cpu_path)
 		if (fd < 0)
 			goto out_fail;
 
-		ftrace_dump_buffer(fd, cpu_buffer, global_pages, page_tmp);
+		ftrace_dump_buffer(fd, cpu_buffer, ti->pages, page_tmp);
 		close(fd);
 	}
 
@@ -1475,26 +1584,72 @@ static int dump_kallsyms(const char *dump_tracing_dir)
 
 static int trace_cmd_data_output(int fd);
 
+#define	FTRACE_DUMP_SYMBOLS	(1 << 0)
+#define	FTRACE_DUMP_META_DATA	(1 << 1)
+
+static int populate_ftrace_dir_tree(struct trace_instance *ti,
+		char *root, uint flags)
+{
+	char path[PATH_MAX];
+	int ret;
+
+	ret = mkdir(root, 0755);
+	if (ret < 0) {
+		if (errno == EEXIST)
+			error(INFO, "mkdir: %s exists\n", root);
+		return FALSE;
+	}
+
+	snprintf(path, sizeof(path), "%s/per_cpu", root);
+	if (try_mkdir(path, 0755) < 0)
+		return FALSE;
+
+	if (ftrace_dump_buffers(path, ti) < 0)
+		return FALSE;
+
+	if (flags & FTRACE_DUMP_META_DATA) {
+		/* Dump event types */
+		snprintf(path, sizeof(path), "%s/events", root);
+		if (try_mkdir(path, 0755) < 0)
+			return FALSE;
+
+		if (ftrace_dump_event_types(path) < 0)
+			return FALSE;
+
+		/* Dump pids with corresponding cmdlines */
+		if (dump_saved_cmdlines(root) < 0)
+			return FALSE;
+	}
+
+	if (flags & FTRACE_DUMP_SYMBOLS) {
+		/* Dump all symbols of the kernel */
+		dump_kallsyms(root);
+	}
+
+	return TRUE;
+}
+
 static void ftrace_dump(int argc, char *argv[])
 {
 	int c;
-	int dump_meta_data = 0;
-	int dump_symbols = 0;
+	int i;
+	uint flags = 0;
 	char *dump_tracing_dir;
-	char path[PATH_MAX];
-	int ret;
+	char instance_path[PATH_MAX];
 
         while ((c = getopt(argc, argv, "smt")) != EOF) {
                 switch(c)
 		{
 		case 's':
-			dump_symbols = 1;
+			flags |= FTRACE_DUMP_SYMBOLS;
 			break;
 		case 'm':
-			dump_meta_data = 1;
+			flags |= FTRACE_DUMP_META_DATA;
 			break;
 		case 't':
-			if (dump_symbols || dump_meta_data || argc - optind > 1)
+			if (flags & FTRACE_DUMP_SYMBOLS ||
+				flags & FTRACE_DUMP_META_DATA ||
+				argc - optind > 1)
 				cmd_usage(pc->curcmd, SYNOPSIS);
 			else {
 				char *trace_dat = "trace.dat";
@@ -1525,38 +1680,34 @@ static void ftrace_dump(int argc, char *argv[])
 		return;
 	}
 
-	ret = mkdir(dump_tracing_dir, 0755);
-	if (ret < 0) {
-		if (errno == EEXIST)
-			error(INFO, "mkdir: %s exists\n", dump_tracing_dir);
-		return;
-	}
-
-	snprintf(path, sizeof(path), "%s/per_cpu", dump_tracing_dir);
-	if (try_mkdir(path, 0755) < 0)
+	if (!populate_ftrace_dir_tree(&global_trace_instance, dump_tracing_dir, flags))
 		return;
 
-	if (ftrace_dump_buffers(path) < 0)
+	if (!multiple_instances_available || instance_count == 0)
 		return;
 
-	if (dump_meta_data) {
-		/* Dump event types */
-		snprintf(path, sizeof(path), "%s/events", dump_tracing_dir);
-		if (try_mkdir(path, 0755) < 0)
-			return;
+	/* Create an instances directory, and dump instance data in there */
+	snprintf(instance_path, sizeof(instance_path),
+			"%s/instances", dump_tracing_dir);
+	if (try_mkdir(instance_path, 0755) < 0)
+		return;
 
-		if (ftrace_dump_event_types(path) < 0)
-			return;
+	/* Don't care about the flags anymore */
+	flags = 0;
 
-		/* Dump pids with corresponding cmdlines */
-		if (dump_saved_cmdlines(dump_tracing_dir) < 0)
-			return;
+	for (i = 0; i < instance_count; i++)
+	{
+		struct trace_instance *ti = &trace_instances[i];
+
+		snprintf(instance_path, sizeof(instance_path),
+			"%s/instances/%s", dump_tracing_dir,
+			ti->name);
+
+		if (populate_ftrace_dir_tree(ti, instance_path, flags) < 0)
+			break;
 	}
 
-	if (dump_symbols) {
-		/* Dump all symbols of the kernel */
-		dump_kallsyms(dump_tracing_dir);
-	}
+	return;
 }
 
 static void ftrace_show(int argc, char *argv[])
@@ -2160,17 +2311,60 @@ static int save_ftrace_cmdlines(int fd)
 	return tmp_file_flush(fd);
 }
 
-static int save_res_data(int fd, int nr_cpu_buffers)
-{
-	unsigned short option = 0;
+/* From trace-cmd.h */
+enum {
+	TRACECMD_OPTION_DONE,         /* 0 */
+	TRACECMD_OPTION_DATE,         /* 1 */
+	TRACECMD_OPTION_CPUSTAT,      /* 2 */
+	TRACECMD_OPTION_BUFFER,       /* 3 */
+	TRACECMD_OPTION_TRACECLOCK,   /* 4 */
+	TRACECMD_OPTION_UNAME,        /* 5 */
+	TRACECMD_OPTION_HOOK,         /* 6 */
+};
 
-	if (write_and_check(fd, &nr_cpu_buffers, 4))
-		return -1;
+static int write_options(int fd, unsigned long long *buffer_offsets)
+{
+	int i;
+	unsigned short option;
+
+	if (!multiple_instances_available)
+		return 0;
 
 	if (write_and_check(fd, "options  ", 10))
 		return -1;
 
+	option = TRACECMD_OPTION_BUFFER;
+	for (i = 0; i < instance_count; i++)
+	{
+		char *name = trace_instances[i].name;
+		size_t name_size = strlen(name) + 1; /* Name length + '\0' */
+		unsigned long long option_size = 8 + name_size;
+		unsigned long long offset;
+
+		offset = buffer_offsets ? buffer_offsets[i] : 0;
+		if (write_and_check(fd, &option, 2))
+			return -1;
+		if (write_and_check(fd, &option_size, 4))
+			return -1;
+		if (write_and_check(fd, &offset, 8))
+			return -1;
+		if (write_and_check(fd, name, name_size))
+			return -1;
+	}
+
+	option = TRACECMD_OPTION_DONE;
 	if (write_and_check(fd, &option, 2))
+		return -1;
+
+	return 0;
+}
+
+static int save_res_data(int fd, int nr_cpu_buffers, unsigned long long *buffer_offsets)
+{
+	if (write_and_check(fd, &nr_cpu_buffers, 4))
+		return -1;
+
+	if (write_options(fd, buffer_offsets))
 		return -1;
 
 	if (write_and_check(fd, "flyrecord", 10))
@@ -2179,7 +2373,7 @@ static int save_res_data(int fd, int nr_cpu_buffers)
 	return 0;
 }
 
-static int save_record_data(int fd, int nr_cpu_buffers)
+static int save_record_data(int fd, int nr_cpu_buffers, struct trace_instance *ti)
 {
 	int i, j;
 	unsigned long long offset, buffer_offset;
@@ -2191,7 +2385,7 @@ static int save_record_data(int fd, int nr_cpu_buffers)
 	buffer_offset = offset;
 
 	for (i = 0; i < nr_cpu_ids; i++) {
-		struct ring_buffer_per_cpu *cpu_buffer = &global_buffers[i];
+		struct ring_buffer_per_cpu *cpu_buffer = &ti->buffers[i];
 		unsigned long long buffer_size;
 
 		if (!cpu_buffer->kaddr)
@@ -2211,7 +2405,7 @@ static int save_record_data(int fd, int nr_cpu_buffers)
 
 	lseek(fd, offset, SEEK_SET);
 	for (i = 0; i < nr_cpu_ids; i++) {
-		struct ring_buffer_per_cpu *cpu_buffer = &global_buffers[i];
+		struct ring_buffer_per_cpu *cpu_buffer = &ti->buffers[i];
 
 		if (!cpu_buffer->kaddr)
 			continue;
@@ -2230,19 +2424,32 @@ static int save_record_data(int fd, int nr_cpu_buffers)
 	return 0;
 }
 
-static int __trace_cmd_data_output(int fd)
+static int get_nr_cpu_buffers(struct trace_instance *ti)
 {
 	int i;
 	int nr_cpu_buffers = 0;
 
 	for (i = 0; i < nr_cpu_ids; i++) {
-		struct ring_buffer_per_cpu *cpu_buffer = &global_buffers[i];
+		struct ring_buffer_per_cpu *cpu_buffer = &ti->buffers[i];
 
 		if (!cpu_buffer->kaddr)
 			continue;
 
 		nr_cpu_buffers++;
 	}
+
+	return nr_cpu_buffers;
+}
+
+static int __trace_cmd_data_output(int fd)
+{
+	int nr_cpu_buffers;
+	unsigned long long global_res_data_offset;
+	unsigned long long *instance_offsets;
+
+	instance_offsets = calloc(sizeof(unsigned long long), instance_count);
+
+	nr_cpu_buffers = get_nr_cpu_buffers(&global_trace_instance);
 
 	if (save_initial_data(fd))
 		return -1;
@@ -2256,9 +2463,38 @@ static int __trace_cmd_data_output(int fd)
 		return -1;
 	if (save_ftrace_cmdlines(fd))
 		return -1;
-	if (save_res_data(fd, nr_cpu_buffers))
+
+	/* We don't have the instance buffer offsets yet, so we'll write in 0s
+	 * for now, and fix it up after we have that information available */
+	global_res_data_offset = lseek(fd, 0, SEEK_CUR);
+	if (save_res_data(fd, nr_cpu_buffers, NULL))
 		return -1;
-	if (save_record_data(fd, nr_cpu_buffers))
+	if (save_record_data(fd, nr_cpu_buffers, &global_trace_instance))
+		return -1;
+
+	if (multiple_instances_available)
+	{
+		int i;
+
+		for (i = 0; i < instance_count; i++)
+		{
+			struct trace_instance *ti = &trace_instances[i];
+			nr_cpu_buffers = get_nr_cpu_buffers(ti);
+
+			/* Save off the instance offset for fixup later */
+			instance_offsets[i] = lseek(fd, 0, SEEK_CUR);
+
+			if (write_and_check(fd, "flyrecord", 10))
+				return -1;
+			if (save_record_data(fd, nr_cpu_buffers, ti))
+				return -1;
+		}
+	}
+
+	/* Fix up the global trace's options header with the instance offsets */
+	lseek(fd, global_res_data_offset, SEEK_SET);
+	nr_cpu_buffers = get_nr_cpu_buffers(&global_trace_instance);
+	if (save_res_data(fd, nr_cpu_buffers, instance_offsets))
 		return -1;
 
 	return 0;
