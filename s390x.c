@@ -1304,8 +1304,7 @@ static void s390x_back_trace_cmd(struct bt_info *bt)
 	 * Print task stack
 	 */
 	if (THIS_KERNEL_VERSION >= LINUX(2, 6, 0)) {
-		readmem(bt->task + OFFSET(task_struct_thread_info), KVADDR,
-			&low, sizeof(long), "thread info", FAULT_ON_ERROR);
+		low = task_to_stackbase(bt->task);
 	} else {
 		low = bt->task;
 	}
