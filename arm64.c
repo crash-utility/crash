@@ -20,6 +20,7 @@
 #include "defs.h"
 #include <elf.h>
 #include <endian.h>
+#include <sys/ioctl.h>
 
 #define NOT_IMPLEMENTED(X) error((X), "%s: function not implemented\n", __func__)
 
@@ -112,6 +113,10 @@ arm64_init(int when)
 		machdep->flags |= MACHDEP_BT_TEXT;
 
 		ms = machdep->machspec;
+
+		if (!ms->kimage_voffset && STREQ(pc->live_memsrc, "/dev/crash"))
+			ioctl(pc->mfd, DEV_CRASH_ARCH_DATA, &ms->kimage_voffset);
+
 		if (!ms->kimage_voffset &&
 		    (string = pc->read_vmcoreinfo("NUMBER(kimage_voffset)"))) {
 			ms->kimage_voffset = htol(string, QUIET, NULL);
@@ -320,6 +325,14 @@ arm64_init(int when)
 
 		/* use machdep parameters */
 		arm64_calc_phys_offset();
+	
+		if (CRASHDEBUG(1)) {
+			if (machdep->flags & NEW_VMEMMAP)
+				fprintf(fp, "kimage_voffset: %lx\n", 
+					machdep->machspec->kimage_voffset);
+			fprintf(fp, "phys_offset: %lx\n", 
+				machdep->machspec->phys_offset);
+		}
 
 		break;
 
@@ -742,9 +755,21 @@ arm64_calc_phys_offset(void)
 		char buf[BUFSIZE];
 		char *p1;
 		int errflag;
-		FILE *fp;
+		FILE *iomem;
+		physaddr_t paddr;
+		struct syment *sp;
 
-		if ((fp = fopen("/proc/iomem", "r")) == NULL)
+		if ((machdep->flags & NEW_VMEMMAP) &&
+		    ms->kimage_voffset && (sp = kernel_symbol_search("memstart_addr"))) {
+			paddr =	sp->value - machdep->machspec->kimage_voffset;
+			if (READMEM(pc->mfd, &phys_offset, sizeof(phys_offset),
+			    sp->value, paddr) > 0) {
+				ms->phys_offset = phys_offset;
+				return;
+			}
+		}
+
+		if ((iomem = fopen("/proc/iomem", "r")) == NULL)
 			return;
 
 		/*
@@ -752,14 +777,14 @@ arm64_calc_phys_offset(void)
 		 * first region which should be correct for most uses.
 		 */
 		errflag = 1;
-		while (fgets(buf, BUFSIZE, fp)) {
+		while (fgets(buf, BUFSIZE, iomem)) {
 			if (strstr(buf, ": System RAM")) {
 				clean_line(buf);
 				errflag = 0;
 				break;
 			}
 		}
-		fclose(fp);
+		fclose(iomem);
 
 		if (errflag)
 			return;
@@ -809,7 +834,7 @@ arm64_kdump_phys_base(ulong *phys_offset)
 		return TRUE;
 	}
 
-	if (machdep->flags & NEW_VMEMMAP &&
+	if ((machdep->flags & NEW_VMEMMAP) &&
 	    machdep->machspec->kimage_voffset &&
 	    (sp = kernel_symbol_search("memstart_addr"))) {
 		paddr =	sp->value - machdep->machspec->kimage_voffset;

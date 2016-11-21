@@ -2983,6 +2983,11 @@ typedef signed int s32;
 #define NEW_VMEMMAP   (0x80)
 #define VM_L4_4K      (0x100)
 
+/*
+ * Get kimage_voffset from /dev/crash
+ */
+#define DEV_CRASH_ARCH_DATA _IOR('c', 1, unsigned long)
+
 /* 
  * sources: Documentation/arm64/memory.txt 
  *          arch/arm64/include/asm/memory.h 
