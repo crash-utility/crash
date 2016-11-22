@@ -5,8 +5,8 @@ of the following devices:
   /proc/kcore
   /dev/crash
 
-If the live system kernel was configured with CONFIG_STRICT_DEVMEM,
-then /dev/mem cannot be used. 
+If the live system kernel was configured with CONFIG_STRICT_DEVMEM
+or CONFIG_HARDENED_USERCOPY, then /dev/mem cannot be used. 
 
 If the live system kernel was configured without CONFIG_PROC_KCORE,
 or if /proc/kcore is non-functional, then /proc/kcore cannot be used.  

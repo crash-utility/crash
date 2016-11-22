@@ -1,8 +1,8 @@
 /*
  *  linux/drivers/char/crash.c
  *
- *  Copyright (C) 2004, 2011  Dave Anderson <anderson@redhat.com>
- *  Copyright (C) 2004, 2011  Red Hat, Inc.
+ *  Copyright (C) 2004, 2011, 2016  Dave Anderson <anderson@redhat.com>
+ *  Copyright (C) 2004, 2011, 2016  Red Hat, Inc.
  */
 
 /******************************************************************************
@@ -35,6 +35,58 @@
 #include <linux/mmzone.h>
 
 extern int page_is_ram(unsigned long);
+
+#ifdef CONFIG_S390
+/*
+ * For swapped prefix pages get bounce buffer using xlate_dev_mem_ptr()
+ */
+static inline void *map_virtual(u64 offset, struct page **pp)
+{
+	struct page *page;
+	unsigned long pfn;
+	void *vaddr;
+
+	vaddr = xlate_dev_mem_ptr(offset);
+	pfn = ((unsigned long) vaddr) >> PAGE_SHIFT;
+	if ((unsigned long) vaddr != offset)
+		page = pfn_to_page(pfn);
+	else
+		page = NULL;
+
+	if (!page_is_ram(pfn)) {
+		printk(KERN_INFO
+		    "crash memory driver: !page_is_ram(pfn: %lx)\n", pfn);
+		return NULL;
+	}
+
+	if (!pfn_valid(pfn)) {
+		printk(KERN_INFO
+		    "crash memory driver: invalid pfn: %lx )\n", pfn);
+		return NULL;
+	}
+
+	*pp = page;
+	return vaddr;
+}
+
+/*
+ * Free bounce buffer if necessary
+ */
+static inline void unmap_virtual(struct page *page)
+{
+	void *vaddr;
+
+	if (page) {
+		/*
+		 * Because for bounce buffers vaddr will never be 0
+		 * unxlate_dev_mem_ptr() will always free the bounce buffer.
+		 */
+		vaddr = (void *)(page_to_pfn(page) << PAGE_SHIFT);
+		unxlate_dev_mem_ptr(0, vaddr);
+	}
+}
+
+#else  /* all architectures except s390x */
 
 static inline void *
 map_virtual(u64 offset, struct page **pp)
@@ -82,16 +134,17 @@ static inline void unmap_virtual(struct page *page)
 { 
 	kunmap(page);
 }
+#endif
 
 
-#define CRASH_VERSION   "1.1"
+#define CRASH_VERSION   "1.3"
 
 /*
  *  These are the file operation functions that allow crash utility
  *  access to physical memory.
  */
 
-static loff_t 
+static loff_t
 crash_llseek(struct file * file, loff_t offset, int orig)
 {
 	switch (orig) {
@@ -107,7 +160,7 @@ crash_llseek(struct file * file, loff_t offset, int orig)
 }
 
 /*
- *  Determine the page address for an address offset value, 
+ *  Determine the page address for an address offset value,
  *  get a virtual address for it, and copy it out.
  *  Accesses must fit within a page.
  */
@@ -118,16 +171,21 @@ crash_read(struct file *file, char *buf, size_t count, loff_t *poff)
 	struct page *page;
 	u64 offset;
 	ssize_t read;
+	char *buffer = file->private_data;
 
 	offset = *poff;
-	if (offset >> PAGE_SHIFT != (offset+count-1) >> PAGE_SHIFT) 
+	if (offset >> PAGE_SHIFT != (offset+count-1) >> PAGE_SHIFT)
 		return -EINVAL;
 
 	vaddr = map_virtual(offset, &page);
 	if (!vaddr)
 		return -EFAULT;
-
-	if (copy_to_user(buf, vaddr, count)) {
+	/*
+	 * Use bounce buffer to bypass the CONFIG_HARDENED_USERCOPY
+	 * kernel text restriction.
+	 */
+	memcpy(buffer, (char *)vaddr, count);
+	if (copy_to_user(buf, buffer, count)) {
 		unmap_virtual(page);
 		return -EFAULT;
 	}
@@ -138,10 +196,66 @@ crash_read(struct file *file, char *buf, size_t count, loff_t *poff)
 	return read;
 }
 
+static int
+crash_open(struct inode * inode, struct file * filp)
+{
+	if (!capable(CAP_SYS_RAWIO))
+		return -EPERM;
+
+	filp->private_data = (void *)__get_free_page(GFP_KERNEL);
+	if (!filp->private_data)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static int
+crash_release(struct inode *inode, struct file *filp)
+{
+	free_pages((unsigned long)filp->private_data, 0);
+	return 0;
+}
+
+/*
+ *  Note: This function is required for Linux 4.6 and later ARM64 kernels.
+ *        For earler kernel versions, remove this CONFIG_ARM64 section.
+ */
+#ifdef CONFIG_ARM64
+
+#define DEV_CRASH_ARCH_DATA _IOR('c', 1, long)
+
+static long
+crash_arch_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	extern u64 kimage_voffset;
+
+	switch (cmd)
+	{
+	case DEV_CRASH_ARCH_DATA:
+		return put_user(kimage_voffset, (unsigned long __user *)arg);
+	default:
+		return -EINVAL;
+	}
+}
+#endif
+
+static long 
+crash_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+#ifdef DEV_CRASH_ARCH_DATA
+	return crash_arch_ioctl(file, cmd, arg);
+#else
+	return -EINVAL;
+#endif
+}
+
 static struct file_operations crash_fops = {
 	.owner = THIS_MODULE,
 	.llseek = crash_llseek,
 	.read = crash_read,
+	.unlocked_ioctl = crash_ioctl,
+	.open = crash_open,
+	.release = crash_release,
 };
 
 static struct miscdevice crash_dev = {
@@ -157,11 +271,11 @@ crash_init(void)
 
 	ret = misc_register(&crash_dev);
 	if (ret) {
-		printk(KERN_ERR 
+		printk(KERN_ERR
 		    "crash memory driver: cannot misc_register (MISC_DYNAMIC_MINOR)\n");
 		goto out;
 	}
-	
+
 	ret = 0;
 	printk(KERN_INFO "crash memory driver: version %s\n", CRASH_VERSION);
 out:
