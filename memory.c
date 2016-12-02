@@ -9880,6 +9880,7 @@ ignore_cache(struct meminfo *si, char *name)
 #define SLAB_MAGIC_DESTROYED    0xB2F23C5AUL    /* slab has been destroyed */
 
 #define SLAB_CFLGS_BUFCTL       0x020000UL      /* bufctls in own cache */
+#define SLAB_CFLGS_OBJFREELIST  0x40000000UL    /* Freelist as an object */
 
 #define KMEM_SLAB_ADDR          (1)
 #define KMEM_BUFCTL_ADDR        (2)
@@ -12439,11 +12440,13 @@ gather_slab_free_list_percpu(struct meminfo *si)
 static void
 gather_slab_free_list_slab_overload_page(struct meminfo *si)
 {
-	int i, active;
+	int i, active, start_offset;
 	ulong obj, objnr, cnt, freelist;
 	unsigned char *ucharptr;
 	unsigned short *ushortptr;
 	unsigned int *uintptr;
+	unsigned int cache_flags, overload_active;
+	ulong slab_overload_page;
 
 	if (CRASHDEBUG(1))
 		fprintf(fp, "slab page: %lx active: %ld si->c_num: %ld\n", 
@@ -12452,12 +12455,19 @@ gather_slab_free_list_slab_overload_page(struct meminfo *si)
 	if (si->s_inuse == si->c_num )
 		return;
 
-	readmem(si->slab - OFFSET(page_lru) + OFFSET(page_freelist),
+	slab_overload_page = si->slab - OFFSET(page_lru);
+	readmem(slab_overload_page + OFFSET(page_freelist),
 		KVADDR, &freelist, sizeof(void *), "page freelist",
 		FAULT_ON_ERROR);
         readmem(freelist, KVADDR, si->freelist, 
 		si->freelist_index_size * si->c_num,
                 "freelist array", FAULT_ON_ERROR);
+	readmem(si->cache+OFFSET(kmem_cache_s_flags),
+		KVADDR, &cache_flags, sizeof(uint),
+		"kmem_cache_s flags", FAULT_ON_ERROR);
+        readmem(slab_overload_page + OFFSET(page_active),
+                KVADDR, &overload_active, sizeof(uint),
+                "active", FAULT_ON_ERROR);
 
 	BNEG(si->addrlist, sizeof(ulong) * (si->c_num+1));
 	cnt = objnr = 0;
@@ -12466,14 +12476,22 @@ gather_slab_free_list_slab_overload_page(struct meminfo *si)
 	uintptr = NULL;
 	active = si->s_inuse;
 
+	/*
+	 * On an OBJFREELIST slab, the object might have been recycled
+	 * and everything before the active count can be random data.
+	 */
+	start_offset = 0;
+	if (cache_flags & SLAB_CFLGS_OBJFREELIST)
+		start_offset = overload_active;
+
 	switch (si->freelist_index_size)
 	{
-	case 1: ucharptr = (unsigned char *)si->freelist; break;
-	case 2: ushortptr = (unsigned short *)si->freelist; break;
-	case 4: uintptr = (unsigned int *)si->freelist; break;
+	case 1: ucharptr = (unsigned char *)si->freelist + start_offset; break;
+	case 2: ushortptr = (unsigned short *)si->freelist + start_offset; break;
+	case 4: uintptr = (unsigned int *)si->freelist + start_offset; break;
 	}
 
-	for (i = 0; i < si->c_num; i++) {
+	for (i = start_offset; i < si->c_num; i++) {
 		switch (si->freelist_index_size)
 		{
 		case 1: objnr = (ulong)*ucharptr++; break;
