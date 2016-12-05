@@ -939,9 +939,11 @@ static int mips_get_elf_notes(void)
 		else if (KDUMP_DUMPFILE())
 			note = netdump_get_prstatus_percpu(i);
 
-		if (!note)
+		if (!note) {
 			error(WARNING,
 			      "cannot find NT_PRSTATUS note for cpu: %d\n", i);
+			continue;
+		}
 
 		len = sizeof(Elf32_Nhdr);
 		len = roundup(len + note->n_namesz, 4);
