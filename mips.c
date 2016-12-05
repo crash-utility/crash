@@ -28,7 +28,7 @@ typedef ulong pte_t;
 #define PGD_T_LOG2	(__builtin_ffs(sizeof(pgd_t)) - 1)
 #define PTE_T_LOG2	(__builtin_ffs(sizeof(pte_t)) - 1)
 
-#define __PGD_ORDER	(32 - 3 * PAGESHIFT() + PGD_T_LOG2 + PTE_T_LOG2)
+#define __PGD_ORDER	(32 - 3 * (int)PAGESHIFT() + PGD_T_LOG2 + PTE_T_LOG2)
 #define PGD_ORDER	(__PGD_ORDER >= 0 ? __PGD_ORDER : 0)
 #define PGD_SIZE	(PAGESIZE() << PGD_ORDER)
 
