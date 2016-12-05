@@ -3475,6 +3475,7 @@ module_init(void)
 
 		total += nsyms;
 		total += 2;  /* store the module's start/ending addresses */
+		total += 2;  /* and the init start/ending addresses */
 
 		/*
 		 *  If the module has kallsyms, set up to grab them as well.
