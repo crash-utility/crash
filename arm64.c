@@ -1,8 +1,8 @@
 /*
  * arm64.c - core analysis suite
  *
- * Copyright (C) 2012-2016 David Anderson
- * Copyright (C) 2012-2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2012-2017 David Anderson
+ * Copyright (C) 2012-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -3388,6 +3388,7 @@ arm64_calc_VA_BITS(void)
 	int bitval;
 	struct syment *sp;
 	ulong value;
+	char *string;
 
 	if (!(sp = symbol_search("swapper_pg_dir")) &&
 	    !(sp = symbol_search("idmap_pg_dir")) &&
@@ -3413,6 +3414,18 @@ arm64_calc_VA_BITS(void)
 			break;
 		}
 	}
+
+	/*
+	 *  Verify against dumpfiles that export VA_BITS in vmcoreinfo
+	 */
+        if ((string = pc->read_vmcoreinfo("NUMBER(VA_BITS)"))) {
+                value = atol(string);
+                free(string);
+		if (machdep->machspec->VA_BITS != value)
+			error(WARNING, "VA_BITS: calculated: %ld  vmcoreinfo: %ld\n",
+				machdep->machspec->VA_BITS, value);
+        }
+
 
 	if (CRASHDEBUG(1))
 		fprintf(fp, "VA_BITS: %ld\n", machdep->machspec->VA_BITS);
