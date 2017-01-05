@@ -2,7 +2,7 @@
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
  * Copyright (C) 2002-2016 David Anderson
- * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -1977,6 +1977,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long blk_mq_ctx_rq_dispatched;
 	long blk_mq_ctx_rq_completed;
 	long task_struct_stack;
+	long tnt_mod;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2120,6 +2121,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long trace_print_flags;
 	long task_struct_flags;
 	long timer_base;
+	long taint_flag;
 };
 
 struct array_table {

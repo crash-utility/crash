@@ -2,7 +2,7 @@
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
  * Copyright (C) 2002-2016 David Anderson
- * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 #include <elf.h>
 #include <libgen.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 static void do_module_cmd(ulong, char *, ulong, char *, char *);
 static void show_module_taint(void);
@@ -3963,6 +3964,99 @@ check_specified_module_tree(char *module, char *gdb_buffer)
 }
 
 static void
+show_module_taint_4_10(void)
+{
+	int i, j, bx;
+	struct load_module *lm;
+	int maxnamelen;
+	int found;
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	struct syment *sp;
+	uint *taintsp, taints;
+	bool tnt_mod;
+	char tnt_true;
+	int tnts_len;
+	ulong tnts_addr;
+	char *modbuf;
+
+	if (INVALID_MEMBER(module_taints)) {
+		MEMBER_OFFSET_INIT(module_taints, "module", "taints");
+		STRUCT_SIZE_INIT(taint_flag, "taint_flag");
+		MEMBER_OFFSET_INIT(tnt_true, "taint_flag", "true");
+		MEMBER_OFFSET_INIT(tnt_mod, "taint_flag", "module");
+	}
+
+	modbuf = GETBUF(SIZE(module));
+
+	for (i = found = maxnamelen = 0; i < kt->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		readmem(lm->module_struct, KVADDR, modbuf, SIZE(module),
+			"module struct", FAULT_ON_ERROR);
+
+		taints = ULONG(modbuf + OFFSET(module_taints));
+
+		if (taints) {
+			found++;
+			maxnamelen = strlen(lm->mod_name) > maxnamelen ?
+				strlen(lm->mod_name) : maxnamelen;
+		}
+	}
+
+	if (!found) {
+		fprintf(fp, "no tainted modules\n");
+		FREEBUF(modbuf);
+		return;
+	}
+
+	tnts_len = get_array_length("taint_flags", NULL, 0);
+	sp = symbol_search("taint_flags");
+	tnts_addr = sp->value;
+
+	fprintf(fp, "%s  %s\n",
+			mkstring(buf2, maxnamelen, LJUST, "NAME"), "TAINTS");
+
+	for (i = 0; i < st->mods_installed; i++) {
+
+		lm = &st->load_modules[i];
+		bx = 0;
+		buf1[0] = '\0';
+
+		readmem(lm->module_struct, KVADDR, modbuf, SIZE(module),
+				"module struct", FAULT_ON_ERROR);
+
+		taints = ULONG(modbuf + OFFSET(module_taints));
+		if (!taints)
+			continue;
+		taintsp = &taints;
+
+		for (j = 0; j < tnts_len; j++) {
+			readmem((tnts_addr + j * SIZE(taint_flag)) +
+					OFFSET(tnt_mod),
+					KVADDR, &tnt_mod, sizeof(bool),
+					"tnt mod", FAULT_ON_ERROR);
+			if (!tnt_mod)
+				continue;
+			if (NUM_IN_BITMAP(taintsp, j)) {
+				readmem((tnts_addr + j * SIZE(taint_flag)) +
+						OFFSET(tnt_true),
+						KVADDR, &tnt_true, sizeof(char),
+						"tnt true", FAULT_ON_ERROR);
+				buf1[bx++] = tnt_true;
+			}
+		}
+
+		buf1[bx++] = '\0';
+
+		fprintf(fp, "%s  %s\n", mkstring(buf2, maxnamelen,
+					LJUST, lm->mod_name), buf1);
+	}
+
+	FREEBUF(modbuf);
+}
+
+static void
 show_module_taint(void)
 {
 	int i, j, bx;
@@ -3979,6 +4073,12 @@ show_module_taint(void)
 	int tnts_exists, tnts_len;
 	ulong tnts_addr;
 	char *modbuf;
+
+	if (VALID_STRUCT(taint_flag) ||
+	    (kernel_symbol_exists("taint_flags") && STRUCT_EXISTS("taint_flag"))) {
+		show_module_taint_4_10();
+		return;
+	}
 
 	if (INVALID_MEMBER(module_taints) &&
 	    INVALID_MEMBER(module_license_gplok)) {
@@ -10416,6 +10516,56 @@ dump_variable_length_record(void)
 }
 
 static void
+show_kernel_taints_v4_10(char *buf, int verbose)
+{
+	int i, bx;
+	char tnt_true, tnt_false;
+	int tnts_len;
+	ulong tnts_addr;
+	ulong tainted_mask, *tainted_mask_ptr;
+	struct syment *sp;
+
+	if (!VALID_STRUCT(taint_flag)) {
+		STRUCT_SIZE_INIT(taint_flag, "taint_flag");
+		MEMBER_OFFSET_INIT(tnt_true, "taint_flag", "true");
+		MEMBER_OFFSET_INIT(tnt_false, "taint_flag", "false");
+	}
+
+	tnts_len = get_array_length("taint_flags", NULL, 0);
+	sp = symbol_search("taint_flags");
+	tnts_addr = sp->value;
+
+	bx = 0;
+	buf[0] = '\0';
+
+	get_symbol_data("tainted_mask", sizeof(ulong), &tainted_mask);
+	tainted_mask_ptr = &tainted_mask;
+
+	for (i = 0; i < tnts_len; i++) {
+		if (NUM_IN_BITMAP(tainted_mask_ptr, i)) {
+			readmem((tnts_addr + i * SIZE(taint_flag)) +
+					OFFSET(tnt_true),
+				KVADDR, &tnt_true, sizeof(char),
+				"tnt true", FAULT_ON_ERROR);
+				buf[bx++] = tnt_true;
+		} else {
+			readmem((tnts_addr + i * SIZE(taint_flag)) +
+					OFFSET(tnt_false),
+				KVADDR, &tnt_false, sizeof(char),
+				"tnt false", FAULT_ON_ERROR);
+			if (tnt_false != ' ' && tnt_false != '-' &&
+			    tnt_false != 'G')
+				buf[bx++] = tnt_false;
+		}
+	}
+
+	buf[bx++] = '\0';
+
+	if (verbose)
+		fprintf(fp, "TAINTED_MASK: %lx  %s\n", tainted_mask, buf);
+}
+
+static void
 show_kernel_taints(char *buf, int verbose)
 {
 	int i, bx;
@@ -10426,6 +10576,12 @@ show_kernel_taints(char *buf, int verbose)
 	ulong tainted_mask, *tainted_mask_ptr;
 	int tainted;
 	struct syment *sp;
+
+	if (VALID_STRUCT(taint_flag) ||
+	    (kernel_symbol_exists("taint_flags") && STRUCT_EXISTS("taint_flag"))) {
+		show_kernel_taints_v4_10(buf, verbose);
+		return;
+	}
 
 	if (!VALID_STRUCT(tnt)) { 
                 STRUCT_SIZE_INIT(tnt, "tnt");
