@@ -1,7 +1,7 @@
 /* netdump.c 
  *
- * Copyright (C) 2002-2015 David Anderson
- * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2017 David Anderson
+ * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -4059,10 +4059,7 @@ read_proc_kcore(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 	 *  and for lowmem access for 32-bit architectures.
 	 */
 	offset = UNINITIALIZED;
-	if (machine_type("ARM64"))
-		kvaddr =  PTOV((ulong)paddr);
-	else
-		kvaddr = (ulong)paddr | machdep->kvbase;
+	kvaddr =  PTOV((ulong)paddr);
 	readcnt = cnt;
 
 	switch (pkd->flags & (KCORE_ELF32|KCORE_ELF64)) 
@@ -4100,6 +4097,25 @@ read_proc_kcore(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 		break;
 
 	case KCORE_ELF64:
+		/*
+		 *  If KASLR, the PAGE_OFFSET may be unknown early on, so try
+		 *  the (hopefully) mapped kernel address first.
+		 */
+		if ((pc->curcmd_flags & MEMTYPE_KVADDR) && (kvaddr != addr)) {
+			pc->curcmd_flags &= ~MEMTYPE_KVADDR;
+			for (i = 0; i < pkd->segments; i++) {
+				lp64 = pkd->load64 + i;
+				if ((addr >= lp64->p_vaddr) &&
+				    (addr < (lp64->p_vaddr + lp64->p_memsz))) {
+					offset = (off_t)(addr - lp64->p_vaddr) + 
+						(off_t)lp64->p_offset;
+					break;
+				}
+			}
+			if (offset != UNINITIALIZED)
+				break;
+		}
+
 		for (i = 0; i < pkd->segments; i++) {
 			lp64 = pkd->load64 + i;
 			if ((kvaddr >= lp64->p_vaddr) &&
