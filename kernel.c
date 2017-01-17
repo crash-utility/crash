@@ -3984,6 +3984,8 @@ show_module_taint_4_10(void)
 		MEMBER_OFFSET_INIT(module_taints, "module", "taints");
 		STRUCT_SIZE_INIT(taint_flag, "taint_flag");
 		MEMBER_OFFSET_INIT(tnt_true, "taint_flag", "true");
+		if (INVALID_MEMBER(tnt_true))
+			MEMBER_OFFSET_INIT(tnt_true, "taint_flag", "c_true");
 		MEMBER_OFFSET_INIT(tnt_mod, "taint_flag", "module");
 	}
 
@@ -10536,6 +10538,10 @@ show_kernel_taints_v4_10(char *buf, int verbose)
 		STRUCT_SIZE_INIT(taint_flag, "taint_flag");
 		MEMBER_OFFSET_INIT(tnt_true, "taint_flag", "true");
 		MEMBER_OFFSET_INIT(tnt_false, "taint_flag", "false");
+		if (INVALID_MEMBER(tnt_true)) {
+			MEMBER_OFFSET_INIT(tnt_true, "taint_flag", "c_true");
+			MEMBER_OFFSET_INIT(tnt_false, "taint_flag", "c_false");
+		}
 	}
 
 	tnts_len = get_array_length("taint_flags", NULL, 0);
