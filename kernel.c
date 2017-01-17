@@ -1,7 +1,7 @@
 /* kernel.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2016 David Anderson
+ * Copyright (C) 2002-2017 David Anderson
  * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -3973,7 +3973,7 @@ show_module_taint_4_10(void)
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
 	struct syment *sp;
-	uint *taintsp, taints;
+	ulong *taintsp, taints;
 	bool tnt_mod;
 	char tnt_true;
 	int tnts_len;
@@ -3995,7 +3995,10 @@ show_module_taint_4_10(void)
 		readmem(lm->module_struct, KVADDR, modbuf, SIZE(module),
 			"module struct", FAULT_ON_ERROR);
 
-		taints = ULONG(modbuf + OFFSET(module_taints));
+		if (MEMBER_SIZE("module", "taints") == sizeof(ulong))
+			taints = ULONG(modbuf + OFFSET(module_taints));
+		else
+			taints = UINT(modbuf + OFFSET(module_taints));
 
 		if (taints) {
 			found++;
@@ -4026,7 +4029,11 @@ show_module_taint_4_10(void)
 		readmem(lm->module_struct, KVADDR, modbuf, SIZE(module),
 				"module struct", FAULT_ON_ERROR);
 
-		taints = ULONG(modbuf + OFFSET(module_taints));
+		if (MEMBER_SIZE("module", "taints") == sizeof(ulong))
+			taints = ULONG(modbuf + OFFSET(module_taints));
+		else
+			taints = UINT(modbuf + OFFSET(module_taints));
+
 		if (!taints)
 			continue;
 		taintsp = &taints;
