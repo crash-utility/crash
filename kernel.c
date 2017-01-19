@@ -10544,12 +10544,23 @@ show_kernel_taints_v4_10(char *buf, int verbose)
 		}
 	}
 
+	bx = 0;
+	buf[0] = '\0';
+
+	/*
+	 *  Make sure that all dependencies are valid to prevent
+	 *  a fatal error from killing the session during the 
+	 *  pre-RUNTIME system banner display.
+	 */ 
+	if (!(pc->flags & RUNTIME)) {
+		if (INVALID_MEMBER(tnt_true) || INVALID_MEMBER(tnt_false) ||
+		    !kernel_symbol_exists("tainted_mask"))
+			return;
+	}
+
 	tnts_len = get_array_length("taint_flags", NULL, 0);
 	sp = symbol_search("taint_flags");
 	tnts_addr = sp->value;
-
-	bx = 0;
-	buf[0] = '\0';
 
 	get_symbol_data("tainted_mask", sizeof(ulong), &tainted_mask);
 	tainted_mask_ptr = &tainted_mask;
