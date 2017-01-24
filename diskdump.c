@@ -1366,8 +1366,30 @@ get_diskdump_regs_ppc(struct bt_info *bt, ulong *eip, ulong *esp)
 static void
 get_diskdump_regs_ppc64(struct bt_info *bt, ulong *eip, ulong *esp)
 {
+	int cpu;
+	Elf64_Nhdr *note;
+	size_t len;
+
 	if ((bt->task == tt->panic_task) && DISKDUMP_VALID())
 		bt->machdep = &dd->sub_header->elf_regs;
+	else if (KDUMP_CMPRS_VALID() &&
+		(bt->task == tt->panic_task ||
+		(is_task_active(bt->task) && dd->num_prstatus_notes > 1))) {
+		cpu = bt->tc->processor;
+		if (dd->nt_prstatus_percpu[cpu] == NULL) {
+			if(CRASHDEBUG(1))
+				error(INFO,
+				      "registers not collected for cpu %d\n",
+				      cpu);
+		} else {
+			note = (Elf64_Nhdr *)
+				dd->nt_prstatus_percpu[cpu];
+			len = sizeof(Elf64_Nhdr);
+			len = roundup(len + note->n_namesz, 4);
+			bt->machdep = (void *)((char *)note + len +
+				MEMBER_OFFSET("elf_prstatus", "pr_reg"));
+		}
+	}
 
 	machdep->get_stack_frame(bt, eip, esp);
 }

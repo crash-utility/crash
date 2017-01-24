@@ -65,19 +65,6 @@ static ulong pgd_page_vaddr_l4(ulong pgd);
 static ulong pud_page_vaddr_l4(ulong pud);
 static ulong pmd_page_vaddr_l4(ulong pmd);
 
-static inline uint get_ptetype(ulong pte)
-{
-	uint pte_type = 0; /* 0: regular entry; 1: huge pte; 2: huge pd */
-
-	if (is_hugepage(pte))
-		pte_type = 1;
-	else if (!(machdep->flags & RADIX_MMU) &&
-	    (PAGESIZE() != PPC64_64K_PAGE_SIZE) && is_hugepd(pte))
-		pte_type = 2;
-
-	return pte_type;
-}
-
 static inline int is_hugepage(ulong pte)
 {
 	if ((machdep->flags & BOOK3E) ||
@@ -126,6 +113,19 @@ static inline int is_hugepd(ulong pte)
 		return (((pte & HUGE_PTE_MASK) == 0x0) &&
 			((pte & HUGEPD_SHIFT_MASK) != 0));
 	}
+}
+
+static inline uint get_ptetype(ulong pte)
+{
+	uint pte_type = 0; /* 0: regular entry; 1: huge pte; 2: huge pd */
+
+	if (is_hugepage(pte))
+		pte_type = 1;
+	else if (!(machdep->flags & RADIX_MMU) &&
+	    (PAGESIZE() != PPC64_64K_PAGE_SIZE) && is_hugepd(pte))
+		pte_type = 2;
+
+	return pte_type;
 }
 
 static inline ulong hugepage_dir(ulong pte)
@@ -2219,66 +2219,11 @@ ppc64_print_eframe(char *efrm_str, struct ppc64_pt_regs *regs,
 }
 
 /*
- * get SP and IP from the saved ptregs.
- */
-static int
-ppc64_kdump_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
-{
-	struct ppc64_pt_regs *pt_regs;
-	unsigned long unip;
-
-	pt_regs = (struct ppc64_pt_regs *)bt_in->machdep;
-	if (!pt_regs || !pt_regs->gpr[1]) {
-		/*
-		 * Not collected regs. May be the corresponding CPU not
-		 * responded to an IPI.
-		 */
-		fprintf(fp, "%0lx: GPR1 register value (SP) was not saved\n",
-			bt_in->task);
-		return FALSE;
-	}
-	*ksp = pt_regs->gpr[1];
-	if (IS_KVADDR(*ksp)) {
-		readmem(*ksp+16, KVADDR, &unip, sizeof(ulong), "Regs NIP value",
-			FAULT_ON_ERROR);
-		*nip = unip;
-	} else {
-		if (IN_TASK_VMA(bt_in->task, *ksp))
-			fprintf(fp, "%0lx: Task is running in user space\n",
-				bt_in->task);
-		else 
-			fprintf(fp, "%0lx: Invalid Stack Pointer %0lx\n",
-				bt_in->task, *ksp);
-		*nip = pt_regs->nip;
-	}
-
-	if (bt_in->flags && 
-	((BT_TEXT_SYMBOLS|BT_TEXT_SYMBOLS_PRINT|BT_TEXT_SYMBOLS_NOPRINT))) 
-		return TRUE;
-
-	/*
-	 * Print the collected regs for the active task
-	 */
-	ppc64_print_regs(pt_regs);
-	if (!IS_KVADDR(*ksp)) 
-		return FALSE;
-	
-	fprintf(fp, " NIP [%016lx] %s\n", pt_regs->nip,
-		closest_symbol(pt_regs->nip));
-	if (unip != pt_regs->link)
-		fprintf(fp, " LR  [%016lx] %s\n", pt_regs->link,
-			closest_symbol(pt_regs->link));
-
-	return TRUE;
-}
-
-/*
  *  Get the starting point for the active cpus in a diskdump/netdump.
  */
 static int
 ppc64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 {
-	int panic_task;
 	int i;
 	char *sym;
 	ulong *up;
@@ -2291,25 +2236,13 @@ ppc64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 	struct ppc64_pt_regs *pt_regs;
 	struct syment *sp;
 
-	/* 
-	 * For the kdump vmcore, Use SP and IP values that are saved in ptregs.
-	 */ 
-	if (pc->flags & KDUMP)
-		return ppc64_kdump_stack_frame(bt_in, nip, ksp);
-
         bt = &bt_local;
         BCOPY(bt_in, bt, sizeof(struct bt_info));
         ms = machdep->machspec;
-        ur_nip = ur_ksp = 0;
-	
-	panic_task = tt->panic_task == bt->task ? TRUE : FALSE;
 
 	check_hardirq = check_softirq = tt->flags & IRQSTACKS ? TRUE : FALSE;
-	if (panic_task && bt->machdep) {
-		pt_regs = (struct ppc64_pt_regs *)bt->machdep;
-		ur_nip = pt_regs->nip;
-		ur_ksp = pt_regs->gpr[1];
-	} else if (bt->task != tt->panic_task) {
+
+	if (bt->task != tt->panic_task) {
 		char cpu_frozen = FALSE;
 		/*
 		 * Determine whether the CPU responded to an IPI.
@@ -2428,15 +2361,39 @@ retry:
 		alter_stackbuf(bt);
 		check_intrstack = FALSE;
 		goto retry;
-	} 
+	}
+
 	/*
-	 *  We didn't find what we were looking for, so just use what was
-	 *  passed in the ELF header.
+	 * We didn't find what we were looking for, so try to use
+	 * the SP and IP values saved in ptregs.
 	 */
-	if (ur_nip && ur_ksp) {
-        	*nip = ur_nip;
-		*ksp = ur_ksp;
-		return TRUE;
+	pt_regs = (struct ppc64_pt_regs *)bt_in->machdep;
+	if (!pt_regs || !pt_regs->gpr[1]) {
+		/*
+		 * Not collected regs. May be the corresponding CPU did not
+		 * respond to an IPI.
+		 */
+		if (CRASHDEBUG(1))
+			fprintf(fp, "%0lx: GPR1(SP) register value not saved\n",
+				bt_in->task);
+	} else {
+		*ksp = pt_regs->gpr[1];
+		if (IS_KVADDR(*ksp)) {
+			readmem(*ksp+16, KVADDR, nip, sizeof(ulong),
+				"Regs NIP value", FAULT_ON_ERROR);
+			ppc64_print_regs(pt_regs);
+			return TRUE;
+		} else {
+			if (IN_TASK_VMA(bt_in->task, *ksp))
+				fprintf(fp, "%0lx: Task is running in user space\n",
+					bt_in->task);
+			else
+				fprintf(fp, "%0lx: Invalid Stack Pointer %0lx\n",
+					bt_in->task, *ksp);
+			*nip = pt_regs->nip;
+			ppc64_print_regs(pt_regs);
+			return FALSE;
+		}
 	}
 
         console("ppc64_get_dumpfile_stack_frame: cannot find SP for panic task\n");
