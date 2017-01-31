@@ -1,7 +1,7 @@
 /* x86_64.c -- core analysis suite
  *
- * Copyright (C) 2004-2016 David Anderson
- * Copyright (C) 2004-2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2017 David Anderson
+ * Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -340,7 +340,7 @@ x86_64_init(int when)
 				machdep->machspec->vmalloc_end = VMALLOC_END_2_6_31;
 				machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
 				machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
-				if ((kt->flags2 & KASLR) && (THIS_KERNEL_VERSION >= LINUX(4,7,0)))
+				if (kt->flags2 & KASLR)
 					machdep->machspec->modules_vaddr = __START_KERNEL_map + 
 						(machdep->machspec->kernel_image_size ?
 						machdep->machspec->kernel_image_size : GIGABYTES(1));
@@ -772,7 +772,12 @@ x86_64_dump_machdep_table(ulong arg)
 	fprintf(fp, "              vmemmap_end: %016lx %s\n", (ulong)ms->vmemmap_end,
 		machdep->flags & VMEMMAP ? "" : "(unused)");
 	fprintf(fp, "                phys_base: %lx\n", (ulong)ms->phys_base);
-	fprintf(fp, "        kernel_image_size: %ldMB\n", ms->kernel_image_size/MEGABYTES(1));
+	fprintf(fp, "        kernel_image_size: ");
+	if (ms->kernel_image_size)
+		fprintf(fp, "%lx (%ldMB)\n", ms->kernel_image_size,
+			ms->kernel_image_size/MEGABYTES(1));
+	else
+		fprintf(fp, "(uninitialized)\n");
 	fprintf(fp, "               GART_start: %lx\n", ms->GART_start);
 	fprintf(fp, "                 GART_end: %lx\n", ms->GART_end);
 	fprintf(fp, "                     pml4: %lx\n", (ulong)ms->pml4);
@@ -5445,7 +5450,7 @@ parse_cmdline_args(void)
 	char *p;
 	char buf[BUFSIZE];
 	char *arglist[MAXARGS];
-	int megabytes;
+	int megabytes, gigabytes;
 	int lines = 0;
 	int vm_flag;
 	ulong value;
@@ -5514,6 +5519,39 @@ parse_cmdline_args(void)
 	                                            "setting phys_base to: 0x%lx\n\n",
 	                                                machdep->machspec->phys_base);
 						machdep->flags |= PHYS_BASE;
+	                                        continue;
+	                                }
+	                        }
+			} else if (STRNEQ(arglist[i], "kernel_image_size=")) {
+				megabytes = gigabytes = FALSE;
+				if ((LASTCHAR(arglist[i]) == 'm') || 
+				    (LASTCHAR(arglist[i]) == 'M')) {
+					LASTCHAR(arglist[i]) = NULLCHAR;
+					megabytes = TRUE;
+				}
+				if ((LASTCHAR(arglist[i]) == 'g') || 
+				    (LASTCHAR(arglist[i]) == 'G')) {
+					LASTCHAR(arglist[i]) = NULLCHAR;
+					gigabytes = TRUE;
+				}
+
+	                        p = arglist[i] + strlen("kernel_image_size=");
+	                        if (strlen(p)) {
+					if (megabytes || gigabytes) {
+	                                	value = dtol(p, RETURN_ON_ERROR|QUIET,
+	                                        	&errflag);
+					} else
+	                                	value = htol(p, RETURN_ON_ERROR|QUIET,
+	                                        	&errflag);
+	                                if (!errflag) {
+						if (megabytes)
+							value = MEGABYTES(value);
+						else if (gigabytes)
+							value = GIGABYTES(value);
+	                                        machdep->machspec->kernel_image_size = value;
+	                                        error(NOTE,
+	                                            "setting kernel_image_size to: 0x%lx\n\n",
+	                                                machdep->machspec->kernel_image_size);
 	                                        continue;
 	                                }
 	                        }
