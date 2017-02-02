@@ -46,7 +46,6 @@ static int insmod_memory_driver_module(void);
 static int get_memory_driver_dev(dev_t *);
 static int memory_driver_init(void);
 static int create_memory_device(dev_t);
-static void *radix_tree_lookup(ulong, ulong, int);
 static int match_file_string(char *, char *, char *);
 static ulong get_root_vfsmount(char *);
 static void check_live_arch_mismatch(void);
@@ -2080,14 +2079,25 @@ vfs_init(void)
 	if (!(ft->inode_cache = (char *)malloc(SIZE(inode)*INODE_CACHE)))
 		error(FATAL, "cannot malloc inode cache\n");
 
-	if (symbol_exists("height_to_maxindex")) {
+	if (symbol_exists("height_to_maxindex") ||
+	    symbol_exists("height_to_maxnodes")) {
+		int newver = symbol_exists("height_to_maxnodes");
 		int tmp ATTRIBUTE_UNUSED;
-		if (LKCD_KERNTYPES())
-			ARRAY_LENGTH_INIT_ALT(tmp, "height_to_maxindex",
-				"radix_tree_preload.nodes", NULL, 0);
-		else
-			ARRAY_LENGTH_INIT(tmp, height_to_maxindex,
-                        	"height_to_maxindex", NULL, 0);
+		if (!newver) {
+			if (LKCD_KERNTYPES())
+				ARRAY_LENGTH_INIT_ALT(tmp, "height_to_maxindex",
+					"radix_tree_preload.nodes", NULL, 0);
+			else
+				ARRAY_LENGTH_INIT(tmp, height_to_maxindex,
+					"height_to_maxindex", NULL, 0);
+		} else {
+			if (LKCD_KERNTYPES())
+				ARRAY_LENGTH_INIT_ALT(tmp, "height_to_maxnodes",
+					"radix_tree_preload.nodes", NULL, 0);
+			else
+				ARRAY_LENGTH_INIT(tmp, height_to_maxnodes,
+					"height_to_maxnodes", NULL, 0);
+		}
 		STRUCT_SIZE_INIT(radix_tree_root, "radix_tree_root");
 		STRUCT_SIZE_INIT(radix_tree_node, "radix_tree_node");
 		MEMBER_OFFSET_INIT(radix_tree_root_height, 
@@ -2098,6 +2108,8 @@ vfs_init(void)
 			"radix_tree_node","slots");
 		MEMBER_OFFSET_INIT(radix_tree_node_height, 
 			"radix_tree_node","height");
+		MEMBER_OFFSET_INIT(radix_tree_node_shift,
+			"radix_tree_node","shift");
 	}
 	MEMBER_OFFSET_INIT(rb_root_rb_node, 
 		"rb_root","rb_node");
@@ -3969,15 +3981,64 @@ cleanup_memory_driver(void)
 	return errors ? FALSE : TRUE;
 }
 
+struct do_radix_tree_info {
+	ulong maxcount;
+	ulong count;
+	void *data;
+};
+static void do_radix_tree_count(ulong node, ulong slot, const char *path,
+				ulong index, void *private)
+{
+	struct do_radix_tree_info *info = private;
+	info->count++;
+}
+static void do_radix_tree_search(ulong node, ulong slot, const char *path,
+				 ulong index, void *private)
+{
+	struct do_radix_tree_info *info = private;
+	struct radix_tree_pair *rtp = info->data;
 
-/*
- *  Use the kernel's radix_tree_lookup() function as a template to dump
- *  a radix tree's entries. 
- */
+	if (rtp->index == index) {
+		rtp->value = (void *)slot;
+		info->count = 1;
+	}
+}
+static void do_radix_tree_dump(ulong node, ulong slot, const char *path,
+			       ulong index, void *private)
+{
+	struct do_radix_tree_info *info = private;
+	fprintf(fp, "[%ld] %lx\n", index, slot);
+	info->count++;
+}
+static void do_radix_tree_gather(ulong node, ulong slot, const char *path,
+				 ulong index, void *private)
+{
+	struct do_radix_tree_info *info = private;
+	struct radix_tree_pair *rtp = info->data;
 
-ulong RADIX_TREE_MAP_SHIFT = UNINITIALIZED;
-ulong RADIX_TREE_MAP_SIZE = UNINITIALIZED;
-ulong RADIX_TREE_MAP_MASK = UNINITIALIZED;
+	if (info->maxcount) {
+		rtp[info->count].index = index;
+		rtp[info->count].value = (void *)slot;
+
+		info->count++;
+		info->maxcount--;
+	}
+}
+static void do_radix_tree_dump_cb(ulong node, ulong slot, const char *path,
+				  ulong index, void *private)
+{
+	struct do_radix_tree_info *info = private;
+	struct radix_tree_pair *rtp = info->data;
+	int (*cb)(ulong) = rtp->value;
+
+	/* Caller defined operation */
+	if (!cb(slot)) {
+		error(FATAL, "do_radix_tree: callback "
+		      "operation failed: entry: %ld  item: %lx\n",
+		      info->count, slot);
+	}
+	info->count++;
+}
 
 /*
  *  do_radix_tree argument usage: 
@@ -4011,116 +4072,39 @@ ulong RADIX_TREE_MAP_MASK = UNINITIALIZED;
 ulong
 do_radix_tree(ulong root, int flag, struct radix_tree_pair *rtp)
 {
-	int i, ilen, height; 
-	long nlen;
-	ulong index, maxindex, count, maxcount;
-	long *height_to_maxindex;
-	char *radix_tree_root_buf;
-	struct radix_tree_pair *r;
-	ulong root_rnode;
-	void *ret;
-	int (*cb)(ulong) = NULL;
-
-	count = 0;
-
-	if (!VALID_STRUCT(radix_tree_root) || !VALID_STRUCT(radix_tree_node) ||
-	    !VALID_MEMBER(radix_tree_root_height) ||
-	    !VALID_MEMBER(radix_tree_root_rnode) ||
-	    !VALID_MEMBER(radix_tree_node_slots) ||
-	    !ARRAY_LENGTH(height_to_maxindex)) 
-		error(FATAL, 
-		   "radix trees do not exist (or have changed their format)\n");
-
-	if (RADIX_TREE_MAP_SHIFT == UNINITIALIZED) {
-		if (!(nlen = MEMBER_SIZE("radix_tree_node", "slots")))
-			error(FATAL, "cannot determine length of " 
-				     "radix_tree_node.slots[] array\n");
-		nlen /= sizeof(void *);
-		RADIX_TREE_MAP_SHIFT = ffsl(nlen) - 1;
-		RADIX_TREE_MAP_SIZE = (1UL << RADIX_TREE_MAP_SHIFT);
-		RADIX_TREE_MAP_MASK = (RADIX_TREE_MAP_SIZE-1);
-	}
-
-	ilen = ARRAY_LENGTH(height_to_maxindex);
-	height_to_maxindex = (long *)GETBUF(ilen * sizeof(long));
-	readmem(symbol_value("height_to_maxindex"), KVADDR, 
-	    	height_to_maxindex, ilen*sizeof(long),
-		"height_to_maxindex array", FAULT_ON_ERROR);
-
-	if (CRASHDEBUG(1)) {
-		fprintf(fp, "radix_tree_node.slots[%ld]\n", 
-			RADIX_TREE_MAP_SIZE);
-		fprintf(fp, "height_to_maxindex[%d]: ", ilen);
-		for (i = 0; i < ilen; i++)
-			fprintf(fp, "%lu ", height_to_maxindex[i]);
-		fprintf(fp, "\n");
-		fprintf(fp, "radix_tree_root at %lx:\n", root);
-		dump_struct("radix_tree_root", (ulong)root, RADIX(16));
-	}
-
-	radix_tree_root_buf = GETBUF(SIZE(radix_tree_root));
-	readmem(root, KVADDR, radix_tree_root_buf, SIZE(radix_tree_root),
-		"radix_tree_root", FAULT_ON_ERROR);
-	height = UINT(radix_tree_root_buf + OFFSET(radix_tree_root_height));
-
-	if ((height < 0) || (height > ilen)) {
-		error(INFO, "height_to_maxindex[] index: %ld\n", ilen);
-		fprintf(fp, "invalid height in radix_tree_root at %lx:\n", root);
-		dump_struct("radix_tree_root", (ulong)root, RADIX(16));
-		return 0;
-	}
-
-	maxindex = height_to_maxindex[height];
-	FREEBUF(height_to_maxindex);
-	FREEBUF(radix_tree_root_buf);
-
-	root_rnode = root + OFFSET(radix_tree_root_rnode);
+	struct do_radix_tree_info info = {
+		.count		= 0,
+		.data		= rtp,
+	};
+	struct radix_tree_ops ops = {
+		.radix		= 16,
+		.private	= &info,
+	};
 
 	switch (flag)
 	{
 	case RADIX_TREE_COUNT:
-		for (index = count = 0; index <= maxindex; index++) {
-			if (radix_tree_lookup(root_rnode, index, height))
-				count++;
-		}
+		ops.entry = do_radix_tree_count;
 		break;
 
 	case RADIX_TREE_SEARCH:
-		count = 0;
-		if (rtp->index > maxindex) 
-			break;
-
-		if ((ret = radix_tree_lookup(root_rnode, rtp->index, height))) {
-			rtp->value = ret;
-			count++;
-		}
+		/*
+		 * FIXME: do_radix_tree_traverse() traverses whole
+		 * radix tree, not binary search. So this search is
+		 * not efficient.
+		 */
+		ops.entry = do_radix_tree_search;
 		break;
 
 	case RADIX_TREE_DUMP:
-		for (index = count = 0; index <= maxindex; index++) {
-			if ((ret = 
-			    radix_tree_lookup(root_rnode, index, height))) {
-				fprintf(fp, "[%ld] %lx\n", index, (ulong)ret);
-				count++;
-			}
-		}
+		ops.entry = do_radix_tree_dump;
 		break;
 
 	case RADIX_TREE_GATHER:
-		if (!(maxcount = rtp->index))
-			maxcount = (ulong)(-1);   /* caller beware */
+		if (!(info.maxcount = rtp->index))
+			info.maxcount = (ulong)(-1);   /* caller beware */
 
-                for (index = count = 0, r = rtp; index <= maxindex; index++) {
-                        if ((ret = 
-			    radix_tree_lookup(root_rnode, index, height))) {
-				r->index = index;
-				r->value = ret;
-				count++;
-                                if (--maxcount <= 0)
-					break;
-				r++;
-                        }
-                }
+		ops.entry = do_radix_tree_gather;
 		break;
 
 	case RADIX_TREE_DUMP_CB:
@@ -4128,62 +4112,15 @@ do_radix_tree(ulong root, int flag, struct radix_tree_pair *rtp)
 			error(FATAL, "do_radix_tree: need set callback function");
 			return -EINVAL;
 		}
-		cb = (int (*)(ulong))rtp->value;
-		for (index = count = 0; index <= maxindex; index++) {
-			if ((ret =
-			    radix_tree_lookup(root_rnode, index, height))) {
-				/* Caller defined operation */
-				if (!cb((ulong)ret)) {
-					error(FATAL, "do_radix_tree: callback "
-					    "operation failed: entry: %ld  item: %lx\n",
-					    count, (ulong)ret);
-				}
-				count++;
-			}
-		}
+		ops.entry = do_radix_tree_dump_cb;
 		break;
 
 	default:
 		error(FATAL, "do_radix_tree: invalid flag: %lx\n", flag);
 	}
 
-	return count;
-}
-
-static void *
-radix_tree_lookup(ulong root_rnode, ulong index, int height)
-{
-	unsigned int shift;
-	ulong rnode;
-	ulong *slots;
-
-	shift = (height-1) * RADIX_TREE_MAP_SHIFT;
-
-	readmem(root_rnode, KVADDR, &rnode, sizeof(void *),
-		"radix_tree_root rnode", FAULT_ON_ERROR);
-
-	if (rnode & 1)
-		rnode &= ~1;
-
-	slots = (ulong *)GETBUF(sizeof(void *) * RADIX_TREE_MAP_SIZE);
-
-	while (height > 0) {
-		if (rnode == 0)
-			break;
-
-		readmem((ulong)rnode+OFFSET(radix_tree_node_slots), KVADDR, 
-			&slots[0], sizeof(void *) * RADIX_TREE_MAP_SIZE,
-			"radix_tree_node.slots array", FAULT_ON_ERROR);
-
-		rnode = slots[((index >> shift) & RADIX_TREE_MAP_MASK)];
-
-		shift -= RADIX_TREE_MAP_SHIFT;
-		height--;
-	}
-
-	FREEBUF(slots);
-
-	return (void *)rnode;
+	do_radix_tree_traverse(root, 1, &ops);
+	return info.count;
 }
 
 int

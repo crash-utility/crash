@@ -1978,6 +1978,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long blk_mq_ctx_rq_completed;
 	long task_struct_stack;
 	long tnt_mod;
+	long radix_tree_node_shift;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2152,6 +2153,7 @@ struct array_table {
 	int kmem_cache_node;
 	int kmem_cache_cpu_slab;
 	int rt_prio_array_queue;
+	int height_to_maxnodes;
 };
 
 /*
@@ -4803,6 +4805,13 @@ char *shift_string_right(char *, int);
 int bracketed(char *, char *, int);
 void backspace(int);
 int do_list(struct list_data *);
+struct radix_tree_ops {
+	void (*entry)(ulong node, ulong slot, const char *path,
+		      ulong index, void *private);
+	uint radix;
+	void *private;
+};
+int do_radix_tree_traverse(ulong ptr, int is_root, struct radix_tree_ops *ops);
 int do_rdtree(struct tree_data *);
 int do_rbtree(struct tree_data *);
 int retrieve_list(ulong *, int);

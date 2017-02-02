@@ -8369,6 +8369,8 @@ builtin_array_length(char *s, int len, int *two_dim)
                 lenptr = &array_table.prio_array_queue;
 	else if (STREQ(s, "height_to_maxindex"))
 		lenptr = &array_table.height_to_maxindex;
+	else if (STREQ(s, "height_to_maxnodes"))
+		lenptr = &array_table.height_to_maxnodes;
 	else if (STREQ(s, "pid_hash"))
 		lenptr = &array_table.pid_hash;
         else if (STREQ(s, "free_area")) {
@@ -9769,6 +9771,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(radix_tree_node_slots));
         fprintf(fp, "        radix_tree_node_height: %ld\n",
                 OFFSET(radix_tree_node_height));
+        fprintf(fp, "        radix_tree_node_shift: %ld\n",
+                OFFSET(radix_tree_node_shift));
 
         fprintf(fp, "               rb_root_rb_node: %ld\n",
                 OFFSET(rb_root_rb_node));
@@ -10404,6 +10408,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 get_array_length("prio_array.queue", NULL, SIZE(list_head)));
 	fprintf(fp, "            height_to_maxindex: %d\n",
 		ARRAY_LENGTH(height_to_maxindex));
+	fprintf(fp, "            height_to_maxnodes: %d\n",
+		ARRAY_LENGTH(height_to_maxnodes));
 	fprintf(fp, "                      pid_hash: %d\n",
 		ARRAY_LENGTH(pid_hash));
 	fprintf(fp, "               kmem_cache_node: %d\n",
