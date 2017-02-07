@@ -484,6 +484,9 @@ static int ftrace_init_trace(struct trace_instance *ti, ulong instance_addr)
 			ti->pages) < 0)
 		goto out_fail;
 
+	if (!ti->max_tr_ring_buffer)
+		return 0;
+
 	ti->max_tr_buffers = calloc(sizeof(*ti->max_tr_buffers), nr_cpu_ids);
 	if (ti->max_tr_buffers == NULL)
 		goto out_fail;
