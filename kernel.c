@@ -7373,7 +7373,7 @@ dump_hrtimer_clock_base(const void *hrtimer_bases, const int num)
 	offset = 0;
 	if (VALID_MEMBER(hrtimer_clock_base_offset))
 		offset = ktime_to_ns(base + OFFSET(hrtimer_clock_base_offset));
-	now = current_time * 1000000000LL / machdep->hz + offset;
+	now = current_time * (1000000000LL / machdep->hz) + offset;
 
 	dump_active_timers(base, now);
 }
@@ -7395,7 +7395,7 @@ dump_hrtimer_base(const void *hrtimer_bases, const int num)
 
 	/* get current time(uptime) */
 	get_uptime(NULL, &current_time);
-	now = current_time * 1000000000LL / machdep->hz;
+	now = current_time * (1000000000LL / machdep->hz);
 
 	dump_active_timers(base, now);
 }
