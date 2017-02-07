@@ -1,8 +1,8 @@
 /* tools.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2016 David Anderson
- * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2017 David Anderson
+ * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -2435,6 +2435,31 @@ cmd_set(void)
 
 			return;
 
+		} else if (STREQ(args[optind], "redzone")) {
+                        if (args[optind+1]) {
+                                optind++;
+                                if (STREQ(args[optind], "on"))
+                                        pc->flags2 |= REDZONE;
+                                else if (STREQ(args[optind], "off"))
+                                        pc->flags2 &= ~REDZONE;
+                                else if (IS_A_NUMBER(args[optind])) {
+                                        value = stol(args[optind],
+                                                FAULT_ON_ERROR, NULL);
+                                        if (value)
+                                                pc->flags2 |= REDZONE;
+                                        else
+                                                pc->flags2 &= ~REDZONE;
+                                } else
+                                        goto invalid_set_command;
+                        }
+		
+			if (runtime) {
+				fprintf(fp, "redzone: %s\n",
+					pc->flags2 & REDZONE ? 
+					"on" : "off");
+			}
+			return;
+
 		} else if (XEN_HYPER_MODE()) {
 			error(FATAL, "invalid argument for the Xen hypervisor\n");
 		} else if (pc->flags & MINIMAL_MODE) {
@@ -2541,6 +2566,7 @@ show_options(void)
 	else
 		fprintf(fp, "(not set)\n");
 	fprintf(fp, "       offline: %s\n", pc->flags2 & OFFLINE_HIDE ? "hide" : "show");
+	fprintf(fp, "       redzone: %s\n", pc->flags2 & REDZONE ? "on" : "off");
 }
 
 

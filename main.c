@@ -1,8 +1,8 @@
 /* main.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2016 David Anderson
- * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2017 David Anderson
+ * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1098,6 +1098,7 @@ setup_environment(int argc, char **argv)
         pc->curcmd = pc->program_name;
         pc->flags = (HASH|SCROLL);
 	pc->flags |= DATADEBUG;          /* default until unnecessary */
+	pc->flags2 |= REDZONE;
 	pc->confd = -2;
 	pc->machine_type = MACHINE_TYPE;
 	pc->readmem = read_dev_mem;      /* defaults until argv[] is parsed */
@@ -1305,9 +1306,6 @@ dump_program_context(void)
         if (pc->flags & REM_LIVE_SYSTEM)
                 sprintf(&buf[strlen(buf)],
                         "%sREM_LIVE_SYSTEM", others++ ? "|" : "");
-        if (pc->flags2 & MEMSRC_LOCAL)
-                sprintf(&buf[strlen(buf)],
-                        "%sMEMSRC_LOCAL", others++ ? "|" : "");
         if (pc->flags & NAMELIST_LOCAL)
                 sprintf(&buf[strlen(buf)],
                         "%sNAMELIST_LOCAL", others++ ? "|" : "");
@@ -1469,6 +1467,10 @@ dump_program_context(void)
 		fprintf(fp, "%sSNAP", others++ ? "|" : "");
 	if (pc->flags2 & EXCLUDED_VMEMMAP)
 		fprintf(fp, "%sEXCLUDED_VMEMMAP", others++ ? "|" : "");
+        if (pc->flags2 & MEMSRC_LOCAL)
+		fprintf(fp, "%sMEMSRC_LOCAL", others++ ? "|" : "");
+	if (pc->flags2 & REDZONE)
+		fprintf(fp, "%sREDZONE", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "         namelist: %s\n", pc->namelist);

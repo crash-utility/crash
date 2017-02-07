@@ -1,8 +1,8 @@
 /* memory.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2016 David Anderson
- * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2017 David Anderson
+ * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -723,6 +723,7 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(kmem_cache_node, "kmem_cache", "node");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_slab, "kmem_cache", "cpu_slab");
 		MEMBER_OFFSET_INIT(kmem_cache_list, "kmem_cache", "list");
+		MEMBER_OFFSET_INIT(kmem_cache_red_left_pad, "kmem_cache", "red_left_pad");
 		MEMBER_OFFSET_INIT(kmem_cache_name, "kmem_cache", "name");
 		MEMBER_OFFSET_INIT(kmem_cache_flags, "kmem_cache", "flags");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_freelist, "kmem_cache_cpu", "freelist");
@@ -18357,6 +18358,8 @@ do_slab_slub(struct meminfo *si, int verbose)
 	ulong freelist, cpu_freelist, cpu_slab_ptr;
 	int i, free_objects, cpu_slab, is_free, node;
 	ulong p, q;
+#define SLAB_RED_ZONE 0x00000400UL
+	ulong flags, red_left_pad;
 
 	if (!si->slab) {
 		if (CRASHDEBUG(1))
@@ -18442,6 +18445,13 @@ do_slab_slub(struct meminfo *si, int verbose)
 			fprintf(fp, "< SLUB: free list END (%d found) >\n", i);
 	}
 
+	red_left_pad = 0;
+	if (VALID_MEMBER(kmem_cache_red_left_pad)) {
+		flags = ULONG(si->cache_buf + OFFSET(kmem_cache_flags));
+		if (flags & SLAB_RED_ZONE)
+			red_left_pad = ULONG(si->cache_buf + OFFSET(kmem_cache_red_left_pad));
+	}
+
 	for (p = vaddr; p < vaddr + objects * si->size; p += si->size) {
 		hq_open();
 		is_free = FALSE;
@@ -18457,7 +18467,7 @@ do_slab_slub(struct meminfo *si, int verbose)
 				}
 				if (q & PAGE_MAPPING_ANON)
 					break;
-				if (p == q) {
+				if ((p + red_left_pad) == q) {
 					is_free = TRUE;
 					goto found_object;
 				}
@@ -18482,7 +18492,8 @@ do_slab_slub(struct meminfo *si, int verbose)
 
 		fprintf(fp, "  %s%lx%s", 
 			is_free ? " " : "[",
-			p, is_free ? "  " : "]");
+			pc->flags2 & REDZONE ? p : p + red_left_pad,
+			is_free ? "  " : "]");
 		if (is_free && (cpu_slab >= 0))
 			fprintf(fp, "(cpu %d cache)", cpu_slab);
 		fprintf(fp, "\n");

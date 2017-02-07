@@ -9332,6 +9332,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(kmem_cache_name));
         fprintf(fp, "               kmem_cache_list: %ld\n",
                 OFFSET(kmem_cache_list));
+        fprintf(fp, "       kmem_cache_red_left_pad: %ld\n",
+                OFFSET(kmem_cache_red_left_pad));
         fprintf(fp, "               kmem_cache_node: %ld\n",
                 OFFSET(kmem_cache_node));
         fprintf(fp, "           kmem_cache_cpu_slab: %ld\n",

@@ -536,6 +536,7 @@ struct program_context {
 #define EXCLUDED_VMEMMAP (0x40000ULL)
 #define is_excluded_vmemmap() (pc->flags2 & EXCLUDED_VMEMMAP)
 #define MEMSRC_LOCAL         (0x80000ULL)
+#define REDZONE             (0x100000ULL)
 	char *cleanup;
 	char *namelist_orig;
 	char *namelist_debug_orig;
@@ -1979,6 +1980,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long task_struct_stack;
 	long tnt_mod;
 	long radix_tree_node_shift;
+	long kmem_cache_red_left_pad;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
