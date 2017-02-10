@@ -1,8 +1,8 @@
 /* x86.c - core analysis suite
  *
  * Portions Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014 David Anderson
- * Copyright (C) 2002-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014,2017 David Anderson
+ * Copyright (C) 2002-2014,2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -178,6 +178,7 @@ static void db_symbol_values(db_sym_t, char **, db_expr_t *);
 static int db_sym_numargs(db_sym_t, int *, char **);
 static void x86_dump_line_number(ulong);
 static void x86_clear_machdep_cache(void);
+static void x86_parse_cmdline_args(void);
 
 static ulong mach_debug = 0;
 
@@ -1774,6 +1775,7 @@ x86_init(int when)
 		machdep->last_ptbl_read = 0;
 		machdep->machspec = &x86_machine_specific;
 		machdep->verify_paddr = generic_verify_paddr;
+		x86_parse_cmdline_args();
 		break;
 
 	case PRE_GDB:
@@ -1797,7 +1799,12 @@ x86_init(int when)
 			machdep->pmd = machdep->pgd;   
 		}
 		machdep->ptrs_per_pgd = PTRS_PER_PGD;
-	        machdep->kvbase = symbol_value("_stext") & ~KVBASE_MASK;  
+		if (!machdep->kvbase) {
+			if (kernel_symbol_exists("module_kaslr_mutex"))
+				machdep->kvbase = 0xc0000000;
+			else
+				machdep->kvbase = symbol_value("_stext") & ~KVBASE_MASK;  
+		}
 		if (machdep->kvbase & 0x80000000) 
                 	machdep->is_uvaddr = generic_is_uvaddr;
 		else {
@@ -2040,6 +2047,63 @@ x86_init(int when)
 	case LOG_ONLY:
 		machdep->kvbase = kt->vmcoreinfo._stext_SYMBOL & ~KVBASE_MASK;
 		break;
+	}
+}
+
+/*
+ *  Handle non-default (c0000000) values of CONFIG_PAGE_OFFSET 
+ *  with "--machdep page_offset=<address>"
+ */
+static void
+x86_parse_cmdline_args(void)
+{
+	int index, i, c, err;
+	char *arglist[MAXARGS];
+	char buf[BUFSIZE];
+	char *p;
+	ulong value = 0;
+
+	for (index = 0; index < MAX_MACHDEP_ARGS; index++) {
+		if (!machdep->cmdline_args[index])
+			break;
+
+		if (!strstr(machdep->cmdline_args[index], "=")) {
+			error(WARNING, "ignoring --machdep option: %x\n",
+				machdep->cmdline_args[index]);
+			continue;
+		}
+
+		strcpy(buf, machdep->cmdline_args[index]);
+
+		for (p = buf; *p; p++) {
+			if (*p == ',')
+				*p = ' ';
+		}
+
+		c = parse_line(buf, arglist);
+
+		for (i = 0; i < c; i++) {
+			err = 0;
+
+			if (STRNEQ(arglist[i], "page_offset=")) {
+				int flags = RETURN_ON_ERROR | QUIET;
+
+				p = arglist[i] + strlen("page_offset=");
+				if (strlen(p))
+					value = htol(p, flags, &err);
+
+				if (!err) {
+					machdep->kvbase = value;
+
+					error(NOTE, "setting PAGE_OFFSET to: 0x%lx\n\n",
+						machdep->kvbase);
+					continue;
+				}
+			}
+
+			error(WARNING, "ignoring --machdep option: %s\n",
+				arglist[i]);
+		}
 	}
 }
 
