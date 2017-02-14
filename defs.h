@@ -1981,6 +1981,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long tnt_mod;
 	long radix_tree_node_shift;
 	long kmem_cache_red_left_pad;
+	long inactive_task_frame_ret_addr;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

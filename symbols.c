@@ -8464,6 +8464,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(task_struct_tss_ksp));
         fprintf(fp, "        task_struct_thread_eip: %ld\n",
                 OFFSET(task_struct_thread_eip));
+	fprintf(fp, "  inactive_task_frame_ret_addr: %ld\n",
+		OFFSET(inactive_task_frame_ret_addr));
         fprintf(fp, "        task_struct_thread_esp: %ld\n",
                 OFFSET(task_struct_thread_esp));
         fprintf(fp, "        task_struct_thread_ksp: %ld\n",

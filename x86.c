@@ -2038,6 +2038,8 @@ x86_init(int when)
 		if (!remap_init())
 			machdep->machspec->max_numnodes = -1;
 
+		MEMBER_OFFSET_INIT(inactive_task_frame_ret_addr, 
+			"inactive_task_frame", "ret_addr");
 		break;
 
 	case POST_INIT:
@@ -3704,12 +3706,22 @@ static ulong
 x86_get_pc(struct bt_info *bt)
 {
 	ulong offset;
-	ulong eip;
+	ulong eip, inactive_task_frame;
 
 	if (tt->flags & THREAD_INFO) {
-        	readmem(bt->task + OFFSET(task_struct_thread_eip), KVADDR,
-                	&eip, sizeof(void *), 
-			"thread_struct eip", FAULT_ON_ERROR);
+		if (VALID_MEMBER(task_struct_thread_eip))
+			readmem(bt->task + OFFSET(task_struct_thread_eip), KVADDR,
+				&eip, sizeof(void *), 
+				"thread_struct eip", FAULT_ON_ERROR);
+		else if (VALID_MEMBER(inactive_task_frame_ret_addr)) {
+			readmem(bt->task + OFFSET(task_struct_thread_esp), KVADDR,
+				&inactive_task_frame, sizeof(void *),
+				"task_struct.inactive_task_frame", FAULT_ON_ERROR);
+			readmem(inactive_task_frame + OFFSET(inactive_task_frame_ret_addr), 
+				KVADDR, &eip, sizeof(void *),
+				"inactive_task_frame.ret_addr", FAULT_ON_ERROR);
+		} else
+			error(FATAL, "cannot determine ip address\n");
 		return eip;
 	}
 
@@ -3734,6 +3746,8 @@ x86_get_sp(struct bt_info *bt)
                 readmem(bt->task + OFFSET(task_struct_thread_esp), KVADDR,
                         &ksp, sizeof(void *),
                         "thread_struct esp", FAULT_ON_ERROR);
+		if (VALID_MEMBER(inactive_task_frame_ret_addr))
+			ksp += OFFSET(inactive_task_frame_ret_addr);
                 return ksp;
 	} 
 
