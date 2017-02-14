@@ -18,6 +18,7 @@
 
 #include "defs.h"
 #include <endian.h>
+#include <ctype.h>
 
 static int ppc64_kvtop(struct task_context *, ulong, physaddr_t *, int);
 static int ppc64_uvtop(struct task_context *, ulong, physaddr_t *, int);
@@ -64,6 +65,7 @@ static ulong hugepage_dir(ulong pte);
 static ulong pgd_page_vaddr_l4(ulong pgd);
 static ulong pud_page_vaddr_l4(ulong pud);
 static ulong pmd_page_vaddr_l4(ulong pmd);
+void opalmsg(void);
 
 static inline int is_hugepage(ulong pte)
 {
@@ -2733,6 +2735,102 @@ ppc64_get_smp_cpus(void)
 	return get_cpus_online();
 }
 
+
+/*
+ * Definitions derived from OPAL. These need to track corresponding values in
+ * https://github.com/open-power/skiboot/blob/master/include/mem-map.h
+ */
+#define SKIBOOT_CONSOLE_DUMP_START	0x31000000
+#define SKIBOOT_CONSOLE_DUMP_SIZE	0x40000
+#define SKIBOOT_BASE			0x30000000
+#define ASCII_UNLIMITED ((ulong)(-1) >> 1)
+
+void
+opalmsg(void)
+{
+	struct memloc {
+		uint8_t u8;
+		uint16_t u16;
+		uint32_t u32;
+		uint64_t u64;
+		uint64_t limit64;
+	};
+	struct opal {
+		unsigned long long base;
+		unsigned long long entry;
+	} opal;
+	int i, a;
+	size_t typesz;
+	void *location;
+	char readtype[20];
+	struct memloc mem;
+	int displayed, per_line;
+	int lost;
+	ulong error_handle;
+	long count = SKIBOOT_CONSOLE_DUMP_SIZE;
+	ulonglong addr = SKIBOOT_CONSOLE_DUMP_START;
+
+	if (CRASHDEBUG(4))
+		fprintf(fp, "<addr: %llx count: %ld (%s)>\n",
+				addr, count, "PHYSADDR");
+
+	/*
+	 * OPAL based platform check
+	 * struct opal of BSS section and hence default value will be ZERO(0)
+	 * opal_init() in the kernel initializes this structure based on
+	 * the platform. Use it as a key to determine whether the dump
+	 * was taken on an OPAL based system or not.
+	 */
+	if (symbol_exists("opal")) {
+		get_symbol_data("opal", sizeof(struct opal), &opal);
+		if (opal.base != SKIBOOT_BASE)
+			error(FATAL, "dump was captured on non-PowerNV machine");
+	} else {
+		error(FATAL, "dump was captured on non-PowerNV machine");
+	}
+
+	BZERO(&mem, sizeof(struct memloc));
+	lost = typesz = per_line = 0;
+	location = NULL;
+
+	/* ASCII */
+	typesz = SIZEOF_8BIT;
+	location = &mem.u8;
+	sprintf(readtype, "ascii");
+	per_line = 256;
+	displayed = 0;
+
+	error_handle = FAULT_ON_ERROR;
+
+	for (i = a = 0; i < count; i++) {
+		if (!readmem(addr, PHYSADDR, location, typesz,
+					readtype, error_handle)) {
+			addr += typesz;
+			lost += 1;
+			continue;
+		}
+
+		if (isprint(mem.u8)) {
+			if ((a % per_line) == 0) {
+				if (displayed && i)
+					fprintf(fp, "\n");
+			}
+			fprintf(fp, "%c", mem.u8);
+			displayed++;
+			a++;
+		} else {
+			if (count == ASCII_UNLIMITED)
+				return;
+			a = 0;
+		}
+
+		addr += typesz;
+	}
+
+	if (lost != count)
+		fprintf(fp, "\n");
+}
+
 /*
  *  Machine dependent command.
  */
@@ -2741,7 +2839,7 @@ ppc64_cmd_mach(void)
 {
         int c;
 
-        while ((c = getopt(argcnt, args, "cm")) != EOF) {
+	while ((c = getopt(argcnt, args, "cmo")) != EOF) {
                 switch(c)
                 {
 		case 'c':
@@ -2749,6 +2847,8 @@ ppc64_cmd_mach(void)
 			fprintf(fp, "PPC64: '-%c' option is not supported\n", 
 				c);
 			break;
+		case 'o':
+			return opalmsg();
                 default:
                         argerrs++;
                         break;
