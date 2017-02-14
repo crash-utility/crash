@@ -1692,7 +1692,8 @@ find_trace(
 #endif
 		func_name = kl_funcname(pc);
 		if (func_name && !XEN_HYPER_MODE()) {
-			if (strstr(func_name, "kernel_thread")) {
+			if (strstr(func_name, "kernel_thread") ||
+			    strstr(func_name, "start_secondary")) {
 				ra = 0;
 				bp = saddr - 4;
 				asp = (uaddr_t*)
