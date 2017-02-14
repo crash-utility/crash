@@ -5,8 +5,8 @@
 /* 
  *  lkcd_x86_trace.c
  *
- *  Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012 David Anderson
- *  Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012 Red Hat, Inc. All rights reserved.
+ *  Copyright (C) 2002-2012, 2017 David Anderson
+ *  Copyright (C) 2002-2012, 2017 Red Hat, Inc. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -581,7 +581,7 @@ framesize_modify(struct framesize_cache *fc)
 		fc->bp_adjust = fmp->post_adjust;
 
 	if (fmp->called_function) {
-        	if (STREQ(fmp->called_function,x86_function_called_by(fc->pc)));
+		if (STREQ(fmp->called_function,x86_function_called_by(fc->pc)))
 			fc->flags |= FRAMESIZE_VALIDATE;
 	}
 
