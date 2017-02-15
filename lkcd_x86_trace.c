@@ -2734,16 +2734,20 @@ eframe_label(char *funcname, ulong eip)
 	efp = &eframe_labels;
 
 	if (!efp->init) {
-		if (!(efp->syscall = symbol_search("system_call")))
-			error(WARNING, 
-			   "\"system_call\" symbol does not exist\n");
+		if (!(efp->syscall = symbol_search("system_call"))) {
+			if (CRASHDEBUG(1))
+				error(WARNING, 
+					"\"system_call\" symbol does not exist\n");
+		}
 		if ((sp = symbol_search("ret_from_sys_call")))
 			efp->syscall_end = sp;
 		else if ((sp = symbol_search("syscall_badsys")))
 			efp->syscall_end = sp;
-		else
-			error(WARNING, 
+		else {
+			if (CRASHDEBUG(1)) 
+				error(WARNING, 
         "neither \"ret_from_sys_call\" nor \"syscall_badsys\" symbols exist\n");
+		}
 
 		if (efp->syscall) {
                 	efp->tracesys = symbol_search("tracesys");
