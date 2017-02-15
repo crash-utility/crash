@@ -2965,14 +2965,19 @@ back_trace(struct bt_info *bt)
         		switch (bt->flags & (BT_HARDIRQ|BT_SOFTIRQ))
         		{
         		case BT_HARDIRQ:
-				btloc.hp->eip = symbol_value("do_IRQ");
-				if (symbol_exists("__do_IRQ"))
-					btloc.hp->esp = ULONG(bt->stackbuf +
-					    OFFSET(thread_info_previous_esp));
-				else
-					btloc.hp->esp = ULONG(bt->stackbuf +
-					    SIZE(irq_ctx) - 
-					    (sizeof(char *)*2));
+				if (kernel_symbol_exists("hardirq_stack") &&
+				    STRUCT_EXISTS("irq_stack")) {
+					btloc.hp->eip = symbol_value("handle_IRQ");
+					btloc.hp->esp = ULONG(bt->stackbuf);
+				} else {
+					btloc.hp->eip = symbol_value("do_IRQ");
+					if (symbol_exists("__do_IRQ"))
+						btloc.hp->esp = ULONG(bt->stackbuf +
+					    		OFFSET(thread_info_previous_esp));
+					else
+						btloc.hp->esp = ULONG(bt->stackbuf +
+					    		SIZE(irq_ctx) - (sizeof(char *)*2));
+				}
 				fprintf(fp, "--- <hard IRQ> ---\n");
 				if (in_irq_ctx(BT_SOFTIRQ, bt->tc->processor, btloc.hp->esp)) {
 					btloc.flags |= BT_SOFTIRQ;
@@ -2983,8 +2988,14 @@ back_trace(struct bt_info *bt)
 
         		case BT_SOFTIRQ:
 				btloc.hp->eip = symbol_value("do_softirq");
-                		btloc.hp->esp = ULONG(bt->stackbuf +
-                        		OFFSET(thread_info_previous_esp));
+				if (kernel_symbol_exists("softirq_stack") &&
+				    STRUCT_EXISTS("irq_stack")) {
+					if (kernel_symbol_exists("do_softirq_own_stack"))
+						btloc.hp->eip = symbol_value("do_softirq_own_stack");
+					btloc.hp->esp = ULONG(bt->stackbuf);
+				} else
+					btloc.hp->esp = ULONG(bt->stackbuf +
+						OFFSET(thread_info_previous_esp));
 				fprintf(fp, "--- <soft IRQ> ---\n");
                 		break;
         		}
@@ -3045,32 +3056,47 @@ restore_stack(struct bt_info *bt)
 	switch (bt->flags & (BT_HARDIRQ|BT_SOFTIRQ)) 
 	{ 
 	case BT_HARDIRQ:
-		retvaddr = ULONG(bt->stackbuf +
-			SIZE(irq_ctx) - sizeof(char *));
-		if ((sp = value_search(retvaddr, NULL)) && 
-			STREQ(sp->name, "do_IRQ"))
-			bt->instptr = retvaddr; 
-		else
-			bt->instptr = symbol_value("do_IRQ");
-		if (symbol_exists("__do_IRQ"))
-            		bt->stkptr = ULONG(bt->stackbuf +
-                     		OFFSET(thread_info_previous_esp));
-		else
-			bt->stkptr = ULONG(bt->stackbuf + 
-				SIZE(irq_ctx) - (sizeof(char *)*2));
+		if (kernel_symbol_exists("hardirq_stack") &&
+		    STRUCT_EXISTS("irq_stack")) {
+			bt->instptr = symbol_value("handle_IRQ");
+			bt->stkptr = ULONG(bt->stackbuf);
+		} else {
+			retvaddr = ULONG(bt->stackbuf +
+				SIZE(irq_ctx) - sizeof(char *));
+			if ((sp = value_search(retvaddr, NULL)) && 
+				STREQ(sp->name, "do_IRQ"))
+				bt->instptr = retvaddr; 
+			else
+				bt->instptr = symbol_value("do_IRQ");
+			if (symbol_exists("__do_IRQ"))
+				bt->stkptr = ULONG(bt->stackbuf +
+					OFFSET(thread_info_previous_esp));
+			else
+				bt->stkptr = ULONG(bt->stackbuf + 
+					SIZE(irq_ctx) - (sizeof(char *)*2));
+		}
 		type = BT_HARDIRQ;
 		break;
 
 	case BT_SOFTIRQ:
-		retvaddr = ULONG(bt->stackbuf +
-			SIZE(irq_ctx) - sizeof(char *));
-		if ((sp = value_search(retvaddr, NULL)) && 
-			STREQ(sp->name, "do_softirq"))
-			bt->instptr = retvaddr; 
-		else
-			bt->instptr = symbol_value("do_softirq");
-               	bt->stkptr = ULONG(bt->stackbuf +
-                       	OFFSET(thread_info_previous_esp));
+		if (kernel_symbol_exists("softirq_stack") &&
+		    STRUCT_EXISTS("irq_stack")) {
+			if (kernel_symbol_exists("do_softirq_own_stack"))
+				bt->instptr = symbol_value("do_softirq_own_stack");
+			else
+				bt->instptr = symbol_value("do_softirq");
+			bt->stkptr = ULONG(bt->stackbuf);
+		} else {
+			retvaddr = ULONG(bt->stackbuf +
+				SIZE(irq_ctx) - sizeof(char *));
+			if ((sp = value_search(retvaddr, NULL)) && 
+				STREQ(sp->name, "do_softirq"))
+				bt->instptr = retvaddr; 
+			else
+				bt->instptr = symbol_value("do_softirq");
+	               	bt->stkptr = ULONG(bt->stackbuf +
+	                       	OFFSET(thread_info_previous_esp));
+		}
 		type = BT_SOFTIRQ;
 		break;
 	}

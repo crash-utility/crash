@@ -1,8 +1,8 @@
 /* task.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2016 David Anderson
- * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2017 David Anderson
+ * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -502,12 +502,6 @@ task_init(void)
 
 	tt->pf_kthread = UNINITIALIZED;
 
-	/*
-	 *  Get the IRQ stacks info if it's configured.
-	 */
-        if (VALID_STRUCT(irq_ctx))
-		irqstacks_init();
-
 	get_active_set();
 
 	if (tt->flags & ACTIVE_ONLY)
@@ -517,6 +511,12 @@ task_init(void)
 
 	if (tt->flags & TASK_REFRESH_OFF) 
 		tt->flags &= ~(TASK_REFRESH|TASK_REFRESH_OFF);
+
+	/*
+	 *  Get the IRQ stacks info if it's configured.
+	 */
+        if (VALID_STRUCT(irq_ctx))
+		irqstacks_init();
 
 	if (ACTIVE()) {
 		active_pid = REMOTE() ? pc->server_pid :
@@ -555,6 +555,7 @@ irqstacks_init(void)
 	int i;
 	char *thread_info_buf;
 	struct syment *hard_sp, *soft_sp;
+	ulong ptr;
 
 	if (!(tt->hardirq_ctx = (ulong *)calloc(NR_CPUS, sizeof(ulong))))
 		error(FATAL, "cannot malloc hardirq_ctx space.");
@@ -567,13 +568,22 @@ irqstacks_init(void)
 
 	thread_info_buf = GETBUF(SIZE(irq_ctx));
 
-	if ((hard_sp = per_cpu_symbol_search("per_cpu__hardirq_ctx"))) {
+	if ((hard_sp = per_cpu_symbol_search("per_cpu__hardirq_ctx")) ||
+	    (hard_sp = per_cpu_symbol_search("per_cpu__hardirq_stack"))) {
 		if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF)) {
 			for (i = 0; i < NR_CPUS; i++) {
 				if (!kt->__per_cpu_offset[i])
 					continue;
-				tt->hardirq_ctx[i] = hard_sp->value +
-					kt->__per_cpu_offset[i];
+				ptr = hard_sp->value + kt->__per_cpu_offset[i];
+
+				if (!readmem(ptr, KVADDR, &ptr,
+					     sizeof(void *), "hardirq ctx",
+					     RETURN_ON_ERROR)) {
+					error(INFO, "cannot read hardirq_ctx[%d] at %lx\n",
+					      i, ptr);
+					continue;
+				}
+				tt->hardirq_ctx[i] = ptr;
 			}
 		} else 
 			tt->hardirq_ctx[0] = hard_sp->value;
@@ -586,28 +596,40 @@ irqstacks_init(void)
 		error(WARNING, "cannot determine hardirq_ctx addresses\n");
 
 	for (i = 0; i < NR_CPUS; i++) {
-        	if (!(tt->hardirq_ctx[i]))
-                        continue;
+		if (!(tt->hardirq_ctx[i]))
+			continue;
 
-                if (!readmem(tt->hardirq_ctx[i], KVADDR, thread_info_buf, 
+		if (!readmem(tt->hardirq_ctx[i], KVADDR, thread_info_buf, 
 		    SIZE(irq_ctx), "hardirq thread_union", 
 		    RETURN_ON_ERROR)) {
-                	error(INFO, "cannot read hardirq_ctx[%d] at %lx\n",
-                            	i, tt->hardirq_ctx[i]);
-                        continue;
-                }
+			error(INFO, "cannot read hardirq_ctx[%d] at %lx\n",
+				i, tt->hardirq_ctx[i]);
+			continue;
+		}
 
-                tt->hardirq_tasks[i] = 
-			ULONG(thread_info_buf+OFFSET(thread_info_task));
+		if (MEMBER_EXISTS("irq_ctx", "tinfo"))
+			tt->hardirq_tasks[i] = 
+				ULONG(thread_info_buf+OFFSET(thread_info_task));
+		else
+			tt->hardirq_tasks[i] = stkptr_to_task(ULONG(thread_info_buf));
 	}
 
-	if ((soft_sp = per_cpu_symbol_search("per_cpu__softirq_ctx"))) {
+	if ((soft_sp = per_cpu_symbol_search("per_cpu__softirq_ctx")) ||
+	    (soft_sp = per_cpu_symbol_search("per_cpu__softirq_stack"))) {
 		if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF)) {
 			for (i = 0; i < NR_CPUS; i++) {
 				if (!kt->__per_cpu_offset[i])
 					continue;
-				tt->softirq_ctx[i] = soft_sp->value +
-					kt->__per_cpu_offset[i];
+				ptr = soft_sp->value + kt->__per_cpu_offset[i];
+
+				if (!readmem(ptr, KVADDR, &ptr,
+					     sizeof(void *), "softirq ctx",
+					     RETURN_ON_ERROR)) {
+					error(INFO, "cannot read softirq_ctx[%d] at %lx\n",
+					      i, ptr);
+					continue;
+				}
+				tt->softirq_ctx[i] = ptr;
 			}
 		} else 
 			 tt->softirq_ctx[0] = soft_sp->value;
@@ -620,21 +642,23 @@ irqstacks_init(void)
 		error(WARNING, "cannot determine softirq_ctx addresses\n");
 
         for (i = 0; i < NR_CPUS; i++) {
-                if (!(tt->softirq_ctx[i]))
-                        continue;
+		if (!(tt->softirq_ctx[i]))
+			continue;
 
-                if (!readmem(tt->softirq_ctx[i], KVADDR, thread_info_buf,
-                    SIZE(irq_ctx), "softirq thread_union",
-                    RETURN_ON_ERROR)) {
+		if (!readmem(tt->softirq_ctx[i], KVADDR, thread_info_buf,
+		    SIZE(irq_ctx), "softirq thread_union",
+		    RETURN_ON_ERROR)) {
 			error(INFO, "cannot read softirq_ctx[%d] at %lx\n",
-                       		i, tt->hardirq_ctx[i]);
-                    	continue;
-                }
+				i, tt->hardirq_ctx[i]);
+			continue;
+		}
 
-                tt->softirq_tasks[i] =
-                        ULONG(thread_info_buf+OFFSET(thread_info_task));
-        }
-
+		if (MEMBER_EXISTS("irq_ctx", "tinfo")) 
+			tt->softirq_tasks[i] =
+				ULONG(thread_info_buf+OFFSET(thread_info_task));
+		else
+			tt->softirq_tasks[i] = stkptr_to_task(ULONG(thread_info_buf));
+	}
 
         tt->flags |= IRQSTACKS;
 

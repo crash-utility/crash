@@ -1970,6 +1970,8 @@ x86_init(int when)
 		STRUCT_SIZE_INIT(e820map, "e820map");
 		STRUCT_SIZE_INIT(e820entry, "e820entry");
 		STRUCT_SIZE_INIT(irq_ctx, "irq_ctx");
+		if (!VALID_STRUCT(irq_ctx))
+			STRUCT_SIZE_INIT(irq_ctx, "irq_stack");
 		MEMBER_OFFSET_INIT(e820map_nr_map, "e820map", "nr_map");
 		MEMBER_OFFSET_INIT(e820entry_addr, "e820entry", "addr");
 		MEMBER_OFFSET_INIT(e820entry_size, "e820entry", "size");
