@@ -1692,8 +1692,7 @@ find_trace(
 #endif
 		func_name = kl_funcname(pc);
 		if (func_name && !XEN_HYPER_MODE()) {
-			if (strstr(func_name, "kernel_thread") ||
-			    strstr(func_name, "start_secondary")) {
+			if (strstr(func_name, "kernel_thread")) {
 				ra = 0;
 				bp = saddr - 4;
 				asp = (uaddr_t*)
@@ -1719,7 +1718,9 @@ find_trace(
 					ra, sp, bp, asp, 0, 0, 0, EX_FRAME|SET_EX_FRAME_ADDR);
 				return(trace->nframes);
 #ifdef REDHAT
-                        } else if (STREQ(func_name, "cpu_idle")) {
+                        } else if (STREQ(func_name, "cpu_idle") ||
+				STREQ(func_name, "cpu_startup_entry") ||
+				STREQ(func_name, "start_secondary")) {
                                 ra = 0;
                                 bp = sp = saddr - 4;
                                 asp = curframe->asp;
