@@ -2967,7 +2967,7 @@ back_trace(struct bt_info *bt)
         		case BT_HARDIRQ:
 				if (kernel_symbol_exists("hardirq_stack") &&
 				    STRUCT_EXISTS("irq_stack")) {
-					btloc.hp->eip = symbol_value("handle_IRQ");
+					btloc.hp->eip = symbol_value("handle_irq");
 					btloc.hp->esp = ULONG(bt->stackbuf);
 				} else {
 					btloc.hp->eip = symbol_value("do_IRQ");
@@ -3058,7 +3058,7 @@ restore_stack(struct bt_info *bt)
 	case BT_HARDIRQ:
 		if (kernel_symbol_exists("hardirq_stack") &&
 		    STRUCT_EXISTS("irq_stack")) {
-			bt->instptr = symbol_value("handle_IRQ");
+			bt->instptr = symbol_value("handle_irq");
 			bt->stkptr = ULONG(bt->stackbuf);
 		} else {
 			retvaddr = ULONG(bt->stackbuf +
