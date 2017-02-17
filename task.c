@@ -555,7 +555,7 @@ irqstacks_init(void)
 	int i;
 	char *thread_info_buf;
 	struct syment *hard_sp, *soft_sp;
-	ulong ptr;
+	ulong ptr, hardirq_next_sp = 0;
 
 	if (!(tt->hardirq_ctx = (ulong *)calloc(NR_CPUS, sizeof(ulong))))
 		error(FATAL, "cannot malloc hardirq_ctx space.");
@@ -610,8 +610,10 @@ irqstacks_init(void)
 		if (MEMBER_EXISTS("irq_ctx", "tinfo"))
 			tt->hardirq_tasks[i] = 
 				ULONG(thread_info_buf+OFFSET(thread_info_task));
-		else
-			tt->hardirq_tasks[i] = stkptr_to_task(ULONG(thread_info_buf));
+		else {
+			hardirq_next_sp = ULONG(thread_info_buf);
+			tt->hardirq_tasks[i] = stkptr_to_task(hardirq_next_sp);
+		}
 	}
 
 	if ((soft_sp = per_cpu_symbol_search("per_cpu__softirq_ctx")) ||
@@ -656,8 +658,15 @@ irqstacks_init(void)
 		if (MEMBER_EXISTS("irq_ctx", "tinfo")) 
 			tt->softirq_tasks[i] =
 				ULONG(thread_info_buf+OFFSET(thread_info_task));
-		else
+		else {
 			tt->softirq_tasks[i] = stkptr_to_task(ULONG(thread_info_buf));
+			/* Checking if softirq => hardirq nested stack */
+			if ((tt->softirq_tasks[i] != NO_TASK) && hardirq_next_sp) {
+				if ((tt->softirq_ctx[i] <= hardirq_next_sp) &&
+				    (hardirq_next_sp < tt->softirq_ctx[i] + STACKSIZE()))
+					tt->hardirq_tasks[i] = tt->softirq_tasks[i];
+			}
+		}
 	}
 
         tt->flags |= IRQSTACKS;
