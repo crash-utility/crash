@@ -2299,3 +2299,27 @@ diff -up gdb-7.6/bfd/elf64-ppc.c.orig gdb-7.6/bfd/elf64-ppc.c
  
          do_cleanups (old_chain);
  }
+diff -up gdb-7.6/bfd/configure.orig gdb-7.6/bfd/configure
+--- gdb-7.6/bfd/configure.orig	2017-02-17 17:19:51.654898822 -0500
++++ gdb-7.6/bfd/configure	2017-02-17 17:19:57.922038757 -0500
+@@ -12193,7 +12193,7 @@ fi
+ 
+ NO_WERROR=
+ if test "${ERROR_ON_WARNING}" = yes ; then
+-    GCC_WARN_CFLAGS="$GCC_WARN_CFLAGS -Werror"
++    GCC_WARN_CFLAGS="$GCC_WARN_CFLAGS"
+     NO_WERROR="-Wno-error"
+ fi
+ 
+diff -up gdb-7.6/opcodes/configure.orig gdb-7.6/opcodes/configure
+--- gdb-7.6/opcodes/configure.orig	2017-02-17 17:19:08.849943016 -0500
++++ gdb-7.6/opcodes/configure	2017-02-17 17:19:23.256264699 -0500
+@@ -11539,7 +11539,7 @@ fi
+ 
+ NO_WERROR=
+ if test "${ERROR_ON_WARNING}" = yes ; then
+-    GCC_WARN_CFLAGS="$GCC_WARN_CFLAGS -Werror"
++    GCC_WARN_CFLAGS="$GCC_WARN_CFLAGS"
+     NO_WERROR="-Wno-error"
+ fi
+ 
