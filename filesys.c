@@ -1,8 +1,8 @@
 /* filesys.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2016 David Anderson
- * Copyright (C) 2002-2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2017 David Anderson
+ * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -394,7 +394,6 @@ build_searchdirs(int create, int *preferred)
 		if ((searchdirs = calloc(cnt, sizeof(char *))) == NULL) {
 			error(INFO, "search directory list malloc: %s\n",
                                 strerror(errno));
-			closedir(dirp);
 			return default_searchdirs;
 		} 
 		for (i = 0; i < DEFAULT_SEARCHDIRS; i++) 

@@ -6088,7 +6088,7 @@ cmd_irq(void)
 	int nr_irqs;
 	ulong *cpus;
 	int show_intr, choose_cpu;
-	char buf[10];
+	char buf[15];
 	char arg_buf[BUFSIZE];
 
 	cpus = NULL;
@@ -6203,7 +6203,7 @@ cmd_irq(void)
 		}
 
 		fprintf(fp, "     ");
-		BZERO(buf, 10);
+		BZERO(buf, 15);
 
 		for (i = 0; i < kt->cpus; i++) {
 			if (hide_offline_cpu(i))
