@@ -2741,7 +2741,7 @@ ppc64_get_smp_cpus(void)
  * https://github.com/open-power/skiboot/blob/master/include/mem-map.h
  */
 #define SKIBOOT_CONSOLE_DUMP_START	0x31000000
-#define SKIBOOT_CONSOLE_DUMP_SIZE	0x40000
+#define SKIBOOT_CONSOLE_DUMP_SIZE	0x100000
 #define SKIBOOT_BASE			0x30000000
 #define ASCII_UNLIMITED ((ulong)(-1) >> 1)
 
