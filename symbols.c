@@ -1,7 +1,7 @@
 /* symbols.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2016 David Anderson
+ * Copyright (C) 2002-2017 David Anderson
  * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -10971,6 +10971,11 @@ calculate_load_order_v2(struct load_module *lm, bfd *bfd, int dynamic,
 	    if (i == lm->mod_sections) {
 		    fprintf(fp, "?? Section %s not found for symbol %s\n",
 			secname, s1->name);
+		    s1++;
+		    continue;
+	    }
+
+	    if (lm->mod_section_data[i].flags & SEC_FOUND) {
 		    s1++;
 		    continue;
 	    }
