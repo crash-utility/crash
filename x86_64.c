@@ -6197,6 +6197,18 @@ x86_64_calc_phys_base(void)
 	}
 
 	/*
+	 * Linux 4.10 exports it in VMCOREINFO (finally).
+	 */
+	if ((p1 = pc->read_vmcoreinfo("NUMBER(phys_base)"))) {
+		machdep->machspec->phys_base = dtol(p1, QUIET, NULL);
+		free(p1);
+		if (CRASHDEBUG(1))
+			fprintf(fp, "VMCOREINFO: phys_base: %lx\n", 
+				machdep->machspec->phys_base);
+		return;
+	}
+
+	/*
 	 *  Get relocation value from whatever dumpfile format is being used.
 	 */
 
