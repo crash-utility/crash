@@ -27,6 +27,7 @@
 static struct machine_specific arm64_machine_specific = { 0 };
 static int arm64_verify_symbol(const char *, ulong, char);
 static void arm64_parse_cmdline_args(void);
+static void arm64_calc_kimage_voffset(void);
 static void arm64_calc_phys_offset(void);
 static void arm64_calc_virtual_memory_ranges(void);
 static int arm64_kdump_phys_base(ulong *);
@@ -322,6 +323,9 @@ arm64_init(int when)
 		machdep->dumpfile_init = NULL;
 		machdep->verify_line_number = NULL;
 		machdep->init_kernel_pgd = arm64_init_kernel_pgd;
+
+		/* use machdep parameters */
+		arm64_calc_kimage_voffset();
 
 		/* use machdep parameters */
 		arm64_calc_phys_offset();
@@ -735,6 +739,21 @@ arm64_parse_cmdline_args(void)
 	}
 }
 
+static void
+arm64_calc_kimage_voffset(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong phys_offset;
+
+	if (ms->kimage_voffset) /* vmcoreinfo/--machdep override */
+		return;
+
+	if ((kt->flags2 & KASLR) && (kt->flags & RELOC_SET)){
+		arm_kdump_phys_base(&phys_offset);
+		ms->kimage_voffset = ms->vmalloc_start_addr + (kt->relocate * -1) - phys_offset;
+	}
+
+}
 
 static void
 arm64_calc_phys_offset(void)
