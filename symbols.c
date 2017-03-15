@@ -10130,6 +10130,18 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(atomic_t_counter));
 	fprintf(fp, "          percpu_counter_count: %ld\n",
 		OFFSET(percpu_counter_count));
+	fprintf(fp, "             sk_buff_head_next: %ld\n",
+		OFFSET(sk_buff_head_next));
+	fprintf(fp, "             sk_buff_head_qlen: %ld\n",
+		OFFSET(sk_buff_head_qlen));
+	fprintf(fp, "                  sk_buff_next: %ld\n",
+		OFFSET(sk_buff_next));
+	fprintf(fp, "                   sk_buff_len: %ld\n",
+		OFFSET(sk_buff_len));
+	fprintf(fp, "                  sk_buff_data: %ld\n",
+		OFFSET(sk_buff_data));
+	fprintf(fp, "           nlmsghdr_nlmsg_type: %ld\n",
+		OFFSET(nlmsghdr_nlmsg_type));
 
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
@@ -10363,6 +10375,14 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(tnt));
 	fprintf(fp, "                    taint_flag: %ld\n",
 		SIZE(taint_flag));
+	fprintf(fp, "                      nlmsghdr: %ld\n",
+		SIZE(nlmsghdr));
+	fprintf(fp, "           nlmsghdr_nlmsg_type: %ld\n",
+		SIZE(nlmsghdr_nlmsg_type));
+	fprintf(fp, "             sk_buff_head_qlen: %ld\n",
+		SIZE(sk_buff_head_qlen));
+	fprintf(fp, "                   sk_buff_len: %ld\n",
+		SIZE(sk_buff_len));
 
         fprintf(fp, "\n                   array_table:\n");
 	/*

@@ -1982,6 +1982,12 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long radix_tree_node_shift;
 	long kmem_cache_red_left_pad;
 	long inactive_task_frame_ret_addr;
+	long sk_buff_head_next;
+	long sk_buff_head_qlen;
+	long sk_buff_next;
+	long sk_buff_len;
+	long sk_buff_data;
+	long nlmsghdr_nlmsg_type;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2126,6 +2132,10 @@ struct size_table {         /* stash of commonly-used sizes */
 	long task_struct_flags;
 	long timer_base;
 	long taint_flag;
+	long nlmsghdr;
+	long nlmsghdr_nlmsg_type;
+	long sk_buff_head_qlen;
+	long sk_buff_len;
 };
 
 struct array_table {
@@ -5316,6 +5326,7 @@ void dump_log(int);
 #define SHOW_LOG_LEVEL (0x1)
 #define SHOW_LOG_DICT  (0x2)
 #define SHOW_LOG_TEXT  (0x4)
+#define SHOW_LOG_AUDIT (0x8)
 void set_cpu(int);
 void clear_machdep_cache(void);
 struct stack_hook *gather_text_list(struct bt_info *);

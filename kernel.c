@@ -86,6 +86,9 @@ static void show_kernel_taints(char *, int);
 static void dump_dmi_info(void);
 static void list_source_code(struct gnu_request *, int);
 static void source_tree_init(void);
+static ulong dump_audit_skb_queue(ulong);
+static ulong __dump_audit(char *);
+static void dump_audit(void);
 
 
 /*
@@ -4760,7 +4763,7 @@ cmd_log(void)
 
 	msg_flags = 0;
 
-        while ((c = getopt(argcnt, args, "tdm")) != EOF) {
+        while ((c = getopt(argcnt, args, "tdma")) != EOF) {
                 switch(c)
                 {
 		case 't':
@@ -4772,6 +4775,9 @@ cmd_log(void)
                 case 'm':
                         msg_flags |= SHOW_LOG_LEVEL;
                         break;
+		case 'a':
+			msg_flags |= SHOW_LOG_AUDIT;
+			break;
                 default:
                         argerrs++;
                         break;
@@ -4780,6 +4786,11 @@ cmd_log(void)
 
         if (argerrs)
                 cmd_usage(pc->curcmd, SYNOPSIS);
+
+	if (msg_flags & SHOW_LOG_AUDIT) {
+		dump_audit();
+		return;
+	}
 
 	dump_log(msg_flags);
 }
@@ -10751,4 +10762,134 @@ dump_dmi_info(void)
 	} 
 
 	close_tmpfile();
+}
+
+#define NLMSG_ALIGNTO 4
+#define NLMSG_DATA(nlh) (nlh + roundup(SIZE(nlmsghdr), NLMSG_ALIGNTO))
+
+static ulong
+dump_audit_skb_queue(ulong audit_skb_queue)
+{
+	ulong skb_buff_head_next = 0, p;
+	uint32_t qlen = 0;
+
+	if (INVALID_SIZE(nlmsghdr)) {
+		STRUCT_SIZE_INIT(nlmsghdr, "nlmsghdr");
+		MEMBER_OFFSET_INIT(nlmsghdr_nlmsg_type, "nlmsghdr", "nlmsg_type");
+		MEMBER_SIZE_INIT(nlmsghdr_nlmsg_type, "nlmsghdr", "nlmsg_type");
+		MEMBER_OFFSET_INIT(sk_buff_head_next, "sk_buff_head", "next");
+		MEMBER_OFFSET_INIT(sk_buff_head_qlen, "sk_buff_head", "qlen");
+		MEMBER_SIZE_INIT(sk_buff_head_qlen, "sk_buff_head", "qlen");
+		MEMBER_OFFSET_INIT(sk_buff_data, "sk_buff", "data");
+		MEMBER_OFFSET_INIT(sk_buff_len, "sk_buff", "len");
+		MEMBER_OFFSET_INIT(sk_buff_next, "sk_buff", "next");
+		MEMBER_SIZE_INIT(sk_buff_len, "sk_buff", "len");
+	}
+
+	readmem(audit_skb_queue + OFFSET(sk_buff_head_qlen),
+		KVADDR,
+		&qlen,
+		SIZE(sk_buff_head_qlen),
+		"audit_skb_queue.qlen",
+		FAULT_ON_ERROR);
+
+	if (!qlen)
+		return 0;
+
+	readmem(audit_skb_queue + OFFSET(sk_buff_head_next),
+		KVADDR,
+		&skb_buff_head_next,
+		sizeof(void *),
+		"audit_skb_queue.next",
+		FAULT_ON_ERROR);
+
+	if (!skb_buff_head_next)
+		error(FATAL, "audit_skb_queue.next: NULL\n");
+
+	p = skb_buff_head_next;
+	do {
+		ulong data, len, data_len;
+		uint16_t nlmsg_type;
+		char *buf = NULL;
+
+		if (CRASHDEBUG(2))
+			fprintf(fp, "%#016lx\n", p);
+
+		readmem(p + OFFSET(sk_buff_len),
+			KVADDR,
+			&len,
+			SIZE(sk_buff_len),
+			"sk_buff.data",
+			FAULT_ON_ERROR);
+
+		data_len = len - roundup(SIZE(nlmsghdr), NLMSG_ALIGNTO);
+
+		readmem(p + OFFSET(sk_buff_data),
+			KVADDR,
+			&data,
+			sizeof(void *),
+			"sk_buff.data",
+			FAULT_ON_ERROR);
+
+		if (!data)
+			error(FATAL, "sk_buff.data: NULL\n");
+
+		readmem(data + OFFSET(nlmsghdr_nlmsg_type),
+			KVADDR,
+			&nlmsg_type,
+			SIZE(nlmsghdr_nlmsg_type),
+			"nlmsghdr.nlmsg_type",
+			FAULT_ON_ERROR);
+
+		buf = GETBUF(data_len + 1);
+		readmem(NLMSG_DATA(data),
+			KVADDR,
+			buf,
+			data_len,
+			"sk_buff.data + sizeof(struct nlmsghdr)",
+			FAULT_ON_ERROR);
+		buf[data_len] = '\0';
+
+		fprintf(fp, "type=%u %s\n", nlmsg_type, buf);
+		FREEBUF(buf);
+
+		readmem(p + OFFSET(sk_buff_next),
+			KVADDR,
+			&p,
+			sizeof(void *),
+			"skb_buff.next",
+			FAULT_ON_ERROR);
+	} while (p != audit_skb_queue);
+
+	return qlen;
+}
+
+static ulong
+__dump_audit(char *symname)
+{
+	if (symbol_exists(symname)) {
+		if (CRASHDEBUG(1))
+			fprintf(fp, "# %s:\n", symname);
+		return dump_audit_skb_queue(symbol_value(symname));
+	}
+	return 0;
+}
+
+static void
+dump_audit(void)
+{
+	ulong qlen = 0;
+
+	if (symbol_exists("audit_skb_queue")) {
+		qlen += __dump_audit("audit_skb_hold_queue");
+		qlen += __dump_audit("audit_skb_queue");
+	} else if (symbol_exists("audit_queue")) {
+		qlen += __dump_audit("audit_hold_queue");
+		qlen += __dump_audit("audit_retry_queue");
+		qlen += __dump_audit("audit_queue");
+	} else
+		option_not_supported('a');
+
+	if (!qlen)
+		error(INFO, "kernel audit log is empty\n");
 }
