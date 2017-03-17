@@ -120,10 +120,9 @@ kernel_init()
 		kt->init_begin = symbol_value("__init_begin");
 		kt->init_end = symbol_value("__init_end");
 	}
-	if (symbol_exists("_end"))
-		kt->end = symbol_value("_end");
-	else
-		kt->end = highest_bss_symbol();
+	kt->end = highest_bss_symbol();
+	if ((sp1 = kernel_symbol_search("_end")) && (sp1->value > kt->end)) 
+		kt->end = sp1->value;
 	
 	/*
 	 *  For the traditional (non-pv_ops) Xen architecture, default to writable 
