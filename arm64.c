@@ -27,6 +27,7 @@
 static struct machine_specific arm64_machine_specific = { 0 };
 static int arm64_verify_symbol(const char *, ulong, char);
 static void arm64_parse_cmdline_args(void);
+static void arm64_calc_kimage_voffset(void);
 static void arm64_calc_phys_offset(void);
 static void arm64_calc_virtual_memory_ranges(void);
 static int arm64_kdump_phys_base(ulong *);
@@ -216,6 +217,8 @@ arm64_init(int when)
 						+ ARM64_MODULES_VSIZE -1;
 
 			ms->vmalloc_start_addr = ms->modules_end + 1;
+
+			arm64_calc_kimage_voffset();
 		} else {
 			ms->modules_vaddr = ARM64_PAGE_OFFSET - MEGABYTES(64);
 			ms->modules_end = ARM64_PAGE_OFFSET - 1;
@@ -735,6 +738,65 @@ arm64_parse_cmdline_args(void)
 	}
 }
 
+static void
+arm64_calc_kimage_voffset(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong phys_addr;
+
+	if (ms->kimage_voffset) /* vmcoreinfo, ioctl, or --machdep override */
+		return;
+
+	if (ACTIVE()) {
+		char buf[BUFSIZE];
+		char *p1;
+		int errflag;
+		FILE *iomem;
+
+		if ((iomem = fopen("/proc/iomem", "r")) == NULL)
+			return;
+
+		errflag = 1;
+		while (fgets(buf, BUFSIZE, iomem)) {
+			if(strstr(buf, ": Kernel code")) {
+				errflag = 0;
+				break;
+			}
+			if (strstr(buf, ": System RAM")) {
+				clean_line(buf);
+
+				if (!(p1 = strstr(buf, "-")))
+					continue;
+
+				*p1 = NULLCHAR;
+
+				phys_addr = htol(buf, RETURN_ON_ERROR | QUIET, NULL);
+				if (phys_addr == BADADDR)
+					continue;
+			}
+		}
+		fclose(iomem);
+
+		if (errflag)
+			return;
+
+	} else if (KDUMP_DUMPFILE())
+		arm_kdump_phys_base(&phys_addr);  /* Get start address of first memory block */
+	else {
+		error(WARNING,
+			"kimage_voffset cannot be determined from the dumpfile.\n");
+		error(CONT,
+			"Using default value of 0.  If this is not correct, then try\n");
+		error(CONT,
+			"using the command line option: --machdep kimage_voffset=<addr>\n");
+		return;
+	}
+
+	ms->kimage_voffset = ms->vmalloc_start_addr - phys_addr;
+
+	if ((kt->flags2 & KASLR) && (kt->flags & RELOC_SET))
+		ms->kimage_voffset += (kt->relocate * -1);
+}
 
 static void
 arm64_calc_phys_offset(void)
