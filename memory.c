@@ -7427,8 +7427,8 @@ dump_free_pages_zones_v1(struct meminfo *fi)
  *  Callback function for free-list search for a specific page.
  */
 struct free_page_callback_data {
-	physaddr_t searchphys;
-	long block_size;	
+	ulong searchpage;
+	long chunk_size;
 	ulong page;
 	int found;
 };
@@ -7437,13 +7437,12 @@ static int
 free_page_callback(void *page, void *arg)
 {
 	struct free_page_callback_data *cbd = arg;
-	physaddr_t this_phys;
+	ulong first_page, last_page;
 
-	if (!page_to_phys((ulong)page, &this_phys))
-		return FALSE;
+	first_page = (ulong)page;
+	last_page = first_page + (cbd->chunk_size * SIZE(page));	
 
-	if ((cbd->searchphys >= this_phys) && 
-	    (cbd->searchphys < (this_phys + cbd->block_size))) {
+	if ((cbd->searchpage >= first_page) && (cbd->searchpage <= last_page)) {
 		cbd->page = (ulong)page;
 		cbd->found = TRUE;
 		return TRUE;
@@ -7469,6 +7468,7 @@ dump_free_pages_zones_v2(struct meminfo *fi)
 	ulong offset, verbose, value, sum, found; 
 	ulong this_addr;
 	physaddr_t phys, this_phys, searchphys, end_paddr;
+	ulong searchpage;
 	struct free_page_callback_data callback_data;
 	ulong pp;
         ulong zone_mem_map;
@@ -7505,8 +7505,12 @@ dump_free_pages_zones_v2(struct meminfo *fi)
                         error(FATAL, 
 			    "dump_free_pages_zones_v2: no memtype specified\n");
                 }
+		if (!phys_to_page(searchphys, &searchpage)) {
+			error(INFO, "cannot determine page for %lx\n", fi->spec_addr);
+			return;
+		}
 		do_search = TRUE;
-		callback_data.searchphys = searchphys;
+		callback_data.searchpage = searchpage;
 		callback_data.found = FALSE;
         } else {
                 searchphys = 0;
@@ -8052,7 +8056,7 @@ multiple_lists:
 				ld->flags |= (LIST_CALLBACK|CALLBACK_RETURN);
 				ld->callback_func = free_page_callback;
 				ld->callback_data = (void *)callback_data;
-				callback_data->block_size = chunk_size * PAGESIZE();
+				callback_data->chunk_size = chunk_size;
 			}
 			cnt = do_list(ld);
 			if (cnt < 0) {
