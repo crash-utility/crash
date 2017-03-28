@@ -269,6 +269,12 @@ gdb_patch:
 	if [ "${ARCH}" = "x86_64" ] && [ "${TARGET}" = "PPC64" ] && [ -f ${GDB}-ppc64le-support.patch ]; then \
 		patch -d ${GDB} -p1 -F0 < ${GDB}-ppc64le-support.patch ; \
 	fi
+	if [ -f /usr/include/proc_service.h ]; then \
+		grep 'extern ps_err_e ps_get_thread_area (struct' /usr/include/proc_service.h; \
+		if [ $$? -eq 0 ]; then \
+			patch -p0 < ${GDB}-proc_service.h.patch; \
+		fi; \
+	fi
 
 library: make_build_data ${OBJECT_FILES}
 	ar -rs ${PROGRAM}lib.a ${OBJECT_FILES}

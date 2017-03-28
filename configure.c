@@ -240,7 +240,7 @@ struct supported_gdb_version {
 	    "7.6",
 	    "GDB_FILES=${GDB_7.6_FILES}",
 	    "GDB_OFILES=${GDB_7.6_OFILES}",
-	    "GDB_PATCH_FILES=gdb-7.6.patch gdb-7.6-ppc64le-support.patch",
+	    "GDB_PATCH_FILES=gdb-7.6.patch gdb-7.6-ppc64le-support.patch gdb-7.6-proc_service.h.patch",
 	    "GDB_FLAGS=-DGDB_7_6",
 	    "GPLv3"
 	},
