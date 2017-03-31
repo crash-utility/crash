@@ -3808,6 +3808,12 @@ do_list(struct list_data *ld)
 		}
 
 		if (next == 0) {
+			if (ld->flags & LIST_HEAD_FORMAT) {
+				error(INFO, "\ninvalid list entry: 0\n");
+				if (close_hq_on_return)
+					hq_close();
+				return -1;
+			}
 			if (CRASHDEBUG(1))
 				console("do_list end: next:%lx\n", next);
 			break;
