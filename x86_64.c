@@ -115,6 +115,7 @@ static int x86_64_get_kvaddr_ranges(struct vaddr_range *);
 static int x86_64_verify_paddr(uint64_t);
 static void GART_init(void);
 static void x86_64_exception_stacks_init(void);
+static int in_START_KERNEL_map(ulong);
 
 struct machine_specific x86_64_machine_specific = { 0 };
 
@@ -6112,6 +6113,21 @@ x86_64_xen_kdump_page_mfn(ulong kvaddr)
 
 #include "xendump.h"
 
+static int
+in_START_KERNEL_map(ulong vaddr)
+{
+	if (machdep->machspec->kernel_image_size &&
+	    ((vaddr >= __START_KERNEL_map) && 
+	    (vaddr < (__START_KERNEL_map + machdep->machspec->kernel_image_size))))
+		return TRUE;
+
+	if ((vaddr >= __START_KERNEL_map) &&
+	    (vaddr < highest_bss_symbol())) 
+		return TRUE; 
+
+	return FALSE;
+}
+
 /*
  *  Determine the physical address base for relocatable kernels.
  */
@@ -6262,15 +6278,11 @@ x86_64_calc_phys_base(void)
 		return;
 	}
 
-#define IN_KERNEL_REGION(vaddr) \
-	 (((vaddr) >= __START_KERNEL_map) && \
-	  ((vaddr) < (__START_KERNEL_map + machdep->machspec->kernel_image_size)))
-
 	if ((vd = get_kdump_vmcore_data())) {
                 for (i = 0; i < vd->num_pt_load_segments; i++) {
 			phdr = vd->load64 + i;
 			if ((phdr->p_vaddr >= __START_KERNEL_map) &&
-			    (IN_KERNEL_REGION(phdr->p_vaddr) || 
+			    (in_START_KERNEL_map(phdr->p_vaddr) || 
 			    !(IS_VMALLOC_ADDR(phdr->p_vaddr)))) {
 
 				machdep->machspec->phys_base = phdr->p_paddr - 
