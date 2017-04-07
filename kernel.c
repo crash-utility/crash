@@ -1573,11 +1573,16 @@ list_source_code(struct gnu_request *req, int count_entered)
 /*
  *  From either a syment pointer, or a virtual address evaluated
  *  from a symbol name plus an offset value, determine whether 
- *  there are multiple symbols with the same name.  
-
+ *  there are multiple symbols with the same name, or if it is
+ *  determined to be an invalid expression of a text address.
+ *
  *  If there are multiple text symbols with the same name, then 
  *  display a "duplicate text symbols found" message followed by
  *  a list of each symbol's information, and return FALSE.
+ *
+ *  If a symbol name plus and offset value evaluates to an address 
+ *  that goes beyond the end of the text function, print an "invalid 
+ *  expression" message, and return FALSE;
  * 
  *  If there is one text symbol and one or more data symbols with
  *  the same name, reset the incoming address based upon the 
@@ -1595,15 +1600,37 @@ static int
 resolve_text_symbol(char *arg, struct syment *sp_in, struct gnu_request *req, int radix)
 {
 	int text_symbols;
-	struct syment *sp, *sp_orig, *first_text_sp;
+	struct syment *sp, *sp_orig, *first_text_sp, *sp_arg, *sp_addr;
 	ulong offset, radix_flag;
+	char buf[BUFSIZE];
+	char *op;
+
+	sp_arg = NULL;
+	if (!sp_in && !IS_A_NUMBER(arg)) {
+		strcpy(buf, arg);
+		strip_beginning_char(buf, '(');
+		strip_ending_char(buf, ')');
+		clean_line(buf);
+		if ((op = strpbrk(buf, "><+-&|*/%^"))) {
+			*op = NULLCHAR;
+			clean_line(buf);
+			if ((sp = symbol_search(buf)) && is_symbol_text(sp))
+				sp_arg = sp;
+		}
+	}
 
 	if (sp_in) {
 		sp_orig = sp_in;
 		offset = 0;
 	} else if ((sp_orig = value_search(req->addr, &offset))) {
-		if (!strstr(arg, sp_orig->name))
+		if (!strstr(arg, sp_orig->name)) {
+			if (sp_arg && (sp_orig != sp_arg)) {
+				error(INFO, "invalid expression: %s evaluates to: %s+%lx\n", 
+					arg, sp_orig->name, offset);
+				return FALSE;
+			}
 			return TRUE;
+		}
 	} else {
 		if (CRASHDEBUG(1))
 			error(INFO, "%s: no text symbol found\n", arg);
@@ -1612,6 +1639,19 @@ resolve_text_symbol(char *arg, struct syment *sp_in, struct gnu_request *req, in
 
 	if (symbol_name_count(sp_orig->name) <= 1)
 		return TRUE;
+
+	if (sp_arg) {
+		sp_addr = value_search(req->addr, &offset);
+		if (sp_arg != sp_addr) {
+			if (STREQ(sp_arg->name, sp_addr->name)) {
+				sp_orig = sp_arg;
+				goto duplicates;
+			}
+			error(INFO, "invalid expression: %s evaluates to %s: %s+%lx\n", 
+				arg, sp_addr->name, offset);
+			return FALSE;
+		}
+	}
 
 	text_symbols = 0;
 	first_text_sp = NULL;
@@ -1647,6 +1687,7 @@ resolve_text_symbol(char *arg, struct syment *sp_in, struct gnu_request *req, in
 		return TRUE;
 	}
 
+duplicates:
 	/*
 	 *  Multiple text symbols with the same name exist.
 	 *  Display them all and return FALSE.
@@ -1659,9 +1700,9 @@ resolve_text_symbol(char *arg, struct syment *sp_in, struct gnu_request *req, in
 	do {
 		if (is_symbol_text(sp)) {
 			if (module_symbol(sp->value, NULL, NULL, NULL, 0))
-				show_symbol(sp, offset, SHOW_LINENUM|SHOW_MODULE|radix_flag);
+				show_symbol(sp, 0, SHOW_LINENUM|SHOW_MODULE|radix_flag);
 			else
-				show_symbol(sp, offset, SHOW_LINENUM|radix_flag);
+				show_symbol(sp, 0, SHOW_LINENUM|radix_flag);
 		}
 	} while ((sp = symbol_search_next(sp->name, sp)));
 
