@@ -1,8 +1,8 @@
 /* gdb_interface.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015 David Anderson
- * Copyright (C) 2002-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015,2017 David Anderson
+ * Copyright (C) 2002-2015,2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -995,7 +995,8 @@ gdb_set_crash_scope(ulong vaddr, char *arg)
 				return FALSE;
 			}
 		}
-	}
+	} else if (kt->flags2 & KASLR)
+		vaddr -= (kt->relocate * -1);
 
 	req->command = GNU_SET_CRASH_BLOCK;
 	req->addr = vaddr;
