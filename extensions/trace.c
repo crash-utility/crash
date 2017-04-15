@@ -198,7 +198,9 @@ static int init_offsets(void)
 			fprintf(fp, "per cpu buffer sizes\n");
 	}
 
-	if (kernel_symbol_exists("ring_buffer_read"))
+	if (machine_type("PPC64") && kernel_symbol_exists(".ring_buffer_read"))
+		gdb_set_crash_scope(symbol_value(".ring_buffer_read"), ".ring_buffer_read");
+	else if (kernel_symbol_exists("ring_buffer_read"))
 		gdb_set_crash_scope(symbol_value("ring_buffer_read"), "ring_buffer_read");
 
 	if (!per_cpu_buffer_sizes)
