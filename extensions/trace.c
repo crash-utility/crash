@@ -96,7 +96,7 @@ struct ring_buffer_per_cpu {
 	ulong real_head_page;
 
 	int head_page_index;
-	unsigned int nr_pages;
+	unsigned long nr_pages;
 	ulong *pages;
 
 	ulong *linear_pages;
@@ -430,7 +430,13 @@ static int ftrace_init_buffers(struct ring_buffer_per_cpu *buffers,
 		buffer_read_value(overrun);
 		buffer_read_value(entries);
 		if (per_cpu_buffer_sizes) {
-			buffer_read_value(nr_pages);
+			if (MEMBER_SIZE("ring_buffer_per_cpu", "nr_pages") == sizeof(unsigned int)) {
+				unsigned int tmp_nr_pages;
+				read_value(tmp_nr_pages, buffers[i].kaddr, ring_buffer_per_cpu, nr_pages);
+				buffers[i].nr_pages = (unsigned long) tmp_nr_pages;
+			} else {
+				buffer_read_value(nr_pages);
+			}
 			pages = buffers[i].nr_pages;
 		} else
 			buffers[i].nr_pages = pages;
