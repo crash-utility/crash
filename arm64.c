@@ -2232,6 +2232,10 @@ arm64_back_trace_cmd(struct bt_info *bt)
 		stackframe.sp = bt->hp->esp + 8;
 		bt->flags &= ~BT_REGS_NOT_FOUND;
 	} else {
+		if (arm64_on_irq_stack(bt->tc->processor, bt->frameptr)) {
+			arm64_set_irq_stack(bt);
+			bt->flags |= BT_IRQSTACK;
+		}
 		stackframe.sp = bt->stkptr;
 		stackframe.pc = bt->instptr;
 		stackframe.fp = bt->frameptr;
@@ -2339,6 +2343,10 @@ arm64_back_trace_cmd_v2(struct bt_info *bt)
 		stackframe.sp = bt->bptr + 16;
 		bt->frameptr = stackframe.fp;
 	} else {
+		if (arm64_on_irq_stack(bt->tc->processor, bt->frameptr)) {
+			arm64_set_irq_stack(bt);
+			bt->flags |= BT_IRQSTACK;
+		}
 		stackframe.sp = bt->stkptr;
 		stackframe.pc = bt->instptr;
 		stackframe.fp = bt->frameptr;
