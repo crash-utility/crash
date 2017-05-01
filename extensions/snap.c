@@ -1,7 +1,7 @@
 /* snap.c - capture live memory into a kdump or netdump dumpfile
  *
- * Copyright (C) 2009, 2013 David Anderson
- * Copyright (C) 2009, 2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2009, 2013, 2014, 2017 David Anderson
+ * Copyright (C) 2009, 2013, 2014, 2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -423,7 +423,10 @@ generate_elf_header(int type, int fd, char *filename)
 	ushort e_machine;
 	int num_segments;
 	struct node_table *nt;
-	ulonglong task_struct;
+	struct SNAP_info {
+		ulonglong task_struct;
+		ulonglong relocate;
+	} SNAP_info;
 
 	num_segments = vt->numnodes;
 
@@ -606,9 +609,10 @@ generate_elf_header(int type, int fd, char *filename)
 	notes->p_filesz += len;
 
   	/* NT_TASKSTRUCT note */
-	task_struct = CURRENT_TASK();
+	SNAP_info.task_struct = CURRENT_TASK();
+	SNAP_info.relocate = kt->relocate;
 	len = dump_elf_note (ptr, NT_TASKSTRUCT, "SNAP",
-		(char *)&task_struct, sizeof(ulonglong));
+		(char *)&SNAP_info, sizeof(struct SNAP_info));
 	offset += len;
 	ptr += len;
 	notes->p_filesz += len;

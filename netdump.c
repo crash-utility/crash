@@ -1172,8 +1172,9 @@ netdump_memory_dump(FILE *fp)
 	netdump_print("            nt_prpsinfo: %lx\n", nd->nt_prpsinfo);
 	netdump_print("          nt_taskstruct: %lx\n", nd->nt_taskstruct);
 	netdump_print("            task_struct: %lx\n", nd->task_struct);
-	netdump_print("              page_size: %d\n", nd->page_size);
+	netdump_print("               relocate: %lx\n", nd->relocate);
 	netdump_print("           switch_stack: %lx\n", nd->switch_stack);
+	netdump_print("              page_size: %d\n", nd->page_size);
 	dump_xen_kdump_data(fp);
 	netdump_print("     num_prstatus_notes: %d\n", nd->num_prstatus_notes);
 	netdump_print("         num_qemu_notes: %d\n", nd->num_qemu_notes);
@@ -1912,8 +1913,6 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 		if (store) {
 			nd->nt_taskstruct = (void *)note;
 			nd->task_struct = *((ulong *)(ptr + note->n_namesz));
-			nd->switch_stack = *((ulong *)
-				(ptr + note->n_namesz + sizeof(ulong)));
 		}
 		break;
         case NT_DISKDUMP:
@@ -2160,8 +2159,19 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 		if (store) {
 			nd->nt_taskstruct = (void *)note;
 			nd->task_struct = *((ulong *)(ptr + note->n_namesz));
-                        nd->switch_stack = *((ulong *)
-                                (ptr + note->n_namesz + sizeof(ulong)));
+			if (pc->flags2 & SNAP) {
+				if (note->n_descsz == 16) {
+					nd->relocate = *((ulong *)
+						(ptr + note->n_namesz + sizeof(ulong)));
+					if (nd->relocate) {
+						kt->relocate = nd->relocate;
+						kt->flags |= RELOC_SET;
+						kt->flags2 |= KASLR;
+					}
+				}
+			} else if (machine_type("IA64"))
+				nd->switch_stack = *((ulong *)
+					(ptr + note->n_namesz + sizeof(ulong)));
 		}
 		break;
         case NT_DISKDUMP:

@@ -1,7 +1,7 @@
 /* netdump.h
  *
- * Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 David Anderson
- * Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2009, 2017 David Anderson
+ * Copyright (C) 2002-2009, 2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -77,6 +77,7 @@ struct vmcore_data {
 	ulonglong backup_src_start;
 	ulong backup_src_size;
 	ulonglong backup_offset;
+	ulong relocate;
 };
 
 #define DUMP_ELF_INCOMPLETE  0x1   /* dumpfile is incomplete */
