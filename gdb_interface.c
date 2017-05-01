@@ -737,6 +737,13 @@ is_restricted_command(char *cmd, ulong flags)
 				newline, newline, pc->program_name);
 		}
 	}
+
+	if (kt->relocate && 
+	    STRNEQ("disassemble", cmd) && STRNEQ(cmd, "disas"))
+               	error(FATAL, 
+		    "the gdb \"disassemble\" command is prohibited because the kernel text\n"
+		    "%swas relocated%s; use the crash \"dis\" command instead.\n",
+			space(strlen(pc->curcmd)+2), kt->flags2 & KASLR ? " by KASLR" : "");
 	
 	return FALSE;
 }
