@@ -5332,7 +5332,10 @@ x86_64_display_memmap(void)
         ulonglong addr, size;
         uint type;
 
-        e820 = symbol_value("e820");
+	if (get_symbol_type("e820", NULL, NULL) == TYPE_CODE_PTR)
+		get_symbol_data("e820", sizeof(void *), &e820);
+	else
+		e820 = symbol_value("e820");
 	if (CRASHDEBUG(1))
 		dump_struct("e820map", e820, RADIX(16));
         buf = (char *)GETBUF(SIZE(e820map));
