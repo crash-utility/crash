@@ -6219,11 +6219,14 @@ x86_64_calc_phys_base(void)
 	 * Linux 4.10 exports it in VMCOREINFO (finally).
 	 */
 	if ((p1 = pc->read_vmcoreinfo("NUMBER(phys_base)"))) {
-		machdep->machspec->phys_base = dtol(p1, QUIET, NULL);
-		free(p1);
+		if (*p1 == '-')
+			machdep->machspec->phys_base = dtol(p1+1, QUIET, NULL) * -1;
+		else
+			machdep->machspec->phys_base = dtol(p1, QUIET, NULL);
 		if (CRASHDEBUG(1))
-			fprintf(fp, "VMCOREINFO: phys_base: %lx\n", 
-				machdep->machspec->phys_base);
+			fprintf(fp, "VMCOREINFO: NUMBER(phys_base): %s -> %lx\n", 
+				p1, machdep->machspec->phys_base);
+		free(p1);
 		return;
 	}
 
