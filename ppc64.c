@@ -1,7 +1,7 @@
 /* ppc64.c -- core analysis suite
  *
- * Copyright (C) 2004-2015 David Anderson
- * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2015,2017 David Anderson
+ * Copyright (C) 2004-2015,2017 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2004, 2006 Haren Myneni, IBM Corporation
  *
  * This program is free software; you can redistribute it and/or modify
@@ -1507,6 +1507,8 @@ ppc64_translate_pte(ulong pte, void *physaddr, ulonglong pte_rpn_shift)
         char *arglist[MAXARGS];
         ulong paddr;
 
+	if (STREQ(pc->curcmd, "pte"))
+		pte_rpn_shift = machdep->machspec->pte_rpn_shift;
         paddr =  PTOB(pte >> pte_rpn_shift);
         page_present = !!(pte & _PAGE_PRESENT);
 
@@ -1517,12 +1519,12 @@ ppc64_translate_pte(ulong pte, void *physaddr, ulonglong pte_rpn_shift)
 
         sprintf(ptebuf, "%lx", pte);
         len1 = MAX(strlen(ptebuf), strlen("PTE"));
-        fprintf(fp, "%s  ", mkstring(buf, len1, CENTER|LJUST, "PTE"));
 
         if (!page_present && pte) {
                 swap_location(pte, buf);
                 if ((c = parse_line(buf, arglist)) != 3)
                         error(FATAL, "cannot determine swap location\n");
+                fprintf(fp, "%s  ", mkstring(buf2, len1, CENTER|LJUST, "PTE"));
 
                 len2 = MAX(strlen(arglist[0]), strlen("SWAP"));
                 len3 = MAX(strlen(arglist[2]), strlen("OFFSET"));
@@ -1541,6 +1543,7 @@ ppc64_translate_pte(ulong pte, void *physaddr, ulonglong pte_rpn_shift)
                 return page_present;
         }
 
+        fprintf(fp, "%s  ", mkstring(buf, len1, CENTER|LJUST, "PTE"));
         sprintf(physbuf, "%lx", paddr);
         len2 = MAX(strlen(physbuf), strlen("PHYSICAL"));
         fprintf(fp, "%s  ", mkstring(buf, len2, CENTER|LJUST, "PHYSICAL"));
