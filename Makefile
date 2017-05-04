@@ -273,6 +273,7 @@ gdb_patch:
 		grep 'extern ps_err_e ps_get_thread_area (struct' /usr/include/proc_service.h; \
 		if [ $$? -eq 0 ]; then \
 			patch -p0 < ${GDB}-proc_service.h.patch; \
+			patch -p0 < crash-fix-build-failure-with-mips.patch; \
 		fi; \
 	fi
 
