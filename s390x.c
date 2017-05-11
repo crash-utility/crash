@@ -688,7 +688,7 @@ int s390x_vtop(ulong table, ulong vaddr, physaddr_t *phys_addr, int verbose)
 	/* Read the first entry to find the number of page table levels. */
 	readmem(table, KVADDR, &entry, sizeof(entry), "entry", FAULT_ON_ERROR);
 	level = (entry & 0xcULL) >> 2;
-	if ((vaddr >> (31 + 11*level)) != 0ULL) {
+	if ((level < 3) && (vaddr >> (31 + 11*level)) != 0ULL) {
 		/* Address too big for the number of page table levels. */
 		return FALSE;
 	}
