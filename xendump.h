@@ -192,3 +192,5 @@ struct xen_dumpcore_p2m {
 	uint64_t pfn;
 	uint64_t gmfn; 
 };
+
+extern struct xendump_data *xd;
