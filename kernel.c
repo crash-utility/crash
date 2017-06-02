@@ -1615,8 +1615,20 @@ resolve_text_symbol(char *arg, struct syment *sp_in, struct gnu_request *req, in
 		if ((op = strpbrk(buf, "><+-&|*/%^"))) {
 			*op = NULLCHAR;
 			clean_line(buf);
-			if ((sp = symbol_search(buf)) && is_symbol_text(sp))
+			if ((sp = symbol_search(buf)) && is_symbol_text(sp)) {
 				sp_arg = sp;
+				text_symbols = 1;
+
+				while ((sp = symbol_search_next(sp->name, sp))) {
+					if (is_symbol_text(sp))
+						text_symbols++;
+				}
+
+				if (text_symbols > 1) {
+					sp_orig = sp_arg;
+					goto duplicates;
+				}
+			}
 		}
 	}
 
