@@ -4708,6 +4708,7 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 #define CACHE_SET              (ADDRESS_SPECIFIED << 23)
 #define SLAB_OVERLOAD_PAGE_PTR (ADDRESS_SPECIFIED << 24)
 #define SLAB_BITFIELD          (ADDRESS_SPECIFIED << 25)
+#define SLAB_GATHER_FAILURE    (ADDRESS_SPECIFIED << 26)
 
 #define GET_ALL \
 	(GET_SHARED_PAGES|GET_TOTALRAM_PAGES|GET_BUFFERS_PAGES|GET_SLAB_PAGES)
@@ -17856,6 +17857,9 @@ dump_kmem_cache_info_slub(struct meminfo *si)
 	char b2[BUFSIZE];
 	int namelen, sizelen, spacelen;
 
+	if (si->flags & SLAB_GATHER_FAILURE)
+		error(INFO, "%s: cannot gather relevant slab data\n", si->curname);
+
 	fprintf(fp, "%s ",
 		mkstring(b1, VADDR_PRLEN, LJUST|LONG_HEX, MKSTR(si->cache))); 
 
@@ -17870,17 +17874,28 @@ dump_kmem_cache_info_slub(struct meminfo *si)
 			space(spacelen <= 0 ? 1 : spacelen), si->objsize); 
 		if (spacelen > 0)
 			spacelen = 1;
-		sprintf(b1, "%c%dld  ", '%', 9 + spacelen - 1);
+		if (si->flags & SLAB_GATHER_FAILURE)
+			sprintf(b1, "%c%ds  ", '%', 9 + spacelen - 1);
+		else
+			sprintf(b1, "%c%dld  ", '%', 9 + spacelen - 1);
 	} else {
 		fprintf(fp, "%-18s  %8ld  ", si->curname, si->objsize); 
-		sprintf(b1, "%c%dld  ", '%', 9);
+		if (si->flags & SLAB_GATHER_FAILURE)
+			sprintf(b1, "%c%ds  ", '%', 9);
+		else
+			sprintf(b1, "%c%dld  ", '%', 9);
 	}
 
-        fprintf(fp, b1, si->inuse);
-
-        fprintf(fp, "%8ld  %5ld  %4ldk\n",  
-		si->inuse + si->free,
-                si->num_slabs, si->slabsize/1024); 
+	if (si->flags & SLAB_GATHER_FAILURE) {
+		fprintf(fp, b1, "?");
+		fprintf(fp, "%8s  %5s  %4ldk\n",  
+			"?", "?", si->slabsize/1024); 
+	} else {
+		fprintf(fp, b1, si->inuse);
+		fprintf(fp, "%8ld  %5ld  %4ldk\n",  
+			si->inuse + si->free,
+			si->num_slabs, si->slabsize/1024); 
+	}
 }
 
 static void
@@ -17978,9 +17993,14 @@ dump_kmem_cache_slub(struct meminfo *si)
 		si->slab_offset = offset;
 		if (!get_kmem_cache_slub_data(GET_SLUB_SLABS, si) ||
 		    !get_kmem_cache_slub_data(GET_SLUB_OBJECTS, si))
-			goto next_cache;
+			si->flags |= SLAB_GATHER_FAILURE;
 
 		DUMP_KMEM_CACHE_INFO_SLUB();
+
+		if (si->flags & SLAB_GATHER_FAILURE) {
+			si->flags &= ~SLAB_GATHER_FAILURE;
+			goto next_cache;
+		}
 
 		if (si->flags & ADDRESS_SPECIFIED) {
 			if (!si->slab)
