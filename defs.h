@@ -3289,6 +3289,15 @@ struct arm64_stackframe {
 #define MODULES_VADDR_2_6_31       0xffffffffa0000000
 #define MODULES_END_2_6_31         0xffffffffff000000
 
+#define USERSPACE_TOP_5LEVEL       0x0100000000000000
+#define PAGE_OFFSET_5LEVEL         0xff10000000000000
+#define VMALLOC_START_ADDR_5LEVEL  0xff92000000000000
+#define VMALLOC_END_5LEVEL         0xffd1ffffffffffff
+#define MODULES_VADDR_5LEVEL       0xffffffffa0000000
+#define MODULES_END_5LEVEL         0xffffffffff5fffff
+#define VMEMMAP_VADDR_5LEVEL       0xffd4000000000000
+#define VMEMMAP_END_5LEVEL         0xffd5ffffffffffff
+
 #define VSYSCALL_START             0xffffffffff600000
 #define VSYSCALL_END               0xffffffffffe00000
 
@@ -3304,8 +3313,16 @@ struct arm64_stackframe {
 #define PTRS_PER_PMD    512
 #define PTRS_PER_PTE    512
 
+#define PGDIR_SHIFT_5LEVEL    48
+#define PTRS_PER_PGD_5LEVEL  512
+#define P4D_SHIFT             39
+#define PTRS_PER_P4D         512
+
+#define __PGDIR_SHIFT  (machdep->machspec->pgdir_shift)
+ 
 #define pml4_index(address) (((address) >> PML4_SHIFT) & (PTRS_PER_PML4-1))
-#define pgd_index(address)  (((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD-1))
+#define p4d_index(address)  (((address) >> P4D_SHIFT) & (PTRS_PER_P4D - 1))
+#define pgd_index(address)  (((address) >> __PGDIR_SHIFT) & (PTRS_PER_PGD-1))
 #define pmd_index(address)  (((address) >> PMD_SHIFT) & (PTRS_PER_PMD-1))
 #define pte_index(address)  (((address) >> PAGE_SHIFT) & (PTRS_PER_PTE - 1))
 
@@ -3341,11 +3358,23 @@ struct arm64_stackframe {
             machdep->machspec->last_upml_read = (ulong)(PML);                 \
     }								            
 
+#define IS_LAST_P4D_READ(p4d) ((ulong)(p4d) == machdep->machspec->last_p4d_read)
+
+#define FILL_P4D(P4D, TYPE, SIZE)                                             \
+    if (!IS_LAST_P4D_READ(P4D)) {                                             \
+	    readmem((ulonglong)((ulong)(P4D)), TYPE, machdep->machspec->p4d,  \
+		    SIZE, "p4d page", FAULT_ON_ERROR);                        \
+	    machdep->machspec->last_p4d_read = (ulong)(P4D);                  \
+    }
+
 /* 
  *  PHYSICAL_PAGE_MASK changed (enlarged) between 2.4 and 2.6, so
  *  for safety, use the 2.6 values to generate it.
  */ 
-#define __PHYSICAL_MASK_SHIFT  40
+#define __PHYSICAL_MASK_SHIFT_XEN     40
+#define __PHYSICAL_MASK_SHIFT_2_6     46
+#define __PHYSICAL_MASK_SHIFT_5LEVEL  52
+#define __PHYSICAL_MASK_SHIFT  (machdep->machspec->physical_mask_shift)
 #define __PHYSICAL_MASK        ((1UL << __PHYSICAL_MASK_SHIFT) - 1)
 #define __VIRTUAL_MASK_SHIFT   48
 #define __VIRTUAL_MASK         ((1UL << __VIRTUAL_MASK_SHIFT) - 1)
@@ -3410,6 +3439,7 @@ struct arm64_stackframe {
 #define _MAX_PHYSMEM_BITS	  40
 #define _MAX_PHYSMEM_BITS_2_6_26  44
 #define _MAX_PHYSMEM_BITS_2_6_31  46
+#define _MAX_PHYSMEM_BITS_5LEVEL  52
 
 #endif  /* X86_64 */
 
@@ -5657,6 +5687,10 @@ struct machine_specific {
 	ulong GART_start;
 	ulong GART_end;
 	ulong kernel_image_size;
+	ulong physical_mask_shift;
+	ulong pgdir_shift;
+        char *p4d;
+	ulong last_p4d_read;
 };
 
 #define KSYMS_START    (0x1)
@@ -5672,8 +5706,9 @@ struct machine_specific {
 #define GART_REGION  (0x400)
 #define NESTED_NMI   (0x800)
 #define RANDOMIZED  (0x1000)
+#define VM_5LEVEL   (0x2000)
 
-#define VM_FLAGS (VM_ORIG|VM_2_6_11|VM_XEN|VM_XEN_RHEL4)
+#define VM_FLAGS (VM_ORIG|VM_2_6_11|VM_XEN|VM_XEN_RHEL4|VM_5LEVEL)
 
 #define _2MB_PAGE_MASK (~((MEGABYTES(2))-1))
 

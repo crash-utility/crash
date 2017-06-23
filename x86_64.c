@@ -19,11 +19,14 @@
 #ifdef X86_64
 
 static int x86_64_kvtop(struct task_context *, ulong, physaddr_t *, int);
+static int x86_64_kvtop_5level(struct task_context *, ulong, physaddr_t *, int);
 static int x86_64_kvtop_xen_wpt(struct task_context *, ulong, physaddr_t *, int);
 static int x86_64_uvtop(struct task_context *, ulong, physaddr_t *, int);
 static int x86_64_uvtop_level4(struct task_context *, ulong, physaddr_t *, int);
 static int x86_64_uvtop_level4_xen_wpt(struct task_context *, ulong, physaddr_t *, int);
 static int x86_64_uvtop_level4_rhel4_xen_wpt(struct task_context *, ulong, physaddr_t *, int);
+static int x86_64_uvtop_5level(struct task_context *, ulong, physaddr_t *, int);
+static int x86_64_task_uses_5level(struct task_context *);
 static ulong x86_64_vmalloc_start(void);
 static int x86_64_is_task_addr(ulong);
 static int x86_64_verify_symbol(const char *, ulong, char);
@@ -210,7 +213,9 @@ x86_64_init(int when)
 			free(machdep->machspec->upml);
 			machdep->machspec->upml = NULL;
 
-	        	machdep->uvtop = x86_64_uvtop;
+			machdep->uvtop = x86_64_uvtop;
+			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_2_6;
+			machdep->machspec->pgdir_shift = PGDIR_SHIFT;
 			break;
 		
 		case VM_2_6_11:
@@ -234,7 +239,9 @@ x86_64_init(int when)
 				/* 2.6.27 layout */
 				machdep->machspec->page_offset = PAGE_OFFSET_2_6_27;
 
-	        	machdep->uvtop = x86_64_uvtop_level4;
+			machdep->uvtop = x86_64_uvtop_level4;
+			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_2_6;
+			machdep->machspec->pgdir_shift = PGDIR_SHIFT;
 			break;
 
                 case VM_XEN:
@@ -245,6 +252,8 @@ x86_64_init(int when)
                         machdep->machspec->vmalloc_end = VMALLOC_END_XEN;
                         machdep->machspec->modules_vaddr = MODULES_VADDR_XEN;
                         machdep->machspec->modules_end = MODULES_END_XEN;
+			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_XEN;
+			machdep->machspec->pgdir_shift = PGDIR_SHIFT;
                         break;
 
 		case VM_XEN_RHEL4:
@@ -255,7 +264,25 @@ x86_64_init(int when)
                         machdep->machspec->vmalloc_end = VMALLOC_END_XEN_RHEL4;
                         machdep->machspec->modules_vaddr = MODULES_VADDR_XEN_RHEL4;
                         machdep->machspec->modules_end = MODULES_END_XEN_RHEL4;
+			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_XEN;
+			machdep->machspec->pgdir_shift = PGDIR_SHIFT;
 			break;
+
+		case VM_5LEVEL:
+			machdep->machspec->userspace_top = USERSPACE_TOP_5LEVEL;
+			machdep->machspec->page_offset = PAGE_OFFSET_5LEVEL;
+			machdep->machspec->vmalloc_start_addr = VMALLOC_START_ADDR_5LEVEL;
+			machdep->machspec->vmalloc_end = VMALLOC_END_5LEVEL;
+			machdep->machspec->modules_vaddr = MODULES_VADDR_5LEVEL;
+			machdep->machspec->modules_end = MODULES_END_5LEVEL;
+			machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_5LEVEL;
+			machdep->machspec->vmemmap_end = VMEMMAP_END_5LEVEL;
+			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_5LEVEL;
+			machdep->machspec->pgdir_shift = PGDIR_SHIFT_5LEVEL;
+			if ((machdep->machspec->p4d = (char *)malloc(PAGESIZE())) == NULL)
+				error(FATAL, "cannot malloc p4d space.");
+			machdep->machspec->last_p4d_read = 0;
+			machdep->uvtop = x86_64_uvtop_level4;  /* 5-level is optional per-task */
 		}
 	        machdep->kvbase = (ulong)PAGE_OFFSET;
 		machdep->identity_map_base = (ulong)PAGE_OFFSET;
@@ -550,7 +577,10 @@ x86_64_init(int when)
 		}
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		if (!machdep->max_physmem_bits) {
-			if (THIS_KERNEL_VERSION >= LINUX(2,6,31))
+			if (machdep->flags & VM_5LEVEL)
+				machdep->max_physmem_bits = 
+					_MAX_PHYSMEM_BITS_5LEVEL;
+			else if (THIS_KERNEL_VERSION >= LINUX(2,6,31))
 				machdep->max_physmem_bits = 
 					_MAX_PHYSMEM_BITS_2_6_31;
 			else if (THIS_KERNEL_VERSION >= LINUX(2,6,26))
@@ -581,6 +611,7 @@ x86_64_init(int when)
                         		machdep->uvtop = x86_64_uvtop_level4_rhel4_xen_wpt;
 					break;
 				}
+				machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_XEN;
 			} else
                         	machdep->uvtop = x86_64_uvtop_level4;
                         MEMBER_OFFSET_INIT(vcpu_guest_context_user_regs,
@@ -649,6 +680,8 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sVM_XEN", others++ ? "|" : "");
 	if (machdep->flags & VM_XEN_RHEL4)
 		fprintf(fp, "%sVM_XEN_RHEL4", others++ ? "|" : "");
+	if (machdep->flags & VM_5LEVEL)
+		fprintf(fp, "%sVM_5LEVEL", others++ ? "|" : "");
 	if (machdep->flags & VMEMMAP)
 		fprintf(fp, "%sVMEMMAP", others++ ? "|" : "");
 	if (machdep->flags & NO_TSS)
@@ -701,17 +734,22 @@ x86_64_dump_machdep_table(ulong arg)
         fprintf(fp, "    processor_speed: x86_64_processor_speed()\n");
 	if (machdep->uvtop == x86_64_uvtop)
         	fprintf(fp, "              uvtop: x86_64_uvtop()\n");
-	else if (machdep->uvtop == x86_64_uvtop_level4)
-        	fprintf(fp, "              uvtop: x86_64_uvtop_level4()\n");
-	else if (machdep->uvtop == x86_64_uvtop_level4_xen_wpt)
+	else if (machdep->uvtop == x86_64_uvtop_level4) {
+        	fprintf(fp, "              uvtop: x86_64_uvtop_level4()");
+		if (machdep->flags & VM_5LEVEL)
+        		fprintf(fp, " or x86_64_uvtop_5level()");
+		fprintf(fp, "\n");
+	} else if (machdep->uvtop == x86_64_uvtop_level4_xen_wpt)
         	fprintf(fp, "              uvtop: x86_64_uvtop_level4_xen_wpt()\n");
 	else if (machdep->uvtop == x86_64_uvtop_level4_rhel4_xen_wpt)
         	fprintf(fp, "              uvtop: x86_64_uvtop_level4_rhel4_xen_wpt()\n");
 	else
         	fprintf(fp, "              uvtop: %lx\n", (ulong)machdep->uvtop);
         fprintf(fp, "              kvtop: x86_64_kvtop()");
-        if (XEN() && (kt->xen_flags & WRITABLE_PAGE_TABLES))
-                fprintf(fp, " -> x86_64_kvtop_xen_wpt()");
+	if (machdep->flags & VM_5LEVEL)
+		fprintf(fp, " -> x86_64_kvtop_5level()");
+	else if (XEN() && (kt->xen_flags & WRITABLE_PAGE_TABLES))
+		fprintf(fp, " -> x86_64_kvtop_xen_wpt()");
 	fprintf(fp, "\n");
         fprintf(fp, "       get_task_pgd: x86_64_get_task_pgd()\n");
 	fprintf(fp, "           dump_irq: x86_64_dump_irq()\n");
@@ -779,6 +817,8 @@ x86_64_dump_machdep_table(ulong arg)
 			ms->kernel_image_size/MEGABYTES(1));
 	else
 		fprintf(fp, "(uninitialized)\n");
+	fprintf(fp, "      physical_mask_shift: %ld\n", ms->physical_mask_shift);
+	fprintf(fp, "              pgdir_shift: %ld\n", ms->pgdir_shift);
 	fprintf(fp, "               GART_start: %lx\n", ms->GART_start);
 	fprintf(fp, "                 GART_end: %lx\n", ms->GART_end);
 	fprintf(fp, "                     pml4: %lx\n", (ulong)ms->pml4);
@@ -790,6 +830,14 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "                     upml: (unused)\n");
 		fprintf(fp, "           last_upml_read: (unused)\n");
 	}
+	if (ms->p4d) {
+		fprintf(fp, "                      p4d: %lx\n", (ulong)ms->p4d);
+		fprintf(fp, "            last_p4d_read: %lx\n", (ulong)ms->last_p4d_read);
+	} else {
+		fprintf(fp, "                      p4d: (unused)\n");
+		fprintf(fp, "            last_p4d_read: (unused)\n");
+	}
+
 	fprintf(fp, "                 irqstack: %lx\n", (ulong)ms->irqstack);
 	fprintf(fp, "          irq_eframe_link: %ld\n", ms->irq_eframe_link);
 	fprintf(fp, "                      pto: %s",
@@ -1434,6 +1482,9 @@ x86_64_uvtop_level4(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, in
 	if (IS_KVADDR(uvaddr))
 		return x86_64_kvtop(tc, uvaddr, paddr, verbose);
 
+	if ((machdep->flags & VM_5LEVEL) && x86_64_task_uses_5level(tc))
+		return x86_64_uvtop_5level(tc, uvaddr, paddr, verbose);
+
 	if ((mm = task_mm(tc->task, TRUE)))
 		pml = ULONG_PTR(tt->mm_struct + OFFSET(mm_struct_pgd));
 	else
@@ -1515,6 +1566,19 @@ x86_64_uvtop_level4(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, in
 
 no_upage:
 
+	return FALSE;
+}
+
+static int
+x86_64_task_uses_5level(struct task_context *tc)
+{
+	return FALSE;
+}
+
+static int
+x86_64_uvtop_5level(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, int verbose)
+{
+	error(INFO, "support for 5-level page tables TBD\n");
 	return FALSE;
 }
 
@@ -1949,6 +2013,9 @@ x86_64_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbo
 		if (XEN() && (kt->xen_flags & WRITABLE_PAGE_TABLES))
 			return (x86_64_kvtop_xen_wpt(tc, kvaddr, paddr, verbose));
 
+		if (machdep->flags & VM_5LEVEL)
+			return (x86_64_kvtop_5level(tc, kvaddr, paddr, verbose));
+
  		/*	
 		 *  pgd = pgd_offset_k(addr);
 		 */
@@ -2026,6 +2093,12 @@ no_kpage:
         return FALSE;
 }
 
+static int
+x86_64_kvtop_5level(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbose)
+{
+	error(INFO, "support for 5-level page tables TBD\n");
+	return FALSE;
+}
 
 static int
 x86_64_kvtop_xen_wpt(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbose)
@@ -5498,6 +5571,9 @@ parse_cmdline_args(void)
 					} else if (STREQ(p, "xen-rhel4")) {
 						machdep->flags |= VM_XEN_RHEL4;
 						continue;
+					} else if (STREQ(p, "5level")) {
+						machdep->flags |= VM_5LEVEL;
+						continue;
 					}
 				}
 			} else if (STRNEQ(arglist[i], "phys_base=")) {
@@ -5612,6 +5688,11 @@ parse_cmdline_args(void)
 				lines++;
 				break;
 		
+			case VM_5LEVEL:
+				error(NOTE, "using 5-level pagetable x86_64 VM address ranges\n");
+				lines++;
+				break;
+
 			default:
 				error(WARNING, "cannot set multiple vm values\n");
 				lines++;
