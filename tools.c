@@ -4130,6 +4130,10 @@ static void do_radix_tree_iter(ulong node, uint height, char *path,
 {
 	uint off;
 
+	if (!hq_enter(node))
+		error(FATAL,
+			"\nduplicate tree node: %lx\n", node);
+
 	for (off = 0; off < RADIX_TREE_MAP_SIZE; off++) {
 		ulong slot;
 		ulong shift = (height - 1) * RADIX_TREE_MAP_SHIFT;
@@ -4286,12 +4290,7 @@ static void do_rdtree_entry(ulong node, ulong slot, const char *path,
 			e[i] = fill_member_offsets(td->structname[i]);
 	}
 
-	if (hq_enter(slot))
-		td->count++;
-	else
-		error(FATAL,
-		      "\nduplicate tree entry: radix_tree_node: %lx  slots[%d]: %lx\n",
-		      node, index, slot);
+	td->count++;
 
 	if (td->flags & VERBOSE)
 		fprintf(fp, "%lx\n", slot);
