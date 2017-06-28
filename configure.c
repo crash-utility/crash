@@ -1277,8 +1277,7 @@ make_build_data(char *target)
         p = fgets(inbuf1, 79, fp1);
 
         p = fgets(inbuf2, 79, fp2);
-        p = strstr(inbuf2, ")");
-        p++;
+        p = strstr(inbuf2, " ");
         *p = '\0';
 
         p = fgets(inbuf3, 79, fp3);
