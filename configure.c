@@ -1285,7 +1285,9 @@ make_build_data(char *target)
 	lower_case(target_data.program, progname);
 
 	fprintf(fp4, "char *build_command = \"%s\";\n", progname);
-        if (strlen(hostname))
+        if (getenv("SOURCE_DATE_EPOCH"))
+                fprintf(fp4, "char *build_data = \"reproducible build\";\n");
+        else if (strlen(hostname))
                 fprintf(fp4, "char *build_data = \"%s by %s on %s\";\n",
                         strip_linefeeds(inbuf1), inbuf2, hostname);
         else
