@@ -1388,12 +1388,17 @@ static void
 x86_64_init_kernel_pgd(void)
 {
 	int i;
-	ulong init_level4_pgt;
+	ulong kernel_pgt = 0;
 
-	init_level4_pgt = symbol_value("init_level4_pgt");
+	if (kernel_symbol_exists("init_level4_pgt"))
+		kernel_pgt = symbol_value("init_level4_pgt");
+	else if (kernel_symbol_exists("init_top_pgt"))
+		kernel_pgt = symbol_value("init_top_pgt");
+	else
+		error(WARNING, "neither \"init_level4_pgt\" or \"init_top_pgt\" exist\n");
 
 	for (i = 0; i < NR_CPUS; i++) 
-		vt->kernel_pgd[i] = init_level4_pgt;
+		vt->kernel_pgd[i] = kernel_pgt;
 
 	FILL_PML4();
 }
