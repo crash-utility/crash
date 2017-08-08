@@ -613,16 +613,19 @@ static inline int s390x_pte_present(unsigned long x){
 
 /* Region or segment table traversal function */
 static ulong _kl_rsg_table_deref_s390x(ulong vaddr, ulong table,
-					 int len, int level)
+				       int len, int level, int verbose)
 {
-	ulong offset, entry;
+	const char *name_vec[] = {"STE", "RTTE", "RSTE", "RFTE"};
+	ulong offset, entry, addr;
 
 	offset = ((vaddr >> (11*level + 20)) & 0x7ffULL) * 8;
 	if (offset >= (len + 1)*4096)
 		/* Offset is over the table limit. */
 		return 0;
-	readmem(table + offset, KVADDR, &entry, sizeof(entry), "entry",
-		FAULT_ON_ERROR);
+	addr = table + offset;
+	readmem(addr, KVADDR, &entry, sizeof(entry), "entry", FAULT_ON_ERROR);
+	if (verbose)
+		fprintf(fp, "%5s: %016lx => %016lx\n", name_vec[level], addr, entry);
 	/*
 	 * Check if the segment table entry could be read and doesn't have
 	 * any of the reserved bits set.
@@ -653,13 +656,17 @@ static int swap_entry(ulong entry)
 }
 
 /* Page table traversal function */
-static ulong _kl_pg_table_deref_s390x(ulong vaddr, ulong table)
+static ulong _kl_pg_table_deref_s390x(ulong vaddr, ulong table, int verbose)
 {
-	ulong offset, entry;
+	ulong offset, entry, addr;
 
 	offset = ((vaddr >> 12) & 0xffULL) * 8;
-	readmem(table + offset, KVADDR, &entry, sizeof(entry), "entry",
-		FAULT_ON_ERROR);
+	addr = table + offset;
+	readmem(addr, KVADDR, &entry, sizeof(entry), "entry", FAULT_ON_ERROR);
+	if (verbose) {
+		fprintf(fp, "%5s: %016lx => %016lx\n", "PTE", addr, entry);
+		fprintf(fp, "%5s: %016llx\n", "PAGE", entry & ~0xfffULL);
+	}
 	/*
 	 * Return zero if the page table entry has the reserved (0x800) or
 	 * the invalid (0x400) bit set and it is not a swap entry.
@@ -675,6 +682,9 @@ int s390x_vtop(ulong table, ulong vaddr, physaddr_t *phys_addr, int verbose)
 {
 	ulong entry, paddr;
 	int level, len;
+
+	if (verbose)
+		fprintf(fp, "PAGE DIRECTORY: %016lx\n", table);
 
 	*phys_addr = 0;
 	/*
@@ -693,7 +703,8 @@ int s390x_vtop(ulong table, ulong vaddr, physaddr_t *phys_addr, int verbose)
 		return FALSE;
 	}
 	while (level >= 0) {
-		entry = _kl_rsg_table_deref_s390x(vaddr, table, len, level);
+		entry = _kl_rsg_table_deref_s390x(vaddr, table, len, level,
+						  verbose);
 		if (!entry)
 			return FALSE;
 		table = entry & ~0xfffULL;
@@ -717,7 +728,7 @@ int s390x_vtop(ulong table, ulong vaddr, physaddr_t *phys_addr, int verbose)
 	}
 
 	/* Get the page table entry */
-	entry = _kl_pg_table_deref_s390x(vaddr, entry & ~0x7ffULL);
+	entry = _kl_pg_table_deref_s390x(vaddr, entry & ~0x7ffULL, verbose);
 	if (!entry)
 		return FALSE;
 
