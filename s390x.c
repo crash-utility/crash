@@ -26,7 +26,8 @@
 
 /* Flags used in entries of page dirs and page tables.
  */
-#define S390X_PAGE_PRESENT   0x001ULL    /* set: loaded in physical memory
+#define S390X_PTE_FLAG_BITS     0xfffULL /* Page table entry flag bits */
+#define S390X_PAGE_PRESENT      0x001ULL /* set: loaded in physical memory
                                           * clear: not loaded in physical mem */
 #define S390X_PAGE_RO           0x200ULL /* HW read-only */
 #define S390X_PAGE_INVALID      0x400ULL /* HW invalid */
@@ -44,6 +45,49 @@
 #define VX_SA_SIZE (32 * 16)
 
 #define S390X_PSW_MASK_PSTATE	0x0001000000000000UL
+
+/*
+ * Flags for Region and Segment table entries.
+ */
+#define S390X_RTE_FLAG_BITS_FC0    0xfffULL
+#define S390X_RTE_FLAG_BITS_FC1    0x7fffffffULL
+#define S390X_RTE_TL           0x3ULL
+#define S390X_RTE_TL_10        0x2ULL
+#define S390X_RTE_TL_01        0x1ULL
+#define S390X_RTE_TT           0xcULL
+#define S390X_RTE_TT_10        0x8ULL
+#define S390X_RTE_TT_01        0x4ULL
+#define S390X_RTE_CR           0x10ULL
+#define S390X_RTE_I            0x20ULL
+#define S390X_RTE_TF           0xc0ULL
+#define S390X_RTE_TF_10        0x80ULL
+#define S390X_RTE_TF_01        0x40ULL
+#define S390X_RTE_P            0x200ULL
+#define S390X_RTE_FC           0x400ULL
+#define S390X_RTE_F            0x800ULL
+#define S390X_RTE_ACC          0xf000ULL
+#define S390X_RTE_ACC_1000     0x8000ULL
+#define S390X_RTE_ACC_0100     0x4000ULL
+#define S390X_RTE_ACC_0010     0x2000ULL
+#define S390X_RTE_ACC_0001     0x1000ULL
+#define S390X_RTE_AV           0x10000ULL
+
+#define S390X_STE_FLAG_BITS_FC0    0x7ffULL
+#define S390X_STE_FLAG_BITS_FC1    0xfffffULL
+#define S390X_STE_TT           0xcULL
+#define S390X_STE_TT_10        0x8ULL
+#define S390X_STE_TT_01        0x4ULL
+#define S390X_STE_CS           0x10ULL
+#define S390X_STE_I            0x20ULL
+#define S390X_STE_P            0x200ULL
+#define S390X_STE_FC           0x400ULL
+#define S390X_STE_F            0x800ULL
+#define S390X_STE_ACC          0xf000ULL
+#define S390X_STE_ACC_1000     0x8000ULL
+#define S390X_STE_ACC_0100     0x4000ULL
+#define S390X_STE_ACC_0010     0x2000ULL
+#define S390X_STE_ACC_0001     0x1000ULL
+#define S390X_STE_AV           0x10000ULL
 
 /*
  * S390x prstatus ELF Note
@@ -611,12 +655,115 @@ static inline int s390x_pte_present(unsigned long x){
  * page table traversal functions 
  */
 
+/* Print flags of Segment-Table entry with format control = 1 */
+static void print_segment_entry_fc1(ulong val)
+{
+	fprintf(fp, "AV=%u; ACC=%u%u%u%u; F=%u; FC=%u; P=%u; I=%u; CS=%u; TT=%u%u\n",
+		!!(val & S390X_STE_AV),
+		!!(val & S390X_STE_ACC_1000),
+		!!(val & S390X_STE_ACC_0100),
+		!!(val & S390X_STE_ACC_0010),
+		!!(val & S390X_STE_ACC_0001),
+		!!(val & S390X_STE_F),
+		!!(val & S390X_STE_FC),
+		!!(val & S390X_STE_P),
+		!!(val & S390X_STE_I),
+		!!(val & S390X_STE_CS),
+		!!(val & S390X_STE_TT_10),
+		!!(val & S390X_STE_TT_01));
+}
+
+/* Print flags of Segment-Table entry with format control = 0 */
+static void print_segment_entry_fc0(ulong val)
+{
+	fprintf(fp, "FC=%u; P=%u; I=%u; CS=%u; TT=%u%u\n",
+		!!(val & S390X_STE_FC),
+		!!(val & S390X_STE_P),
+		!!(val & S390X_STE_I),
+		!!(val & S390X_STE_CS),
+		!!(val & S390X_STE_TT_10),
+		!!(val & S390X_STE_TT_01));
+}
+
+/* Print flags of Region-Third-Table entry with format control = 1 */
+static void print_region_third_entry_fc1(ulong val)
+{
+	fprintf(fp, "AV=%u; ACC=%u%u%u%u; F=%u; FC=%u; P=%u; I=%u; CR=%u; TT=%u%u\n",
+		!!(val & S390X_RTE_AV),
+		!!(val & S390X_RTE_ACC_1000),
+		!!(val & S390X_RTE_ACC_0100),
+		!!(val & S390X_RTE_ACC_0010),
+		!!(val & S390X_RTE_ACC_0001),
+		!!(val & S390X_RTE_F),
+		!!(val & S390X_RTE_FC),
+		!!(val & S390X_RTE_P),
+		!!(val & S390X_RTE_I),
+		!!(val & S390X_RTE_CR),
+		!!(val & S390X_RTE_TT_10),
+		!!(val & S390X_RTE_TT_01));
+}
+
+/* Print flags of Region-Third-Table entry with format control = 0 */
+static void print_region_third_entry_fc0(ulong val)
+{
+	fprintf(fp, "FC=%u; P=%u; TF=%u%u; I=%u; CR=%u; TT=%u%u; TL=%u%u\n",
+		!!(val & S390X_RTE_FC),
+		!!(val & S390X_RTE_P),
+		!!(val & S390X_RTE_TF_10),
+		!!(val & S390X_RTE_TF_01),
+		!!(val & S390X_RTE_I),
+		!!(val & S390X_RTE_CR),
+		!!(val & S390X_RTE_TT_10),
+		!!(val & S390X_RTE_TT_01),
+		!!(val & S390X_RTE_TL_10),
+		!!(val & S390X_RTE_TL_01));
+}
+
+/* Print flags of Region-First/Second-Table entry */
+static void print_region_first_second_entry(ulong val)
+{
+	fprintf(fp, "P=%u; TF=%u%u; I=%u; TT=%u%u; TL=%u%u\n",
+		!!(val & S390X_RTE_P),
+		!!(val & S390X_RTE_TF_10),
+		!!(val & S390X_RTE_TF_01),
+		!!(val & S390X_RTE_I),
+		!!(val & S390X_RTE_TT_10),
+		!!(val & S390X_RTE_TT_01),
+		!!(val & S390X_RTE_TL_10),
+		!!(val & S390X_RTE_TL_01));
+}
+
+/* Print the binary flags for Region or Segment table entry */
+static void s390x_print_te_binary_flags(ulong val, int level)
+{
+	fprintf(fp, "       flags in binary : ");
+	switch (level) {
+	case 0:
+		if (val & S390X_STE_FC)
+			print_segment_entry_fc1(val);
+		else
+			print_segment_entry_fc0(val);
+		break;
+	case 1:
+		if (val & S390X_RTE_FC)
+			print_region_third_entry_fc1(val);
+		else
+			print_region_third_entry_fc0(val);
+		break;
+	case 2:
+	case 3:
+		print_region_first_second_entry(val);
+		break;
+	}
+}
+
 /* Region or segment table traversal function */
 static ulong _kl_rsg_table_deref_s390x(ulong vaddr, ulong table,
 				       int len, int level, int verbose)
 {
 	const char *name_vec[] = {"STE", "RTTE", "RSTE", "RFTE"};
-	ulong offset, entry, addr;
+	ulong offset, entry, flags, addr;
+	int flags_prt_len;
 
 	offset = ((vaddr >> (11*level + 20)) & 0x7ffULL) * 8;
 	if (offset >= (len + 1)*4096)
@@ -624,16 +771,33 @@ static ulong _kl_rsg_table_deref_s390x(ulong vaddr, ulong table,
 		return 0;
 	addr = table + offset;
 	readmem(addr, KVADDR, &entry, sizeof(entry), "entry", FAULT_ON_ERROR);
-	if (verbose)
-		fprintf(fp, "%5s: %016lx => %016lx\n", name_vec[level], addr, entry);
+	if (verbose) {
+		flags_prt_len = 3;
+		if (entry & S390X_RTE_FC)
+			if (level) {
+				flags = entry & S390X_RTE_FLAG_BITS_FC1;
+				flags_prt_len = 8;
+			} else {
+				flags = entry & S390X_STE_FLAG_BITS_FC1;
+				flags_prt_len = 5;
+			}
+		else
+			if (level)
+				flags = entry & S390X_RTE_FLAG_BITS_FC0;
+			else
+				flags = entry & S390X_STE_FLAG_BITS_FC0;
+		fprintf(fp, "%5s: %016lx => %016lx (flags = %0*lx)\n",
+			name_vec[level], addr, entry, flags_prt_len, flags);
+		s390x_print_te_binary_flags(entry, level);
+	}
 	/*
 	 * Check if the segment table entry could be read and doesn't have
 	 * any of the reserved bits set.
 	 */
-	if ((entry & 0xcULL) != (level << 2))
+	if ((entry & S390X_RTE_TT) != (level << 2))
 		return 0;
 	/* Check if the region table entry has the invalid bit set. */
-	if (entry & 0x20ULL)
+	if (entry & S390X_RTE_I)
 		return 0;
 	/* Region table entry is valid and well formed. */
 	return entry;
@@ -664,8 +828,11 @@ static ulong _kl_pg_table_deref_s390x(ulong vaddr, ulong table, int verbose)
 	addr = table + offset;
 	readmem(addr, KVADDR, &entry, sizeof(entry), "entry", FAULT_ON_ERROR);
 	if (verbose) {
-		fprintf(fp, "%5s: %016lx => %016lx\n", "PTE", addr, entry);
-		fprintf(fp, "%5s: %016llx\n", "PAGE", entry & ~0xfffULL);
+		fprintf(fp, "%5s: %016lx => %016lx (flags = %03llx)\n",
+			"PTE", addr, entry, entry & S390X_PTE_FLAG_BITS);
+		fprintf(fp, "       flags in binary : I=%u; P=%u\n",
+			!!(entry & S390X_PAGE_INVALID), !!(entry & S390X_PAGE_RO));
+		fprintf(fp, "%5s: %016llx\n", "PAGE", entry & ~S390X_PTE_FLAG_BITS);
 	}
 	/*
 	 * Return zero if the page table entry has the reserved (0x800) or
