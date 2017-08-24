@@ -3914,8 +3914,9 @@ struct efi_memory_desc_t {
 #define PMD_MASKED_BITS_64K_4_6  0xc0000000000000ffUL
 
 #define PTE_RPN_MASK_DEFAULT  0xffffffffffffffffUL
-#define PTE_RPN_SIZE_L4_4_6   (PAGESIZE() == PPC64_64K_PAGE_SIZE ? 41 : 45)
-#define PTE_RPN_MASK_L4_4_6   (((1UL << PTE_RPN_SIZE_L4_4_6) - 1) << PAGESHIFT())
+#define PAGE_PA_MAX_L4_4_6    (THIS_KERNEL_VERSION >= LINUX(4,11,0) ? 53 : 57)
+#define PTE_RPN_MASK_L4_4_6   \
+	(((1UL << PAGE_PA_MAX_L4_4_6) - 1) & ~((1UL << PAGESHIFT()) - 1))
 #define PTE_RPN_SHIFT_L4_4_6  PAGESHIFT()
 
 #define PGD_MASKED_BITS_4_7  0xc0000000000000ffUL
