@@ -12477,17 +12477,19 @@ int
 patch_kernel_symbol(struct gnu_request *req)
 {
 	int i, c;
+	long relocate_display;
 	struct syment *sp_array[1000], *sp;
 
 	if (req->name == PATCH_KERNEL_SYMBOLS_START) {
-		if (kt->flags & RELOC_FORCE)
+		if (kt->relocate) {
+			if ((long)kt->relocate < 0)
+				relocate_display = (kt->relocate * -1) >> 20;
+			else
+				relocate_display = kt->relocate >> 20;
 			error(WARNING, 
 			    "\nkernel relocated [%ldMB]: patching %ld gdb minimal_symbol values\n",
-				kt->relocate >> 20, st->symcnt);
-		if (kt->flags2 & RELOC_AUTO)
-			error(WARNING, 
-			    "\nkernel relocated [%ldMB]: patching %ld gdb minimal_symbol values\n",
-				(kt->relocate * -1) >> 20, st->symcnt);
+				relocate_display, st->symcnt);
+		}
                 fprintf(fp, (pc->flags & SILENT) || !(pc->flags & TTY) ? "" :
                  "\nplease wait... (patching %ld gdb minimal_symbol values) ",
 			st->symcnt);
