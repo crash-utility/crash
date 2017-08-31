@@ -308,6 +308,7 @@ match_proc_version(void)
 #define CREATE  1
 #define DESTROY 0
 #define DEFAULT_SEARCHDIRS 5
+#define EXTRA_SEARCHDIRS 5
 
 static char **
 build_searchdirs(int create, int *preferred)
@@ -340,11 +341,15 @@ build_searchdirs(int create, int *preferred)
 		*preferred = 0;
 
 	/*
-	 *  Allow, at a minimum, the defaults plus an extra three directories 
-	 *  for the two possible /usr/src/redhat/BUILD/kernel-xxx locations 
-	 *  plus the Red Hat debug directory.
+	 *  Allow, at a minimum, the defaults plus an extra four directories: 
+	 *
+	 *    /lib/modules
+	 *    /usr/src/redhat/BUILD/kernel-<version>/linux
+	 *    /usr/src/redhat/BUILD/kernel-<version>/linux-<version>
+	 *    /usr/lib/debug/lib/modules
+	 *
 	 */  
-	cnt = DEFAULT_SEARCHDIRS + 3;  
+	cnt = DEFAULT_SEARCHDIRS + EXTRA_SEARCHDIRS;  
 
         if ((dirp = opendir("/usr/src"))) {
                 for (dp = readdir(dirp); dp != NULL; dp = readdir(dirp)) 
