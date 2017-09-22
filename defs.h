@@ -3110,6 +3110,7 @@ struct machine_specific {
 	ulong kimage_voffset;
 	ulong kimage_text;
 	ulong kimage_end;
+	ulong user_eframe_offset;
 };
 
 struct arm64_stackframe {

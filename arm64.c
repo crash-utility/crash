@@ -608,6 +608,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "      exp_entry2_start: %lx\n", ms->exp_entry2_start);
 	fprintf(fp, "        exp_entry2_end: %lx\n", ms->exp_entry2_end);
 	fprintf(fp, "       panic_task_regs: %lx\n", (ulong)ms->panic_task_regs);
+	fprintf(fp, "    user_eframe_offset: %ld\n", ms->user_eframe_offset);
 	fprintf(fp, "         PTE_PROT_NONE: %lx\n", ms->PTE_PROT_NONE);
 	fprintf(fp, "              PTE_FILE: ");
 	if (ms->PTE_FILE)
@@ -1376,6 +1377,11 @@ arm64_stackframe_init(void)
 	MEMBER_OFFSET_INIT(elf_prstatus_pr_pid, "elf_prstatus", "pr_pid");
 	MEMBER_OFFSET_INIT(elf_prstatus_pr_reg, "elf_prstatus", "pr_reg");
 
+	if (MEMBER_EXISTS("pt_regs", "stackframe")) 
+		machdep->machspec->user_eframe_offset = SIZE(pt_regs);
+	else
+		machdep->machspec->user_eframe_offset = SIZE(pt_regs) + 16;
+
 	machdep->machspec->__exception_text_start = 
 		symbol_value("__exception_text_start");
 	machdep->machspec->__exception_text_end = 
@@ -1461,7 +1467,7 @@ arm64_stackframe_init(void)
 #define KERNEL_MODE (1)
 #define USER_MODE   (2)
 
-#define USER_EFRAME_OFFSET (304)
+#define USER_EFRAME_OFFSET (machdep->machspec->user_eframe_offset)
 
 /*
  * PSR bits
