@@ -2525,6 +2525,8 @@ cmd_bt(void)
 				hook.esp = (ulong)-3;
 			else if (STREQ(optarg, "noframepointer"))
 				hook.esp = (ulong)-4;
+			else if (STREQ(optarg, "orc"))
+				hook.esp = (ulong)-5;
 			else if (STREQ(optarg, "clear")) {
 				kt->flags &= ~(RA_SEEK|NO_RA_SEEK);
 				hook.esp = 0;

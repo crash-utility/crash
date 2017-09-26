@@ -1988,6 +1988,10 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long sk_buff_len;
 	long sk_buff_data;
 	long nlmsghdr_nlmsg_type;
+	long module_arch;
+	long mod_arch_specific_num_orcs;
+	long mod_arch_specific_orc_unwind_ip;
+	long mod_arch_specific_orc_unwind;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2136,6 +2140,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long nlmsghdr_nlmsg_type;
 	long sk_buff_head_qlen;
 	long sk_buff_len;
+	long orc_entry;
 };
 
 struct array_table {
@@ -5663,6 +5668,45 @@ struct x86_64_stkinfo {
 	char *exception_stacks[MAX_EXCEPTION_STACKS];
 };
 
+typedef struct __attribute__((__packed__)) {
+        signed short sp_offset;
+        signed short bp_offset;
+        unsigned int sp_reg:4;
+        unsigned int bp_reg:4;
+        unsigned int type:2;
+} kernel_orc_entry;
+
+struct ORC_data {
+	int module_ORC;
+	uint lookup_num_blocks;
+	ulong __start_orc_unwind_ip;
+	ulong __stop_orc_unwind_ip;
+	ulong __start_orc_unwind;
+	ulong __stop_orc_unwind;
+	ulong orc_lookup;
+	ulong ip_entry;
+	ulong orc_entry;
+	kernel_orc_entry kernel_orc_entry;
+};
+
+#define ORC_TYPE_CALL                   0
+#define ORC_TYPE_REGS                   1
+#define ORC_TYPE_REGS_IRET              2
+#define UNWIND_HINT_TYPE_SAVE           3
+#define UNWIND_HINT_TYPE_RESTORE        4
+
+#define ORC_REG_UNDEFINED               0
+#define ORC_REG_PREV_SP                 1
+#define ORC_REG_DX                      2
+#define ORC_REG_DI                      3
+#define ORC_REG_BP                      4
+#define ORC_REG_SP                      5
+#define ORC_REG_R10                     6
+#define ORC_REG_R13                     7
+#define ORC_REG_BP_INDIRECT             8
+#define ORC_REG_SP_INDIRECT             9
+#define ORC_REG_MAX                     15
+
 struct machine_specific {
 	ulong userspace_top;
 	ulong page_offset;
@@ -5693,6 +5737,7 @@ struct machine_specific {
 	ulong pgdir_shift;
         char *p4d;
 	ulong last_p4d_read;
+	struct ORC_data orc;
 };
 
 #define KSYMS_START    (0x1)
@@ -5709,6 +5754,7 @@ struct machine_specific {
 #define NESTED_NMI   (0x800)
 #define RANDOMIZED  (0x1000)
 #define VM_5LEVEL   (0x2000)
+#define ORC         (0x4000)
 
 #define VM_FLAGS (VM_ORIG|VM_2_6_11|VM_XEN|VM_XEN_RHEL4|VM_5LEVEL)
 

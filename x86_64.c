@@ -91,6 +91,7 @@ static ulong x86_64_irq_eframe_link(ulong, struct bt_info *, FILE *);
 static ulong search_for_switch_to(ulong, ulong);
 static void x86_64_thread_return_init(void);
 static void x86_64_framepointer_init(void);
+static void x86_64_ORC_init(void);
 static int x86_64_virt_phys_base(void);
 static int x86_64_xendump_p2m_create(struct xendump_data *);
 static int x86_64_pvops_xendump_p2m_create(struct xendump_data *);
@@ -119,6 +120,12 @@ static int x86_64_verify_paddr(uint64_t);
 static void GART_init(void);
 static void x86_64_exception_stacks_init(void);
 static int in_START_KERNEL_map(ulong);
+static ulong orc_ip(ulong);
+static kernel_orc_entry *__orc_find(ulong, ulong, uint, ulong);
+static kernel_orc_entry *orc_find(ulong);
+static kernel_orc_entry *orc_module_find(ulong);
+static ulong ip_table_to_vaddr(ulong);
+static void orc_dump(ulong);
 
 struct machine_specific x86_64_machine_specific = { 0 };
 
@@ -623,6 +630,7 @@ x86_64_init(int when)
                 }
 		x86_64_irq_eframe_link_init();
 		x86_64_framepointer_init();
+		x86_64_ORC_init();
 		x86_64_thread_return_init();
 
 		if (THIS_KERNEL_VERSION >= LINUX(2,6,28))
@@ -692,6 +700,8 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sPHYS_BASE", others++ ? "|" : "");
 	if (machdep->flags & FRAMESIZE_DEBUG)
 		fprintf(fp, "%sFRAMESIZE_DEBUG", others++ ? "|" : "");
+	if (machdep->flags & ORC)
+		fprintf(fp, "%sORC", others++ ? "|" : "");
 	if (machdep->flags & FRAMEPOINTER)
 		fprintf(fp, "%sFRAMEPOINTER", others++ ? "|" : "");
 	if (machdep->flags & GART_REGION)
@@ -840,6 +850,24 @@ x86_64_dump_machdep_table(ulong arg)
 
 	fprintf(fp, "                 irqstack: %lx\n", (ulong)ms->irqstack);
 	fprintf(fp, "          irq_eframe_link: %ld\n", ms->irq_eframe_link);
+	fprintf(fp, "                 ORC_data: %s", machdep->flags & ORC ? "\n" : "(unused)\n");
+	if (machdep->flags & ORC) {
+		fprintf(fp, "                    module_ORC: %s\n", ms->orc.module_ORC ? "TRUE" : "FALSE");
+		fprintf(fp, "             lookup_num_blocks: %d\n", ms->orc.lookup_num_blocks);
+		fprintf(fp, "         __start_orc_unwind_ip: %lx\n", ms->orc.__start_orc_unwind_ip);
+		fprintf(fp, "          __stop_orc_unwind_ip: %lx\n", ms->orc.__stop_orc_unwind_ip);
+		fprintf(fp, "            __start_orc_unwind: %lx\n", ms->orc.__start_orc_unwind);
+		fprintf(fp, "             __stop_orc_unwind: %lx\n", ms->orc.__stop_orc_unwind);
+		fprintf(fp, "                    orc_lookup: %lx\n", ms->orc.orc_lookup);
+		fprintf(fp, "                      ip_entry: %lx\n", ms->orc.ip_entry);
+		fprintf(fp, "                     orc_entry: %lx\n", ms->orc.orc_entry);
+		fprintf(fp, "              kernel_orc_entry:\n");
+		fprintf(fp, "                       sp_offset: %d\n", ms->orc.kernel_orc_entry.sp_offset);
+		fprintf(fp, "                       bp_offset: %d\n", ms->orc.kernel_orc_entry.bp_offset);
+		fprintf(fp, "                          sp_reg: %d\n", ms->orc.kernel_orc_entry.sp_reg);
+		fprintf(fp, "                          bp_reg: %d\n", ms->orc.kernel_orc_entry.bp_reg);
+		fprintf(fp, "                            type: %d\n", ms->orc.kernel_orc_entry.type);
+	} 
 	fprintf(fp, "                      pto: %s",
 		machdep->flags & PT_REGS_INIT ? "\n" : "(uninitialized)\n");
 	if (machdep->flags & PT_REGS_INIT) {
@@ -5757,6 +5785,82 @@ x86_64_framepointer_init(void)
         }
 }
 
+static void
+x86_64_ORC_init(void)
+{
+	int i;
+	char *ORC_symbols[] = {
+		"lookup_num_blocks",
+		"__start_orc_unwind_ip",
+		"__stop_orc_unwind_ip",
+		"__start_orc_unwind",
+		"__stop_orc_unwind",
+		"orc_lookup",
+		NULL
+	};
+	struct ORC_data *orc;
+
+	if (machdep->flags & FRAMEPOINTER)
+		return;
+
+	STRUCT_SIZE_INIT(orc_entry, "orc_entry");
+	if (!VALID_STRUCT(orc_entry))
+		return;
+
+	if (!MEMBER_EXISTS("orc_entry", "sp_offset") || 
+	    !MEMBER_EXISTS("orc_entry", "bp_offset") ||
+	    !MEMBER_EXISTS("orc_entry", "sp_reg") ||
+	    !MEMBER_EXISTS("orc_entry", "bp_reg") ||
+	    !MEMBER_EXISTS("orc_entry", "type") ||
+	    SIZE(orc_entry) != sizeof(kernel_orc_entry)) {
+		error(WARNING, "ORC unwinder: orc_entry structure has changed\n");
+		return;
+	}
+
+	for (i = 0; ORC_symbols[i]; i++) {
+		if (!symbol_exists(ORC_symbols[i])) {
+			error(WARNING, 
+			    "ORC unwinder: %s does not exist in this kernel\n", 
+				ORC_symbols[i]);
+			return;
+		}
+	}
+
+	orc = &machdep->machspec->orc;
+
+	MEMBER_OFFSET_INIT(module_arch, "module", "arch");
+	MEMBER_OFFSET_INIT(mod_arch_specific_num_orcs, "mod_arch_specific", "num_orcs");
+	MEMBER_OFFSET_INIT(mod_arch_specific_orc_unwind_ip, "mod_arch_specific", "orc_unwind_ip");
+	MEMBER_OFFSET_INIT(mod_arch_specific_orc_unwind, "mod_arch_specific", "orc_unwind");
+	/*
+	 *  Nice to have, but not required. 
+	 */
+	if (VALID_MEMBER(module_arch) &&
+	    VALID_MEMBER(mod_arch_specific_num_orcs) &&
+	    VALID_MEMBER(mod_arch_specific_orc_unwind_ip) &&
+	    VALID_MEMBER(mod_arch_specific_orc_unwind)) {
+		orc->module_ORC = TRUE;
+	} else {
+		orc->module_ORC = FALSE;
+		error(WARNING, "ORC unwinder: module orc_entry structures have changed\n");
+	}
+		
+	if (!readmem(symbol_value("lookup_num_blocks"), KVADDR, &orc->lookup_num_blocks, 
+	    sizeof(unsigned int), "lookup_num_blocks", RETURN_ON_ERROR|QUIET)) {
+		error(WARNING, "ORC unwinder: cannot read lookup_num_blocks\n"); 
+		return;
+	} 
+
+	orc->__start_orc_unwind_ip = symbol_value("__start_orc_unwind_ip");
+	orc->__stop_orc_unwind_ip = symbol_value("__stop_orc_unwind_ip");
+	orc->__start_orc_unwind = symbol_value("__start_orc_unwind");
+	orc->__stop_orc_unwind = symbol_value("__stop_orc_unwind");
+	orc->orc_lookup = symbol_value("orc_lookup");
+
+	machdep->flags |= ORC;
+}
+
+
 static ulong
 search_for_switch_to(ulong start, ulong end)
 {
@@ -7675,6 +7779,7 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp)
 	int reterror;
 	int arg_exists;
 	int exception;
+	kernel_orc_entry *korc;
 
 	if (!(bt->flags & BT_FRAMESIZE_DEBUG)) {
 		if ((bt->flags & BT_FRAMESIZE_IGNORE_MASK) ||
@@ -7757,6 +7862,21 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp)
 
 	if ((sp->value >= kt->init_begin) && (sp->value < kt->init_end))
 		return 0;
+
+	if ((machdep->flags & ORC) && (korc = orc_find(textaddr))) {
+		if (CRASHDEBUG(1))
+			fprintf(fp, 
+			    "rsp: %lx textaddr: %lx framesize: %d -> spo: %d bpo: %d spr: %d bpr: %d type: %d %s\n", 
+	    			rsp, textaddr, framesize, korc->sp_offset, korc->bp_offset, 
+				korc->sp_reg, korc->bp_reg, korc->type,
+				(korc->type == ORC_TYPE_CALL) && (korc->sp_reg == ORC_REG_SP) ? "" : "(UNUSED)");
+
+		if ((korc->type == ORC_TYPE_CALL) && (korc->sp_reg == ORC_REG_SP)) {
+			framesize = (korc->sp_offset - 8);
+			return (x86_64_framesize_cache_func(FRAMESIZE_ENTER, textaddr, 
+				&framesize, exception));
+		}
+	}
 
 	framesize = max = 0;
         max_instructions = textaddr - sp->value; 
@@ -7925,6 +8045,13 @@ x86_64_framesize_debug(struct bt_info *bt)
 			sizeof(struct framesize_cache)*framesize_cache_entries);
 		fprintf(fp,
 			"framesize cache cleared and FRAMEPOINTER turned OFF\n");
+		break;
+
+	case -5:
+		if (!bt->hp->eip)
+			error(INFO, "x86_64_framesize_debug: ignoring command (no ip)\n");
+		else
+			orc_dump(bt->hp->eip);
 		break;
 
 	default:
@@ -8181,6 +8308,248 @@ x86_64_verify_paddr(uint64_t paddr)
 	}
 
 	return TRUE;
+}
+
+static ulong 
+orc_ip(ulong ip)
+{
+	int ip_entry;
+
+	if (!readmem((ulong)ip, KVADDR, &ip_entry, sizeof(int), 
+	    "orc_ip", QUIET|RETURN_ON_ERROR))
+		return 0;
+
+	return (ip + ip_entry); 
+}
+
+static kernel_orc_entry *
+__orc_find(ulong ip_table_ptr, ulong u_table_ptr, uint num_entries, ulong ip)
+{
+	int index;
+	int *first = (int *)ip_table_ptr;
+	int *last = (int *)ip_table_ptr + num_entries - 1;
+	int *mid = first, *found = first;
+	int *ip_table = (int *)ip_table_ptr;
+	struct ORC_data *orc = &machdep->machspec->orc;
+	ulong vaddr;
+	kernel_orc_entry *korc;
+
+	if (CRASHDEBUG(2)) {
+		int i, ip_entry;
+		ulong ptr;
+		ulong offset;
+		struct syment *sp;
+
+		fprintf(fp, "__orc_find:\n  ip: %lx  num_entries: %d\n", 
+			ip, num_entries);
+
+		for (i = 0; i < num_entries; i++) {
+			ptr = ip_table_ptr + (i*4);
+			if (!readmem((ulong)ptr, KVADDR, &ip_entry, sizeof(int), 
+			    "ip entry", RETURN_ON_ERROR))
+				return NULL;
+			if (!(vaddr = orc_ip(ptr)))
+				return NULL;
+			fprintf(fp, "  orc_ip(%lx): %x -> %lx / ", ptr, ip_entry, vaddr); 
+			if ((sp = value_search(vaddr, &offset))) {
+				fprintf(fp, "%s+%ld -> ", sp->name, offset);
+				fprintf(fp, "%lx\n", u_table_ptr + (i * SIZE(orc_entry)));
+			} else
+				fprintf(fp, "(unknown symbol value)\n");
+		}
+	}
+
+	while (first <= last) {
+		mid = first + ((last - first) / 2);
+
+		if (!(vaddr = orc_ip((ulong)mid)))
+			return NULL;
+
+		if (vaddr <= ip) {
+			found = mid;
+			first = mid + 1;
+		} else
+			last = mid - 1;
+	}
+
+	index = found - ip_table;
+
+	orc->ip_entry = (ulong)found;
+	orc->orc_entry = u_table_ptr + (index * SIZE(orc_entry));
+	if (!readmem(orc->orc_entry, KVADDR, &orc->kernel_orc_entry, 
+	    sizeof(kernel_orc_entry), "kernel orc_entry", RETURN_ON_ERROR|QUIET)) 
+		return NULL;
+
+	korc = &orc->kernel_orc_entry;
+
+	if (CRASHDEBUG(2)) {
+		fprintf(fp, "  found: %lx  index: %d\n", (ulong)found, index);
+                fprintf(fp, 
+		    "  orc_entry: %lx  sp_offset: %d bp_offset: %d sp_reg: %d bp_reg: %d type: %d\n",
+			orc->orc_entry, korc->sp_offset, korc->bp_offset, korc->sp_reg, korc->bp_reg, korc->type);
+	}
+
+	return korc;
+}
+
+#define LOOKUP_BLOCK_ORDER      8
+#define LOOKUP_BLOCK_SIZE       (1 << LOOKUP_BLOCK_ORDER)
+#define LOOKUP_START_IP         (unsigned long)kt->stext
+#define LOOKUP_STOP_IP          (unsigned long)kt->etext
+
+static kernel_orc_entry *
+orc_find(ulong ip)
+{
+	unsigned int idx, start, stop;
+	struct ORC_data *orc = &machdep->machspec->orc;
+
+	if ((ip < LOOKUP_START_IP) || (ip >= LOOKUP_STOP_IP)) {
+		if ((ip >= MODULES_VADDR) && (ip < MODULES_END))
+			return orc_module_find(ip);
+		error(WARNING, 
+			"%lx: ip is outside kernel and module text ranges\n", ip);
+		return NULL;
+	}
+
+	idx = (ip - LOOKUP_START_IP) / LOOKUP_BLOCK_SIZE;
+
+	if (idx >= orc->lookup_num_blocks-1) {
+		if (CRASHDEBUG(1)) {
+			error(INFO, "bad lookup: idx: %u lookup_num_blocks: %u ip: %lx\n",
+				idx, orc->lookup_num_blocks, ip);
+		}
+		return NULL;
+	}
+
+	if (!readmem(orc->orc_lookup + (sizeof(unsigned int) * idx), KVADDR,
+	    &start, sizeof(unsigned int), "orc_lookup start", RETURN_ON_ERROR|QUIET)) {
+		if (CRASHDEBUG(1))
+			error(INFO, "cannot read \"start\" orc_lookup entry at %lx\n",
+				orc->orc_lookup + (sizeof(unsigned int) * idx));
+		return NULL;
+	}
+	if (!readmem(orc->orc_lookup + (sizeof(unsigned int) * (idx+1)), KVADDR,
+	    &stop, sizeof(unsigned int), "orc_lookup stop", RETURN_ON_ERROR|QUIET)) {
+		if (CRASHDEBUG(1))
+			error(INFO, "cannot read \"stop\" orc_lookup entry at %lx\n",
+				orc->orc_lookup + (sizeof(unsigned int) * (idx+1)));
+		return NULL;
+	}
+	stop += 1;
+
+	if (CRASHDEBUG(2)) {
+		fprintf(fp, "orc_find:\n  ip: %lx  idx: %d\n", ip, idx);
+		fprintf(fp, "  start = orc_lookup[%d]: %d\n"
+			    "  stop = orc_lookup[%d] + 1: %d\n",
+			idx, start, idx+1, stop);
+		fprintf(fp, "  ip table start: %lx\n",
+			orc->__start_orc_unwind_ip + (start * sizeof(int)));
+		fprintf(fp, "  unwind table start: %lx\n",
+			orc->__start_orc_unwind + (start * SIZE(orc_entry)));
+	}
+
+	if ((orc->__start_orc_unwind + (start * SIZE(orc_entry))) >= orc->__stop_orc_unwind) {
+		if (CRASHDEBUG(1)) 
+			error(INFO, 
+			    "bad unwind lookup start: idx: %u num: %u start: %u stop: %u ip: %lx\n",
+				idx, orc->lookup_num_blocks, start, stop, ip);
+		return NULL;
+	}
+	if ((orc->__start_orc_unwind + (stop * SIZE(orc_entry))) > orc->__stop_orc_unwind) {
+		if (CRASHDEBUG(1))
+			error(INFO, 
+			    "bad unwind lookup stop: idx: %u num: %u start: %u stop: %u ip: %lx\n",
+				idx, orc->lookup_num_blocks, start, stop, ip);
+		return NULL;
+	}
+
+	return __orc_find(orc->__start_orc_unwind_ip + (start * sizeof(int)),
+		orc->__start_orc_unwind + (start * SIZE(orc_entry)), stop - start, ip);
+}
+
+static kernel_orc_entry *
+orc_module_find(ulong ip)
+{
+	struct load_module *lm;
+	uint num_orcs;
+	ulong orc_unwind_ip, orc_unwind, module_arch;
+	struct ORC_data *orc = &machdep->machspec->orc;
+
+	if (!(orc->module_ORC) || !module_symbol(ip, NULL, &lm, NULL, 0))
+		return NULL;
+
+	module_arch = lm->module_struct + OFFSET(module_arch);
+
+	if (!readmem(module_arch + OFFSET(mod_arch_specific_num_orcs), KVADDR, 
+	    &num_orcs, sizeof(int), "module num_orcs", RETURN_ON_ERROR|QUIET)) 
+		return NULL;
+	if (!readmem(module_arch + OFFSET(mod_arch_specific_orc_unwind_ip), KVADDR, 
+	    &orc_unwind_ip, sizeof(void *), "module orc_unwind_ip", RETURN_ON_ERROR|QUIET)) 
+		return NULL;
+	if (!readmem(module_arch + OFFSET(mod_arch_specific_orc_unwind), KVADDR, 
+	    &orc_unwind, sizeof(void *), "module orc_unwind", RETURN_ON_ERROR|QUIET)) 
+		return NULL;
+
+	if (CRASHDEBUG(2)) {
+		fprintf(fp, "orc_module_find:\n");
+		fprintf(fp, "  num_orcs: %d orc_unwind_ip: %lx orc_unwind: %lx\n", 
+			num_orcs, orc_unwind_ip, orc_unwind);
+	}
+
+	return __orc_find(orc_unwind_ip, orc_unwind, num_orcs, ip);
+}
+
+static ulong
+ip_table_to_vaddr(ulong ip_table)
+{
+	int ip_entry;
+
+	if (!readmem((ulong)ip_table, KVADDR, &ip_entry, sizeof(int), "ip entry", RETURN_ON_ERROR))
+                error(FATAL, "ip_table_to_vaddr: cannot read ip_table: %lx\n", ip_table);
+
+	return (ip_table + ip_entry);
+}
+
+static void
+orc_dump(ulong ip)
+{
+	struct ORC_data *orc = &machdep->machspec->orc;
+	kernel_orc_entry *korc;
+	ulong vaddr, offset;
+	struct syment *sp, *orig;
+
+	fprintf(fp, "orc_dump: %lx / ", ip);
+	if ((sp = value_search(ip, &offset)))
+		fprintf(fp, "%s+%ld\n--------\n", sp->name, offset);
+	else
+		fprintf(fp, "(unresolved)\n--------\n");
+	orig = sp;
+
+	if (!orc_find(ip)) {
+		fprintf(fp, "%lx: ip not found\n", ip);
+		return;
+	}
+
+next_in_func:
+	fprintf(fp, "ip: %lx -> %lx / ",  orc->ip_entry, 
+		vaddr = ip_table_to_vaddr(orc->ip_entry));
+	if ((sp = value_search(vaddr, &offset)))
+		fprintf(fp, "%s+%ld -> ", sp->name, offset);
+	else
+		fprintf(fp, "(unresolved) -> ");
+	if (!readmem(orc->orc_entry, KVADDR, &orc->kernel_orc_entry, sizeof(kernel_orc_entry),
+	    "kernel orc_entry", RETURN_ON_ERROR)) 
+		error(FATAL, "cannot read orc_entry\n");
+	korc = &orc->kernel_orc_entry;
+	fprintf(fp, "orc: %lx  spo: %d bpo: %d spr: %d bpr: %d type: %d\n",
+			orc->orc_entry, korc->sp_offset, korc->bp_offset, korc->sp_reg, korc->bp_reg, korc->type);
+
+	orc->ip_entry += sizeof(int);
+	orc->orc_entry += sizeof(kernel_orc_entry);
+	vaddr = ip_table_to_vaddr(orc->ip_entry);
+	if ((sp = value_search(vaddr, &offset)))
+		if (sp == orig)
+			goto next_in_func;
 }
 
 #endif  /* X86_64 */ 
