@@ -3004,6 +3004,7 @@ typedef signed int s32;
 #define IRQ_STACKS    (0x40)
 #define NEW_VMEMMAP   (0x80)
 #define VM_L4_4K      (0x100)
+#define UNW_4_14      (0x200)
 
 /*
  * Get kimage_voffset from /dev/crash
