@@ -2895,15 +2895,21 @@ parse_task_thread(int argcnt, char *arglist[], struct task_context *tc) {
 	char lookfor1[BUFSIZE];
 	char lookfor2[BUFSIZE];
 	char lookfor3[BUFSIZE];
-	int i;
+	int i, cnt, randomized;
 
         rewind(pc->tmpfile);
 
 	BZERO(lookfor1, BUFSIZE);
 	BZERO(lookfor2, BUFSIZE);
 	BZERO(lookfor3, BUFSIZE);
+	randomized = FALSE;
 
         while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+		if (STREQ(buf, "  {\n"))
+			randomized = TRUE;
+		else if (randomized && STREQ(buf, "  }, \n"))
+			randomized = FALSE;
+
 		if (strlen(lookfor2)) {
 			fprintf(pc->saved_fp, "%s", buf);
 			if (STRNEQ(buf, lookfor2))
@@ -2922,15 +2928,18 @@ parse_task_thread(int argcnt, char *arglist[], struct task_context *tc) {
 			BZERO(lookfor1, BUFSIZE);
 			BZERO(lookfor2, BUFSIZE);
 			BZERO(lookfor3, BUFSIZE);
-			sprintf(lookfor1, "  %s = ", arglist[i]);
+			sprintf(lookfor1, "%s  %s = ", 
+				randomized ? "  " : "", arglist[i]);
 			if (STRNEQ(buf, lookfor1)) {
 				fprintf(pc->saved_fp, "%s", buf);
-                        	if (strstr(buf, "{{\n")) 
-                                	sprintf(lookfor2, "    }},");
-                        	else if (strstr(buf, "{\n")) 
-                                	sprintf(lookfor2, "  },");
-				else if (strstr(buf, "{"))
-                                	sprintf(lookfor3, "},");
+				if (strstr(buf, "{{\n")) 
+					sprintf(lookfor2, "%s    }},", 
+						randomized ? "  " : "");
+				else if (strstr(buf, " = {\n")) { 
+					cnt = count_leading_spaces(buf);
+					sprintf(lookfor2, "%s}", space(cnt));
+				} else if (strstr(buf, "{"))
+					sprintf(lookfor3, "},");
 				break;
 			}
 		}
