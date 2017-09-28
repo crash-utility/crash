@@ -77,7 +77,7 @@ struct vmcore_data {
 	ulonglong backup_src_start;
 	ulong backup_src_size;
 	ulonglong backup_offset;
-	ulong relocate;
+	ulong arch_data;
 };
 
 #define DUMP_ELF_INCOMPLETE  0x1   /* dumpfile is incomplete */

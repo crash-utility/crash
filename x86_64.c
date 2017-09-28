@@ -184,6 +184,12 @@ x86_64_init(int when)
 		machdep->get_kvaddr_ranges = x86_64_get_kvaddr_ranges;
                 if (machdep->cmdline_args[0])
                         parse_cmdline_args();
+		if ((string = pc->read_vmcoreinfo("relocate"))) {
+			kt->relocate = htol(string, QUIET, NULL);
+                        kt->flags |= RELOC_SET;
+                        kt->flags2 |= KASLR;
+			free(string);
+		}
 		if ((string = pc->read_vmcoreinfo("NUMBER(KERNEL_IMAGE_SIZE)"))) {
 			machdep->machspec->kernel_image_size = dtol(string, QUIET, NULL);
 			free(string);
