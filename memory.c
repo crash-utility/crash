@@ -17200,10 +17200,8 @@ next_online_node(int first)
 	int i, j, node;
 	ulong mask, *maskptr;
 
-	if ((first/BITS_PER_LONG) >= vt->node_online_map_len) {
-		error(INFO, "next_online_node: %d is too large!\n", first);
+	if ((first/BITS_PER_LONG) >= vt->node_online_map_len)
 		return -1;
-	}
 
 	maskptr = (ulong *)vt->node_online_map;
 	for (i = node = 0; i <  vt->node_online_map_len; i++, maskptr++) {
