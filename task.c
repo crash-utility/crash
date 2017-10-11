@@ -8765,10 +8765,15 @@ cfs_rq_offset_init(void)
 		MEMBER_OFFSET_INIT(sched_rt_entity_my_q, "sched_rt_entity",
 			"my_q");
 		MEMBER_OFFSET_INIT(sched_entity_on_rq, "sched_entity", "on_rq");
-		MEMBER_OFFSET_INIT(cfs_rq_rb_leftmost, "cfs_rq", "rb_leftmost");
-		MEMBER_OFFSET_INIT(cfs_rq_nr_running, "cfs_rq", "nr_running");
 		MEMBER_OFFSET_INIT(cfs_rq_tasks_timeline, "cfs_rq", 
 			"tasks_timeline");
+		MEMBER_OFFSET_INIT(cfs_rq_rb_leftmost, "cfs_rq", "rb_leftmost");
+		if (INVALID_MEMBER(cfs_rq_rb_leftmost) && 
+		    VALID_MEMBER(cfs_rq_tasks_timeline) &&
+		    MEMBER_EXISTS("rb_root_cached", "rb_leftmost"))
+			ASSIGN_OFFSET(cfs_rq_rb_leftmost) = OFFSET(cfs_rq_tasks_timeline) + 
+				MEMBER_OFFSET("rb_root_cached", "rb_leftmost");
+		MEMBER_OFFSET_INIT(cfs_rq_nr_running, "cfs_rq", "nr_running");
 		MEMBER_OFFSET_INIT(cfs_rq_curr, "cfs_rq", "curr");
 		MEMBER_OFFSET_INIT(rt_rq_active, "rt_rq", "active");
                 MEMBER_OFFSET_INIT(task_struct_run_list, "task_struct",
