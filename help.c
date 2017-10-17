@@ -2862,7 +2862,7 @@ NULL
 char *help_search[] = {
 "search",
 "search memory",
-"[-s start] [ -[kKV] | -u | -p | -t ] [-e end | -l length] [-m mask]\n"
+"[-s start] [ -[kKV] | -u | -p | -t | -T ] [-e end | -l length] [-m mask]\n"
 "         [-x count] -[cwh] [value | (expression) | symbol | string] ...",
 "  This command searches for a given value within a range of user virtual, kernel",
 "  virtual, or physical memory space.  If no end nor length value is entered, ",
@@ -2893,6 +2893,7 @@ char *help_search[] = {
 "          -t  Search only the kernel stack pages of every task.  If one or more",
 "              matches are found in a task's kernel stack, precede the output",
 "              with a task-identifying header.",
+"          -T  Same as -t, except only the active task(s) are considered.",
 "      -e end  Stop the search at this hexadecimal user or kernel virtual",
 "              address, kernel symbol, or physical address.  The end address",
 "              must be appropriate for the memory type specified.",

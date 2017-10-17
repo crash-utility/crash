@@ -13882,7 +13882,7 @@ cmd_search(void)
 	ulong value, mask, len;
 	ulong uvaddr_start, uvaddr_end;
 	ulong kvaddr_start, kvaddr_end, range_end;
-	int sflag, Kflag, Vflag, pflag, tflag;
+	int sflag, Kflag, Vflag, pflag, Tflag, tflag;
 	struct searchinfo searchinfo;
 	struct syment *sp;
 	struct node_table *nt;
@@ -13896,7 +13896,7 @@ cmd_search(void)
 
 	context = max = 0;
 	start = end = 0;
-	value = mask = sflag = pflag = Kflag = Vflag = memtype = len = tflag = 0;
+	value = mask = sflag = pflag = Kflag = Vflag = memtype = len = Tflag = tflag = 0;
 	kvaddr_start = kvaddr_end = 0;
 	uvaddr_start = UNINITIALIZED;
 	uvaddr_end = COMMON_VADDR_SPACE() ? (ulong)(-1) : machdep->kvbase;
@@ -13933,7 +13933,7 @@ cmd_search(void)
 
 	searchinfo.mode = SEARCH_ULONG;	/* default search */
 
-        while ((c = getopt(argcnt, args, "tl:ukKVps:e:v:m:hwcx:")) != EOF) {
+        while ((c = getopt(argcnt, args, "Ttl:ukKVps:e:v:m:hwcx:")) != EOF) {
                 switch(c)
                 {
 		case 'u':
@@ -14038,12 +14038,19 @@ cmd_search(void)
 			context = dtoi(optarg, FAULT_ON_ERROR, NULL);
 			break;
 
+		case 'T':
 		case 't':
 			if (XEN_HYPER_MODE())
 				error(FATAL, 
- 			 	    "-t option is not applicable to the "
-				    "Xen hypervisor\n");
-			tflag++;
+ 			 	    "-%c option is not applicable to the "
+				    "Xen hypervisor\n", c);
+			if (c == 'T')
+				Tflag++;
+			else if (c == 't')
+				tflag++;
+			if (tflag && Tflag)
+				error(FATAL, 
+				    "-t and -T options are mutually exclusive\n");
 			break;
 
                 default:
@@ -14052,10 +14059,11 @@ cmd_search(void)
                 }
         }
 
-	if (tflag && (memtype || start || end || len)) 
+	if ((tflag || Tflag) && (memtype || start || end || len)) 
 		error(FATAL, 
-		    "-t option cannot be used with other "
-		    "memory-selection options\n");
+		    "-%c option cannot be used with other "
+		    "memory-selection options\n",
+		    tflag ? 't' : 'T');
 
 	if (XEN_HYPER_MODE()) {
 		memtype = KVADDR;
@@ -14328,10 +14336,12 @@ cmd_search(void)
 			break;
 		}
 
-		if (tflag) {
+		if (tflag || Tflag) {
 			searchinfo.tasks_found = 0;
 			tc = FIRST_CONTEXT();
 			for (i = 0; i < RUNNING_TASKS(); i++, tc++) {
+				if (Tflag && !is_task_active(tc->task))
+					continue;
 				searchinfo.vaddr_start = GET_STACKBASE(tc->task); 
 				searchinfo.vaddr_end = GET_STACKTOP(tc->task);
 				searchinfo.task_context = tc;
