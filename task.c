@@ -6750,6 +6750,8 @@ panic_search(void)
 	fd->keyword_array[0] = FOREACH_BT; 
 	if (machine_type("S390X"))
 		fd->flags |= FOREACH_o_FLAG;
+	else if (machine_type("ARM64"))
+		fd->flags |= FOREACH_t_FLAG;
 	else
 		fd->flags |= (FOREACH_t_FLAG|FOREACH_o_FLAG);
 

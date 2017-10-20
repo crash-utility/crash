@@ -3038,6 +3038,7 @@ typedef signed int s32;
 #define ARM64_VMEMMAP_END    (ARM64_VMEMMAP_VADDR + GIGABYTES(8UL) - 1)
 
 #define ARM64_STACK_SIZE   (16384)
+#define ARM64_IRQ_STACK_SIZE   ARM64_STACK_SIZE
 
 #define _SECTION_SIZE_BITS      30
 #define _MAX_PHYSMEM_BITS       40
@@ -3117,6 +3118,8 @@ struct machine_specific {
 	ulong kimage_text;
 	ulong kimage_end;
 	ulong user_eframe_offset;
+	/* for v4.14 or later */
+	ulong kern_eframe_offset;
 };
 
 struct arm64_stackframe {

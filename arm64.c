@@ -612,6 +612,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "        exp_entry2_end: %lx\n", ms->exp_entry2_end);
 	fprintf(fp, "       panic_task_regs: %lx\n", (ulong)ms->panic_task_regs);
 	fprintf(fp, "    user_eframe_offset: %ld\n", ms->user_eframe_offset);
+	fprintf(fp, "    kern_eframe_offset: %ld\n", ms->kern_eframe_offset);
 	fprintf(fp, "         PTE_PROT_NONE: %lx\n", ms->PTE_PROT_NONE);
 	fprintf(fp, "              PTE_FILE: ");
 	if (ms->PTE_FILE)
@@ -1383,7 +1384,7 @@ arm64_irq_stack_init(void)
 
 		if (!(ms->irq_stacks = (ulong *)malloc((size_t)(kt->cpus * sizeof(ulong)))))
 			error(FATAL, "cannot malloc irq_stack addresses\n");
-		ms->irq_stack_size = 16384;
+		ms->irq_stack_size = ARM64_IRQ_STACK_SIZE;
 		machdep->flags |= IRQ_STACKS;
 
 		for (i = 0; i < kt->cpus; i++) {
@@ -1410,10 +1411,13 @@ arm64_stackframe_init(void)
 	MEMBER_OFFSET_INIT(elf_prstatus_pr_pid, "elf_prstatus", "pr_pid");
 	MEMBER_OFFSET_INIT(elf_prstatus_pr_reg, "elf_prstatus", "pr_reg");
 
-	if (MEMBER_EXISTS("pt_regs", "stackframe")) 
+	if (MEMBER_EXISTS("pt_regs", "stackframe")) {
 		machdep->machspec->user_eframe_offset = SIZE(pt_regs);
-	else
+		machdep->machspec->kern_eframe_offset = SIZE(pt_regs) - 16;
+	} else {
 		machdep->machspec->user_eframe_offset = SIZE(pt_regs) + 16;
+		machdep->machspec->kern_eframe_offset = SIZE(pt_regs);
+	}
 
 	machdep->machspec->__exception_text_start = 
 		symbol_value("__exception_text_start");
@@ -1503,6 +1507,7 @@ arm64_stackframe_init(void)
 #define USER_MODE   (2)
 
 #define USER_EFRAME_OFFSET (machdep->machspec->user_eframe_offset)
+#define KERN_EFRAME_OFFSET (machdep->machspec->kern_eframe_offset)
 
 /*
  * PSR bits
@@ -1793,7 +1798,7 @@ arm64_display_full_frame(struct bt_info *bt, ulong sp)
 				sp = bt->stacktop;
 		}
 	} else { 
-		/* IRQ exception frame */
+		/* This is a transition case from irq to process stack. */
 		return;
 	}
 
@@ -1903,6 +1908,38 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 	if (!(machdep->flags & IRQ_STACKS))
 		return TRUE;
 
+	if (!(machdep->flags & IRQ_STACKS))
+		return TRUE;
+
+	if (machdep->flags & UNW_4_14) {
+		if ((bt->flags & BT_IRQSTACK) &&
+		    !arm64_on_irq_stack(bt->tc->processor, frame->fp)) {
+			if (arm64_on_process_stack(bt, frame->fp)) {
+				arm64_set_process_stack(bt);
+
+				frame->sp = frame->fp - KERN_EFRAME_OFFSET;
+				/*
+				 * for switch_stack
+				 * fp still points to irq stack
+				 */
+				bt->bptr = fp;
+				/*
+				 * for display_full_frame
+				 * sp points to process stack
+				 *
+				 * If we want to see pt_regs,
+				 * comment out the below.
+				 * bt->frameptr = frame->sp;
+				 */
+			} else {
+				/* irq -> user */
+				return FALSE;
+			}
+		}
+
+		return TRUE;
+	}
+
 	/*
 	 * The kernel's manner of determining the end of the IRQ stack:
 	 *
@@ -1915,49 +1952,29 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 	 *  irq_stack_ptr = IRQ_STACK_PTR(raw_smp_processor_id());
 	 *  orig_sp = IRQ_STACK_TO_TASK_STACK(irq_stack_ptr);   (pt_regs pointer on process stack)
 	 */
-	if (machdep->flags & UNW_4_14) {
-		if ((bt->flags & BT_IRQSTACK) &&
-		    !arm64_on_irq_stack(bt->tc->processor, frame->fp)) {
-			if (arm64_on_process_stack(bt, frame->fp)) {
-				arm64_set_process_stack(bt);
+	ms = machdep->machspec;
+	irq_stack_ptr = ms->irq_stacks[bt->tc->processor] + ms->irq_stack_size - 16;
 
-				frame->sp = frame->fp - SIZE(pt_regs) + 16;
-				/* for switch_stack */
-				/* fp still points to irq stack */
-				bt->bptr = fp;
-				/* for display_full_frame */
-				/* sp points to process stack */
-				bt->frameptr = frame->sp;
-			} else {
-				/* irq -> user */
-				return FALSE;
-			}
+	if (frame->sp == irq_stack_ptr) {
+		orig_sp = GET_STACK_ULONG(irq_stack_ptr - 8);
+		arm64_set_process_stack(bt);
+		if (INSTACK(orig_sp, bt) && (INSTACK(frame->fp, bt) || (frame->fp == 0))) {
+			ptregs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(orig_sp))];
+			frame->sp = orig_sp;
+			frame->pc = ptregs->pc;
+			bt->bptr = fp;
+			if (CRASHDEBUG(1))
+				error(INFO,
+				    "arm64_unwind_frame: switch stacks: fp: %lx sp: %lx  pc: %lx\n",
+					frame->fp, frame->sp, frame->pc);
+		} else {
+			error(WARNING,
+			    "arm64_unwind_frame: on IRQ stack: oriq_sp: %lx%s fp: %lx%s\n",
+				orig_sp, INSTACK(orig_sp, bt) ? "" : " (?)",
+				frame->fp, INSTACK(frame->fp, bt) ? "" : " (?)");
+			return FALSE;
 		}
-	} else { /* !UNW_4_14 */
-		ms = machdep->machspec;
-		irq_stack_ptr = ms->irq_stacks[bt->tc->processor] + ms->irq_stack_size - 16;
-
-		if (frame->sp == irq_stack_ptr) {
-			orig_sp = GET_STACK_ULONG(irq_stack_ptr - 8);
-			arm64_set_process_stack(bt);
-			if (INSTACK(orig_sp, bt) && (INSTACK(frame->fp, bt) || (frame->fp == 0))) {
-				ptregs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(orig_sp))];
-				frame->sp = orig_sp;
-				frame->pc = ptregs->pc;
-				bt->bptr = fp;
-				if (CRASHDEBUG(1))
-					error(INFO, 
-					    "arm64_unwind_frame: switch stacks: fp: %lx sp: %lx  pc: %lx\n",
-						frame->fp, frame->sp, frame->pc);
-			} else {
-				error(WARNING, 
-				    "arm64_unwind_frame: on IRQ stack: oriq_sp: %lx%s fp: %lx%s\n",
-					orig_sp, INSTACK(orig_sp, bt) ? "" : " (?)",
-					frame->fp, INSTACK(frame->fp, bt) ? "" : " (?)");
-				return FALSE;
-			}
-		}
-	} /* UNW_4_14 */
+	}
 
 	return TRUE;
 }
@@ -2147,17 +2164,10 @@ arm64_unwind_frame_v2(struct bt_info *bt, struct arm64_stackframe *frame,
 			 * We are on process stack. Just add a faked frame
 			 */
 
-			if (!arm64_on_irq_stack(bt->tc->processor, ext_frame.fp)) {
-				if (MEMBER_EXISTS("pt_regs", "stackframe")) {
-					frame->sp = ext_frame.fp
-						    - sizeof(struct arm64_pt_regs) - 16;
-					frame->fp = ext_frame.fp;
-				} else {
-					frame->sp = ext_frame.fp
-						    - sizeof(struct arm64_pt_regs);
-					frame->fp = frame->sp;
-				}
-			} else {
+			if (!arm64_on_irq_stack(bt->tc->processor, ext_frame.fp))
+				frame->sp = ext_frame.fp
+					    - sizeof(struct arm64_pt_regs);
+			else {
 				/*
 				 * FIXME: very exceptional case
 				 * We are already back on process stack, but
@@ -2177,10 +2187,10 @@ arm64_unwind_frame_v2(struct bt_info *bt, struct arm64_stackframe *frame,
 				 * Really ugly
 				 */
 				frame->sp = frame->fp + 0x20;
-				frame->fp = frame->sp;
 				fprintf(ofp, " (Next exception frame might be wrong)\n");
 			}
 
+			frame->fp = frame->sp;
 		} else {
 			/* We are on IRQ stack */
 
@@ -2190,15 +2200,9 @@ arm64_unwind_frame_v2(struct bt_info *bt, struct arm64_stackframe *frame,
 			if (ext_frame.fp != irq_stack_ptr) {
 				/* (2) Just add a faked frame */
 
-				if (MEMBER_EXISTS("pt_regs", "stackframe")) {
-					frame->sp = ext_frame.fp
-						    - sizeof(struct arm64_pt_regs);
-					frame->fp = ext_frame.fp;
-				} else {
-					frame->sp = ext_frame.fp
-						    - sizeof(struct arm64_pt_regs) - 16;
-					frame->fp = frame->sp;
-				}
+				frame->sp = ext_frame.fp
+					    - sizeof(struct arm64_pt_regs);
+				frame->fp = frame->sp;
 			} else {
 				/*
 				 * (3)
@@ -2285,6 +2289,11 @@ arm64_back_trace_cmd(struct bt_info *bt)
 	FILE *ofp;
 
 	if (bt->flags & BT_OPT_BACK_TRACE) {
+		if (machdep->flags & UNW_4_14) {
+			option_not_supported('o');
+			return;
+		}
+
 		arm64_back_trace_cmd_v2(bt);
 		return;
 	}
@@ -2346,7 +2355,7 @@ arm64_back_trace_cmd(struct bt_info *bt)
 			goto complete_user;
 
 		if (DUMPFILE() && is_task_active(bt->task)) {
-			exception_frame = stackframe.fp - SIZE(pt_regs);
+			exception_frame = stackframe.fp - KERN_EFRAME_OFFSET;
 			if (arm64_is_kernel_exception_frame(bt, exception_frame))
 				arm64_print_exception_frame(bt, exception_frame, 
 					KERNEL_MODE, ofp);
@@ -2377,13 +2386,8 @@ arm64_back_trace_cmd(struct bt_info *bt)
 
 		if (arm64_in_exception_text(bt->instptr) && INSTACK(stackframe.fp, bt)) {
 			if (!(bt->flags & BT_IRQSTACK) ||
-			    (((stackframe.sp + SIZE(pt_regs)) < bt->stacktop))) {
-				if (MEMBER_EXISTS("pt_regs", "stackframe"))
-					/* v4.14 or later */
-					exception_frame = stackframe.fp - SIZE(pt_regs) + 16;
-				else
-					exception_frame = stackframe.fp - SIZE(pt_regs);
-			}
+			    (((stackframe.sp + SIZE(pt_regs)) < bt->stacktop)))
+				exception_frame = stackframe.fp - KERN_EFRAME_OFFSET;
 		}
 
 		if ((bt->flags & BT_IRQSTACK) &&
@@ -2503,8 +2507,6 @@ user_space:
 		 * otherwise show an exception frame.
 		 * Since exception entry code doesn't have a real
 		 * stackframe, we fake a dummy frame here.
-		 * Note: Since we have a real stack frame in pt_regs,
-		 * We no longer need a dummy frame on v4.14 or later.
 		 */
 		if (!arm64_in_exp_entry(stackframe.pc))
 			continue;
