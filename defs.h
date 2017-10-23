@@ -2591,6 +2591,9 @@ struct symbol_table_data {
 	ulong last_section_end;
 	ulong _stext_vmlinux;
 	struct downsized downsized;
+	ulong divide_error_vmlinux;
+	ulong idt_table_vmlinux;
+	ulong saved_command_line_vmlinux;
 };
 
 /* flags for st */
@@ -6312,6 +6315,7 @@ void sadump_set_zero_excluded(void);
 void sadump_unset_zero_excluded(void);
 struct sadump_data;
 struct sadump_data *get_sadump_data(void);
+int sadump_calc_kaslr_offset(ulong *);
 
 /*
  * qemu.c

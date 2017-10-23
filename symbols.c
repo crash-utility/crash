@@ -624,6 +624,9 @@ kaslr_init(void)
 			st->_stext_vmlinux = UNINITIALIZED;
 		}
 	}
+
+	if (SADUMP_DUMPFILE())
+		kt->flags2 |= KASLR_CHECK;
 }
 
 /*
@@ -636,6 +639,19 @@ derive_kaslr_offset(bfd *abfd, int dynamic, bfd_byte *start, bfd_byte *end,
 {
 	unsigned long relocate;
 	ulong _stext_relocated;
+
+	if (SADUMP_DUMPFILE()) {
+		ulong kaslr_offset = 0;
+
+		sadump_calc_kaslr_offset(&kaslr_offset);
+
+		if (kaslr_offset) {
+			kt->relocate = kaslr_offset * -1;
+			kt->flags |= RELOC_SET;
+		}
+
+		return;
+	}
 
 	if (ACTIVE()) {
 		_stext_relocated = symbol_value_from_proc_kallsyms("_stext");
@@ -3051,6 +3067,16 @@ dump_symbol_table(void)
 		fprintf(fp, "(unused)\n");
 	else
 		fprintf(fp, "\n");
+
+	if (SADUMP_DUMPFILE()) {
+		fprintf(fp, "divide_error_vmlinux: %lx\n", st->divide_error_vmlinux);
+		fprintf(fp, "   idt_table_vmlinux: %lx\n", st->idt_table_vmlinux);
+		fprintf(fp, "saved_command_line_vmlinux: %lx\n", st->saved_command_line_vmlinux);
+	} else {
+		fprintf(fp, "divide_error_vmlinux: (unused)\n");
+		fprintf(fp, "   idt_table_vmlinux: (unused)\n");
+		fprintf(fp, "saved_command_line_vmlinux: (unused)\n");
+	}
 
         fprintf(fp, "    symval_hash[%d]: %lx\n", SYMVAL_HASH,
                 (ulong)&st->symval_hash[0]);
@@ -12244,6 +12270,24 @@ numeric_forward(const void *P_x, const void *P_y)
 			kt->flags2 &= ~KASLR_CHECK;
 			kt->flags2 |= (RELOC_AUTO|KASLR);
 		}
+	}
+
+	if (SADUMP_DUMPFILE()) {
+		/* Need for kaslr_offset and phys_base */
+		if (STREQ(x->name, "divide_error"))
+			st->divide_error_vmlinux = valueof(x);
+		else if (STREQ(y->name, "divide_error"))
+			st->divide_error_vmlinux = valueof(y);
+
+		if (STREQ(x->name, "idt_table"))
+			st->idt_table_vmlinux = valueof(x);
+		else if (STREQ(y->name, "idt_table"))
+			st->idt_table_vmlinux = valueof(y);
+
+		if (STREQ(x->name, "saved_command_line"))
+			st->saved_command_line_vmlinux = valueof(x);
+		else if (STREQ(y->name, "saved_command_line"))
+			st->saved_command_line_vmlinux = valueof(y);
 	}
 
   	xs = bfd_get_section(x);

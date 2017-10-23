@@ -194,6 +194,9 @@ x86_64_init(int when)
 			machdep->machspec->kernel_image_size = dtol(string, QUIET, NULL);
 			free(string);
 		}
+		if (SADUMP_DUMPFILE())
+			/* Need for calculation of kaslr_offset and phys_base */
+			machdep->kvtop = x86_64_kvtop;
 		break;
 
 	case PRE_GDB:
@@ -2019,6 +2022,22 @@ x86_64_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbo
 	ulong pte;
 	physaddr_t physpage;
 
+	if (SADUMP_DUMPFILE() && !(machdep->flags & KSYMS_START)) {
+		/*
+		 * In the case of sadump, to calculate kaslr_offset and
+		 * phys_base, kvtop is called during symtab_init(). In this
+		 * stage phys_base is not initialized yet and x86_64_VTOP()
+		 * does not work. Jump to the code of pagetable translation.
+		 */
+		FILL_PML4();
+		pml4 = ((ulong *)machdep->machspec->pml4) + pml4_index(kvaddr);
+		if (verbose) {
+			fprintf(fp, "PML4 DIRECTORY: %lx\n", vt->kernel_pgd[0]);
+			fprintf(fp, "PAGE DIRECTORY: %lx\n", *pml4);
+		}
+		goto start_vtop_with_pagetable;
+	}
+
         if (!IS_KVADDR(kvaddr))
                 return FALSE;
 
@@ -2065,6 +2084,8 @@ x86_64_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbo
                		fprintf(fp, "PAGE DIRECTORY: %lx\n", *pml4);
 		}
 	}
+
+start_vtop_with_pagetable:
 	if (!(*pml4) & _PAGE_PRESENT)
 		goto no_kpage;
 	pgd_paddr = (*pml4) & PHYSICAL_PAGE_MASK;
