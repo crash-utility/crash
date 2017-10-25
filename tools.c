@@ -423,9 +423,10 @@ strip_hex(char *line)
  *  Turn a string into upper-case.
  */
 char *
-upper_case(char *s, char *buf)
+upper_case(const char *s, char *buf)
 {
-	char *p1, *p2;
+	const char *p1;
+	char *p2;
 
 	p1 = s;
 	p2 = buf;

@@ -109,6 +109,24 @@ static void show_ps_summary(ulong);
 static void irqstacks_init(void);
 static void parse_task_thread(int argcnt, char *arglist[], struct task_context *);
 static void stack_overflow_check_init(void);
+static int has_sched_policy(ulong, ulong);
+static ulong task_policy(ulong);
+static ulong sched_policy_bit_from_str(const char *);
+static ulong make_sched_policy(const char *);
+
+static struct sched_policy_info {
+	ulong value;
+	char *name;
+} sched_policy_info[] = {
+	{ SCHED_NORMAL,		"NORMAL" },
+	{ SCHED_FIFO,		"FIFO" },
+	{ SCHED_RR,		"RR" },
+	{ SCHED_BATCH,		"BATCH" },
+	{ SCHED_ISO,		"ISO" },
+	{ SCHED_IDLE,		"IDLE" },
+	{ SCHED_DEADLINE,	"DEADLINE" },
+	{ ULONG_MAX,		NULL }
+};
 
 /*
  *  Figure out how much space will be required to hold the task context
@@ -273,6 +291,8 @@ task_init(void)
 	MEMBER_OFFSET_INIT(task_struct_next_run, "task_struct", "next_run");
 	MEMBER_OFFSET_INIT(task_struct_flags, "task_struct", "flags");
 	MEMBER_SIZE_INIT(task_struct_flags, "task_struct", "flags");
+	MEMBER_OFFSET_INIT(task_struct_policy, "task_struct", "policy");
+	MEMBER_SIZE_INIT(task_struct_policy, "task_struct", "policy");
         MEMBER_OFFSET_INIT(task_struct_pidhash_next,
                 "task_struct", "pidhash_next");
 	MEMBER_OFFSET_INIT(task_struct_pgrp, "task_struct", "pgrp");
@@ -2974,7 +2994,7 @@ cmd_ps(void)
 	cpuspec = NULL;
 	flag = 0;
 
-        while ((c = getopt(argcnt, args, "SgstcpkuGlmarC:")) != EOF) {
+        while ((c = getopt(argcnt, args, "SgstcpkuGlmarC:y:")) != EOF) {
                 switch(c)
 		{
 		case 'k':
@@ -3073,6 +3093,11 @@ cmd_ps(void)
 			cpuspec = optarg;
 			psinfo.cpus = get_cpumask_buf();
 			make_cpumask(cpuspec, psinfo.cpus, FAULT_ON_ERROR, NULL);
+			break;
+
+		case 'y':
+			flag |= PS_POLICY;
+			psinfo.policy = make_sched_policy(optarg);
 			break;
 
 		default:
@@ -3218,6 +3243,8 @@ show_ps_data(ulong flag, struct task_context *tc, struct psinfo *psi)
 		return;
 	if ((flag & PS_KERNEL) && !is_kernel_thread(tc->task))
 		return;
+	if ((flag & PS_POLICY) && !has_sched_policy(tc->task, psi->policy))
+		return;
 	if (flag & PS_GROUP) {
 		if (flag & (PS_LAST_RUN|PS_MSECS))
 			error(FATAL, "-G not supported with -%c option\n",
@@ -3336,7 +3363,7 @@ show_ps(ulong flag, struct psinfo *psi)
 
 		tc = FIRST_CONTEXT();
 		for (i = 0; i < RUNNING_TASKS(); i++, tc++)
-			show_ps_data(flag, tc, NULL);
+			show_ps_data(flag, tc, psi);
 		
 		return;
 	}
@@ -3391,7 +3418,7 @@ show_ps(ulong flag, struct psinfo *psi)
 				if (flag & PS_TIMES) 
 					show_task_times(tc, flag);
 				else
-					show_ps_data(flag, tc, NULL);
+					show_ps_data(flag, tc, psi);
 			}
 		}
 	}
@@ -3546,7 +3573,7 @@ show_milliseconds(struct task_context *tc, struct psinfo *psi)
 	sprintf(format, "[%c%dll%c] ", '%', c, 
 		pc->output_radix == 10 ? 'u' : 'x');
 
-	if (psi) {
+	if (psi && psi->cpus) {
 		for (c = others = 0; c < kt->cpus; c++) {
 			if (!NUM_IN_BITMAP(psi->cpus, c))
 				continue;
@@ -5366,6 +5393,27 @@ task_flags(ulong task)
 }
 
 /*
+ * Return task's policy as bitmask bit.
+ */
+static ulong
+task_policy(ulong task)
+{
+	ulong policy = 0;
+
+	fill_task_struct(task);
+
+	if (!tt->last_task_read)
+		return policy;
+
+	if (SIZE(task_struct_policy) == sizeof(unsigned int))
+		policy = 1 << UINT(tt->task_struct + OFFSET(task_struct_policy));
+	else
+		policy = 1 << ULONG(tt->task_struct + OFFSET(task_struct_policy));
+
+	return policy;
+}
+
+/*
  *  Return a task's tgid.
  */
 ulong
@@ -5797,7 +5845,7 @@ cmd_foreach(void)
 	BZERO(&foreach_data, sizeof(struct foreach_data));
 	fd = &foreach_data;
 
-        while ((c = getopt(argcnt, args, "R:vomlgersStTpukcfFxhdaG")) != EOF) {
+        while ((c = getopt(argcnt, args, "R:vomlgersStTpukcfFxhdaGy:")) != EOF) {
                 switch(c)
 		{
 		case 'R':
@@ -5890,6 +5938,11 @@ cmd_foreach(void)
 
 		case 'G':
 			fd->flags |= FOREACH_G_FLAG;
+			break;
+
+		case 'y':
+			fd->flags |= FOREACH_y_FLAG;
+			fd->policy = make_sched_policy(optarg);
 			break;
 
 		default:
@@ -6554,6 +6607,10 @@ foreach(struct foreach_data *fd)
 					cmdflags |= PS_GROUP;
 				if (fd->flags & FOREACH_s_FLAG)
 					cmdflags |= PS_KSTACKP;
+				if (fd->flags & FOREACH_y_FLAG) {
+					cmdflags |= PS_POLICY;
+					psinfo.policy = fd->policy;
+				}
 				/*
 				 * mutually exclusive flags
 				 */ 
@@ -7386,6 +7443,82 @@ is_kernel_thread(ulong task)
 		return TRUE;
 
 	return FALSE;
+}
+
+/*
+ * Checks if task policy corresponds to given mask.
+ */
+static int
+has_sched_policy(ulong task, ulong policy)
+{
+	return !!(task_policy(task) & policy);
+}
+
+/*
+ * Converts sched policy name into mask bit.
+ */
+static ulong
+sched_policy_bit_from_str(const char *policy_str)
+{
+	struct sched_policy_info *info = NULL;
+	ulong policy = 0;
+	int found = 0;
+	char *upper = NULL;
+	/*
+	 * Once kernel gets more than 10 scheduling policies,
+	 * sizes of these arrays should be adjusted
+	 */
+	char digit[2] = { 0, 0 };
+	char hex[4] = { 0, 0, 0, 0 };
+
+	upper = GETBUF(strlen(policy_str) + 1);
+	upper_case(policy_str, upper);
+
+	for (info = sched_policy_info; info->name; info++) {
+		snprintf(digit, sizeof digit, "%lu", info->value);
+		/*
+		 * Not using %#lX format here since "0X" prefix
+		 * is not prepended if 0 value is given
+		 */
+		snprintf(hex, sizeof hex, "0X%lX", info->value);
+		if (strncmp(upper, info->name, strlen(info->name)) == 0 ||
+			strncmp(upper, digit, sizeof digit) == 0 ||
+			strncmp(upper, hex, sizeof hex) == 0) {
+			policy = 1 << info->value;
+			found = 1;
+			break;
+		}
+	}
+
+	FREEBUF(upper);
+
+	if (!found)
+		error(FATAL,
+			"%s: invalid scheduling policy\n", policy_str);
+
+	return policy;
+}
+
+/*
+ * Converts sched policy string set into bitmask.
+ */
+static ulong
+make_sched_policy(const char *policy_str)
+{
+	ulong policy = 0;
+	char *iter = NULL;
+	char *orig = NULL;
+	char *cur = NULL;
+
+	iter = STRDUPBUF(policy_str);
+	orig = iter;
+
+	while ((cur = strsep(&iter, ",")))
+		policy |= sched_policy_bit_from_str(cur);
+
+	FREEBUF(orig);
+
+	return policy;
 }
 
 /*

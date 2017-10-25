@@ -1139,6 +1139,7 @@ extern struct machdep_table *machdep;
 #define FOREACH_a_FLAG   (0x4000000)
 #define FOREACH_G_FLAG   (0x8000000)
 #define FOREACH_F_FLAG2 (0x10000000)
+#define FOREACH_y_FLAG  (0x20000000)
 
 #define FOREACH_PS_EXCLUSIVE \
   (FOREACH_g_FLAG|FOREACH_a_FLAG|FOREACH_t_FLAG|FOREACH_c_FLAG|FOREACH_p_FLAG|FOREACH_l_FLAG|FOREACH_r_FLAG|FOREACH_m_FLAG)
@@ -1162,6 +1163,7 @@ struct foreach_data {
 	int comms;
 	int args;
 	int regexs;
+	int policy;
 };
 
 struct reference {       
@@ -1992,6 +1994,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long mod_arch_specific_num_orcs;
 	long mod_arch_specific_orc_unwind_ip;
 	long mod_arch_specific_orc_unwind;
+	long task_struct_policy;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2141,6 +2144,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long sk_buff_head_qlen;
 	long sk_buff_len;
 	long orc_entry;
+	long task_struct_policy;
 };
 
 struct array_table {
@@ -4576,6 +4580,13 @@ enum type_code {
  */
 #define PF_EXITING 0x00000004  /* getting shut down */
 #define PF_KTHREAD 0x00200000  /* I am a kernel thread */
+#define SCHED_NORMAL	0
+#define SCHED_FIFO	1
+#define SCHED_RR	2
+#define SCHED_BATCH	3
+#define SCHED_ISO	4
+#define SCHED_IDLE	5
+#define SCHED_DEADLINE	6
 
 extern long _ZOMBIE_;
 #define IS_ZOMBIE(task)   (task_state(task) & _ZOMBIE_)
@@ -4603,6 +4614,7 @@ extern long _ZOMBIE_;
 #define PS_NO_HEADER  (0x10000)
 #define PS_MSECS      (0x20000)
 #define PS_SUMMARY    (0x40000)
+#define PS_POLICY     (0x80000)
 
 #define PS_EXCLUSIVE (PS_TGID_LIST|PS_ARGV_ENVP|PS_TIMES|PS_CHILD_LIST|PS_PPID_LIST|PS_LAST_RUN|PS_RLIMIT|PS_MSECS|PS_SUMMARY)
 
@@ -4620,6 +4632,7 @@ struct psinfo {
 	} regex_data[MAX_PS_ARGS];
 	int regexs;
 	ulong *cpus;
+	int policy;
 };
 
 #define IS_A_NUMBER(X)      (decimal(X, 0) || hexadecimal(X, 0))
@@ -4823,7 +4836,7 @@ char *strip_ending_char(char *, char);
 char *strip_beginning_char(char *, char);
 char *strip_comma(char *);
 char *strip_hex(char *);
-char *upper_case(char *, char *);
+char *upper_case(const char *, char *);
 char *first_nonspace(char *);
 char *first_space(char *);
 char *replace_string(char *, char *, char);

@@ -8584,6 +8584,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(task_struct_prio));
         fprintf(fp, "             task_struct_on_rq: %ld\n",
                 OFFSET(task_struct_on_rq));
+        fprintf(fp, "            task_struct_policy: %ld\n",
+                OFFSET(task_struct_policy));
 
 	fprintf(fp, "              thread_info_task: %ld\n",
                 OFFSET(thread_info_task));
@@ -10211,6 +10213,7 @@ dump_offset_table(char *spec, ulong makestruct)
         fprintf(fp, "                       pt_regs: %ld\n", SIZE(pt_regs));
         fprintf(fp, "                   task_struct: %ld\n", SIZE(task_struct));
         fprintf(fp, "             task_struct_flags: %ld\n", SIZE(task_struct_flags));
+        fprintf(fp, "            task_struct_policy: %ld\n", SIZE(task_struct_policy));
         fprintf(fp, "                   thread_info: %ld\n", SIZE(thread_info));
         fprintf(fp, "                 softirq_state: %ld\n", 
 		SIZE(softirq_state));
