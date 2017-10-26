@@ -75,7 +75,7 @@ struct meminfo {           /* general purpose memory information structure */
 	ulong container;
 	int *freelist;
 	int freelist_index_size;
-
+	ulong random;
 };
 
 /*
@@ -293,6 +293,7 @@ static void dump_per_cpu_offsets(void);
 static void dump_page_flags(ulonglong);
 static ulong kmem_cache_nodelists(ulong);
 static void dump_hstates(void);
+static ulong freelist_ptr(struct meminfo *, ulong, ulong);
 
 /*
  *  Memory display modes specific to this file.
@@ -726,6 +727,7 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(kmem_cache_red_left_pad, "kmem_cache", "red_left_pad");
 		MEMBER_OFFSET_INIT(kmem_cache_name, "kmem_cache", "name");
 		MEMBER_OFFSET_INIT(kmem_cache_flags, "kmem_cache", "flags");
+		MEMBER_OFFSET_INIT(kmem_cache_random, "kmem_cache", "random");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_freelist, "kmem_cache_cpu", "freelist");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_page, "kmem_cache_cpu", "page");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_node, "kmem_cache_cpu", "node");
@@ -18000,6 +18002,9 @@ dump_kmem_cache_slub(struct meminfo *si)
 		si->slabsize = (PAGESIZE() << order);
 		si->inuse = si->num_slabs = 0;
 		si->slab_offset = offset;
+		si->random = VALID_MEMBER(kmem_cache_random) ?
+			ULONG(si->cache_buf + OFFSET(kmem_cache_random)) : 0;
+
 		if (!get_kmem_cache_slub_data(GET_SLUB_SLABS, si) ||
 		    !get_kmem_cache_slub_data(GET_SLUB_OBJECTS, si))
 			si->flags |= SLAB_GATHER_FAILURE;
@@ -18587,6 +18592,15 @@ count_free_objects(struct meminfo *si, ulong freelist)
 	return c;
 }
 
+static ulong
+freelist_ptr(struct meminfo *si, ulong ptr, ulong ptr_addr)
+{
+	if (si->random)
+		/* CONFIG_SLAB_FREELIST_HARDENED */
+		return (ptr ^ si->random ^ ptr_addr);
+	else
+		return ptr;
+}
 
 static ulong
 get_freepointer(struct meminfo *si, void *object)
@@ -18601,7 +18615,7 @@ get_freepointer(struct meminfo *si, void *object)
 		return BADADDR;
 	}
 
-	return nextfree;
+	return (freelist_ptr(si, nextfree, vaddr));
 }
 
 static void

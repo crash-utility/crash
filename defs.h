@@ -1995,6 +1995,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long mod_arch_specific_orc_unwind_ip;
 	long mod_arch_specific_orc_unwind;
 	long task_struct_policy;
+	long kmem_cache_random;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
