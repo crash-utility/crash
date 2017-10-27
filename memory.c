@@ -17003,8 +17003,8 @@ valid_section(ulong addr)
 
 	if ((mem_section = read_mem_section(addr)))
         	return (ULONG(mem_section + 
-			OFFSET(mem_section_section_mem_map)) && 
-			SECTION_MARKED_PRESENT);
+			OFFSET(mem_section_section_mem_map))
+			& SECTION_MARKED_PRESENT);
 	return 0;
 }
 
@@ -17012,11 +17012,17 @@ int
 section_has_mem_map(ulong addr)
 {
 	char *mem_section;
+	ulong kernel_version_bit;
+
+	if (THIS_KERNEL_VERSION >= LINUX(2,6,24))
+		kernel_version_bit = SECTION_HAS_MEM_MAP;
+	else
+		kernel_version_bit = SECTION_MARKED_PRESENT;
 
 	if ((mem_section = read_mem_section(addr)))
 		return (ULONG(mem_section + 
 			OFFSET(mem_section_section_mem_map))
-			&& SECTION_HAS_MEM_MAP);
+			& kernel_version_bit);
 	return 0;
 }
 
