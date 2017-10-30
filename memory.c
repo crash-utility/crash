@@ -14467,7 +14467,7 @@ display_with_pre_and_post(void *bufptr, ulonglong addr, struct searchinfo *si)
 	}
 
 	amount = ctx * t;
-	addr_d = addr - amount < 0 ? 0 : addr - amount;
+	addr_d = addr - amount;
 
 	display_memory(addr_d, ctx, flag, memtype, NULL);
 
