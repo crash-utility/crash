@@ -2387,7 +2387,7 @@ NULL
 char *help_timer[] = {
 "timer",
 "timer queue data",
-"[-r]",
+"[-r][-C cpu]",
 "  This command displays the timer queue entries, both old- and new-style,",
 "  in chronological order.  In the case of the old-style timers, the",
 "  timer_table array index is shown; in the case of the new-style timers, ",
@@ -2397,6 +2397,8 @@ char *help_timer[] = {
 "        chronological order.  In the case of the old-style hrtimers, the",
 "        expiration time is a single value; in the new-style hrtimers, the",
 "        expiration time is a range.",
+" -C cpu Restrict the output to one or more CPUs, where multiple cpu[s] can", 
+"        be specified, for example, as \"1,3,5\", \"1-3\", or \"1,3,5-7,10\".",
 "\nEXAMPLES",
 "    %s> timer",
 "    JIFFIES",

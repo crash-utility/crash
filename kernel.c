@@ -38,18 +38,18 @@ static void display_bh_1(void);
 static void display_bh_2(void);
 static void display_bh_3(void);
 static void display_bh_4(void);
-static void dump_hrtimer_data(void);
+static void dump_hrtimer_data(const ulong *cpus);
 static void dump_hrtimer_clock_base(const void *, const int);
 static void dump_hrtimer_base(const void *, const int);
 static void dump_active_timers(const void *, ulonglong);
 static int get_expires_len(const int, const ulong *, const int);
 static void print_timer(const void *);
 static ulonglong ktime_to_ns(const void *);
-static void dump_timer_data(void);
-static void dump_timer_data_tvec_bases_v1(void);
-static void dump_timer_data_tvec_bases_v2(void);
-static void dump_timer_data_tvec_bases_v3(void);
-static void dump_timer_data_timer_bases(void);
+static void dump_timer_data(const ulong *cpus);
+static void dump_timer_data_tvec_bases_v1(const ulong *cpus);
+static void dump_timer_data_tvec_bases_v2(const ulong *cpus);
+static void dump_timer_data_tvec_bases_v3(const ulong *cpus);
+static void dump_timer_data_timer_bases(const ulong *cpus);
 struct tv_range;
 static void init_tv_ranges(struct tv_range *, int, int, int);
 static int do_timer_list(ulong,int, ulong *, void *,ulong *,struct tv_range *);
@@ -7353,14 +7353,22 @@ cmd_timer(void)
 {
         int c;
 	int rflag;
+	char *cpuspec;
+	ulong *cpus = NULL;
 
 	rflag = 0;
 
-        while ((c = getopt(argcnt, args, "r")) != EOF) {
+        while ((c = getopt(argcnt, args, "rC:")) != EOF) {
                 switch(c)
                 {
 		case 'r':
 			rflag = 1;
+			break;
+
+		case 'C':
+			cpuspec = optarg;
+			cpus = get_cpumask_buf();
+			make_cpumask(cpuspec, cpus, FAULT_ON_ERROR, NULL);
 			break;
 
                 default:
@@ -7373,15 +7381,18 @@ cmd_timer(void)
                 cmd_usage(pc->curcmd, SYNOPSIS);
 
 	if (rflag)
-		dump_hrtimer_data();
+		dump_hrtimer_data(cpus);
 	else
-		dump_timer_data();
+		dump_timer_data(cpus);
+
+	if (cpus)
+		FREEBUF(cpus);
 }
 
 static void
-dump_hrtimer_data(void)
+dump_hrtimer_data(const ulong *cpus)
 {
-	int i, j;
+	int i, j, k = 0;
 	int hrtimer_max_clock_bases, max_hrtimer_bases;
 	struct syment * hrtimer_bases;
 
@@ -7405,7 +7416,10 @@ dump_hrtimer_data(void)
 	hrtimer_bases = per_cpu_symbol_search("hrtimer_bases");
 
 	for (i = 0; i < kt->cpus; i++) {
-		if (i)
+		if (cpus && !NUM_IN_BITMAP(cpus, i))
+			continue;
+
+		if (k++)
 			fprintf(fp, "\n");
 
 		if (hide_offline_cpu(i)) {
@@ -7752,7 +7766,7 @@ struct tv_range {
 #define TVN (6)
 
 static void
-dump_timer_data(void)
+dump_timer_data(const ulong *cpus)
 {
 	int i;
 	ulong timer_active;
@@ -7773,16 +7787,16 @@ dump_timer_data(void)
         struct tv_range tv[TVN];
 
 	if (kt->flags2 & TIMER_BASES) {
-		dump_timer_data_timer_bases();
+		dump_timer_data_timer_bases(cpus);
 		return;
 	} else if (kt->flags2 & TVEC_BASES_V3) {
-		dump_timer_data_tvec_bases_v3();
+		dump_timer_data_tvec_bases_v3(cpus);
 		return;
 	} else if (kt->flags & TVEC_BASES_V2) {
-		dump_timer_data_tvec_bases_v2();
+		dump_timer_data_tvec_bases_v2(cpus);
 		return;
 	} else if (kt->flags & TVEC_BASES_V1) {
-		dump_timer_data_tvec_bases_v1();
+		dump_timer_data_tvec_bases_v1(cpus);
 		return;
 	}
 		
@@ -7924,7 +7938,7 @@ dump_timer_data(void)
  */
 
 static void
-dump_timer_data_tvec_bases_v1(void)
+dump_timer_data_tvec_bases_v1(const ulong *cpus)
 {
 	int i, cpu, tdx, flen;
         struct timer_data *td;
@@ -7947,6 +7961,11 @@ dump_timer_data_tvec_bases_v1(void)
 	cpu = 0;
 
 next_cpu:
+	if (cpus && !NUM_IN_BITMAP(cpus, cpu)) {
+		if (++cpu < kt->cpus)
+			goto next_cpu;
+		return;
+	}
 
         count = 0;
         td = (struct timer_data *)NULL;
@@ -8039,7 +8058,7 @@ next_cpu:
  */
 
 static void
-dump_timer_data_tvec_bases_v2(void)
+dump_timer_data_tvec_bases_v2(const ulong *cpus)
 {
 	int i, cpu, tdx, flen;
         struct timer_data *td;
@@ -8073,6 +8092,11 @@ dump_timer_data_tvec_bases_v2(void)
 	cpu = 0;
 
 next_cpu:
+	if (cpus && !NUM_IN_BITMAP(cpus, cpu)) {
+		if (++cpu < kt->cpus)
+			goto next_cpu;
+		return;
+	}
 	/*
 	 * hide data of offline cpu and goto next cpu
 	 */
@@ -8185,7 +8209,7 @@ next_cpu:
  *  Linux 4.2 timers use new tvec_root, tvec and timer_list structures
  */
 static void
-dump_timer_data_tvec_bases_v3(void)
+dump_timer_data_tvec_bases_v3(const ulong *cpus)
 {
 	int i, cpu, tdx, flen;
 	struct timer_data *td;
@@ -8216,6 +8240,11 @@ dump_timer_data_tvec_bases_v3(void)
 	cpu = 0;
 
 next_cpu:
+	if (cpus && !NUM_IN_BITMAP(cpus, cpu)) {
+		if (++cpu < kt->cpus)
+			goto next_cpu;
+		return;
+	}
 	/*
 	 * hide data of offline cpu and goto next cpu
 	 */
@@ -8758,9 +8787,9 @@ do_timer_list_v4(struct timer_bases_data *data)
  *  Linux 4.8 timers use new timer_bases[][]
  */
 static void
-dump_timer_data_timer_bases(void)
+dump_timer_data_timer_bases(const ulong *cpus)
 {
-	int i, cpu, flen, base, nr_bases, found, display;
+	int i, cpu, flen, base, nr_bases, found, display, j = 0;
 	struct syment *sp;
 	ulong timer_base, jiffies, function;
 	struct timer_bases_data data;
@@ -8785,6 +8814,11 @@ dump_timer_data_timer_bases(void)
 		RJUST|LONG_DEC,MKSTR(jiffies)));
 
 next_cpu:
+	if (cpus && !NUM_IN_BITMAP(cpus, cpu)) {
+		if (++cpu < kt->cpus)
+			goto next_cpu;
+		goto done;
+	}
 	/*
 	 * hide data of offline cpu and goto next cpu
 	 */
@@ -8803,7 +8837,7 @@ next_cpu:
 	else
 		timer_base = sp->value;
 
-	if (cpu)
+	if (j++)
 		fprintf(fp, "\n");
 next_base:
 
