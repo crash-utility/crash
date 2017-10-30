@@ -2086,7 +2086,7 @@ x86_64_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbo
 	}
 
 start_vtop_with_pagetable:
-	if (!(*pml4) & _PAGE_PRESENT)
+	if (!(*pml4 & _PAGE_PRESENT))
 		goto no_kpage;
 	pgd_paddr = (*pml4) & PHYSICAL_PAGE_MASK;
 	FILL_PGD(pgd_paddr, PHYSADDR, PAGESIZE());
@@ -2187,7 +2187,7 @@ x86_64_kvtop_xen_wpt(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, i
 		fprintf(fp, "PML4 DIRECTORY: %lx\n", vt->kernel_pgd[0]);
                 fprintf(fp, "PAGE DIRECTORY: %lx [machine]\n", *pml4);
 	}
-	if (!(*pml4) & _PAGE_PRESENT)
+	if (!(*pml4 & _PAGE_PRESENT))
 		goto no_kpage;
 	pgd_paddr = (*pml4) & PHYSICAL_PAGE_MASK;
 	pgd_paddr = xen_m2p(pgd_paddr);
