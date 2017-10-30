@@ -157,9 +157,6 @@ read_dump_header(char *file)
 	}
 
 restart:
-	if (block_size < 0)
-		return FALSE;
-
 	if (!read_device(sph, block_size, &offset)) {
 		error(INFO, "sadump: cannot read partition header\n");
 		goto err;
