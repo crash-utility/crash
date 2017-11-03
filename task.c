@@ -3485,7 +3485,7 @@ show_last_run(struct task_context *tc, struct psinfo *psi)
 	sprintf(format, "[%c%dll%c] ", '%', c, 
 		pc->output_radix == 10 ? 'u' : 'x');
 
-	if (psi) {
+	if (psi && psi->cpus) {
 		for (c = others = 0; c < kt->cpus; c++) {
 			if (!NUM_IN_BITMAP(psi->cpus, c))
 				continue;
