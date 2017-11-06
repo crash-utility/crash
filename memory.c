@@ -8236,7 +8236,44 @@ dump_kmeminfo(void)
 		char *swapper_space = GETBUF(SIZE(address_space));
 
 		swapper_space_nrpages = 0;
-		if (symbol_exists("swapper_spaces") && 
+		if (symbol_exists("nr_swapper_spaces") &&
+			(len = get_array_length("nr_swapper_spaces",
+				NULL, 0))) {
+			char *nr_swapper_space =
+				GETBUF(len * sizeof(unsigned int));
+			readmem(symbol_value("nr_swapper_spaces"), KVADDR,
+				nr_swapper_space,  len * sizeof(unsigned int),
+				"nr_swapper_space", RETURN_ON_ERROR);
+			for (i = 0; i < len; i++) {
+				int j;
+				unsigned long sa;
+				unsigned int banks = UINT(nr_swapper_space +
+					(i * sizeof(unsigned int)));
+
+				if (!banks)
+					continue;
+
+				readmem(symbol_value("swapper_spaces") +
+					(i * sizeof(void *)),KVADDR,
+					&sa, sizeof(void *),
+					"swapper_space", RETURN_ON_ERROR);
+
+				if (!sa)
+					continue;
+
+				for (j = 0; j < banks; j++) {
+					readmem(sa + j * SIZE(address_space),
+						KVADDR, swapper_space,
+						SIZE(address_space),
+						"swapper_space",
+						RETURN_ON_ERROR);
+					swapper_space_nrpages +=
+						ULONG(swapper_space +
+						OFFSET(address_space_nrpages));
+				}
+			}
+			FREEBUF(nr_swapper_space);
+		} else if (symbol_exists("swapper_spaces") &&
 		    (len = get_array_length("swapper_spaces", NULL, 0))) {
 			for (i = 0; i < len; i++) {
 		    		if (!readmem(symbol_value("swapper_spaces") + 
@@ -8253,7 +8290,7 @@ dump_kmeminfo(void)
 		    RETURN_ON_ERROR))
 			swapper_space_nrpages = ULONG(swapper_space + 
 				OFFSET(address_space_nrpages));
-			
+
 		page_cache_size = nr_file_pages - swapper_space_nrpages -
 			buffer_pages;
 		FREEBUF(swapper_space);
