@@ -31,7 +31,7 @@ static const char *pci_strclass (uint, char *);
 static const char *pci_strvendor(uint, char *); 
 static const char *pci_strdev(uint, uint, char *); 
 
-static void diskio_option(void);
+static void diskio_option(ulong flags);
  
 static struct dev_table {
         ulong flags;
@@ -41,6 +41,9 @@ struct dev_table *dt = &dev_table;
 
 #define DEV_INIT    0x1
 #define DISKIO_INIT 0x2
+
+#define DIOF_ALL	1 << 0
+#define DIOF_NONZERO	1 << 1
 
 void
 dev_init(void)
@@ -93,11 +96,15 @@ cmd_dev(void)
 
 	flags = 0;
 
-        while ((c = getopt(argcnt, args, "dpi")) != EOF) {
+        while ((c = getopt(argcnt, args, "dDpi")) != EOF) {
                 switch(c)
                 {
 		case 'd':
-			diskio_option();
+			diskio_option(DIOF_ALL);
+			return;
+
+		case 'D':
+			diskio_option(DIOF_NONZERO);
 			return;
 
 		case 'i':
@@ -4002,7 +4009,7 @@ init_iter(struct iter *i)
 }
 
 static void 
-display_one_diskio(struct iter *i, unsigned long gendisk)
+display_one_diskio(struct iter *i, unsigned long gendisk, ulong flags)
 {
 	char disk_name[BUFSIZE + 1];
 	char buf0[BUFSIZE];
@@ -4027,6 +4034,10 @@ display_one_diskio(struct iter *i, unsigned long gendisk)
 	readmem(gendisk + OFFSET(gendisk_major), KVADDR, &major, sizeof(int),
 		"gen_disk.major", FAULT_ON_ERROR);
 	i->get_diskio(queue_addr, &io);
+
+	if ((flags & DIOF_NONZERO)
+		&& (io.read + io.write == 0))
+		return;
 
 	fprintf(fp, "%s%s%s  %s%s%s%s  %s%5d%s%s%s%s%s",
 		mkstring(buf0, 5, RJUST|INT_DEC, (char *)(unsigned long)major),
@@ -4055,7 +4066,7 @@ display_one_diskio(struct iter *i, unsigned long gendisk)
 }
 
 static void 
-display_all_diskio(void)
+display_all_diskio(ulong flags)
 {
 	struct iter i;
 	unsigned long gendisk;
@@ -4089,7 +4100,7 @@ display_all_diskio(void)
 		mkstring(buf5, 5, RJUST, "DRV"));
 
 	while ((gendisk = i.next_disk(&i)) != 0)
-		display_one_diskio(&i, gendisk);
+		display_one_diskio(&i, gendisk, flags);
 }
 
 static 
@@ -4149,8 +4160,8 @@ void diskio_init(void)
 }
 
 static void 
-diskio_option(void)
+diskio_option(ulong flags)
 {
 	diskio_init();
-	display_all_diskio();
+	display_all_diskio(flags);
 }
