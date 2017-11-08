@@ -3284,6 +3284,8 @@ dump_symbol_table(void)
 				lm->mod_section_data[s].size);
 		}
 
+		fprintf(fp, "        loaded_objfile: %lx\n", (ulong)lm->loaded_objfile);
+
 		if (CRASHDEBUG(1)) {
         		for (sp = lm->mod_load_symtable; 
 			     sp < lm->mod_load_symend; sp++) {
@@ -4100,6 +4102,7 @@ get_line_number(ulong addr, char *buf, int reserved)
 	struct load_module *lm;
 
 	buf[0] = NULLCHAR;
+	lm = NULL;
 
 	if (NO_LINE_NUMBERS() || !is_kernel_text(addr))
 		return(buf);
@@ -4129,6 +4132,8 @@ get_line_number(ulong addr, char *buf, int reserved)
 		req->command = GNU_GET_LINE_NUMBER;
 		req->addr = addr;
 		req->buf = buf;
+		if (lm && lm->loaded_objfile)
+			req->lm = lm;
 		if ((sp = value_search(addr, NULL)))
 			req->name = sp->name;
 		gdb_interface(req);
@@ -12025,6 +12030,7 @@ delete_load_module(ulong base_addr)
 			if (lm->mod_section_data)
 				free(lm->mod_section_data);
 			lm->mod_section_data = (struct mod_section_data *)0;
+			lm->loaded_objfile = NULL;
 		}
 		st->flags &= ~LOAD_MODULE_SYMS;
 		return;
@@ -12061,6 +12067,7 @@ delete_load_module(ulong base_addr)
 			if (lm->mod_section_data)
 				free(lm->mod_section_data);
 			lm->mod_section_data = (struct mod_section_data *)0;
+			lm->loaded_objfile = NULL;
                 } else if (lm->mod_flags & MOD_LOAD_SYMS)
 			st->flags |= LOAD_MODULE_SYMS;
         }

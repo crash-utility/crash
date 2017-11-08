@@ -2688,6 +2688,7 @@ struct load_module {
 	struct syment *mod_init_symend;
 	ulong mod_percpu;
 	ulong mod_percpu_size;
+	struct objfile *loaded_objfile;
 };
 
 #define IN_MODULE(A,L) \
@@ -4479,6 +4480,7 @@ struct gnu_request {
     		struct symbol *sym;
     		struct objfile *obj;
   	} global_iterator;
+	struct load_module *lm;
 };
 
 /*
