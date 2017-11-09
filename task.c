@@ -55,6 +55,7 @@ static long rq_idx(int);
 static long cpu_idx(int);
 static void dump_runq(void);
 static void dump_on_rq_timestamp(void);
+static void dump_on_rq_lag(void);
 static void dump_on_rq_milliseconds(void);
 static void dump_runqueues(void);
 static void dump_prio_array(int, ulong, char *);
@@ -8045,10 +8046,11 @@ cmd_runq(void)
 	ulong *cpus = NULL;
 	int sched_debug = 0;
 	int dump_timestamp_flag = 0;
+	int dump_lag_flag = 0;
 	int dump_task_group_flag = 0;
 	int dump_milliseconds_flag = 0;
 
-        while ((c = getopt(argcnt, args, "dtgmc:")) != EOF) {
+        while ((c = getopt(argcnt, args, "dtTgmc:")) != EOF) {
                 switch(c)
                 {
 		case 'd':
@@ -8056,6 +8058,9 @@ cmd_runq(void)
 			break;
 		case 't':
 			dump_timestamp_flag = 1;
+			break;
+		case 'T':
+			dump_lag_flag = 1;
 			break;
 		case 'm':
 			dump_milliseconds_flag = 1;
@@ -8092,6 +8097,8 @@ cmd_runq(void)
 
 	if (dump_timestamp_flag)
                 dump_on_rq_timestamp();
+	else if (dump_lag_flag)
+		dump_on_rq_lag();
 	else if (dump_milliseconds_flag)
                 dump_on_rq_milliseconds();
 	else if (sched_debug)
@@ -8173,6 +8180,90 @@ dump_on_rq_timestamp(void)
 		} else
 			fprintf(fp, "\n"); 
 
+	}
+}
+
+/*
+ * Runqueue timestamp struct for dump_on_rq_lag().
+ */
+struct runq_ts_info {
+	int cpu;
+	ulonglong ts;
+};
+
+/*
+ * Comparison function for dump_on_rq_lag().
+ * Sorts runqueue timestamps in a descending order.
+ */
+static int
+compare_runq_ts(const void *p1, const void *p2)
+{
+	const struct runq_ts_info *ts1 = p1;
+	const struct runq_ts_info *ts2 = p2;
+
+	if (ts1->ts > ts2->ts)
+		return -1;
+
+	if (ts1->ts < ts2->ts)
+		return 1;
+
+	return 0;
+}
+
+/*
+ * Calculates integer log10
+ */
+static ulong
+__log10ul(ulong x)
+{
+	ulong ret = 1;
+
+	while (x > 9) {
+		ret++;
+		x /= 10;
+	}
+
+	return ret;
+}
+
+/*
+ * Displays relative CPU lag.
+ */
+static void
+dump_on_rq_lag(void)
+{
+	struct syment *rq_sp;
+	int cpu;
+	ulong runq;
+	ulonglong timestamp;
+	struct runq_ts_info runq_ts[kt->cpus];
+
+	if (!(rq_sp = per_cpu_symbol_search("per_cpu__runqueues")))
+		error(FATAL, "per-cpu runqueues do not exist\n");
+	if (INVALID_MEMBER(rq_timestamp))
+		option_not_supported('T');
+
+	for (cpu = 0; cpu < kt->cpus; cpu++) {
+		if ((kt->flags & SMP) && (kt->flags &PER_CPU_OFF))
+			runq = rq_sp->value + kt->__per_cpu_offset[cpu];
+		else
+			runq = rq_sp->value;
+
+		readmem(runq + OFFSET(rq_timestamp), KVADDR, &timestamp,
+				sizeof(ulonglong), "per-cpu rq timestamp",
+				FAULT_ON_ERROR);
+
+		runq_ts[cpu].cpu = cpu;
+		runq_ts[cpu].ts = timestamp;
+	}
+
+	qsort(runq_ts, (size_t)kt->cpus, sizeof(struct runq_ts_info), compare_runq_ts);
+
+	for (cpu = 0; cpu < kt->cpus; cpu++) {
+		fprintf(fp, "%sCPU %d: %.2lf secs\n",
+			space(2 + __log10ul(kt->cpus) - __log10ul(runq_ts[cpu].cpu)),
+			runq_ts[cpu].cpu,
+			((double)runq_ts[0].ts - (double)runq_ts[cpu].ts) / 1000000000.0);
 	}
 }
 

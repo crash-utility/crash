@@ -2532,7 +2532,7 @@ NULL
 char *help_runq[] = {
 "runq",
 "run queue",
-"[-t] [-m] [-g] [-c cpu(s)]",
+"[-t] [-T] [-m] [-g] [-c cpu(s)]",
 "  With no argument, this command displays the tasks on the run queues",
 "  of each cpu.",
 " ",
@@ -2541,6 +2541,8 @@ char *help_runq[] = {
 "         whichever applies; following each cpu timestamp is the last_run or ",
 "         timestamp value of the active task on that cpu, whichever applies, ",
 "         along with the task identification.",
+"     -T  Display the time lag of each CPU relative to the most recent runqueue",
+"         timestamp.",
 "     -m  Display the amount of time that the active task on each cpu has been",
 "         running, expressed in a format consisting of days, hours, minutes, ",
 "         seconds and milliseconds.",
