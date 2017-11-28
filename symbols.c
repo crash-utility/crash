@@ -8608,6 +8608,10 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "            mnt_namespace_list: %ld\n",
 		OFFSET(mnt_namespace_list));
 
+	fprintf(fp, "             pid_namespace_idr: %ld\n",
+		OFFSET(pid_namespace_idr));
+	fprintf(fp, "                    idr_idr_rt: %ld\n",
+		OFFSET(idr_idr_rt));
         fprintf(fp, "                  pid_link_pid: %ld\n",
                 OFFSET(pid_link_pid));
         fprintf(fp, "                pid_hash_chain: %ld\n",
@@ -10349,6 +10353,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(pid_link));
 	fprintf(fp, "                          upid: %ld\n", 
 		SIZE(upid));
+	fprintf(fp, "                           pid: %ld\n",
+		SIZE(pid));
 	fprintf(fp, "                  unwind_table: %ld\n", 
 		SIZE(unwind_table));
 	fprintf(fp, "                        rlimit: %ld\n", 

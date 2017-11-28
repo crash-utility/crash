@@ -845,6 +845,8 @@ struct task_table {                      /* kernel/local task table data */
 	long anonpages;
 	ulong stack_end_magic;
 	ulong pf_kthread;
+	ulong pid_radix_tree;
+	int callbacks;
 };
 
 #define TASK_INIT_DONE       (0x1)
@@ -864,6 +866,7 @@ struct task_table {                      /* kernel/local task table data */
 #define ACTIVE_ONLY       (0x4000)
 #define START_TIME_NSECS  (0x8000)
 #define THREAD_INFO_IN_TASK (0x10000)
+#define PID_RADIX_TREE   (0x20000)
 
 #define TASK_SLUSH (20)
 
@@ -1996,6 +1999,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long mod_arch_specific_orc_unwind;
 	long task_struct_policy;
 	long kmem_cache_random;
+	long pid_namespace_idr;
+	long idr_idr_rt;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2146,6 +2151,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long sk_buff_len;
 	long orc_entry;
 	long task_struct_policy;
+	long pid;
 };
 
 struct array_table {

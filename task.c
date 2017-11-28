@@ -30,6 +30,8 @@ static void refresh_hlist_task_table(void);
 static void refresh_hlist_task_table_v2(void);
 static void refresh_hlist_task_table_v3(void);
 static void refresh_active_task_table(void);
+static int radix_tree_task_callback(ulong);
+static void refresh_radix_tree_task_table(void);
 static struct task_context *store_context(struct task_context *, ulong, char *);
 static void refresh_context(ulong, ulong);
 static ulong parent_of(ulong);
@@ -439,12 +441,55 @@ task_init(void)
 	    	((len = SIZE(thread_union)) != STACKSIZE())) 
 		machdep->stacksize = len;
 
+	MEMBER_OFFSET_INIT(pid_namespace_idr, "pid_namespace", "idr");
+	MEMBER_OFFSET_INIT(idr_idr_rt, "idr", "idr_rt");
+
+	if (symbol_exists("height_to_maxindex") ||
+	    symbol_exists("height_to_maxnodes")) {
+		int newver = symbol_exists("height_to_maxnodes");
+		int tmp ATTRIBUTE_UNUSED;
+		if (!newver) {
+			if (LKCD_KERNTYPES())
+				ARRAY_LENGTH_INIT_ALT(tmp, "height_to_maxindex",
+					"radix_tree_preload.nodes", NULL, 0);
+			else
+				ARRAY_LENGTH_INIT(tmp, height_to_maxindex,
+					"height_to_maxindex", NULL, 0);
+		} else {
+			if (LKCD_KERNTYPES())
+				ARRAY_LENGTH_INIT_ALT(tmp, "height_to_maxnodes",
+					"radix_tree_preload.nodes", NULL, 0);
+			else
+				ARRAY_LENGTH_INIT(tmp, height_to_maxnodes,
+					"height_to_maxnodes", NULL, 0);
+		}
+		STRUCT_SIZE_INIT(radix_tree_root, "radix_tree_root");
+		STRUCT_SIZE_INIT(radix_tree_node, "radix_tree_node");
+		MEMBER_OFFSET_INIT(radix_tree_root_height,
+			"radix_tree_root","height");
+		MEMBER_OFFSET_INIT(radix_tree_root_rnode,
+			"radix_tree_root","rnode");
+		MEMBER_OFFSET_INIT(radix_tree_node_slots,
+			"radix_tree_node","slots");
+		MEMBER_OFFSET_INIT(radix_tree_node_height,
+			"radix_tree_node","height");
+		MEMBER_OFFSET_INIT(radix_tree_node_shift,
+			"radix_tree_node","shift");
+	}
+
 	if (symbol_exists("pidhash") && symbol_exists("pid_hash") &&
 	    !symbol_exists("pidhash_shift"))
 		error(FATAL, 
         "pidhash and pid_hash both exist -- cannot distinquish between them\n");
 
-	if (symbol_exists("pid_hash") && symbol_exists("pidhash_shift")) {
+	if (VALID_MEMBER(pid_namespace_idr)) {
+		STRUCT_SIZE_INIT(pid, "pid");
+		tt->refresh_task_table = refresh_radix_tree_task_table;
+		tt->pid_radix_tree = symbol_value("init_pid_ns") +
+			OFFSET(pid_namespace_idr) + OFFSET(idr_idr_rt);
+		tt->flags |= PID_RADIX_TREE;
+
+	} else if (symbol_exists("pid_hash") && symbol_exists("pidhash_shift")) {
 		int pidhash_shift;
 
 	   	if (get_symbol_type("PIDTYPE_PID", NULL, &req) != 
@@ -2266,6 +2311,233 @@ chain_next:
 	please_wait_done();
 
         if (ACTIVE() && (tt->flags & TASK_INIT_DONE)) 
+		refresh_context(curtask, curpid);
+
+	tt->retries = MAX(tt->retries, retries);
+}
+
+/*
+ *  Linux 4.15: pid_hash[] replaced by IDR/radix_tree
+ */
+static int
+radix_tree_task_callback(ulong task)
+{
+	ulong *tlp;
+
+	if (tt->callbacks < tt->max_tasks) {
+		tlp = (ulong *)tt->task_local;
+		tlp += tt->callbacks++;
+		*tlp = task;
+	}
+
+	return TRUE;
+}
+
+static void
+refresh_radix_tree_task_table(void)
+{
+	int i, cnt;
+	ulong count, retries, next, curtask, curpid, upid_ns, pid_tasks_0, task;
+	ulong *tlp;
+	char *tp;
+	struct radix_tree_pair rtp;
+	struct task_context *tc;
+	char *pidbuf;
+
+	if (DUMPFILE() && (tt->flags & TASK_INIT_DONE))   /* impossible */
+		return;
+
+	if (DUMPFILE()) {                                 /* impossible */
+		please_wait("gathering task table data");
+		if (!symbol_exists("panic_threads"))
+			tt->flags |= POPULATE_PANIC;
+	}
+
+	if (ACTIVE() && !(tt->flags & TASK_REFRESH))
+		return;
+
+	curpid = NO_PID;
+	curtask = NO_TASK;
+
+	/*
+	 *  The current task's task_context entry may change,
+	 *  or the task may not even exist anymore.
+	 */
+	if (ACTIVE() && (tt->flags & TASK_INIT_DONE)) {
+		curtask = CURRENT_TASK();
+		curpid = CURRENT_PID();
+	}
+
+	count = do_radix_tree(tt->pid_radix_tree, RADIX_TREE_COUNT, NULL);
+	if (CRASHDEBUG(1))
+		console("do_radix_tree: count: %ld\n", count);
+
+	retries = 0;
+	pidbuf = GETBUF(SIZE(pid));
+
+retry_radix_tree:
+	if (retries && DUMPFILE())
+		error(FATAL,
+			"\ncannot gather a stable task list via radix tree\n");
+
+	if ((retries == MAX_UNLIMITED_TASK_RETRIES) &&
+	    !(tt->flags & TASK_INIT_DONE))
+		error(FATAL,
+		    "\ncannot gather a stable task list via radix tree (%d retries)\n",
+			retries);
+
+	if (count > tt->max_tasks) {
+		tt->max_tasks = count + TASK_SLUSH;
+		allocate_task_space(tt->max_tasks);
+	}
+
+	BZERO(tt->task_local, tt->max_tasks * sizeof(void *));
+	tt->callbacks = 0;
+	rtp.index = 0;
+	rtp.value = (void *)&radix_tree_task_callback;
+	count = do_radix_tree(tt->pid_radix_tree, RADIX_TREE_DUMP_CB, &rtp);
+	if (CRASHDEBUG(1))
+		console("do_radix_tree: count: %ld  tt->callbacks: %d\n", count, tt->callbacks);
+
+	if (count > tt->max_tasks) {
+		retries++;
+		goto retry_radix_tree;
+	}
+
+	if (!hq_open()) {
+		error(INFO, "cannot hash task_struct entries\n");
+		if (!(tt->flags & TASK_INIT_DONE))
+			clean_exit(1);
+		error(INFO, "using stale task_structs\n");
+		return;
+       }
+
+	/*
+	 *  Get the idle threads first.
+	 */
+	cnt = 0;
+	for (i = 0; i < kt->cpus; i++) {
+		if (!tt->idle_threads[i])
+			continue;
+		if (hq_enter(tt->idle_threads[i]))
+			cnt++;
+		else
+			error(WARNING, "%sduplicate idle tasks?\n",
+				DUMPFILE() ? "\n" : "");
+	}
+
+	for (i = 0; i < tt->max_tasks; i++) {
+		tlp = (ulong *)tt->task_local;
+		tlp += i;
+		if ((next = *tlp) == 0)
+			break;
+
+		/*
+		 *  Translate radix tree contents to PIDTYPE_PID task.
+		 *  - the radix tree contents are struct pid pointers
+		 *  - upid is contained in pid.numbers[0]
+		 *  - upid.ns should point to init->init_pid_ns
+		 *  - pid->tasks[0] is first hlist_node in task->pids[3]
+		 *  - get task from address of task->pids[0]
+		 */
+		if (!readmem(next, KVADDR, pidbuf,
+		    SIZE(pid), "pid", RETURN_ON_ERROR|QUIET)) {
+			error(INFO, "\ncannot read pid struct from radix tree\n");
+			if (DUMPFILE())
+				continue;
+			hq_close();
+			retries++;
+			goto retry_radix_tree;
+		}
+
+		upid_ns = ULONG(pidbuf + OFFSET(pid_numbers) + OFFSET(upid_ns));
+		if (upid_ns != tt->init_pid_ns)
+			continue;
+		pid_tasks_0 = ULONG(pidbuf + OFFSET(pid_tasks));
+		if (!pid_tasks_0)
+			continue;
+		task = pid_tasks_0 - OFFSET(task_struct_pids);
+
+		if (CRASHDEBUG(1))
+			console("pid: %lx  ns: %lx  tasks[0]: %lx task: %lx\n",
+				next, upid_ns, pid_tasks_0, task);
+
+		if (is_idle_thread(task))
+			continue;
+
+		if (!IS_TASK_ADDR(task)) {
+			error(INFO, "%s: IDR radix tree: invalid task address: %lx\n",
+				DUMPFILE() ? "\n" : "", task);
+			if (DUMPFILE())
+				break;
+			hq_close();
+			retries++;
+			goto retry_radix_tree;
+		}
+
+		if (!hq_enter(task)) {
+			error(INFO, "%s: IDR radix tree: duplicate task: %lx\n",
+				DUMPFILE() ? "\n" : "", task);
+			if (DUMPFILE())
+				break;
+			hq_close();
+			retries++;
+			goto retry_radix_tree;
+		}
+
+		cnt++;
+	}
+
+	BZERO(tt->task_local, tt->max_tasks * sizeof(void *));
+	cnt = retrieve_list((ulong *)tt->task_local, cnt);
+	hq_close();
+
+	clear_task_cache();
+
+        for (i = 0, tlp = (ulong *)tt->task_local,
+             tt->running_tasks = 0, tc = tt->context_array;
+             i < tt->max_tasks; i++, tlp++) {
+		if (!(*tlp))
+			continue;
+
+		if (!IS_TASK_ADDR(*tlp)) {
+			error(WARNING,
+		            "%sinvalid task address found in task list: %lx\n",
+				DUMPFILE() ? "\n" : "", *tlp);
+			if (DUMPFILE())
+				continue;
+			retries++;
+			goto retry_radix_tree;
+		}
+
+		if (task_exists(*tlp)) {
+			error(WARNING,
+		           "%sduplicate task address found in task list: %lx\n",
+				DUMPFILE() ? "\n" : "", *tlp);
+			if (DUMPFILE())
+				continue;
+			retries++;
+			goto retry_radix_tree;
+		}
+
+		if (!(tp = fill_task_struct(*tlp))) {
+			if (DUMPFILE())
+				continue;
+			retries++;
+			goto retry_radix_tree;
+		}
+
+		if (store_context(tc, *tlp, tp)) {
+			tc++;
+			tt->running_tasks++;
+		}
+	}
+
+	FREEBUF(pidbuf);
+
+	please_wait_done();
+
+	if (ACTIVE() && (tt->flags & TASK_INIT_DONE))
 		refresh_context(curtask, curpid);
 
 	tt->retries = MAX(tt->retries, retries);
@@ -7054,6 +7326,8 @@ dump_task_table(int verbose)
                 fprintf(fp, "refresh_hlist_task_table_v3()\n");
         else if (tt->refresh_task_table == refresh_active_task_table)
                 fprintf(fp, "refresh_active_task_table()\n");
+        else if (tt->refresh_task_table == refresh_radix_tree_task_table)
+                fprintf(fp, "refresh_radix_tree_task_table()\n");
 	else
 		fprintf(fp, "%lx\n", (ulong)tt->refresh_task_table);
 
@@ -7090,6 +7364,9 @@ dump_task_table(int verbose)
         if (tt->flags & PID_HASH)
                 sprintf(&buf[strlen(buf)], 
 			"%sPID_HASH", others++ ? "|" : "");
+	if (tt->flags & PID_RADIX_TREE)
+		sprintf(&buf[strlen(buf)],
+			"%sPID_RADIX_TREE", others++ ? "|" : "");
         if (tt->flags & THREAD_INFO)
                 sprintf(&buf[strlen(buf)], 
 			"%sTHREAD_INFO", others++ ? "|" : "");
@@ -7122,6 +7399,8 @@ dump_task_table(int verbose)
 	fprintf(fp, "          task_end: %lx\n",  tt->task_end);
 	fprintf(fp, "        task_local: %lx\n",  (ulong)tt->task_local);
 	fprintf(fp, "         max_tasks: %d\n", tt->max_tasks);
+	fprintf(fp, "    pid_radix_tree: %lx\n", tt->pid_radix_tree);
+	fprintf(fp, "         callbacks: %d\n", tt->callbacks);
 	fprintf(fp, "        nr_threads: %d\n", tt->nr_threads);
 	fprintf(fp, "     running_tasks: %ld\n", tt->running_tasks);
 	fprintf(fp, "           retries: %ld\n", tt->retries);

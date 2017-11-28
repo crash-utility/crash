@@ -2083,38 +2083,6 @@ vfs_init(void)
 	if (!(ft->inode_cache = (char *)malloc(SIZE(inode)*INODE_CACHE)))
 		error(FATAL, "cannot malloc inode cache\n");
 
-	if (symbol_exists("height_to_maxindex") ||
-	    symbol_exists("height_to_maxnodes")) {
-		int newver = symbol_exists("height_to_maxnodes");
-		int tmp ATTRIBUTE_UNUSED;
-		if (!newver) {
-			if (LKCD_KERNTYPES())
-				ARRAY_LENGTH_INIT_ALT(tmp, "height_to_maxindex",
-					"radix_tree_preload.nodes", NULL, 0);
-			else
-				ARRAY_LENGTH_INIT(tmp, height_to_maxindex,
-					"height_to_maxindex", NULL, 0);
-		} else {
-			if (LKCD_KERNTYPES())
-				ARRAY_LENGTH_INIT_ALT(tmp, "height_to_maxnodes",
-					"radix_tree_preload.nodes", NULL, 0);
-			else
-				ARRAY_LENGTH_INIT(tmp, height_to_maxnodes,
-					"height_to_maxnodes", NULL, 0);
-		}
-		STRUCT_SIZE_INIT(radix_tree_root, "radix_tree_root");
-		STRUCT_SIZE_INIT(radix_tree_node, "radix_tree_node");
-		MEMBER_OFFSET_INIT(radix_tree_root_height, 
-			"radix_tree_root","height");
-		MEMBER_OFFSET_INIT(radix_tree_root_rnode, 
-			"radix_tree_root","rnode");
-		MEMBER_OFFSET_INIT(radix_tree_node_slots, 
-			"radix_tree_node","slots");
-		MEMBER_OFFSET_INIT(radix_tree_node_height, 
-			"radix_tree_node","height");
-		MEMBER_OFFSET_INIT(radix_tree_node_shift,
-			"radix_tree_node","shift");
-	}
 	MEMBER_OFFSET_INIT(rb_root_rb_node, 
 		"rb_root","rb_node");
 	MEMBER_OFFSET_INIT(rb_node_rb_left, 
