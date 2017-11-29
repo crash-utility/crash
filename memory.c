@@ -16928,7 +16928,7 @@ sparse_mem_init(void)
 {
 	ulong addr;
 	ulong mem_section_size;
-	int len, dimension;
+	int len, dimension, mem_section_is_ptr;
 
 	if (!IS_SPARSEMEM())
 		return;
@@ -16940,8 +16940,19 @@ sparse_mem_init(void)
 		error(FATAL, 
 		    "CONFIG_SPARSEMEM kernels not supported for this architecture\n");
 
+	/*
+	 *  The kernel's mem_section changed from array to pointer in this commit:
+	 *
+	 *   commit 83e3c48729d9ebb7af5a31a504f3fd6aff0348c4
+	 *   mm/sparsemem: Allocate mem_section at runtime for CONFIG_SPARSEMEM_EXTREME=y
+	 */
+	mem_section_is_ptr = 
+		get_symbol_type("mem_section", NULL, NULL) == TYPE_CODE_PTR ? 
+			TRUE : FALSE;
+
 	if (((len = get_array_length("mem_section", &dimension, 0)) ==
-	    (NR_MEM_SECTIONS() / _SECTIONS_PER_ROOT_EXTREME())) || !dimension)
+	    (NR_MEM_SECTIONS() / _SECTIONS_PER_ROOT_EXTREME())) || 
+	    mem_section_is_ptr || !dimension)
 		vt->flags |= SPARSEMEM_EX;
 
 	if (IS_SPARSEMEM_EX()) {
@@ -16960,7 +16971,7 @@ sparse_mem_init(void)
 		fprintf(fp, "SECTIONS_PER_ROOT = %ld\n", SECTIONS_PER_ROOT() );
 		fprintf(fp, "SECTION_ROOT_MASK = 0x%lx\n", SECTION_ROOT_MASK());
 		fprintf(fp, "PAGES_PER_SECTION = %ld\n", PAGES_PER_SECTION());
-		if (IS_SPARSEMEM_EX() && !len)
+		if (!mem_section_is_ptr && IS_SPARSEMEM_EX() && !len)
 			error(WARNING, "SPARSEMEM_EX: questionable section values\n");
 	}
 
@@ -16969,8 +16980,12 @@ sparse_mem_init(void)
 	if (!(vt->mem_section = (char *)malloc(SIZE(mem_section))))
 		error(FATAL, "cannot malloc mem_section cache\n");
 
-	addr = symbol_value("mem_section");
-	readmem(addr, KVADDR,vt->mem_sec ,mem_section_size,
+	if (mem_section_is_ptr)
+		get_symbol_data("mem_section", sizeof(void *), &addr);
+	else
+		addr = symbol_value("mem_section");
+
+	readmem(addr, KVADDR, vt->mem_sec, mem_section_size,
 		"memory section root table", FAULT_ON_ERROR);
 }
 
