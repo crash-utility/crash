@@ -2337,6 +2337,14 @@ retry:
                         *nip = *up;
                         *ksp = bt->stackbase + 
 				((char *)(up) - 16 - bt->stackbuf);
+			/*
+			 * Check whether this symbol relates to a
+			 * backtrace or not
+			 */
+			ur_ksp =  *(ulong *)&bt->stackbuf[(*ksp) - bt->stackbase];
+			if (!INSTACK(ur_ksp, bt))
+				continue;
+
                         return TRUE;
                 }
 	}
