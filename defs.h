@@ -3324,7 +3324,7 @@ struct arm64_stackframe {
 #define VMEMMAP_END_5LEVEL         0xffd5ffffffffffff
 
 #define VSYSCALL_START             0xffffffffff600000
-#define VSYSCALL_END               0xffffffffffe00000
+#define VSYSCALL_END               0xffffffffff601000
 
 #define PTOV(X)               ((unsigned long)(X)+(machdep->kvbase))
 #define VTOP(X)               x86_64_VTOP((ulong)(X))
