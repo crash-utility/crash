@@ -3316,7 +3316,7 @@ struct arm64_stackframe {
 
 #define USERSPACE_TOP_5LEVEL       0x0100000000000000
 #define PAGE_OFFSET_5LEVEL         0xff10000000000000
-#define VMALLOC_START_ADDR_5LEVEL  0xff92000000000000
+#define VMALLOC_START_ADDR_5LEVEL  0xffa0000000000000
 #define VMALLOC_END_5LEVEL         0xffd1ffffffffffff
 #define MODULES_VADDR_5LEVEL       0xffffffffa0000000
 #define MODULES_END_5LEVEL         0xffffffffff5fffff
