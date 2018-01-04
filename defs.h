@@ -3344,7 +3344,7 @@ struct arm64_stackframe {
 #define PTRS_PER_P4D         512
 
 #define __PGDIR_SHIFT  (machdep->machspec->pgdir_shift)
- 
+
 #define pml4_index(address) (((address) >> PML4_SHIFT) & (PTRS_PER_PML4-1))
 #define p4d_index(address)  (((address) >> P4D_SHIFT) & (PTRS_PER_P4D - 1))
 #define pgd_index(address)  (((address) >> __PGDIR_SHIFT) & (PTRS_PER_PGD-1))
@@ -3353,26 +3353,24 @@ struct arm64_stackframe {
 
 #define IS_LAST_PML4_READ(pml4) ((ulong)(pml4) == machdep->machspec->last_pml4_read)
 
-#define FILL_PML4() { \
-	if (!(pc->flags & RUNTIME) || ACTIVE()) { \
-		if (!IS_LAST_PML4_READ(vt->kernel_pgd[0])) \
-                    readmem(vt->kernel_pgd[0], KVADDR, machdep->machspec->pml4, \
-                        PAGESIZE(), "init_level4_pgt", FAULT_ON_ERROR); \
-                machdep->machspec->last_pml4_read = (ulong)(vt->kernel_pgd[0]); \
-	} \
-}
+#define FILL_PML4() 									\
+	if (!(pc->flags & RUNTIME) || ACTIVE()) { 					\
+		if (!IS_LAST_PML4_READ(vt->kernel_pgd[0])) { 				\
+			readmem(vt->kernel_pgd[0], KVADDR, machdep->machspec->pml4, 	\
+					PAGESIZE(), "init_level4_pgt", FAULT_ON_ERROR); \
+			machdep->machspec->last_pml4_read = (ulong)(vt->kernel_pgd[0]); \
+		} 									\
+	}
 
-#define FILL_PML4_HYPER() { \
-	if (!machdep->machspec->last_pml4_read) { \
-		unsigned long idle_pg_table = \
-		    symbol_exists("idle_pg_table_4") ? symbol_value("idle_pg_table_4") : \
-			symbol_value("idle_pg_table"); \
-		readmem(idle_pg_table, KVADDR, \
-			machdep->machspec->pml4, PAGESIZE(), "idle_pg_table", \
-			FAULT_ON_ERROR); \
-		machdep->machspec->last_pml4_read = idle_pg_table; \
-	}\
-}
+#define FILL_PML4_HYPER() 								\
+	if (!machdep->machspec->last_pml4_read) { 					\
+		unsigned long idle_pg_table = symbol_exists("idle_pg_table_4") ? 	\
+						symbol_value("idle_pg_table_4") : 	\
+						symbol_value("idle_pg_table"); 	\
+		readmem(idle_pg_table, KVADDR, machdep->machspec->pml4, PAGESIZE(), 	\
+				"idle_pg_table", FAULT_ON_ERROR); 			\
+		machdep->machspec->last_pml4_read = idle_pg_table; 			\
+	}
 
 #define IS_LAST_UPML_READ(pml) ((ulong)(pml) == machdep->machspec->last_upml_read)
 
