@@ -1,7 +1,7 @@
 /* x86_64.c -- core analysis suite
  *
- * Copyright (C) 2004-2017 David Anderson
- * Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2018 David Anderson
+ * Copyright (C) 2004-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -83,6 +83,7 @@ static void x86_64_init_kernel_pgd(void);
 static void x86_64_cpu_pda_init(void);
 static void x86_64_per_cpu_init(void);
 static void x86_64_ist_init(void);
+static void x86_64_irq_stack_gap_init(void);
 static void x86_64_post_init(void);
 static void parse_cmdline_args(void);
 static void x86_64_clear_machdep_cache(void);
@@ -181,6 +182,7 @@ x86_64_init(int when)
 		machdep->flags |= MACHDEP_BT_TEXT;
 		machdep->flags |= FRAMESIZE_DEBUG;
 		machdep->machspec->irq_eframe_link = UNINITIALIZED;
+		machdep->machspec->irq_stack_gap = UNINITIALIZED;
 		machdep->get_kvaddr_ranges = x86_64_get_kvaddr_ranges;
                 if (machdep->cmdline_args[0])
                         parse_cmdline_args();
@@ -638,6 +640,7 @@ x86_64_init(int when)
 				MEMBER_OFFSET("cpu_user_regs", "cs") - sizeof(ulong);
                 }
 		x86_64_irq_eframe_link_init();
+		x86_64_irq_stack_gap_init();
 		x86_64_framepointer_init();
 		x86_64_ORC_init();
 		x86_64_thread_return_init();
@@ -857,8 +860,6 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "            last_p4d_read: (unused)\n");
 	}
 
-	fprintf(fp, "                 irqstack: %lx\n", (ulong)ms->irqstack);
-	fprintf(fp, "          irq_eframe_link: %ld\n", ms->irq_eframe_link);
 	fprintf(fp, "                 ORC_data: %s", machdep->flags & ORC ? "\n" : "(unused)\n");
 	if (machdep->flags & ORC) {
 		fprintf(fp, "                    module_ORC: %s\n", ms->orc.module_ORC ? "TRUE" : "FALSE");
@@ -931,6 +932,9 @@ x86_64_dump_machdep_table(ulong arg)
 	fprintf(fp, "            thread_return: %lx\n", ms->thread_return); 
 	fprintf(fp, "            page_protnone: %lx\n", ms->page_protnone); 
 
+	fprintf(fp, "                 irqstack: %lx\n", (ulong)ms->irqstack);
+	fprintf(fp, "          irq_eframe_link: %ld\n", ms->irq_eframe_link);
+	fprintf(fp, "            irq_stack_gap: %ld\n", ms->irq_stack_gap);
 	fprintf(fp, "                  stkinfo: isize: %d\n", 
 		ms->stkinfo.isize);
 	fprintf(fp, "                           esize[%d]: %d,%d,%d,%d,%d,%d,%d%s\n", 
@@ -1335,6 +1339,71 @@ x86_64_ist_init(void)
 		} else if (STRUCT_EXISTS("x8664_pda"))
 			error(WARNING, 
 	      "boot_exception_stacks: symbol does not exist in this kernel!\n");
+	}
+}
+
+/*
+ *  Determine whether the unused gap at the top of the IRQ stack exists,
+ *  and store its size (either 0 or 64 bytes).
+ */
+static void 
+x86_64_irq_stack_gap_init(void)
+{
+	int c, cpus;
+	struct syment *sp;
+	ulong irq_stack_ptr;
+	struct machine_specific *ms = machdep->machspec;
+	
+	if (ms->irq_stack_gap != UNINITIALIZED)
+		return;
+
+	if (THIS_KERNEL_VERSION >= LINUX(4,9,0)) {
+		ms->irq_stack_gap = 0;
+		return;
+	}
+
+	ms->irq_stack_gap = 64;
+
+	/*
+	 *  Check for backports of this commit:
+	 *
+	 *    commit 4950d6d48a0c43cc61d0bbb76fb10e0214b79c66
+	 *    Author: Josh Poimboeuf <jpoimboe@redhat.com>
+	 *    Date:   Thu Aug 18 10:59:08 2016 -0500
+	 *
+	 *        x86/dumpstack: Remove 64-byte gap at end of irq stack
+	 */
+
+	if (!(sp = per_cpu_symbol_search("per_cpu__irq_stack_ptr")))
+		return;
+
+	/*
+	 *  CONFIG_SMP=n
+	 */
+	if (!(kt->flags & PER_CPU_OFF)) {
+		get_symbol_data(sp->name, sizeof(ulong), &irq_stack_ptr);
+		if ((irq_stack_ptr & 0xfff) == 0)
+			ms->irq_stack_gap = 0;
+		return;
+	}
+
+	/*
+	 *  Check the per-cpu irq_stack_ptr of the first possible cpu.
+	 */
+	if (!cpu_map_addr("possible"))
+		return;
+
+	cpus = kt->kernel_NR_CPUS ? kt->kernel_NR_CPUS : NR_CPUS;
+	for (c = 0; c < cpus; c++) {
+		if (!in_cpu_map(POSSIBLE, c))
+			continue;
+		if (readmem(sp->value + kt->__per_cpu_offset[c],
+		    KVADDR, &irq_stack_ptr, sizeof(void *), "irq_stack_ptr",
+		    QUIET|RETURN_ON_ERROR)) {
+			if ((irq_stack_ptr & 0xfff) == 0)
+				ms->irq_stack_gap = 0;
+			break;
+		}
 	}
 }
 
@@ -3352,7 +3421,7 @@ in_exception_stack:
                     	error(FATAL, "read of IRQ stack at %lx failed\n",
 				bt->stackbase);
 
-		stacktop = bt->stacktop - 64; /* from kernel code */
+		stacktop = bt->stacktop - ms->irq_stack_gap; 
 
 		bt->flags &= ~BT_FRAMESIZE_DISABLE;
 
@@ -3829,7 +3898,7 @@ in_exception_stack:
                     	error(FATAL, "read of IRQ stack at %lx failed\n",
 				bt->stackbase);
 
-		stacktop = bt->stacktop - 64; /* from kernel code */
+		stacktop = bt->stacktop - ms->irq_stack_gap;
 
 		if (!done) {
 			level = dwarf_backtrace(bt, level, stacktop);
@@ -5575,6 +5644,10 @@ x86_64_compiler_warning_stub(void)
  *
  *   --machdep irq_eframe_link=<offset>
  *
+ *  Force the IRQ stack gap size via:
+ *
+ *   --machdep irq_stack_gap=<size>
+ *
  *  Force max_physmem_bits via:
  *
  *   --machdep max_physmem_bits=<count>
@@ -5701,6 +5774,15 @@ parse_cmdline_args(void)
 					value = stol(p, RETURN_ON_ERROR|QUIET, &errflag);
 					if (!errflag) {
 						machdep->machspec->irq_eframe_link = value;
+						continue;
+					}
+				}
+	                } else if (STRNEQ(arglist[i], "irq_stack_gap=")) {
+	                        p = arglist[i] + strlen("irq_stack_gap=");
+				if (strlen(p)) {
+					value = stol(p, RETURN_ON_ERROR|QUIET, &errflag);
+					if (!errflag) {
+						machdep->machspec->irq_stack_gap = value;
 						continue;
 					}
 				}
