@@ -5769,6 +5769,8 @@ struct machine_specific {
 	ulong last_p4d_read;
 	struct ORC_data orc;
 	ulong irq_stack_gap;
+	ulong kpti_entry_stack;
+	ulong kpti_entry_stack_size;
 };
 
 #define KSYMS_START    (0x1)
@@ -5786,6 +5788,7 @@ struct machine_specific {
 #define RANDOMIZED  (0x1000)
 #define VM_5LEVEL   (0x2000)
 #define ORC         (0x4000)
+#define KPTI        (0x8000)
 
 #define VM_FLAGS (VM_ORIG|VM_2_6_11|VM_XEN|VM_XEN_RHEL4|VM_5LEVEL)
 

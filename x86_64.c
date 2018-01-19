@@ -48,6 +48,7 @@ static void x86_64_back_trace_cmd(struct bt_info *);
 static ulong x86_64_in_exception_stack(struct bt_info *, int *);
 static ulong x86_64_in_irqstack(struct bt_info *);
 static int x86_64_in_alternate_stack(int, ulong);
+static ulong x86_64_in_kpti_entry_stack(int, ulong);
 static ulong __schedule_frame_adjust(ulong, struct bt_info *);
 static void x86_64_low_budget_back_trace_cmd(struct bt_info *);
 static void x86_64_dwarf_back_trace_cmd(struct bt_info *);
@@ -84,6 +85,7 @@ static void x86_64_cpu_pda_init(void);
 static void x86_64_per_cpu_init(void);
 static void x86_64_ist_init(void);
 static void x86_64_irq_stack_gap_init(void);
+static void x86_64_entry_trampoline_init(void);
 static void x86_64_post_init(void);
 static void parse_cmdline_args(void);
 static void x86_64_clear_machdep_cache(void);
@@ -641,6 +643,7 @@ x86_64_init(int when)
                 }
 		x86_64_irq_eframe_link_init();
 		x86_64_irq_stack_gap_init();
+		x86_64_entry_trampoline_init();
 		x86_64_framepointer_init();
 		x86_64_ORC_init();
 		x86_64_thread_return_init();
@@ -722,6 +725,8 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sNESTED_NMI", others++ ? "|" : "");
 	if (machdep->flags & RANDOMIZED)
 		fprintf(fp, "%sRANDOMIZED", others++ ? "|" : "");
+	if (machdep->flags & KPTI)
+		fprintf(fp, "%sKPTI", others++ ? "|" : "");
         fprintf(fp, ")\n");
 
 	fprintf(fp, "             kvbase: %lx\n", machdep->kvbase);
@@ -973,7 +978,18 @@ x86_64_dump_machdep_table(ulong arg)
 			fprintf(fp, "\n   ");
 		fprintf(fp, "%016lx ", ms->stkinfo.ibase[c]);
 	}
-	fprintf(fp, "\n");
+	fprintf(fp, "\n                 kpti_entry_stack_size: %ld", ms->kpti_entry_stack_size);
+	fprintf(fp, "\n                      kpti_entry_stack: ");
+	if (machdep->flags & KPTI) {
+		fprintf(fp, "%lx\n   ", ms->kpti_entry_stack);
+		for (c = 0; c < cpus; c++) {
+			if (c && !(c%4))
+				fprintf(fp, "\n   ");
+			fprintf(fp, "%016lx ", ms->kpti_entry_stack + kt->__per_cpu_offset[c]);
+		}
+		fprintf(fp, "\n");
+	} else
+		fprintf(fp, "(unused)\n");
 }
 
 /*
@@ -3147,7 +3163,7 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 	struct syment *sp, *spt;
 	FILE *ofp;
 	ulong estack, irqstack;
-	ulong irq_eframe;
+	ulong irq_eframe, kpti_eframe;
 	struct bt_info bt_local, *bt;
 	struct machine_specific *ms;
 	ulong last_process_stack_eframe;
@@ -3493,6 +3509,16 @@ in_exception_stack:
 		bt->stacktop = GET_STACKTOP(bt->tc->task);
 
 		if (!INSTACK(rsp, bt)) {
+			/*
+			 *  If the exception occurred while on the KPTI entry trampoline stack,
+			 *  just print the entry exception frame and bail out.
+			 */
+			if ((kpti_eframe = x86_64_in_kpti_entry_stack(bt->tc->processor, rsp))) {
+				x86_64_exception_frame(EFRAME_PRINT, kpti_eframe, 0, bt, ofp);
+				fprintf(fp, "--- <entry trampoline stack> ---\n");
+				return;
+			}
+
 			switch (bt->flags & (BT_EXCEPTION_STACK|BT_IRQSTACK))
 			{
 			case (BT_EXCEPTION_STACK|BT_IRQSTACK):
@@ -3720,7 +3746,7 @@ x86_64_dwarf_back_trace_cmd(struct bt_info *bt_in)
 	struct syment *sp;
 	FILE *ofp;
 	ulong estack, irqstack;
-	ulong irq_eframe;
+	ulong irq_eframe, kpti_eframe;
 	struct bt_info bt_local, *bt;
 	struct machine_specific *ms;
 	ulong last_process_stack_eframe;
@@ -3940,6 +3966,16 @@ in_exception_stack:
 		bt->stacktop = GET_STACKTOP(bt->tc->task);
 
 		if (!INSTACK(rsp, bt)) {
+			/*
+			 *  If the exception occurred while on the KPTI entry trampoline stack,
+			 *  just print the entry exception frame and bail out.
+			 */
+			if ((kpti_eframe = x86_64_in_kpti_entry_stack(bt->tc->processor, rsp))) {
+				x86_64_exception_frame(EFRAME_PRINT, kpti_eframe, 0, bt, ofp);
+				fprintf(fp, "--- <ENTRY TRAMPOLINE stack> ---\n");
+				return;
+			}
+
 			switch (bt->flags & (BT_EXCEPTION_STACK|BT_IRQSTACK))
 			{
 			case (BT_EXCEPTION_STACK|BT_IRQSTACK):
@@ -8661,4 +8697,71 @@ next_in_func:
 			goto next_in_func;
 }
 
+/*
+ *  KPTI entry stack initialization.  May vary signficantly
+ *  between upstream and distribution backports.
+ */
+static void 
+x86_64_entry_trampoline_init(void)
+{
+	struct machine_specific *ms;
+	struct syment *sp;
+
+	ms = machdep->machspec;
+
+	if (!kernel_symbol_exists("pti_init") &&
+	    !kernel_symbol_exists("kaiser_init"))
+		return;
+
+	/*
+	 *  4.15
+	 */
+	if (MEMBER_EXISTS("entry_stack", "words") && 
+	    MEMBER_EXISTS("entry_stack_page", "stack") &&
+	    (sp = per_cpu_symbol_search("per_cpu__entry_stack_storage"))) {
+		ms->kpti_entry_stack = sp->value + MEMBER_OFFSET("entry_stack_page", "stack");
+		ms->kpti_entry_stack_size = MEMBER_SIZE("entry_stack", "words");
+		machdep->flags |= KPTI;
+		return;
+	}
+
+	/* 
+	 *  RHEL
+	 */
+	if (MEMBER_EXISTS("tss_struct", "stack")) {
+		if (!(sp = per_cpu_symbol_search("per_cpu__init_tss")))
+			sp = per_cpu_symbol_search("per_cpu__cpu_tss");
+		ms->kpti_entry_stack = sp->value + MEMBER_OFFSET("tss_struct", "stack");
+		ms->kpti_entry_stack_size = MEMBER_SIZE("tss_struct", "stack");
+		machdep->flags |= KPTI;
+		return;
+	}
+}
+
+static ulong
+x86_64_in_kpti_entry_stack(int cpu, ulong rsp)
+{
+	ulong stack_base, stack_end;
+	struct machine_specific *ms;
+
+	if (!(machdep->flags & KPTI))
+		return 0;
+
+	ms = machdep->machspec;
+
+	if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF)) {
+		if (kt->__per_cpu_offset[cpu] == 0)
+			return 0;
+		stack_base = ms->kpti_entry_stack + kt->__per_cpu_offset[cpu];
+	} else
+		stack_base = ms->kpti_entry_stack; 
+
+	stack_end = stack_base + 
+		(ms->kpti_entry_stack_size > 0 ? ms->kpti_entry_stack_size : 512);
+
+	if ((rsp >= stack_base) && (rsp < stack_end))
+		return(stack_end - SIZE(pt_regs));
+
+	return 0;
+}
 #endif  /* X86_64 */ 
