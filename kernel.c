@@ -1,8 +1,8 @@
 /* kernel.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2017 David Anderson
- * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2018 David Anderson
+ * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -2889,6 +2889,11 @@ back_trace(struct bt_info *bt)
 		if (!(bt->flags & (BT_TEXT_SYMBOLS|BT_TEXT_SYMBOLS_ALL) || REMOTE_PAUSED()))
 			return;
  	}
+
+	if (bt->stackbase == 0) {
+		fprintf(fp, "(no stack)\n");
+		return;
+	}
 
 	fill_stackbuf(bt);
 

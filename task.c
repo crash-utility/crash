@@ -1,8 +1,8 @@
 /* task.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2017 David Anderson
- * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2018 David Anderson
+ * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -4182,12 +4182,14 @@ task_pointer_string(struct task_context *tc, ulong do_kstackp, char *buf)
 				KVADDR, &bt->stkptr, sizeof(void *),
                 		"thread_struct ksp", FAULT_ON_ERROR);
 		} else {
-               		bt->task = tc->task;
-               		bt->tc = tc;
-               		bt->stackbase = GET_STACKBASE(tc->task);
-               		bt->stacktop = GET_STACKTOP(tc->task);
-			bt->flags |= BT_KSTACKP;
-			back_trace(bt);
+			if ((bt->stackbase = GET_STACKBASE(tc->task))) {
+				bt->stacktop = GET_STACKTOP(tc->task);
+				bt->task = tc->task;
+				bt->tc = tc;
+				bt->flags |= BT_KSTACKP;
+				back_trace(bt);
+			} else
+				bt->stkptr = 0;
 		}
 
 		if (bt->stkptr)
