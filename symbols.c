@@ -1,8 +1,8 @@
 /* symbols.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2017 David Anderson
- * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2018 David Anderson
+ * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1004,10 +1004,9 @@ symbol_value_from_proc_kallsyms(char *symname)
 
 	found = FALSE;
 	while (!found && fgets(buf, BUFSIZE, kp) &&
-	    (parse_line(buf, kallsyms) == 3) && 
-	    hexadecimal(kallsyms[0], 0)) {
-
-		if (STREQ(kallsyms[2], symname)) {
+	    (parse_line(buf, kallsyms) == 3)) {
+		if (hexadecimal(kallsyms[0], 0) && 
+		    STREQ(kallsyms[2], symname)) {
 			kallsym = htol(kallsyms[0], RETURN_ON_ERROR, NULL);
 			found = TRUE;
 			break;
