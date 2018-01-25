@@ -1245,8 +1245,10 @@ x86_64_ist_init(void)
 	struct syment *boot_sp, *tss_sp, *ist_sp;
 
         ms = machdep->machspec;
-	if (!(tss_sp = per_cpu_symbol_search("per_cpu__init_tss")))
-		tss_sp = per_cpu_symbol_search("per_cpu__cpu_tss");
+	if (!(tss_sp = per_cpu_symbol_search("per_cpu__init_tss"))) {
+		if (!(tss_sp = per_cpu_symbol_search("per_cpu__cpu_tss")))
+			tss_sp = per_cpu_symbol_search("per_cpu__cpu_tss_rw");
+	}
 	ist_sp = per_cpu_symbol_search("per_cpu__orig_ist");
 
 	x86_64_exception_stacks_init();
