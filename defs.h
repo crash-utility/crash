@@ -2605,6 +2605,8 @@ struct symbol_table_data {
 	ulong divide_error_vmlinux;
 	ulong idt_table_vmlinux;
 	ulong saved_command_line_vmlinux;
+	ulong pti_init_vmlinux;
+	ulong kaiser_init_vmlinux;
 };
 
 /* flags for st */

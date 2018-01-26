@@ -1749,7 +1749,7 @@ static ulong memparse(char *ptr, char **retptr)
  * of elfcorehdr.
  */
 static ulong
-get_elfcorehdr(ulong cr3, ulong kaslr_offset)
+get_elfcorehdr(ulong kaslr_offset)
 {
 	char cmdline[BUFSIZE], *ptr;
 	ulong cmdline_vaddr;
@@ -1906,7 +1906,7 @@ get_vmcoreinfo(ulong elfcorehdr, ulong *addr, int *len)
  *    using "elfcorehdr=" and retrieve kaslr_offset/phys_base from vmcoreinfo.
  */
 static int
-get_kaslr_offset_from_vmcoreinfo(ulong cr3, ulong orig_kaslr_offset,
+get_kaslr_offset_from_vmcoreinfo(ulong orig_kaslr_offset,
 		                 ulong *kaslr_offset, ulong *phys_base)
 {
 	ulong elfcorehdr_addr = 0;
@@ -1916,7 +1916,7 @@ get_kaslr_offset_from_vmcoreinfo(ulong cr3, ulong orig_kaslr_offset,
 	int ret = FALSE;
 
 	/* Find "elfcorehdr=" in the kernel boot parameter */
-	elfcorehdr_addr = get_elfcorehdr(cr3, orig_kaslr_offset);
+	elfcorehdr_addr = get_elfcorehdr(orig_kaslr_offset);
 	if (!elfcorehdr_addr)
 		return FALSE;
 
@@ -1973,8 +1973,8 @@ quit:
  * 1) Get IDTR and CR3 value from the dump header.
  * 2) Get a virtual address of IDT from IDTR value
  *    --- (A)
- * 3) Translate (A) to physical address using CR3, which points a top of
- *    page table.
+ * 3) Translate (A) to physical address using CR3, the upper 52 bits
+ *    of which points a top of page table.
  *    --- (B)
  * 4) Get an address of vector0 (Devide Error) interrupt handler from
  *    IDT, which are pointed by (B).
@@ -2023,12 +2023,15 @@ quit:
  *    kernel. Retrieve vmcoreinfo from address of "elfcorehdr=" and
  *    get kaslr_offset and phys_base from vmcoreinfo.
  */
+#define PTI_USER_PGTABLE_BIT	PAGE_SHIFT
+#define PTI_USER_PGTABLE_MASK	(1 << PTI_USER_PGTABLE_BIT)
+#define CR3_PCID_MASK		0xFFFull
 int
 sadump_calc_kaslr_offset(ulong *kaslr_offset)
 {
 	ulong phys_base = 0;
 	struct sadump_smram_cpu_state scs;
-	uint64_t idtr = 0, cr3 = 0, idtr_paddr;
+	uint64_t idtr = 0, pgd = 0, idtr_paddr;
 	ulong divide_error_vmcore;
 	ulong kaslr_offset_kdump, phys_base_kdump;
 	int ret = FALSE;
@@ -2039,7 +2042,10 @@ sadump_calc_kaslr_offset(ulong *kaslr_offset)
 
 	memset(&scs, 0, sizeof(scs));
 	get_sadump_smram_cpu_state_any(&scs);
-	cr3 = scs.Cr3;
+	if (st->pti_init_vmlinux || st->kaiser_init_vmlinux)
+		pgd = scs.Cr3 & ~(CR3_PCID_MASK|PTI_USER_PGTABLE_MASK);
+	else
+		pgd = scs.Cr3 & ~CR3_PCID_MASK;
 	idtr = ((uint64_t)scs.IdtUpper)<<32 | (uint64_t)scs.IdtLower;
 
 	/*
@@ -2050,12 +2056,12 @@ sadump_calc_kaslr_offset(ulong *kaslr_offset)
 	 *
 	 * TODO: XEN and 5-level is not supported
 	 */
-	vt->kernel_pgd[0] = cr3;
+	vt->kernel_pgd[0] = pgd;
 	machdep->machspec->last_pml4_read = vt->kernel_pgd[0];
 	machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_2_6;
 	machdep->machspec->pgdir_shift = PGDIR_SHIFT;
-	if (!readmem(cr3, PHYSADDR, machdep->machspec->pml4, PAGESIZE(),
-			"cr3", RETURN_ON_ERROR))
+	if (!readmem(pgd, PHYSADDR, machdep->machspec->pml4, PAGESIZE(),
+			"pgd", RETURN_ON_ERROR))
 		goto quit;
 
 	/* Convert virtual address of IDT table to physical address */
@@ -2070,7 +2076,7 @@ sadump_calc_kaslr_offset(ulong *kaslr_offset)
 
 	if (CRASHDEBUG(1)) {
 		fprintf(fp, "calc_kaslr_offset: idtr=%lx\n", idtr);
-		fprintf(fp, "calc_kaslr_offset: cr3=%lx\n", cr3);
+		fprintf(fp, "calc_kaslr_offset: pgd=%lx\n", pgd);
 		fprintf(fp, "calc_kaslr_offset: idtr(phys)=%lx\n", idtr_paddr);
 		fprintf(fp, "calc_kaslr_offset: divide_error(vmlinux): %lx\n",
 			st->divide_error_vmlinux);
@@ -2084,9 +2090,12 @@ sadump_calc_kaslr_offset(ulong *kaslr_offset)
 	 * from vmcoreinfo
 	 */
 	if (get_kaslr_offset_from_vmcoreinfo(
-		cr3, *kaslr_offset, &kaslr_offset_kdump, &phys_base_kdump)) {
+		*kaslr_offset, &kaslr_offset_kdump, &phys_base_kdump)) {
 		*kaslr_offset =  kaslr_offset_kdump;
 		phys_base =  phys_base_kdump;
+	} else if (CRASHDEBUG(1)) {
+		fprintf(fp, "sadump: failed to determine which kernel was running at crash,\n");
+		fprintf(fp, "sadump: asssuming the kdump 1st kernel.\n");
 	}
 
 	if (CRASHDEBUG(1)) {
