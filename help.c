@@ -166,6 +166,7 @@ char *program_usage_info[] = {
     "      vm=2.6.11     (2.6.11 and later virtual memory address ranges)",
     "      vm=xen        (Xen kernel virtual memory address ranges)",
     "      vm=xen-rhel4  (RHEL4 Xen kernel virtual address ranges)",
+    "      vm=5level     (5-level page tables)",
     "    PPC64:",
     "      vm=orig",
     "      vm=2.6.14     (4-level page tables)",

@@ -2057,10 +2057,11 @@ sadump_calc_kaslr_offset(ulong *kaslr_offset)
 	 * TODO: XEN and 5-level is not supported
 	 */
 	vt->kernel_pgd[0] = pgd;
-	machdep->machspec->last_pml4_read = vt->kernel_pgd[0];
+	machdep->last_pgd_read = vt->kernel_pgd[0];
 	machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_2_6;
 	machdep->machspec->pgdir_shift = PGDIR_SHIFT;
-	if (!readmem(pgd, PHYSADDR, machdep->machspec->pml4, PAGESIZE(),
+	machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD;
+	if (!readmem(pgd, PHYSADDR, machdep->pgd, PAGESIZE(),
 			"pgd", RETURN_ON_ERROR))
 		goto quit;
 
@@ -2108,7 +2109,7 @@ sadump_calc_kaslr_offset(ulong *kaslr_offset)
 	ret = TRUE;
 quit:
 	vt->kernel_pgd[0] = 0;
-	machdep->machspec->last_pml4_read = 0;
+	machdep->last_pgd_read = 0;
 	return ret;
 }
 #else

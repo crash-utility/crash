@@ -3332,56 +3332,43 @@ struct arm64_stackframe {
 #define VTOP(X)               x86_64_VTOP((ulong)(X))
 #define IS_VMALLOC_ADDR(X)    x86_64_IS_VMALLOC_ADDR((ulong)(X))
 
-#define PML4_SHIFT      39
-#define PTRS_PER_PML4   512
-#define PGDIR_SHIFT     30
+/*
+ * the default page table level for x86_64:
+ *    4 level page tables
+ */
+#define PGDIR_SHIFT     39
 #define PTRS_PER_PGD    512
+#define PUD_SHIFT       30
+#define PTRS_PER_PUD    512
 #define PMD_SHIFT       21
 #define PTRS_PER_PMD    512
 #define PTRS_PER_PTE    512
 
+/* 5 level page */
 #define PGDIR_SHIFT_5LEVEL    48
 #define PTRS_PER_PGD_5LEVEL  512
 #define P4D_SHIFT             39
 #define PTRS_PER_P4D         512
 
 #define __PGDIR_SHIFT  (machdep->machspec->pgdir_shift)
+#define __PTRS_PER_PGD  (machdep->machspec->ptrs_per_pgd)
 
-#define pml4_index(address) (((address) >> PML4_SHIFT) & (PTRS_PER_PML4-1))
+#define pgd_index(address)  (((address) >> __PGDIR_SHIFT) & (__PTRS_PER_PGD-1))
 #define p4d_index(address)  (((address) >> P4D_SHIFT) & (PTRS_PER_P4D - 1))
-#define pgd_index(address)  (((address) >> __PGDIR_SHIFT) & (PTRS_PER_PGD-1))
+#define pud_index(address)  (((address) >> PUD_SHIFT) & (PTRS_PER_PUD - 1))
 #define pmd_index(address)  (((address) >> PMD_SHIFT) & (PTRS_PER_PMD-1))
 #define pte_index(address)  (((address) >> PAGE_SHIFT) & (PTRS_PER_PTE - 1))
 
-#define IS_LAST_PML4_READ(pml4) ((ulong)(pml4) == machdep->machspec->last_pml4_read)
-
-#define FILL_PML4() 									\
-	if (!(pc->flags & RUNTIME) || ACTIVE()) { 					\
-		if (!IS_LAST_PML4_READ(vt->kernel_pgd[0])) { 				\
-			readmem(vt->kernel_pgd[0], KVADDR, machdep->machspec->pml4, 	\
-					PAGESIZE(), "init_level4_pgt", FAULT_ON_ERROR); \
-			machdep->machspec->last_pml4_read = (ulong)(vt->kernel_pgd[0]); \
-		} 									\
+#define FILL_TOP_PGD() 							\
+	if (!(pc->flags & RUNTIME) || ACTIVE()) { 				\
+		FILL_PGD(vt->kernel_pgd[0], KVADDR, PAGESIZE());		\
 	}
 
-#define FILL_PML4_HYPER() 								\
-	if (!machdep->machspec->last_pml4_read) { 					\
-		unsigned long idle_pg_table = symbol_exists("idle_pg_table_4") ? 	\
-						symbol_value("idle_pg_table_4") : 	\
-						symbol_value("idle_pg_table"); 	\
-		readmem(idle_pg_table, KVADDR, machdep->machspec->pml4, PAGESIZE(), 	\
-				"idle_pg_table", FAULT_ON_ERROR); 			\
-		machdep->machspec->last_pml4_read = idle_pg_table; 			\
-	}
-
-#define IS_LAST_UPML_READ(pml) ((ulong)(pml) == machdep->machspec->last_upml_read)
-
-#define FILL_UPML(PML, TYPE, SIZE) 					      \
-    if (!IS_LAST_UPML_READ(PML)) {                                             \
-            readmem((ulonglong)((ulong)(PML)), TYPE, machdep->machspec->upml, \
-                    SIZE, "pml page", FAULT_ON_ERROR);                        \
-            machdep->machspec->last_upml_read = (ulong)(PML);                 \
-    }								            
+#define FILL_TOP_PGD_HYPER() 							\
+	unsigned long idle_pg_table = symbol_exists("idle_pg_table_4") ? 	\
+					symbol_value("idle_pg_table_4") : 	\
+					symbol_value("idle_pg_table");		\
+	FILL_PGD(idle_pg_table, KVADDR, PAGESIZE());
 
 #define IS_LAST_P4D_READ(p4d) ((ulong)(p4d) == machdep->machspec->last_p4d_read)
 
@@ -3405,7 +3392,7 @@ struct arm64_stackframe {
 #define __VIRTUAL_MASK         ((1UL << __VIRTUAL_MASK_SHIFT) - 1)
 #define PAGE_SHIFT             12
 #define PAGE_SIZE              (1UL << PAGE_SHIFT)
-#define PHYSICAL_PAGE_MASK    (~(PAGE_SIZE-1) & (__PHYSICAL_MASK << PAGE_SHIFT))
+#define PHYSICAL_PAGE_MASK    (~(PAGE_SIZE-1) & __PHYSICAL_MASK )
 
 #define _PAGE_BIT_NX    63
 #define _PAGE_PRESENT   0x001
@@ -5749,7 +5736,7 @@ struct machine_specific {
 	ulong modules_vaddr;
 	ulong modules_end;
 	ulong phys_base;
-        char *pml4;
+	char *pml4;
 	char *upml;
 	ulong last_upml_read;
 	ulong last_pml4_read;
@@ -5773,6 +5760,7 @@ struct machine_specific {
 	ulong irq_stack_gap;
 	ulong kpti_entry_stack;
 	ulong kpti_entry_stack_size;
+	ulong ptrs_per_pgd;
 };
 
 #define KSYMS_START    (0x1)
