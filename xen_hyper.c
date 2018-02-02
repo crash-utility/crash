@@ -435,19 +435,30 @@ xen_hyper_misc_init(void)
 /*
  * Do initialization for scheduler of Xen Hyper system here.
  */
-#define XEN_HYPER_SCHEDULERS_ARRAY_CNT 10
 #define XEN_HYPER_SCHEDULER_NAME 1024
+
+static int section_size(char *start_section, char *end_section)
+{
+	ulong sp_start, sp_end;
+
+	sp_start = symbol_value(start_section);
+	sp_end = symbol_value(end_section);
+
+	return (sp_end - sp_start) / sizeof(long);
+}
 
 static void
 xen_hyper_schedule_init(void)
 {
 	ulong addr, opt_sched, schedulers, opt_name;
 	long scheduler_opt_name;
-	long schedulers_buf[XEN_HYPER_SCHEDULERS_ARRAY_CNT];
+	long *schedulers_buf;
+	int nr_schedulers;
 	struct xen_hyper_sched_context *schc;
 	char *buf;
 	char opt_name_buf[XEN_HYPER_OPT_SCHED_SIZE];
 	int i, cpuid, flag;
+	char *sp_name;
 
 	/* get scheduler information */
 	if((xhscht->scheduler_struct =
@@ -469,15 +480,27 @@ xen_hyper_schedule_init(void)
 	XEN_HYPER_OPT_SCHED_SIZE, "opt_sched,", RETURN_ON_ERROR)) {
 		error(FATAL, "cannot read opt_sched,.\n");
 	}
-	schedulers = symbol_value("schedulers");
+
+	/* symbol exists since Xen 4.7 */
+	if (symbol_exists("__start_schedulers_array")) {
+		sp_name = "__start_schedulers_array";
+		nr_schedulers = section_size("__start_schedulers_array",
+					     "__end_schedulers_array");
+	} else {
+		sp_name = "schedulers";
+		nr_schedulers = get_array_length("schedulers", 0, 0);
+	}
+
+	schedulers_buf = (long *)GETBUF(nr_schedulers * sizeof(long));
+	schedulers = symbol_value(sp_name);
 	addr = schedulers;
 	while (xhscht->name == NULL) {
 		if (!readmem(addr, KVADDR, schedulers_buf,
-		sizeof(long) * XEN_HYPER_SCHEDULERS_ARRAY_CNT,
-		"schedulers", RETURN_ON_ERROR)) {
+			     sizeof(long) * nr_schedulers,
+			     "schedulers", RETURN_ON_ERROR)) {
 			error(FATAL, "cannot read schedulers.\n");
 		}
-		for (i = 0; i < XEN_HYPER_SCHEDULERS_ARRAY_CNT; i++) {
+		for (i = 0; i < nr_schedulers; i++) {
 			if (schedulers_buf[i] == 0) {
 				error(FATAL, "schedule data not found.\n");
 			}
@@ -514,9 +537,10 @@ xen_hyper_schedule_init(void)
 			strncpy(xhscht->name, buf, strlen(buf));
 			break;
 		}
-		addr += sizeof(long) * XEN_HYPER_SCHEDULERS_ARRAY_CNT;
+		addr += sizeof(long) * nr_schedulers;
 	}
 	FREEBUF(buf);
+	FREEBUF(schedulers_buf);
 
 	/* get schedule_data information */
 	if((xhscht->sched_context_array =
