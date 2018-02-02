@@ -830,6 +830,7 @@ char *help_foreach[] = {
 "           must be a POSIX extended regular expression that will be used",
 "           to match task names.",
 "     user  perform the command(s) on all user (non-kernel) threads.",
+"  gleader  perform the command(s) on all user (non-kernel) thread group leaders.",
 "   kernel  perform the command(s) on all kernel threads.",
 "   active  perform the command(s) on the active thread on each CPU.",
 "    state  perform the command(s) on all tasks in the specified state, which",

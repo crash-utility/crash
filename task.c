@@ -6368,6 +6368,18 @@ cmd_foreach(void)
                         continue;
                 }
 
+		/*
+		 *  Select only user-space thread group leaders
+		 */
+		if (STREQ(args[optind], "gleader")) {
+			if (fd->flags & FOREACH_KERNEL)
+				error(FATAL,
+					"gleader and kernel are mutually exclusive!\n");
+			fd->flags |= (FOREACH_USER|FOREACH_GLEADER);
+			optind++;
+			continue;
+		}
+
 		/* 
 		 *  Select only active tasks (dumpfile only)
 	  	 */
@@ -6700,6 +6712,9 @@ foreach(struct foreach_data *fd)
 			continue;
 
 		if ((fd->flags & FOREACH_USER) && is_kernel_thread(tc->task))
+			continue;
+
+		if ((fd->flags & FOREACH_GLEADER) && tc->pid != task_tgid(tc->task))
 			continue;
 
 		if ((fd->flags & FOREACH_KERNEL) && !is_kernel_thread(tc->task))
