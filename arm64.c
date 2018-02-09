@@ -1,8 +1,8 @@
 /*
  * arm64.c - core analysis suite
  *
- * Copyright (C) 2012-2017 David Anderson
- * Copyright (C) 2012-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2012-2018 David Anderson
+ * Copyright (C) 2012-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -633,6 +633,8 @@ arm64_dump_machdep_table(ulong arg)
         	fprintf(fp, "%lx\n", ms->__SWP_OFFSET_MASK);
 	else
 		fprintf(fp, "(unused)\n");
+	fprintf(fp, "   machine_kexec_start: %lx\n", ms->machine_kexec_start);
+	fprintf(fp, "     machine_kexec_end: %lx\n", ms->machine_kexec_end);
 	fprintf(fp, "     crash_kexec_start: %lx\n", ms->crash_kexec_start);
 	fprintf(fp, "       crash_kexec_end: %lx\n", ms->crash_kexec_end);
 	fprintf(fp, "  crash_save_cpu_start: %lx\n", ms->crash_save_cpu_start);
@@ -1336,7 +1338,7 @@ arm64_irq_stack_init(void)
 	struct syment *sp;
 	struct gnu_request request, *req;
 	struct machine_specific *ms = machdep->machspec;
-	ulong p;
+	ulong p, sz;
 	req = &request;
 
 	if (symbol_exists("irq_stack") &&
@@ -1384,7 +1386,26 @@ arm64_irq_stack_init(void)
 
 		if (!(ms->irq_stacks = (ulong *)malloc((size_t)(kt->cpus * sizeof(ulong)))))
 			error(FATAL, "cannot malloc irq_stack addresses\n");
-		ms->irq_stack_size = ARM64_IRQ_STACK_SIZE;
+
+		/*
+		 *  Determining the IRQ_STACK_SIZE is tricky, but for now
+		 *  4.14 kernel has:
+		 *
+		 *    #define IRQ_STACK_SIZE          THREAD_SIZE
+		 *
+		 *  and finding a solid usage of THREAD_SIZE is hard, but:   
+		 *
+		 *    union thread_union {
+		 *            ... 
+	         *            unsigned long stack[THREAD_SIZE/sizeof(long)];
+		 *    };
+		 */
+		if (MEMBER_EXISTS("thread_union", "stack")) { 
+			if ((sz = MEMBER_SIZE("thread_union", "stack")) > 0)
+				ms->irq_stack_size = sz;
+		} else
+			ms->irq_stack_size = ARM64_IRQ_STACK_SIZE;
+
 		machdep->flags |= IRQ_STACKS;
 
 		for (i = 0; i < kt->cpus; i++) {
@@ -1404,7 +1425,7 @@ arm64_stackframe_init(void)
 	long task_struct_thread;
 	long thread_struct_cpu_context;
 	long context_sp, context_pc, context_fp;
-	struct syment *sp1, *sp1n, *sp2, *sp2n;
+	struct syment *sp1, *sp1n, *sp2, *sp2n, *sp3, *sp3n;
 
 	STRUCT_SIZE_INIT(note_buf, "note_buf_t");
 	STRUCT_SIZE_INIT(elf_prstatus, "elf_prstatus");
@@ -1441,11 +1462,15 @@ arm64_stackframe_init(void)
 	if ((sp1 = kernel_symbol_search("crash_kexec")) &&
 	    (sp1n = next_symbol(NULL, sp1)) && 
 	    (sp2 = kernel_symbol_search("crash_save_cpu")) &&
-	    (sp2n = next_symbol(NULL, sp2))) {
+	    (sp2n = next_symbol(NULL, sp2)) &&
+	    (sp3 = kernel_symbol_search("machine_kexec")) &&
+	    (sp3n = next_symbol(NULL, sp3))) {
 		machdep->machspec->crash_kexec_start = sp1->value;
 		machdep->machspec->crash_kexec_end = sp1n->value;
 		machdep->machspec->crash_save_cpu_start = sp2->value;
 		machdep->machspec->crash_save_cpu_end = sp2n->value;
+		machdep->machspec->machine_kexec_start = sp3->value;
+		machdep->machspec->machine_kexec_end = sp3n->value;
 		machdep->flags |= KDUMP_ENABLED;
 	}
 
@@ -2592,6 +2617,7 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 {
 	ulong *ptr, *start, *base;
 	struct machine_specific *ms;
+	ulong crash_kexec_frame;
 
 	if (!(machdep->flags & KDUMP_ENABLED))
 		return FALSE;
@@ -2606,6 +2632,7 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 			start = (ulong *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(bt->stacktop))];
 	}
 
+	crash_kexec_frame = 0;
 	ms = machdep->machspec;
 	for (ptr = start - 8; ptr >= base; ptr--) {
 		if (bt->flags & BT_OPT_BACK_TRACE) {
@@ -2628,12 +2655,26 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 				return TRUE;
 			}
 		} else {
-			if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+			if ((*ptr >= ms->machine_kexec_start) && (*ptr < ms->machine_kexec_end)) {
 				bt->bptr = ((ulong)ptr - (ulong)base)
 					   + task_to_stackbase(bt->tc->task);
 				if (CRASHDEBUG(1))
-					fprintf(fp, "%lx: %lx (crash_kexec)\n", bt->bptr, *ptr);
+					fprintf(fp, "%lx: %lx (machine_kexec)\n", bt->bptr, *ptr);
 				return TRUE;
+			}
+			if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+				/*
+				 *  Stash the first crash_kexec frame in case the machine_kexec
+				 *  frame is not found.
+				 */
+				if (!crash_kexec_frame) {
+					crash_kexec_frame = ((ulong)ptr - (ulong)base)
+						+ task_to_stackbase(bt->tc->task);
+					if (CRASHDEBUG(1))
+						fprintf(fp, "%lx: %lx (crash_kexec)\n", 
+							bt->bptr, *ptr);
+				}
+				continue;
 			}
 			if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
 				bt->bptr = ((ulong)ptr - (ulong)base)
@@ -2644,6 +2685,11 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 			}
 		}
 	} 
+
+	if (crash_kexec_frame) {
+		bt->bptr = crash_kexec_frame;
+		return TRUE;
+	}
 
 	return FALSE;
 }

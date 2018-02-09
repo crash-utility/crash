@@ -3138,6 +3138,8 @@ struct machine_specific {
 	ulong user_eframe_offset;
 	/* for v4.14 or later */
 	ulong kern_eframe_offset;
+	ulong machine_kexec_start;
+	ulong machine_kexec_end;
 };
 
 struct arm64_stackframe {
