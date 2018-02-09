@@ -2411,8 +2411,10 @@ arm64_back_trace_cmd(struct bt_info *bt)
 
 		if (arm64_in_exception_text(bt->instptr) && INSTACK(stackframe.fp, bt)) {
 			if (!(bt->flags & BT_IRQSTACK) ||
-			    (((stackframe.sp + SIZE(pt_regs)) < bt->stacktop)))
-				exception_frame = stackframe.fp - KERN_EFRAME_OFFSET;
+			    ((stackframe.sp + SIZE(pt_regs)) < bt->stacktop)) {
+				if (arm64_is_kernel_exception_frame(bt, stackframe.fp - KERN_EFRAME_OFFSET))
+					exception_frame = stackframe.fp - KERN_EFRAME_OFFSET;
+			}
 		}
 
 		if ((bt->flags & BT_IRQSTACK) &&
