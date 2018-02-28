@@ -3488,7 +3488,8 @@ is_kernel(char *file)
 
 		if (endian_mismatch(file, elf64->e_ident[EI_DATA], 0))
 			goto bailout;
-	}
+	} else
+		return FALSE;
 
 bailout:
 	return(is_bfd_format(file));
