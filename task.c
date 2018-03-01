@@ -3240,7 +3240,7 @@ parse_task_thread(int argcnt, char *arglist[], struct task_context *tc) {
 }
 
 static char *ps_exclusive = 
-    "-a, -t, -c, -p, -g, -l, -m, -S and -r flags are all mutually-exclusive\n";
+    "-a, -t, -c, -p, -g, -l, -m, -S, -r and -A flags are all mutually-exclusive\n";
 
 static void
 check_ps_exclusive(ulong flag, ulong thisflag)
@@ -3267,7 +3267,7 @@ cmd_ps(void)
 	cpuspec = NULL;
 	flag = 0;
 
-        while ((c = getopt(argcnt, args, "SgstcpkuGlmarC:y:")) != EOF) {
+        while ((c = getopt(argcnt, args, "ASgstcpkuGlmarC:y:")) != EOF) {
                 switch(c)
 		{
 		case 'k':
@@ -3371,6 +3371,11 @@ cmd_ps(void)
 		case 'y':
 			flag |= PS_POLICY;
 			psinfo.policy = make_sched_policy(optarg);
+			break;
+
+		case 'A':
+			check_ps_exclusive(flag, PS_ACTIVE);
+			flag |= PS_ACTIVE;
 			break;
 
 		default:
@@ -3576,6 +3581,9 @@ show_ps_data(ulong flag, struct task_context *tc, struct psinfo *psi)
 
 	task_active = is_task_active(tc->task);
 
+	if ((flag & PS_ACTIVE) && (flag & PS_SHOW_ALL) && !task_active)
+		return;
+
 	if (task_active) {
 		if (hide_offline_cpu(tc->processor))
 			fprintf(fp, "- ");
@@ -3610,7 +3618,7 @@ show_ps(ulong flag, struct psinfo *psi)
 	int print;
 	char buf[BUFSIZE];
 
-	if (!(flag & (PS_EXCLUSIVE|PS_NO_HEADER))) 
+	if (!(flag & ((PS_EXCLUSIVE & ~PS_ACTIVE)|PS_NO_HEADER))) 
 		fprintf(fp, 
 		    "   PID    PPID  CPU %s  ST  %%MEM     VSZ    RSS  COMM\n",
 			flag & PS_KSTACKP ?
