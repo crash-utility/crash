@@ -1030,6 +1030,7 @@ struct machdep_table {
         int (*verify_line_number)(ulong, ulong, ulong);
         void (*get_irq_affinity)(int);
         void (*show_interrupts)(int, ulong *);
+	int (*is_page_ptr)(ulong, physaddr_t *);
 };
 
 /*
@@ -2369,6 +2370,7 @@ struct vm_table {                /* kernel VM-related data */
 		ulong mask;
 		char *name;
 	} *pageflags_data;
+	ulong max_mem_section_nr;
 };
 
 #define NODES                       (0x1)
@@ -5100,6 +5102,7 @@ ulong vm_area_dump(ulong, ulong, ulong, struct reference *);
 char *fill_vma_cache(ulong);
 void clear_vma_cache(void);
 void dump_vma_cache(ulong);
+int generic_is_page_ptr(ulong, physaddr_t *);
 int is_page_ptr(ulong, physaddr_t *);
 void dump_vm_table(int);
 int read_string(ulong, char *, int);
