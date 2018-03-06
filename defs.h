@@ -5133,6 +5133,7 @@ int vaddr_type(ulong, struct task_context *);
 char *format_stack_entry(struct bt_info *bt, char *, ulong, ulong);
 int in_user_stack(ulong, ulong);
 int dump_inode_page(ulong);
+ulong valid_section_nr(ulong);
 
 
 /*

@@ -77,6 +77,7 @@ static void x86_64_calc_phys_base(void);
 static int x86_64_is_module_addr(ulong);
 static int x86_64_is_kvaddr(ulong);
 static int x86_64_is_uvaddr(ulong, struct task_context *);
+static int x86_64_is_page_ptr(ulong, physaddr_t *);
 static ulong *x86_64_kpgd_offset(ulong, int, int);
 static ulong x86_64_upgd_offset(struct task_context *, ulong, int, int);
 static ulong x86_64_upgd_offset_legacy(struct task_context *, ulong, int, int);
@@ -156,6 +157,7 @@ x86_64_init(int when)
 	{
 	case SETUP_ENV:
 		machdep->process_elf_notes = x86_process_elf_notes;
+		machdep->is_page_ptr = x86_64_is_page_ptr;
 		break;
 	case PRE_SYMTAB:
 		machdep->verify_symbol = x86_64_verify_symbol;
@@ -802,6 +804,7 @@ x86_64_dump_machdep_table(ulong arg)
 	fprintf(fp, "       get_smp_cpus: x86_64_get_smp_cpus()\n");
         fprintf(fp, "          is_kvaddr: x86_64_is_kvaddr()\n");
         fprintf(fp, "          is_uvaddr: x86_64_is_uvaddr()\n");
+        fprintf(fp, "        is_page_ptr: x86_64_is_page_ptr()\n");
         fprintf(fp, "       verify_paddr: x86_64_verify_paddr()\n");
         fprintf(fp, "  get_kvaddr_ranges: x86_64_get_kvaddr_ranges()\n");
         fprintf(fp, "    init_kernel_pgd: x86_64_init_kernel_pgd()\n");
@@ -1592,6 +1595,26 @@ static int
 x86_64_is_uvaddr(ulong addr, struct task_context *tc)
 {
         return (addr < USERSPACE_TOP);
+}
+
+static int
+x86_64_is_page_ptr(ulong addr, physaddr_t *phys)
+{
+	ulong pfn, nr;
+
+	if (IS_SPARSEMEM() && (machdep->flags & VMEMMAP) &&
+	    (addr >= VMEMMAP_VADDR && addr <= VMEMMAP_END) &&
+	    !((addr - VMEMMAP_VADDR) % SIZE(page))) {
+
+		pfn = (addr - VMEMMAP_VADDR) / SIZE(page);
+		nr = pfn_to_section_nr(pfn);
+		if (valid_section_nr(nr)) {
+			if (phys)
+				*phys = PTOB(pfn);
+			return TRUE;
+		}
+	}
+	return FALSE;
 }
 
 /*
