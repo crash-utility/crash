@@ -815,7 +815,7 @@ NULL,
 char *help_foreach[] = {
 "foreach",
 "display command data for multiple tasks in the system",
-"[[pid | taskp | name | state | [kernel | user]] ...]\n"
+"[[pid | taskp | name | state | [kernel | user | gleader]] ...]\n"
 "          command [flag] [argument]",
 "  This command allows for an examination of various kernel data associated",
 "  with any, or all, tasks in the system, without having to set the context",
