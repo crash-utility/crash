@@ -2969,6 +2969,8 @@ back_trace(struct bt_info *bt)
 		get_xendump_regs(bt, &eip, &esp);
 	else if (SADUMP_DUMPFILE())
 		get_sadump_regs(bt, &eip, &esp);
+	else if (VMSS_DUMPFILE())
+		get_vmware_vmss_regs(bt, &eip, &esp);
         else if (REMOTE_PAUSED()) {
 		if (!is_task_active(bt->task) || !get_remote_regs(bt, &eip, &esp))
 			machdep->get_stack_frame(bt, &eip, &esp);

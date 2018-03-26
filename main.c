@@ -1361,6 +1361,9 @@ dump_program_context(void)
         if (pc->flags & DISKDUMP)
                 sprintf(&buf[strlen(buf)],
                         "%sDISKDUMP", others++ ? "|" : "");
+        if (pc->flags & VMWARE_VMSS)
+                sprintf(&buf[strlen(buf)],
+                        "%sVMWARE_VMSS", others++ ? "|" : "");
         if (pc->flags & SYSMAP)
                 sprintf(&buf[strlen(buf)],
                         "%sSYSMAP", others++ ? "|" : "");

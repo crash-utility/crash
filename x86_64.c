@@ -3273,6 +3273,8 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 			diskdump_display_regs(bt->tc->processor, ofp);
 		else if (SADUMP_DUMPFILE())
 			sadump_display_regs(bt->tc->processor, ofp);
+		else if (VMSS_DUMPFILE())
+			vmware_vmss_display_regs(bt->tc->processor, ofp);
 		return;
 	}
 
@@ -3295,13 +3297,16 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 			diskdump_display_regs(bt->tc->processor, ofp);
 		else if (SADUMP_DUMPFILE())
 			sadump_display_regs(bt->tc->processor, ofp);
+		else if (VMSS_DUMPFILE())
+			vmware_vmss_display_regs(bt->tc->processor, ofp);
 		else if (pc->flags2 & QEMU_MEM_DUMP_ELF)
 			display_regs_from_elf_notes(bt->tc->processor, ofp);
 		return;
 	} else if ((bt->flags & BT_KERNEL_SPACE) &&
 		   (KVMDUMP_DUMPFILE() ||
 		    (ELF_NOTES_VALID() && DISKDUMP_DUMPFILE()) ||
-		    SADUMP_DUMPFILE() || (pc->flags2 & QEMU_MEM_DUMP_ELF))) {
+		    SADUMP_DUMPFILE() || (pc->flags2 & QEMU_MEM_DUMP_ELF) ||
+		    VMSS_DUMPFILE())) {
 		fprintf(ofp, "    [exception RIP: ");
 		if ((sp = value_search(bt->instptr, &offset))) {
 			fprintf(ofp, "%s", sp->name);
@@ -3317,6 +3322,8 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 			diskdump_display_regs(bt->tc->processor, ofp);
 		else if (SADUMP_DUMPFILE())
 			sadump_display_regs(bt->tc->processor, ofp);
+		else if (VMSS_DUMPFILE())
+			vmware_vmss_display_regs(bt->tc->processor, ofp);
 		else if (pc->flags2 & QEMU_MEM_DUMP_ELF)
 			display_regs_from_elf_notes(bt->tc->processor, ofp);
 
@@ -4941,7 +4948,8 @@ skip_stage:
 	if (halt_rip && halt_rsp) {
         	*rip = halt_rip;
 		*rsp = halt_rsp;
-		if (KVMDUMP_DUMPFILE() || SADUMP_DUMPFILE())
+		if (KVMDUMP_DUMPFILE() || SADUMP_DUMPFILE() ||
+		    (VMSS_DUMPFILE() && vmware_vmss_valid_regs(bt)))
 			bt_in->flags &= ~(ulonglong)BT_DUMPFILE_SEARCH;
 		return;
 	}
@@ -4986,7 +4994,8 @@ skip_stage:
 
         machdep->get_stack_frame(bt, rip, rsp);
 
-	if (KVMDUMP_DUMPFILE() || SADUMP_DUMPFILE())
+	if (KVMDUMP_DUMPFILE() || SADUMP_DUMPFILE() ||
+	    (VMSS_DUMPFILE() && vmware_vmss_valid_regs(bt)))
 		bt_in->flags &= ~(ulonglong)BT_DUMPFILE_SEARCH;
 }
 

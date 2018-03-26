@@ -710,6 +710,9 @@ dump_registers(void)
 	} else if (NETDUMP_DUMPFILE() || KDUMP_DUMPFILE()) {
 		dump_registers_for_elf_dumpfiles();
 		return;
+	} else if (VMSS_DUMPFILE()) {
+		dump_registers_for_vmss_dump();
+		return;
 	}
 
 	error(FATAL, "-r option not supported on %s\n",

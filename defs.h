@@ -283,6 +283,7 @@ struct number_option {
 #define LKCD_KERNTYPES()    (pc->flags & KERNTYPES)
 #define KVMDUMP_DUMPFILE()  (pc->flags & KVMDUMP)
 #define SADUMP_DUMPFILE()  (pc->flags & SADUMP)
+#define VMSS_DUMPFILE()     (pc->flags & VMWARE_VMSS)
 
 #define NETDUMP_LOCAL    (0x1)  /* netdump_data flags */
 #define NETDUMP_REMOTE   (0x2)  
@@ -6388,6 +6389,11 @@ int vmware_vmss_init(char *filename, FILE *ofp);
 uint vmware_vmss_page_size(void);
 int read_vmware_vmss(int, void *, int, ulong, physaddr_t);
 int write_vmware_vmss(int, void *, int, ulong, physaddr_t);
+void vmware_vmss_display_regs(int, FILE *);
+void get_vmware_vmss_regs(struct bt_info *, ulong *, ulong *);
+int vmware_vmss_memory_dump(FILE *);
+void dump_registers_for_vmss_dump(void);
+int vmware_vmss_valid_regs(struct bt_info *);
 
 /*
  *  gnu_binutils.c
