@@ -284,6 +284,9 @@ struct number_option {
 #define KVMDUMP_DUMPFILE()  (pc->flags & KVMDUMP)
 #define SADUMP_DUMPFILE()  (pc->flags & SADUMP)
 #define VMSS_DUMPFILE()     (pc->flags & VMWARE_VMSS)
+#define QEMU_MEM_DUMP_NO_VMCOREINFO() \
+	    ((pc->flags2 & (QEMU_MEM_DUMP_ELF|QEMU_MEM_DUMP_COMPRESSED)) && !(pc->flags2 & VMCOREINFO))
+
 
 #define NETDUMP_LOCAL    (0x1)  /* netdump_data flags */
 #define NETDUMP_REMOTE   (0x2)  
@@ -2773,6 +2776,29 @@ struct load_module {
 #define DIV_ROUND_UP(n,d)	(((n) + (d) - 1) / (d))
 #define NR_SECTION_ROOTS()	(DIV_ROUND_UP(NR_MEM_SECTIONS(), SECTIONS_PER_ROOT()))
 #define SECTION_ROOT_MASK()	(SECTIONS_PER_ROOT() - 1)
+
+struct QEMUCPUSegment {
+	uint32_t selector;
+	uint32_t limit;
+	uint32_t flags;
+	uint32_t pad;
+	uint64_t base;
+};
+
+typedef struct QEMUCPUSegment QEMUCPUSegment;
+
+struct QEMUCPUState {
+	uint32_t version;
+	uint32_t size;
+	uint64_t rax, rbx, rcx, rdx, rsi, rdi, rsp, rbp;
+	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
+	uint64_t rip, rflags;
+	QEMUCPUSegment cs, ds, es, fs, gs, ss;
+	QEMUCPUSegment ldt, tr, gdt, idt;
+	uint64_t cr[5];
+};
+
+typedef struct QEMUCPUState QEMUCPUState;
 
 /*
  *  Machine specific stuff
@@ -6204,6 +6230,8 @@ int get_netdump_arch(void);
 int exist_regs_in_elf_notes(struct task_context *);
 void *get_regs_from_elf_notes(struct task_context *);
 void map_cpus_to_prstatus(void);
+int kdump_phys_base(ulong *);
+int kdump_set_phys_base(ulong);
 int arm_kdump_phys_base(ulong *);
 int is_proc_kcore(char *, ulong);
 int proc_kcore_init(FILE *);
@@ -6215,6 +6243,8 @@ void kdump_backup_region_init(void);
 void display_regs_from_elf_notes(int, FILE *);
 void display_ELF_note(int, int, void *, FILE *);
 void *netdump_get_prstatus_percpu(int);
+int kdump_kaslr_check(void);
+QEMUCPUState *kdump_get_qemucpustate(int);
 #define PRSTATUS_NOTE (1)
 #define QEMU_NOTE     (2)
 
@@ -6246,6 +6276,7 @@ int diskdump_memory_dump(FILE *);
 FILE *set_diskdump_fp(FILE *);
 void get_diskdump_regs(struct bt_info *, ulong *, ulong *);
 int diskdump_phys_base(unsigned long *);
+int diskdump_set_phys_base(unsigned long);
 ulong *diskdump_flags;
 int is_partial_diskdump(void);
 int dumpfile_is_split(void);
@@ -6257,6 +6288,8 @@ void diskdump_display_regs(int, FILE *);
 void process_elf32_notes(void *, ulong);
 void process_elf64_notes(void *, ulong);
 void dump_registers_for_compressed_kdump(void);
+int diskdump_kaslr_check(void);
+QEMUCPUState *diskdump_get_qemucpustate(int);
 
 /*
  * makedumpfile.c
@@ -6335,6 +6368,7 @@ FILE *set_sadump_fp(FILE *);
 void get_sadump_regs(struct bt_info *bt, ulong *ipp, ulong *spp);
 void sadump_display_regs(int, FILE *);
 int sadump_phys_base(ulong *);
+int sadump_set_phys_base(ulong);
 void sadump_show_diskset(void);
 int sadump_is_zero_excluded(void);
 void sadump_set_zero_excluded(void);
@@ -6342,6 +6376,7 @@ void sadump_unset_zero_excluded(void);
 struct sadump_data;
 struct sadump_data *get_sadump_data(void);
 int sadump_calc_kaslr_offset(ulong *);
+int sadump_get_cr3_idtr(ulong *, ulong *);
 
 /*
  * qemu.c
@@ -6394,6 +6429,14 @@ void get_vmware_vmss_regs(struct bt_info *, ulong *, ulong *);
 int vmware_vmss_memory_dump(FILE *);
 void dump_registers_for_vmss_dump(void);
 int vmware_vmss_valid_regs(struct bt_info *);
+int vmware_vmss_get_cr3_idtr(ulong *, ulong *);
+int vmware_vmss_phys_base(ulong *phys_base);
+int vmware_vmss_set_phys_base(ulong);
+
+/*
+ * kaslr_helper.c
+ */
+int calc_kaslr_offset(ulong *, ulong *);
 
 /*
  *  gnu_binutils.c

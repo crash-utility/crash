@@ -71,7 +71,7 @@ CFILES=main.c tools.c global_data.c memory.c filesys.c help.c task.c \
 	xen_hyper.c xen_hyper_command.c xen_hyper_global_data.c \
 	xen_hyper_dump_tables.c kvmdump.c qemu.c qemu-load.c sadump.c ipcs.c \
 	ramdump.c vmware_vmss.c \
-	xen_dom0.c
+	xen_dom0.c kaslr_helper.c
 
 SOURCE_FILES=${CFILES} ${GENERIC_HFILES} ${MCORE_HFILES} \
 	${REDHAT_CFILES} ${REDHAT_HFILES} ${UNWIND_HFILES} \
@@ -90,7 +90,7 @@ OBJECT_FILES=main.o tools.o global_data.o memory.o filesys.o help.o task.o \
 	xen_hyper.o xen_hyper_command.o xen_hyper_global_data.o \
 	xen_hyper_dump_tables.o kvmdump.o qemu.o qemu-load.o sadump.o ipcs.o \
 	ramdump.o vmware_vmss.o \
-	xen_dom0.o
+	xen_dom0.o kaslr_helper.o
 
 MEMORY_DRIVER_FILES=memory_driver/Makefile memory_driver/crash.c memory_driver/README
 
@@ -516,6 +516,9 @@ ramdump.o: ${GENERIC_HFILES} ${REDHAT_HFILES} ramdump.c
 
 vmware_vmss.o: ${GENERIC_HFILES} ${VMWARE_HFILES} vmware_vmss.c
 	${CC} -c ${CRASH_CFLAGS} vmware_vmss.c ${WARNING_OPTIONS} ${WARNING_ERROR}
+
+kaslr_helper.o: ${GENERIC_HFILES} kaslr_helper.c
+	${CC} -c ${CRASH_CFLAGS} kaslr_helper.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 ${PROGRAM}: force
 	@make --no-print-directory all

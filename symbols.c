@@ -610,7 +610,13 @@ kaslr_init(void)
 		st->_stext_vmlinux = UNINITIALIZED;
 	}
 
-	if (KDUMP_DUMPFILE() || DISKDUMP_DUMPFILE()) {
+	if (QEMU_MEM_DUMP_NO_VMCOREINFO()) {
+		if (KDUMP_DUMPFILE() && kdump_kaslr_check()) {
+			kt->flags2 |= KASLR_CHECK;
+		} else if (DISKDUMP_DUMPFILE() && diskdump_kaslr_check()) {
+			kt->flags2 |= KASLR_CHECK;
+		}
+	} else if (KDUMP_DUMPFILE() || DISKDUMP_DUMPFILE()) {
 		if ((string = pc->read_vmcoreinfo("SYMBOL(_stext)"))) {
 			kt->vmcoreinfo._stext_SYMBOL =
 				htol(string, RETURN_ON_ERROR, NULL);
@@ -625,7 +631,7 @@ kaslr_init(void)
 		}
 	}
 
-	if (SADUMP_DUMPFILE())
+	if (SADUMP_DUMPFILE() || VMSS_DUMPFILE())
 		kt->flags2 |= KASLR_CHECK;
 }
 
@@ -640,14 +646,26 @@ derive_kaslr_offset(bfd *abfd, int dynamic, bfd_byte *start, bfd_byte *end,
 	unsigned long relocate;
 	ulong _stext_relocated;
 
-	if (SADUMP_DUMPFILE()) {
+	if (SADUMP_DUMPFILE() || QEMU_MEM_DUMP_NO_VMCOREINFO() || VMSS_DUMPFILE()) {
 		ulong kaslr_offset = 0;
+		ulong phys_base = 0;
 
-		sadump_calc_kaslr_offset(&kaslr_offset);
+		calc_kaslr_offset(&kaslr_offset, &phys_base);
 
 		if (kaslr_offset) {
 			kt->relocate = kaslr_offset * -1;
 			kt->flags |= RELOC_SET;
+		}
+
+		if (phys_base) {
+			if (SADUMP_DUMPFILE())
+				sadump_set_phys_base(phys_base);
+			else if (KDUMP_DUMPFILE())
+				kdump_set_phys_base(phys_base);
+			else if (DISKDUMP_DUMPFILE())
+				diskdump_set_phys_base(phys_base);
+			else if (VMSS_DUMPFILE())
+				vmware_vmss_set_phys_base(phys_base);
 		}
 
 		return;
@@ -3067,7 +3085,7 @@ dump_symbol_table(void)
 	else
 		fprintf(fp, "\n");
 
-	if (SADUMP_DUMPFILE()) {
+	if (SADUMP_DUMPFILE() || QEMU_MEM_DUMP_NO_VMCOREINFO() || VMSS_DUMPFILE()) {
 		fprintf(fp, "divide_error_vmlinux: %lx\n", st->divide_error_vmlinux);
 		fprintf(fp, "   idt_table_vmlinux: %lx\n", st->idt_table_vmlinux);
 		fprintf(fp, "saved_command_line_vmlinux: %lx\n", st->saved_command_line_vmlinux);
@@ -12294,7 +12312,7 @@ numeric_forward(const void *P_x, const void *P_y)
 		}
 	}
 
-	if (SADUMP_DUMPFILE()) {
+	if (SADUMP_DUMPFILE() || QEMU_MEM_DUMP_NO_VMCOREINFO() || VMSS_DUMPFILE()) {
 		/* Need for kaslr_offset and phys_base */
 		if (STREQ(x->name, "divide_error"))
 			st->divide_error_vmlinux = valueof(x);

@@ -56,6 +56,7 @@ struct diskdump_data {
 	void	**nt_prstatus_percpu;
 	uint	num_prstatus_notes;
 	void	**nt_qemu_percpu;
+	void	**nt_qemucs_percpu;
 	uint	num_qemu_notes;
 
 	/* page cache */
@@ -153,8 +154,14 @@ resize_note_pointers:
 		    	    dd->num_qemu_notes * sizeof(void *))) == NULL)
 				error(FATAL, 
 				    "compressed kdump: cannot realloc QEMU note pointers\n");
-		} else
+			if  ((dd->nt_qemucs_percpu = realloc(dd->nt_qemucs_percpu,
+			    dd->num_qemu_notes * sizeof(void *))) == NULL)
+				error(FATAL,
+				    "compressed kdump: cannot realloc QEMU note pointers\n");
+		} else {
 			free(dd->nt_qemu_percpu);
+			free(dd->nt_qemucs_percpu);
+		}
 	}
 }
 
@@ -283,6 +290,10 @@ process_elf32_notes(void *note_buf, unsigned long size_note)
 		}
 		len = sizeof(Elf32_Nhdr);
 		if (STRNEQ((char *)nt + len, "QEMU")) {
+			ulong *ptr =
+			    (ulong *)((char *)nt + sizeof(Elf32_Nhdr) + nt->n_namesz);
+			dd->nt_qemucs_percpu[qemu_num] =
+			    (ulong *)roundup((ulong) ptr, 4);
 			dd->nt_qemu_percpu[qemu_num] = nt;
 			qemu_num++;
 		}
@@ -332,6 +343,10 @@ process_elf64_notes(void *note_buf, unsigned long size_note)
 		}
 		len = sizeof(Elf64_Nhdr);
 		if (STRNEQ((char *)nt + len, "QEMU")) {
+			ulong *ptr =
+			    (ulong *)((char *)nt + sizeof(Elf64_Nhdr) + nt->n_namesz);
+			dd->nt_qemucs_percpu[qemu_num] =
+			    (ulong *)roundup((ulong) ptr, 4);
 			dd->nt_qemu_percpu[qemu_num] = nt;
 			qemu_num++;
 		}
@@ -759,6 +774,10 @@ restart:
 			error(FATAL, "qemu mem dump compressed: cannot malloc pointer"
 				" to QEMU notes\n");
 
+		if ((dd->nt_qemucs_percpu = malloc(NR_CPUS * sizeof(void *))) == NULL)
+			error(FATAL, "qemu mem dump compressed: cannot malloc pointer"
+				" to QEMUCS notes\n");
+
 		if (FLAT_FORMAT()) {
 			if (!read_flattened_format(dd->dfd, offset, dd->notes_buf, size)) {
 				error(INFO, "compressed kdump: cannot read notes data"
@@ -854,6 +873,8 @@ err:
 		free(dd->nt_prstatus_percpu);
 	if (dd->nt_qemu_percpu)
 		free(dd->nt_qemu_percpu);
+	if (dd->nt_qemucs_percpu)
+		free(dd->nt_qemucs_percpu);
 
 	dd->flags &= ~(DISKDUMP_LOCAL|KDUMP_CMPRS_LOCAL);
 	pc->flags2 &= ~ELF_NOTES;
@@ -961,6 +982,17 @@ diskdump_phys_base(unsigned long *phys_base)
 {
 	if (KDUMP_CMPRS_VALID()) {
 		*phys_base = dd->sub_header_kdump->phys_base;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+int
+diskdump_set_phys_base(unsigned long phys_base)
+{
+	if (diskdump_kaslr_check()) {
+		dd->sub_header_kdump->phys_base = phys_base;
 		return TRUE;
 	}
 
@@ -2435,4 +2467,36 @@ dump_registers_for_compressed_kdump(void)
 	}
 }
 
+int
+diskdump_kaslr_check()
+{
+	if (!QEMU_MEM_DUMP_NO_VMCOREINFO())
+		return FALSE;
 
+	if (dd->num_qemu_notes)
+		return TRUE;
+
+	return FALSE;
+}
+
+#ifdef X86_64
+QEMUCPUState *
+diskdump_get_qemucpustate(int cpu)
+{
+        if (cpu >= dd->num_qemu_notes) {
+                if (CRASHDEBUG(1))
+                        error(INFO,
+                            "Invalid index for QEMU Note: %d (>= %d)\n",
+                            cpu, dd->num_qemu_notes);
+                return NULL;
+        }
+
+        if (dd->machine_type != EM_X86_64) {
+                if (CRASHDEBUG(1))
+                        error(INFO, "Only x86_64 64bit is supported.\n");
+                return NULL;
+        }
+
+        return (QEMUCPUState *)dd->nt_qemucs_percpu[cpu];
+}
+#endif

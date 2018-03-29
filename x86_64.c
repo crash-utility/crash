@@ -202,7 +202,8 @@ x86_64_init(int when)
 			machdep->machspec->kernel_image_size = dtol(string, QUIET, NULL);
 			free(string);
 		}
-		if (SADUMP_DUMPFILE())
+		if (SADUMP_DUMPFILE() || QEMU_MEM_DUMP_NO_VMCOREINFO() ||
+		    VMSS_DUMPFILE())
 			/* Need for calculation of kaslr_offset and phys_base */
 			machdep->kvtop = x86_64_kvtop;
 		break;
@@ -2220,7 +2221,8 @@ x86_64_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbo
 	ulong pte;
 	physaddr_t physpage;
 
-	if (SADUMP_DUMPFILE() && !(machdep->flags & KSYMS_START)) {
+	if ((SADUMP_DUMPFILE() || QEMU_MEM_DUMP_NO_VMCOREINFO() || VMSS_DUMPFILE())
+	    && !(machdep->flags & KSYMS_START)) {
 		/*
 		 * In the case of sadump, to calculate kaslr_offset and
 		 * phys_base, kvtop is called during symtab_init(). In this
@@ -6639,6 +6641,34 @@ x86_64_calc_phys_base(void)
 	/*
 	 *  Get relocation value from whatever dumpfile format is being used.
 	 */
+
+	if (QEMU_MEM_DUMP_NO_VMCOREINFO()) {
+		if ((KDUMP_DUMPFILE() && kdump_phys_base(&phys_base)) ||
+		    (DISKDUMP_DUMPFILE() && diskdump_phys_base(&phys_base)))
+			machdep->machspec->phys_base = phys_base;
+
+		if (!x86_64_virt_phys_base())
+			error(WARNING,
+				"cannot determine physical base address:"
+				" defaulting to %lx\n\n",
+				machdep->machspec->phys_base);
+		return;
+	}
+
+	if (VMSS_DUMPFILE()) {
+		if (vmware_vmss_phys_base(&phys_base)) {
+			machdep->machspec->phys_base = phys_base;
+			if (!x86_64_virt_phys_base())
+				error(WARNING,
+				    "cannot determine physical base address:"
+				    " defaulting to %lx\n\n",
+					machdep->machspec->phys_base);
+			if (CRASHDEBUG(1))
+				fprintf(fp, "compressed kdump: phys_base: %lx\n",
+				    phys_base);
+		}
+		return;
+	}
 
 	if (DISKDUMP_DUMPFILE()) {
 		if (diskdump_phys_base(&phys_base)) {

@@ -2,6 +2,7 @@
  * vmware_vmss.c
  *
  * Copyright (c) 2015 VMware, Inc.
+ * Copyright (c) 2018 Red Hat Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,7 +14,8 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * Author: Dyno Hongjun Fu <hfu@vmware.com>
+ * Authors: Dyno Hongjun Fu <hfu@vmware.com>
+ *          Sergio Lopez <slp@redhat.com>
  */
 
 #include "defs.h"
@@ -862,4 +864,32 @@ vmware_vmss_valid_regs(struct bt_info *bt)
 		return TRUE;
 
 	return FALSE;
+}
+
+int
+vmware_vmss_get_cr3_idtr(ulong *cr3, ulong *idtr)
+{
+	if (vmss.num_vcpus == 0 || vmss.vcpu_regs[0] != REGS_PRESENT_ALL)
+		return FALSE;
+
+	*cr3 = vmss.regs64[0]->cr[3];
+	*idtr = vmss.regs64[0]->idtr;
+
+	return TRUE;
+}
+
+int
+vmware_vmss_phys_base(ulong *phys_base)
+{
+	*phys_base = vmss.phys_base;
+
+	return TRUE;
+}
+
+int
+vmware_vmss_set_phys_base(ulong phys_base)
+{
+	vmss.phys_base = phys_base;
+
+	return TRUE;
 }

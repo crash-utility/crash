@@ -157,6 +157,7 @@ struct vmssdata {
         memregion	regions[MAX_REGIONS];
 	uint64_t	memoffset;
 	uint64_t	memsize;
+	ulong		phys_base;
 	int		separate_vmem;
 	uint32_t	*vcpu_regs;
 	uint64_t	num_vcpus;
