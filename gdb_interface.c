@@ -1,8 +1,8 @@
 /* gdb_interface.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015,2017 David Anderson
- * Copyright (C) 2002-2015,2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015,2018 David Anderson
+ * Copyright (C) 2002-2015,2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -861,6 +861,12 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 	switch (len)
 	{
 	case SIZEOF_8BIT:
+		if (STREQ(pc->curcmd, "bt")) {
+			if (readmem(addr, memtype, buf, SIZEOF_8BIT,
+		    	    "gdb_readmem_callback", readflags)) 
+				return TRUE;
+		}
+
 		p1 = (char *)buf;
 		if ((memtype == KVADDR) && 
 		    text_value_cache_byte(addr, (unsigned char *)p1)) 
@@ -878,6 +884,12 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 		return TRUE;
 
 	case SIZEOF_32BIT:
+		if (STREQ(pc->curcmd, "bt")) {
+			if (readmem(addr, memtype, buf, SIZEOF_32BIT,
+		    	    "gdb_readmem_callback", readflags)) 
+				return TRUE;
+		}
+
 		if ((memtype == KVADDR) && text_value_cache(addr, 0, buf)) 
 			return TRUE;
 
