@@ -438,8 +438,17 @@ task_init(void)
 			len = SIZE(task_union));
 		machdep->stacksize = len;
 	} else if (VALID_SIZE(thread_union) && 
-	    	((len = SIZE(thread_union)) != STACKSIZE())) 
+	    	((len = SIZE(thread_union)) != STACKSIZE())) {
 		machdep->stacksize = len;
+	} else {
+		if (kernel_symbol_exists("__start_init_task") &&
+		    kernel_symbol_exists("__end_init_task")) {
+			len = symbol_value("__end_init_task");
+			len -= symbol_value("__start_init_task");
+			ASSIGN_SIZE(thread_union) = len;
+			machdep->stacksize = len;
+		}
+	}
 
 	MEMBER_OFFSET_INIT(pid_namespace_idr, "pid_namespace", "idr");
 	MEMBER_OFFSET_INIT(idr_idr_rt, "idr", "idr_rt");
