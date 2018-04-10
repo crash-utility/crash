@@ -32,7 +32,7 @@ static void refresh_hlist_task_table_v3(void);
 static void refresh_active_task_table(void);
 static int radix_tree_task_callback(ulong);
 static void refresh_radix_tree_task_table(void);
-static struct task_context *store_context(struct task_context *, ulong, char *);
+static struct task_context *add_context(ulong, char *);
 static void refresh_context(ulong, ulong);
 static ulong parent_of(ulong);
 static void parent_list(ulong);
@@ -792,6 +792,10 @@ allocate_task_space(int cnt)
                     malloc(cnt * sizeof(struct task_context))))
                         error(FATAL, "cannot malloc context array (%d tasks)",
                                 cnt);
+		if (!(tt->context_by_task = (struct task_context **)
+                    malloc(cnt * sizeof(struct task_context*))))
+                        error(FATAL, "cannot malloc context_by_task array (%d tasks)",
+                                cnt);
 		if (!(tt->tgid_array = (struct tgid_context *)
                     malloc(cnt * sizeof(struct tgid_context))))
                         error(FATAL, "cannot malloc tgid array (%d tasks)",
@@ -810,6 +814,13 @@ allocate_task_space(int cnt)
                         error(FATAL,
                             "%scannot realloc context array (%d tasks)",
 	                	(pc->flags & RUNTIME) ? "" : "\n", cnt);
+
+		 if (!(tt->context_by_task = (struct task_context **)
+                    realloc(tt->context_by_task,
+		    cnt * sizeof(struct task_context*))))
+                        error(FATAL,
+                            "%scannot realloc context_by_task array (%d tasks)",
+                            	(pc->flags & RUNTIME) ? "" : "\n", cnt);
 
 		 if (!(tt->tgid_array = (struct tgid_context *)
                     realloc(tt->tgid_array, 
@@ -831,7 +842,6 @@ refresh_fixed_task_table(void)
 {
 	int i;
 	ulong *tlp;
-	struct task_context *tc;
 	ulong curtask;
 	ulong retries;
 	ulong curpid;
@@ -877,8 +887,7 @@ retry:
 
 	clear_task_cache();
 
-        for (i = 0, tlp = (ulong *)tt->task_local, 
-	     tt->running_tasks = 0, tc = tt->context_array;
+        for (i = 0, tlp = (ulong *)tt->task_local, tt->running_tasks = 0;
              i < tt->max_tasks; i++, tlp++) {
                 if (TASK_IN_USE(*tlp)) {
                 	if (!(tp = fill_task_struct(*tlp))) {
@@ -888,10 +897,7 @@ retry:
                         	goto retry;
                 	}
 
-                	if (store_context(tc, *tlp, tp)) {
-                        	tc++;
-                        	tt->running_tasks++;
-                	}
+			add_context(*tlp, tp);
 		}
         }
 
@@ -975,7 +981,6 @@ refresh_unlimited_task_table(void)
 {
 	int i;
 	ulong *tlp;
-	struct task_context *tc;
 	ulong curtask;
 	ulong curpid;
 	struct list_data list_data, *ld;
@@ -1089,8 +1094,7 @@ retry:
 
 	clear_task_cache();
 
-        for (i = 0, tlp = (ulong *)tt->task_local, 
-             tt->running_tasks = 0, tc = tt->context_array;
+        for (i = 0, tlp = (ulong *)tt->task_local, tt->running_tasks = 0;
              i < tt->max_tasks; i++, tlp++) {
 		if (!(*tlp))
 			continue;
@@ -1102,14 +1106,6 @@ retry:
 			goto retry;
 		}	
 	
-		if (task_exists(*tlp)) {
-			error(INFO, 
-		            "\nduplicate task address in task list: %lx\n",
-				*tlp);
-			retries++;
-			goto retry;
-		}
-
                 if (!(tp = fill_task_struct(*tlp))) {
                      	if (DUMPFILE())
                         	continue;
@@ -1117,10 +1113,7 @@ retry:
                         goto retry;
                 }
 
-		if (store_context(tc, *tlp, tp)) {
-                	tc++;
-                	tt->running_tasks++;
-		}
+		add_context(*tlp, tp);
 	}
 
 	if (DUMPFILE()) {
@@ -1152,7 +1145,6 @@ refresh_pidhash_task_table(void)
 	char *pidhash, *tp; 
 	ulong *pp, next, pnext;
 	int len, cnt;
-        struct task_context *tc;
         ulong curtask;
         ulong curpid;
         ulong retries;
@@ -1293,8 +1285,7 @@ retry_pidhash:
 
 	clear_task_cache();
 
-        for (i = 0, tlp = (ulong *)tt->task_local, 
-             tt->running_tasks = 0, tc = tt->context_array;
+        for (i = 0, tlp = (ulong *)tt->task_local, tt->running_tasks = 0;
              i < tt->max_tasks; i++, tlp++) {
 		if (!(*tlp))
 			continue;
@@ -1309,16 +1300,6 @@ retry_pidhash:
 			goto retry_pidhash;
 		}	
 	
-		if (task_exists(*tlp)) {
-			error(WARNING, 
-		           "%sduplicate task address found in task list: %lx\n",
-				DUMPFILE() ? "\n" : "", *tlp);
-			if (DUMPFILE())
-				continue;
-			retries++;
-			goto retry_pidhash;
-		}
-
 		if (!(tp = fill_task_struct(*tlp))) {
                         if (DUMPFILE())
                                 continue;
@@ -1326,10 +1307,7 @@ retry_pidhash:
                         goto retry_pidhash;
                 }
 
-		if (store_context(tc, *tlp, tp)) {
-			tc++;
-			tt->running_tasks++;
-		}
+		add_context(*tlp, tp);
 	}
 
         FREEBUF(pidhash);
@@ -1370,7 +1348,6 @@ refresh_pid_hash_task_table(void)
 	char *tp; 
 	ulong next, pnext;
 	int len, cnt;
-        struct task_context *tc;
         ulong curtask;
         ulong curpid;
         ulong retries;
@@ -1505,8 +1482,7 @@ retry_pid_hash:
 
 	clear_task_cache();
 
-        for (i = 0, tlp = (ulong *)tt->task_local, 
-             tt->running_tasks = 0, tc = tt->context_array;
+        for (i = 0, tlp = (ulong *)tt->task_local, tt->running_tasks = 0;
              i < tt->max_tasks; i++, tlp++) {
 		if (!(*tlp))
 			continue;
@@ -1521,16 +1497,6 @@ retry_pid_hash:
 			goto retry_pid_hash;
 		}	
 	
-		if (task_exists(*tlp)) {
-			error(WARNING, 
-		           "%sduplicate task address found in task list: %lx\n",
-				DUMPFILE() ? "\n" : "", *tlp);
-			if (DUMPFILE())
-				continue;
-			retries++;
-			goto retry_pid_hash;
-		}
-
 		if (!(tp = fill_task_struct(*tlp))) {
                         if (DUMPFILE())
                                 continue;
@@ -1538,10 +1504,7 @@ retry_pid_hash:
                         goto retry_pid_hash;
                 }
 
-		if (store_context(tc, *tlp, tp)) {
-			tc++;
-			tt->running_tasks++;
-		}
+		add_context(*tlp, tp);
 	}
 
         FREEBUF(pid_hash);
@@ -1574,7 +1537,6 @@ refresh_hlist_task_table(void)
 	char *nodebuf;
 	int plen, len, cnt;
 	long value;
-        struct task_context *tc;
         ulong curtask;
         ulong curpid;
         ulong retries;
@@ -1777,8 +1739,7 @@ retry_pid_hash:
 
 	clear_task_cache();
 
-        for (i = 0, tlp = (ulong *)tt->task_local, 
-             tt->running_tasks = 0, tc = tt->context_array;
+        for (i = 0, tlp = (ulong *)tt->task_local, tt->running_tasks = 0;
              i < tt->max_tasks; i++, tlp++) {
 		if (!(*tlp))
 			continue;
@@ -1793,16 +1754,6 @@ retry_pid_hash:
 			goto retry_pid_hash;
 		}	
 	
-		if (task_exists(*tlp)) {
-			error(WARNING, 
-		           "%sduplicate task address found in task list: %lx\n",
-				DUMPFILE() ? "\n" : "", *tlp);
-			if (DUMPFILE())
-				continue;
-			retries++;
-			goto retry_pid_hash;
-		}
-
 		if (!(tp = fill_task_struct(*tlp))) {
                         if (DUMPFILE())
                                 continue;
@@ -1810,10 +1761,7 @@ retry_pid_hash:
                         goto retry_pid_hash;
                 }
 
-		if (store_context(tc, *tlp, tp)) {
-			tc++;
-			tt->running_tasks++;
-		}
+		add_context(*tlp, tp);
 	}
 
         FREEBUF(pid_hash);
@@ -1844,7 +1792,6 @@ refresh_hlist_task_table_v2(void)
 	ulong next, pnext, pprev;
 	char *nodebuf;
 	int len, cnt;
-        struct task_context *tc;
         ulong curtask;
         ulong curpid;
         ulong retries;
@@ -2012,8 +1959,7 @@ retry_pid_hash:
 
 	clear_task_cache();
 
-        for (i = 0, tlp = (ulong *)tt->task_local, 
-             tt->running_tasks = 0, tc = tt->context_array;
+        for (i = 0, tlp = (ulong *)tt->task_local, tt->running_tasks = 0;
              i < tt->max_tasks; i++, tlp++) {
 		if (!(*tlp))
 			continue;
@@ -2028,16 +1974,6 @@ retry_pid_hash:
 			goto retry_pid_hash;
 		}	
 	
-		if (task_exists(*tlp)) {
-			error(WARNING, 
-		           "%sduplicate task address found in task list: %lx\n",
-				DUMPFILE() ? "\n" : "", *tlp);
-			if (DUMPFILE())
-				continue;
-			retries++;
-			goto retry_pid_hash;
-		}
-
 		if (!(tp = fill_task_struct(*tlp))) {
                         if (DUMPFILE())
                                 continue;
@@ -2045,10 +1981,7 @@ retry_pid_hash:
                         goto retry_pid_hash;
                 }
 
-		if (store_context(tc, *tlp, tp)) {
-			tc++;
-			tt->running_tasks++;
-		}
+		add_context(*tlp, tp);
 	}
 
         FREEBUF(pid_hash);
@@ -2079,7 +2012,6 @@ refresh_hlist_task_table_v3(void)
 	ulong upid;
 	char *nodebuf;
 	int len, cnt;
-        struct task_context *tc;
         ulong curtask;
         ulong curpid;
         ulong retries;
@@ -2275,8 +2207,7 @@ chain_next:
 
 	clear_task_cache();
 
-        for (i = 0, tlp = (ulong *)tt->task_local, 
-             tt->running_tasks = 0, tc = tt->context_array;
+        for (i = 0, tlp = (ulong *)tt->task_local, tt->running_tasks = 0;
              i < tt->max_tasks; i++, tlp++) {
 		if (!(*tlp))
 			continue;
@@ -2291,16 +2222,6 @@ chain_next:
 			goto retry_pid_hash;
 		}	
 	
-		if (task_exists(*tlp)) {
-			error(WARNING, 
-		           "%sduplicate task address found in task list: %lx\n",
-				DUMPFILE() ? "\n" : "", *tlp);
-			if (DUMPFILE())
-				continue;
-			retries++;
-			goto retry_pid_hash;
-		}
-
 		if (!(tp = fill_task_struct(*tlp))) {
                         if (DUMPFILE())
                                 continue;
@@ -2308,10 +2229,7 @@ chain_next:
                         goto retry_pid_hash;
                 }
 
-		if (store_context(tc, *tlp, tp)) {
-			tc++;
-			tt->running_tasks++;
-		}
+		add_context(*tlp, tp);
 	}
 
         FREEBUF(pid_hash);
@@ -2350,7 +2268,6 @@ refresh_radix_tree_task_table(void)
 	ulong *tlp;
 	char *tp;
 	struct radix_tree_pair rtp;
-	struct task_context *tc;
 	char *pidbuf;
 
 	if (DUMPFILE() && (tt->flags & TASK_INIT_DONE))   /* impossible */
@@ -2503,8 +2420,7 @@ retry_radix_tree:
 
 	clear_task_cache();
 
-        for (i = 0, tlp = (ulong *)tt->task_local,
-             tt->running_tasks = 0, tc = tt->context_array;
+        for (i = 0, tlp = (ulong *)tt->task_local, tt->running_tasks = 0;
              i < tt->max_tasks; i++, tlp++) {
 		if (!(*tlp))
 			continue;
@@ -2519,16 +2435,6 @@ retry_radix_tree:
 			goto retry_radix_tree;
 		}
 
-		if (task_exists(*tlp)) {
-			error(WARNING,
-		           "%sduplicate task address found in task list: %lx\n",
-				DUMPFILE() ? "\n" : "", *tlp);
-			if (DUMPFILE())
-				continue;
-			retries++;
-			goto retry_radix_tree;
-		}
-
 		if (!(tp = fill_task_struct(*tlp))) {
 			if (DUMPFILE())
 				continue;
@@ -2536,10 +2442,7 @@ retry_radix_tree:
 			goto retry_radix_tree;
 		}
 
-		if (store_context(tc, *tlp, tp)) {
-			tc++;
-			tt->running_tasks++;
-		}
+		add_context(*tlp, tp);
 	}
 
 	FREEBUF(pidbuf);
@@ -2558,7 +2461,6 @@ refresh_active_task_table(void)
 	int i;
 	char *tp; 
 	int cnt;
-        struct task_context *tc;
         ulong curtask;
         ulong curpid;
         ulong retries;
@@ -2619,8 +2521,7 @@ retry_active:
 
 	clear_task_cache();
 
-        for (i = 0, tlp = (ulong *)tt->task_local, 
-             tt->running_tasks = 0, tc = tt->context_array;
+        for (i = 0, tlp = (ulong *)tt->task_local, tt->running_tasks = 0;
              i < tt->max_tasks; i++, tlp++) {
 		if (!(*tlp))
 			continue;
@@ -2635,16 +2536,6 @@ retry_active:
 			goto retry_active;
 		}	
 	
-		if (task_exists(*tlp)) {
-			error(WARNING, 
-		           "%sduplicate task address found in task list: %lx\n",
-				DUMPFILE() ? "\n" : "", *tlp);
-			if (DUMPFILE())
-				continue;
-			retries++;
-			goto retry_active;
-		}
-
 		if (!(tp = fill_task_struct(*tlp))) {
                         if (DUMPFILE())
                                 continue;
@@ -2652,10 +2543,7 @@ retry_active:
                         goto retry_active;
                 }
 
-		if (store_context(tc, *tlp, tp)) {
-			tc++;
-			tt->running_tasks++;
-		} else if (DUMPFILE())
+		if (!add_context(*tlp, tp) && DUMPFILE())
 			error(WARNING, "corrupt/invalid active task: %lx\n",
 				*tlp);
 	}
@@ -2676,11 +2564,11 @@ retry_active:
 }
 
 /*
- *  Fill a task_context structure with the data from a task.  If a NULL
- *  task_context pointer is passed in, use the next available one.
+ *  Initialize and return a new task_context structure with data from a task.
+ *  NULL is returned on error.
  */
 static struct task_context *
-store_context(struct task_context *tc, ulong task, char *tp)
+add_context(ulong task, char *tp)
 {
         pid_t *pid_addr, *tgid_addr;
         char *comm_addr;
@@ -2689,6 +2577,7 @@ store_context(struct task_context *tc, ulong task, char *tp)
         ulong *mm_addr;
         int has_cpu;
 	int do_verify;
+	struct task_context *tc;
 	struct tgid_context *tg;
 
 	processor_addr = NULL;
@@ -2708,8 +2597,7 @@ store_context(struct task_context *tc, ulong task, char *tp)
 	else
 		do_verify = 0;
 
-	if (!tc)
-		tc = tt->context_array + tt->running_tasks;
+	tc = tt->context_array + tt->running_tasks;
 
         pid_addr = (pid_t *)(tp + OFFSET(task_struct_pid));
 	tgid_addr = (pid_t *)(tp + OFFSET(task_struct_tgid));
@@ -2764,6 +2652,8 @@ store_context(struct task_context *tc, ulong task, char *tp)
         if (has_cpu && (tt->flags & POPULATE_PANIC))
                 tt->panic_threads[tc->processor] = tc->task;
 
+	tt->flags &= ~INDEXED_CONTEXTS;
+	tt->running_tasks++;
 	return tc;
 }
 
@@ -2810,6 +2700,33 @@ refresh_context(ulong curtask, ulong curpid)
         }
 }
 
+static int
+sort_by_task(const void *arg1, const void *arg2)
+{
+	const struct task_context *t1, *t2;
+
+	t1 = *(const struct task_context **)arg1;
+	t2 = *(const struct task_context **)arg2;
+
+	if (t1->task == t2->task)
+		return 0;
+
+	return (t1->task < t2->task) ? -1 : 1;
+}
+
+/* sort context_by_task by task address */
+static void
+sort_context_by_task(void)
+{
+	int i;
+
+	for (i = 0; i < tt->running_tasks; i++)
+		tt->context_by_task[i] = &tt->context_array[i];
+	qsort(tt->context_by_task, tt->running_tasks,
+	      sizeof(*tt->context_by_task), sort_by_task);
+	tt->flags |= INDEXED_CONTEXTS;
+}
+
 /*
  *  Sort the task_context array by PID number; for PID 0, sort by processor.
  */
@@ -2822,6 +2739,8 @@ sort_context_array(void)
 	qsort((void *)tt->context_array, (size_t)tt->running_tasks,
         	sizeof(struct task_context), sort_by_pid);
 	set_context(curtask, NO_PID);
+
+	sort_context_by_task();
 }
 
 static int
@@ -2867,6 +2786,8 @@ sort_context_array_by_last_run(void)
 	qsort((void *)tt->context_array, (size_t)tt->running_tasks,
         	sizeof(struct task_context), sort_by_last_run);
 	set_context(curtask, NO_PID);
+
+	sort_context_by_task();
 }
 
 /*
@@ -4671,15 +4592,12 @@ pid_to_task(ulong pid)
 ulong
 task_to_pid(ulong task)
 {
-        int i;
         struct task_context *tc;
 
-        
-        tc = FIRST_CONTEXT();
-        for (i = 0; i < RUNNING_TASKS(); i++, tc++) 
-                if (tc->task == task)
-                        return(tc->pid);
-        
+	tc = task_to_context(task);
+	if (tc != NULL)
+		return tc->pid;
+
         return(NO_PID);
 }
 
@@ -4706,15 +4624,24 @@ task_exists(ulong task)
 struct task_context *
 task_to_context(ulong task)
 {
-        int i;
-        struct task_context *tc;
+	struct task_context key, *tc, **found;
+	int i;
+
+	/* Binary search the context_by_task array. */
+	if (tt->flags & INDEXED_CONTEXTS) {
+		key.task = task;
+		tc = &key;
+		found = bsearch(&tc, tt->context_by_task, tt->running_tasks,
+				sizeof(*tt->context_by_task), sort_by_task);
+		return found ? *found : NULL;
+	}
 
         tc = FIRST_CONTEXT();
-        for (i = 0; i < RUNNING_TASKS(); i++, tc++) 
+        for (i = 0; i < RUNNING_TASKS(); i++, tc++)
                 if (tc->task == task)
-                        return tc; 
-        
-        return NULL;
+                        return tc;
+
+	return NULL;
 }
 
 /*
@@ -5916,12 +5843,8 @@ get_panic_context(void)
 			error(WARNING, 
 			  "active task %lx on cpu %d not found in PID hash\n\n",
 				task, i);
-			if ((tp = fill_task_struct(task))) {
-				if ((tc = store_context(NULL, task, tp))) 
-					tt->running_tasks++;
-				else
-					continue;
-			}
+			if ((tp = fill_task_struct(task)))
+				add_context(task, tp);
 		}
 	}
 
@@ -7189,10 +7112,8 @@ found_panic_task:
 		 *  If the task list was corrupted, add this one in.
 		 */
                 if ((tp = fill_task_struct(lasttask))) {
-			if ((tc = store_context(NULL, lasttask, tp))) {
-				tt->running_tasks++;
+			if ((tc = add_context(lasttask, tp)))
 				return tc;
-			}
 		}
 	} 
 
@@ -7337,6 +7258,7 @@ dump_task_table(int verbose)
 		fprintf(fp, "          .tc_next: %lx\n", (ulong)tc->tc_next);
 	}
 	fprintf(fp, "     context_array: %lx\n",  (ulong)tt->context_array);
+	fprintf(fp, "   context_by_task: %lx\n",  (ulong)tt->context_by_task);
 	fprintf(fp, "        tgid_array: %lx\n",  (ulong)tt->tgid_array);
 	fprintf(fp, "     tgid_searches: %ld\n",  tt->tgid_searches);
 	fprintf(fp, "   tgid_cache_hits: %ld (%ld%%)\n", tt->tgid_cache_hits,
@@ -7422,6 +7344,9 @@ dump_task_table(int verbose)
         if (tt->flags & ACTIVE_ONLY)
                 sprintf(&buf[strlen(buf)], 
 			"%sACTIVE_ONLY", others++ ? "|" : "");
+        if (tt->flags & INDEXED_CONTEXTS)
+                sprintf(&buf[strlen(buf)], 
+			"%sINDEXED_CONTEXTS", others++ ? "|" : "");
 	sprintf(&buf[strlen(buf)], ")");
 
         if (strlen(buf) > 54)
@@ -7663,7 +7588,7 @@ dump_task_table(int verbose)
 
 	if (tt->flags & THREAD_INFO)
 		fprintf(fp, 
-	     "\nINDEX   TASK/THREAD_INFO    PID CPU PTASK   MM_STRUCT  COMM\n");
+             "\nINDEX         TASK/THREAD_INFO           PID CPU     PTASK          MM_STRUCT     COMM\n");
 	else
 		fprintf(fp, 
 			"\nINDEX   TASK    PID CPU PTASK   MM_STRUCT  COMM\n");
@@ -7671,7 +7596,7 @@ dump_task_table(int verbose)
         for (i = 0; i < RUNNING_TASKS(); i++, tc++) {
 		if (tt->flags & THREAD_INFO)
 			fprintf(fp, 
-			    "[%3d] %08lx/%08lx %5ld %d %08lx %08lx %s\n",
+			    "[%3d] %08lx/%08lx %5ld %d %08lx %016lx %s\n",
 				i, tc->task, tc->thread_info, tc->pid, 
 				tc->processor, tc->ptask, (ulong)tc->mm_struct,
 				tc->comm); 
@@ -7686,6 +7611,12 @@ dump_task_table(int verbose)
 		tg = &tt->tgid_array[i];
 		tc = task_to_context(tg->task);
 		fprintf(fp, "[%3d] %lx %ld (%s)\n", i, tg->task, tg->tgid, tc->comm);
+	}
+
+        fprintf(fp, "\nINDEX       TASK       (COMM)\n");
+	for (i = 0; i < RUNNING_TASKS(); i++) {
+		tc = tt->context_by_task[i];
+		fprintf(fp, "[%3d] %lx (%s)\n", i, tc->task, tc->comm);
 	}
 }
 
