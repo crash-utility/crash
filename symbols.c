@@ -8440,6 +8440,10 @@ builtin_array_length(char *s, int len, int *two_dim)
 		lenptr = &array_table.kmem_cache_cpu_slab;
 	else if (STREQ(s, "rt_prio_array.queue"))
 		lenptr = &array_table.rt_prio_array_queue;
+	else if (STREQ(s, "task_struct.rlim"))
+		lenptr = &array_table.task_struct_rlim;
+	else if (STREQ(s, "signal_struct.rlim"))
+		lenptr = &array_table.signal_struct_rlim;
 
 	if (!lenptr)                /* not stored */
 		return(len);        
@@ -10520,6 +10524,10 @@ dump_offset_table(char *spec, ulong makestruct)
 		ARRAY_LENGTH(kmem_cache_cpu_slab));
         fprintf(fp, "           rt_prio_array_queue: %d\n",
                 ARRAY_LENGTH(rt_prio_array_queue));
+	fprintf(fp, "              task_struct_rlim: %d\n",
+		ARRAY_LENGTH(task_struct_rlim));
+	fprintf(fp, "            signal_struct_rlim: %d\n",
+		ARRAY_LENGTH(signal_struct_rlim));
 
 	if (spec) {
 		int in_size_table, in_array_table, arrays, offsets, sizes;

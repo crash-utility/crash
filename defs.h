@@ -2191,6 +2191,8 @@ struct array_table {
 	int kmem_cache_cpu_slab;
 	int rt_prio_array_queue;
 	int height_to_maxnodes;
+	int task_struct_rlim;
+	int signal_struct_rlim;
 };
 
 /*

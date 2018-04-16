@@ -4027,12 +4027,14 @@ show_task_rlimit(struct task_context *tc)
 	in_task_struct = in_signal_struct = FALSE;
 
 	if (VALID_MEMBER(task_struct_rlim)) {
-		rlimit_index = get_array_length("task_struct.rlim", NULL, 0);
+		rlimit_index = (i = ARRAY_LENGTH(task_struct_rlim)) ?
+			i : get_array_length("task_struct.rlim", NULL, 0);
 		in_task_struct = TRUE;
 	} else if (VALID_MEMBER(signal_struct_rlim)) {
 		if (!VALID_MEMBER(task_struct_signal))
 			error(FATAL, "cannot determine rlimit array location\n");
-		rlimit_index = get_array_length("signal_struct.rlim", NULL, 0);
+		rlimit_index = (i = ARRAY_LENGTH(signal_struct_rlim)) ?
+			i : get_array_length("signal_struct.rlim", NULL, 0);
 		in_signal_struct = TRUE;
 	}
 
