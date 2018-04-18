@@ -3946,6 +3946,10 @@ cmd_tree()
 				
 			break;
 
+		case 'l':
+			td->flags |= TREE_LINEAR_ORDER;
+			break;
+
 		case 'r':
 			if (td->flags & TREE_ROOT_OFFSET_ENTERED) 
 				error(FATAL,
@@ -3993,10 +3997,6 @@ cmd_tree()
 			td->flags |= TREE_POSITION_DISPLAY;
 			break;
 
-		case 'l':
-			td->flags |= TREE_LINEAR_ORDER;
-			break;
-
 		case 'N':
 			td->flags |= TREE_NODE_POINTER;
 			break;
@@ -4023,12 +4023,15 @@ cmd_tree()
 	if (argerrs)
 		cmd_usage(pc->curcmd, SYNOPSIS);
 
+	if ((type_flag & RADIXTREE_REQUEST) && (td->flags & TREE_LINEAR_ORDER))
+		error(FATAL, "-l option is not applicable to radix trees\n");
+
 	if ((type_flag & RADIXTREE_REQUEST) && (td->flags & TREE_NODE_OFFSET_ENTERED))
 		error(FATAL, "-o option is not applicable to radix trees\n");
 
 	if ((td->flags & TREE_ROOT_OFFSET_ENTERED) && 
 	    (td->flags & TREE_NODE_POINTER))
-		error(INFO, "-r and -N options are mutually exclusive\n");
+		error(FATAL, "-r and -N options are mutually exclusive\n");
 
 	if (!args[optind]) {
 		error(INFO, "a starting address is required\n");
