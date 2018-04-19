@@ -60,7 +60,7 @@ UNWIND_HFILES=unwind.h unwind_i.h rse.h unwind_x86.h unwind_x86_64.h
 VMWARE_HFILES=vmware_vmss.h
 
 CFILES=main.c tools.c global_data.c memory.c filesys.c help.c task.c \
-	kernel.c test.c gdb_interface.c configure.c net.c dev.c \
+	kernel.c test.c gdb_interface.c configure.c net.c dev.c bpf.c \
 	alpha.c x86.c ppc.c ia64.c s390.c s390x.c s390dbf.c ppc64.c x86_64.c \
 	arm.c arm64.c mips.c sparc64.c \
 	extensions.c remote.c va_server.c va_server_v1.c symbols.c cmdline.c \
@@ -79,7 +79,7 @@ SOURCE_FILES=${CFILES} ${GENERIC_HFILES} ${MCORE_HFILES} \
 	${IBM_HFILES} ${SADUMP_HFILES} ${VMWARE_HFILES}
 
 OBJECT_FILES=main.o tools.o global_data.o memory.o filesys.o help.o task.o \
-	build_data.o kernel.o test.o gdb_interface.o net.o dev.o \
+	build_data.o kernel.o test.o gdb_interface.o net.o dev.o bpf.o \
 	alpha.o x86.o ppc.o ia64.o s390.o s390x.o s390dbf.o ppc64.o x86_64.o \
 	arm.o arm64.o mips.o sparc64.o \
 	extensions.o remote.o va_server.o va_server_v1.o symbols.o cmdline.o \
@@ -519,6 +519,9 @@ vmware_vmss.o: ${GENERIC_HFILES} ${VMWARE_HFILES} vmware_vmss.c
 
 kaslr_helper.o: ${GENERIC_HFILES} kaslr_helper.c
 	${CC} -c ${CRASH_CFLAGS} kaslr_helper.c ${WARNING_OPTIONS} ${WARNING_ERROR}
+
+bpf.o: ${GENERIC_HFILES} bpf.c
+	${CC} -c ${CRASH_CFLAGS} bpf.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 ${PROGRAM}: force
 	@make --no-print-directory all

@@ -1,0 +1,1082 @@
+/* bpf.c - core analysis suite
+ *
+ * Copyright (C) 2018 David Anderson
+ * Copyright (C) 2018 Red Hat, Inc. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+#include "defs.h"
+
+struct bpf_info {
+	ulong status;
+	ulong progs, maps;
+	struct radix_tree_pair *proglist;
+	struct radix_tree_pair *maplist;
+	char *bpf_prog_buf;
+	char *bpf_prog_aux_buf;
+	char *bpf_map_buf;
+	char *bytecode_buf;
+	int bpf_prog_type_size;
+	int bpf_map_map_type_size;
+	char prog_hdr1[81];
+	char map_hdr1[81];
+} bpf_info = { 
+	.status = UNINITIALIZED,
+};
+
+static void do_bpf(ulong, ulong, char *, int);
+static void bpf_init(struct bpf_info *);
+static int bpf_type_size_init(void);
+static char *bpf_prog_type_string(int, char *);
+static char *bpf_map_map_type_string(int, char *);
+static char *bpf_prog_used_maps(int, char *);
+static char *bpf_prog_tag_string(char *, char *);
+
+static void dump_xlated_plain(void *, unsigned int, int);
+
+#define PROG_ID      (0x1)
+#define MAP_ID       (0x2)
+#define DUMP_STRUCT  (0x4)
+#define JITED        (0x8)
+#define XLATED      (0x10)
+#define OPCODES     (0x20)
+
+void
+cmd_bpf(void)
+{
+	int c, radix;
+	ulong flags, id;
+	char *structarg;
+
+	flags = id = radix = 0;
+	structarg = NULL;
+
+	while ((c = getopt(argcnt, args, "tTjsxdm:p:")) != EOF) {
+		switch(c)
+		{
+		case 'j':
+			flags |= JITED;
+			break;
+		case 'T':
+			flags |= (XLATED|OPCODES);
+			break;
+		case 't':
+			flags |= XLATED;
+			break;
+		case 'm':
+			if (flags & PROG_ID)
+				error(FATAL, "-m and -p options are mutually exclusive\n");
+			id = stol(optarg, FAULT_ON_ERROR, NULL);
+			flags |= MAP_ID;
+			break;
+		case 'p':	
+			if (flags & MAP_ID)
+				error(FATAL, "-m and -p options are mutually exclusive\n");
+			id = stol(optarg, FAULT_ON_ERROR, NULL);
+			flags |= PROG_ID;
+			break;
+		case 's':
+			flags |= DUMP_STRUCT;
+			structarg = optarg;
+			break;
+		case 'x':
+			if (radix == 10)
+				error(FATAL, "-d and -x are mutually exclusive\n");
+			radix = 16;
+			break;
+		case 'd':
+			if (radix == 16)
+				error(FATAL, "-d and -x are mutually exclusive\n");
+			radix = 16;
+			break;
+		default:
+			argerrs++;
+			break;
+		}
+	}
+
+	if (argerrs)
+		cmd_usage(pc->curcmd, SYNOPSIS);
+
+	if ((flags & JITED) && !(flags & PROG_ID))
+		error(FATAL, "-j option only applicable with -p\n");
+	if ((flags & XLATED) && !(flags & PROG_ID))
+		error(FATAL, "-t option only applicable with -p\n");
+	if ((flags & DUMP_STRUCT) && !(flags & (PROG_ID|MAP_ID)))
+		error(FATAL, "-s option requires either -m or -p\n");
+
+	if (radix && !(flags & (PROG_ID|MAP_ID)))
+		error(FATAL, "-%c option requires either -m or -p\n",
+			radix == 10 ? 'd' : 'x');
+
+	while (args[optind]) {
+		;
+		optind++;
+	}
+
+	do_bpf(flags, id, structarg, radix);
+}
+
+static void
+bpf_init(struct bpf_info *bpf)
+{
+	long len;
+	ulong cnt ATTRIBUTE_UNUSED;
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char buf3[BUFSIZE];
+	char buf4[BUFSIZE];
+
+	switch (bpf->status)
+	{
+	case UNINITIALIZED:
+		if (!kernel_symbol_exists("prog_idr") || 
+		    !kernel_symbol_exists("map_idr")) {
+			bpf->status = FALSE;
+			command_not_supported();
+		}
+		
+		STRUCT_SIZE_INIT(bpf_prog, "bpf_prog");
+		STRUCT_SIZE_INIT(bpf_prog_aux, "bpf_prog_aux");
+		STRUCT_SIZE_INIT(bpf_map, "bpf_map");
+		STRUCT_SIZE_INIT(bpf_insn, "bpf_insn");
+		MEMBER_OFFSET_INIT(bpf_prog_aux, "bpf_prog", "aux");
+		MEMBER_OFFSET_INIT(bpf_prog_type, "bpf_prog", "type");
+		MEMBER_OFFSET_INIT(bpf_prog_tag, "bpf_prog", "tag");
+		MEMBER_OFFSET_INIT(bpf_prog_jited_len, "bpf_prog", "jited_len");
+		MEMBER_OFFSET_INIT(bpf_prog_bpf_func, "bpf_prog", "bpf_func");
+		MEMBER_OFFSET_INIT(bpf_prog_len, "bpf_prog", "len");
+		MEMBER_OFFSET_INIT(bpf_prog_insnsi, "bpf_prog", "insnsi");
+		MEMBER_OFFSET_INIT(bpf_map_map_type, "bpf_map", "map_type");
+		MEMBER_OFFSET_INIT(bpf_map_map_flags, "bpf_map", "map_flags");
+		MEMBER_OFFSET_INIT(bpf_prog_aux_used_maps, "bpf_prog_aux", "used_maps");
+		MEMBER_OFFSET_INIT(bpf_prog_aux_used_map_cnt, "bpf_prog_aux", "used_map_cnt");
+		if (!VALID_STRUCT(bpf_prog) || 
+		    !VALID_STRUCT(bpf_prog_aux) ||
+		    !VALID_STRUCT(bpf_map) ||
+		    !VALID_STRUCT(bpf_insn) ||
+		    INVALID_MEMBER(bpf_prog_aux) ||
+		    INVALID_MEMBER(idr_idr_rt) ||
+		    INVALID_MEMBER(bpf_prog_type) ||
+		    INVALID_MEMBER(bpf_prog_tag) ||
+		    INVALID_MEMBER(bpf_prog_jited_len) ||
+		    INVALID_MEMBER(bpf_prog_bpf_func) ||
+		    INVALID_MEMBER(bpf_prog_len) ||
+		    INVALID_MEMBER(bpf_prog_insnsi) ||
+		    INVALID_MEMBER(bpf_map_map_flags) ||
+		    INVALID_MEMBER(bpf_map_map_type) ||
+		    INVALID_MEMBER(bpf_prog_aux_used_maps) ||
+		    INVALID_MEMBER(bpf_prog_aux_used_map_cnt)) {
+			bpf->status = FALSE;
+			command_not_supported();
+		}	
+
+		if (!bpf_type_size_init()) {
+			bpf->status = FALSE;
+			command_not_supported();
+		}
+		sprintf(bpf->prog_hdr1, "%s %s %s %s ",
+			mkstring(buf1, 4, CENTER|LJUST, "ID"),
+			mkstring(buf2, VADDR_PRLEN, CENTER|LJUST, "BPF_PROG"),
+			mkstring(buf3, VADDR_PRLEN, CENTER|LJUST, "BPF_PROG_AUX"),
+			mkstring(buf4, bpf->bpf_prog_type_size, CENTER|LJUST, "BPF_PROG_TYPE"));
+		strcat(bpf->prog_hdr1, "      TAG        USED_MAPS");
+		sprintf(bpf->map_hdr1, "%s %s %s MAP_FLAGS",
+			mkstring(buf1, 4, CENTER|LJUST, "ID"),
+			mkstring(buf2, VADDR_PRLEN, CENTER|LJUST, "BPF_MAP"),
+			mkstring(buf3, bpf->bpf_map_map_type_size, CENTER|LJUST, "BPF_MAP_TYPE"));
+
+		bpf->status = TRUE;
+		break;
+
+	case TRUE:
+		break;
+
+	case FALSE:
+		command_not_supported();
+	}
+
+	bpf->progs = do_radix_tree(symbol_value("prog_idr") + OFFSET(idr_idr_rt),
+		RADIX_TREE_COUNT, NULL);
+	if (bpf->progs) {
+		len = sizeof(struct radix_tree_pair) * (bpf->progs+1);
+		bpf->proglist = (struct radix_tree_pair *)GETBUF(len);
+		bpf->proglist[0].index = bpf->progs;
+		cnt = do_radix_tree(symbol_value("prog_idr") + OFFSET(idr_idr_rt),
+			RADIX_TREE_GATHER, bpf->proglist);
+	}
+
+	bpf->maps = do_radix_tree(symbol_value("map_idr") + OFFSET(idr_idr_rt), 
+		RADIX_TREE_COUNT, NULL);
+	if (bpf->maps) {
+		len = sizeof(struct radix_tree_pair) * (bpf->maps+1);
+		bpf->maplist = (struct radix_tree_pair *)GETBUF(len);
+		bpf->maplist[0].index = bpf->progs;
+		cnt = do_radix_tree(symbol_value("map_idr") + OFFSET(idr_idr_rt),
+			RADIX_TREE_GATHER, bpf->maplist);
+	}
+
+	bpf->bpf_prog_buf = GETBUF(SIZE(bpf_prog));
+	bpf->bpf_prog_aux_buf = GETBUF(SIZE(bpf_prog_aux));
+	bpf->bpf_map_buf = GETBUF(SIZE(bpf_map));
+}
+
+static void
+do_bpf(ulong flags, ulong id, char *structarg, int radix)
+{
+	int i, c, found, type;
+	struct bpf_info *bpf;
+	ulong bpf_prog_aux, bpf_func, end_func, addr, insnsi;
+	char *symbol;
+	int jited_len, len;
+	char *arglist[MAXARGS];
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char buf3[BUFSIZE];
+	char buf4[BUFSIZE];
+	
+	bpf = &bpf_info;
+	bpf->proglist = bpf->maplist = NULL;
+	bpf->bpf_prog_buf = bpf->bpf_prog_aux_buf = bpf->bpf_map_buf = NULL;
+	bpf->bytecode_buf = NULL;
+
+	bpf_init(bpf);
+
+	switch (flags & (MAP_ID|PROG_ID)) 
+	{
+	case PROG_ID: 
+		for (i = found = 0; i < bpf->progs; i++) {
+			if (id == bpf->proglist[i].index) {
+				found++;
+				break;
+			}
+		}
+		if (!found) {
+			error(INFO, "invalid program ID: %ld\n", id);
+			goto bailout;
+		}
+		break;
+
+	case MAP_ID:
+		for (i = found = 0; i < bpf->maps; i++) {
+			if (id == bpf->maplist[i].index) {
+				found++;
+				break;
+			}
+		}
+		if (!found) {
+			error(INFO, "invalid map ID: %ld\n", id);
+			goto bailout;
+		}
+		break;
+	}
+
+	if (flags & MAP_ID)
+		goto do_map_only;
+
+	fprintf(fp, "%s\n", bpf->prog_hdr1);
+
+	for (i = 0; i < bpf->progs; i++) {
+		if ((i == 0) && (bpf->proglist[i].value == 0)) {
+			fprintf(fp, "(none loaded)\n");
+			break;
+		}
+
+		if ((flags & PROG_ID) && (id != bpf->proglist[i].index))
+			continue;
+
+		if (!readmem((ulong)bpf->proglist[i].value, KVADDR, bpf->bpf_prog_buf, 
+		    SIZE(bpf_prog), "struct bpf_prog", RETURN_ON_ERROR))
+			goto bailout;
+		bpf_prog_aux = ULONG(bpf->bpf_prog_buf + OFFSET(bpf_prog_aux));
+		if (!readmem(bpf_prog_aux, KVADDR, bpf->bpf_prog_aux_buf, 
+		    SIZE(bpf_prog_aux), "struct bpf_prog_aux", RETURN_ON_ERROR))
+			goto bailout;
+
+		fprintf(fp, "%s %s %s ", 
+			mkstring(buf1, 4, CENTER|LJUST|LONG_DEC, MKSTR(bpf->proglist[i].index)),
+			mkstring(buf2, VADDR_PRLEN, CENTER|LJUST|LONG_HEX, MKSTR(bpf->proglist[i].value)),
+			mkstring(buf3, VADDR_PRLEN, CENTER|LJUST|LONG_HEX, MKSTR(bpf_prog_aux)));
+		type = INT(bpf->bpf_prog_buf + OFFSET(bpf_prog_type));
+		fprintf(fp, "%s ", 
+			mkstring(buf1, bpf->bpf_prog_type_size, CENTER|LJUST, bpf_prog_type_string(type, buf2)));
+		fprintf(fp, "%s ", bpf_prog_tag_string(bpf->bpf_prog_buf + OFFSET(bpf_prog_tag), buf1));
+		fprintf(fp, "%s ", 
+			mkstring(buf1, strlen("USED_MAPS"), CENTER|LJUST, bpf_prog_used_maps(i, buf2)));
+		fprintf(fp, "\n");
+
+		if (flags & PROG_ID) {
+			;   /* TBD */
+		}
+
+		if (flags & JITED) {
+			fprintf(fp, "\n");
+			jited_len = UINT(bpf->bpf_prog_buf + OFFSET(bpf_prog_jited_len));
+			bpf_func = ULONG(bpf->bpf_prog_buf + OFFSET(bpf_prog_bpf_func));
+			end_func = bpf_func + jited_len;
+
+			if (jited_len) {
+				open_tmpfile();
+				sprintf(buf1, "x/%di 0x%lx", jited_len, bpf_func);
+				gdb_pass_through(buf1, NULL, GNU_RETURN_ON_ERROR);
+				rewind(pc->tmpfile);
+				while (fgets(buf1, BUFSIZE, pc->tmpfile)) {
+					strcpy(buf2, strip_linefeeds(buf1));
+					c = parse_line(buf1, arglist);
+					if (STRNEQ(arglist[0], "0x") && 
+					    (LASTCHAR(arglist[0]) == ':')) {
+						addr = htol(strip_ending_char(arglist[0], ':'), 
+							RETURN_ON_ERROR, NULL);
+						if (addr >= end_func)
+							break;
+					}
+					symbol = NULL;
+					if ((c > 1) && IS_A_NUMBER(arglist[c-1])) {
+						addr = htol(arglist[c-1], RETURN_ON_ERROR, NULL);
+						symbol = value_to_symstr(addr, buf3, radix); 
+						if (strlen(symbol)) {
+							sprintf(buf4, "<%s>", symbol);
+							symbol = buf4;
+						}
+					}
+					fprintf(pc->saved_fp, "%s %s\n", buf2, symbol ? symbol : "");
+				}
+				close_tmpfile();
+			} else
+				fprintf(fp, "(program not jited)\n");
+		}
+
+		if (flags & XLATED) {
+			fprintf(fp, "\n");
+			len = UINT(bpf->bpf_prog_buf + OFFSET(bpf_prog_len));
+			insnsi = (ulong)bpf->proglist[i].value + OFFSET(bpf_prog_insnsi);
+			bpf->bytecode_buf = GETBUF(len * SIZE(bpf_insn));
+			if (CRASHDEBUG(1))
+				fprintf(fp, "bytecode_buf: [%lx] len %d * size %ld = %ld  from: %lx\n", 
+					(ulong)bpf->bytecode_buf,
+					len, SIZE(bpf_insn), len * SIZE(bpf_insn), insnsi);
+			if (!readmem(insnsi, KVADDR, bpf->bytecode_buf, len * SIZE(bpf_insn), 
+			    "bpf_prog.insnsi contents", RETURN_ON_ERROR))
+				goto bailout;
+			dump_xlated_plain((void *)bpf->bytecode_buf, len * SIZE(bpf_insn), flags & OPCODES);
+		}
+
+		if (flags & DUMP_STRUCT) {
+			fprintf(fp, "\n");
+			dump_struct("bpf_prog", (ulong)bpf->proglist[i].value, radix);
+			fprintf(fp, "\n");
+			dump_struct("bpf_prog_aux", bpf_prog_aux, radix);
+		}
+	}
+
+	if (flags & PROG_ID)
+		goto bailout;
+	else
+		fprintf(fp, "\n");
+
+do_map_only:
+	fprintf(fp, "%s\n", bpf->map_hdr1);
+
+	for (i = 0; i < bpf->maps; i++) {
+		if ((i == 0) && (bpf->maplist[0].value == 0)) {
+			fprintf(fp, "(none loaded)\n");
+			break;
+		}
+		if ((flags & MAP_ID) && (id != bpf->maplist[i].index))
+			continue;
+
+		if (!readmem((ulong)bpf->maplist[i].value, KVADDR, bpf->bpf_map_buf, 
+		    SIZE(bpf_map), "struct bpf_map", RETURN_ON_ERROR))
+			goto bailout;
+
+		fprintf(fp, "%s %s ", 
+			mkstring(buf1, 4, CENTER|LJUST|LONG_DEC, MKSTR(bpf->maplist[i].index)),
+			mkstring(buf2, VADDR_PRLEN, CENTER|LJUST|LONG_HEX, MKSTR(bpf->maplist[i].value)));
+		type = INT(bpf->bpf_map_buf + OFFSET(bpf_map_map_type));
+		fprintf(fp, "%s ", 
+			mkstring(buf1, bpf->bpf_map_map_type_size, CENTER|LJUST, bpf_map_map_type_string(type, buf2)));
+		fprintf(fp, " %08x ", UINT(bpf->bpf_map_buf + OFFSET(bpf_map_map_flags)));
+		fprintf(fp, "\n");
+
+		if (flags & MAP_ID) {
+			;  /* TBD */
+		}
+
+		if (flags & DUMP_STRUCT) {
+			fprintf(fp, "\n");
+			dump_struct("bpf_map", (ulong)bpf->maplist[i].value, radix);
+		}
+
+	}
+
+bailout:
+	FREEBUF(bpf->proglist);
+	FREEBUF(bpf->maplist);
+	FREEBUF(bpf->bpf_prog_buf);
+	FREEBUF(bpf->bpf_prog_aux_buf);
+	FREEBUF(bpf->bpf_map_buf);
+	if (bpf->bytecode_buf)
+		FREEBUF(bpf->bytecode_buf);
+}
+
+static int 
+bpf_type_size_init(void)
+{
+	int c ATTRIBUTE_UNUSED; 
+	size_t max;
+	char *arglist[MAXARGS];
+	char buf[BUFSIZE];
+	struct bpf_info *bpf = &bpf_info;
+
+	open_tmpfile();
+	if (dump_enumerator_list("bpf_prog_type")) {
+		max = 0;
+		rewind(pc->tmpfile);
+		while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+			if (!strstr(buf, " = "))
+				continue;
+			c = parse_line(buf, arglist);
+			if (CRASHDEBUG(1))
+				fprintf(pc->saved_fp, "%s\n", arglist[0]);
+			max = MAX(max, strlen(arglist[0]));
+		}
+		bpf->bpf_prog_type_size = max - strlen("BPF_PROG_TYPE_");
+	} else {
+		close_tmpfile();
+		return FALSE;
+	}
+	close_tmpfile();
+
+	open_tmpfile();
+	if (dump_enumerator_list("bpf_map_type")) {
+		max = 0;
+		rewind(pc->tmpfile);
+		while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+			if (!strstr(buf, " = "))
+				continue;
+			c = parse_line(buf, arglist);
+			if (CRASHDEBUG(1))
+				fprintf(pc->saved_fp, "%s\n", arglist[0]);
+			max = MAX(max, strlen(arglist[0]));
+		}
+		bpf->bpf_map_map_type_size = max - strlen("BPF_PROG_TYPE_");
+	} else {
+		close_tmpfile();
+		return FALSE;
+	}
+	close_tmpfile();
+
+	return TRUE;
+}
+
+static char *
+bpf_prog_type_string(int type, char *retbuf)
+{
+	char *p;	
+	int c ATTRIBUTE_UNUSED; 
+	char *arglist[MAXARGS];
+	char buf[BUFSIZE];
+	
+	retbuf[0] = NULLCHAR;
+
+	open_tmpfile();
+	if (dump_enumerator_list("bpf_prog_type")) {
+		rewind(pc->tmpfile);
+		while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+			if (!strstr(buf, " = "))
+				continue;
+			c = parse_line(buf, arglist);
+			if (atoi(arglist[2]) == type) {
+				p = arglist[0];
+				p += strlen("BPF_PROG_TYPE_");
+				strcpy(retbuf, p);
+				break;
+			}
+		}
+	} 
+
+	close_tmpfile();
+	return retbuf;
+}
+
+static char *
+bpf_map_map_type_string(int map_type, char *retbuf)
+{
+	char *p;	
+	int c ATTRIBUTE_UNUSED; 
+	char *arglist[MAXARGS];
+	char buf[BUFSIZE];
+	
+	retbuf[0] = NULLCHAR;
+
+	open_tmpfile();
+	if (dump_enumerator_list("bpf_map_type")) {
+		rewind(pc->tmpfile);
+		while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+			if (!strstr(buf, " = "))
+				continue;
+			c = parse_line(buf, arglist);
+			if (atoi(arglist[2]) == map_type) {
+				p = arglist[0];
+				p += strlen("BPF_MAP_TYPE_");
+				strcpy(retbuf, p);
+				break;
+			}
+		}
+	} 
+
+	close_tmpfile();
+	return retbuf;
+}
+
+static char *
+bpf_prog_used_maps(int idx, char *retbuf)
+{
+	int i, m, cnt;
+	struct bpf_info *bpf = &bpf_info;
+	uint used_map_cnt;
+	ulong used_maps, map;
+
+	retbuf[0] = NULLCHAR;
+
+	used_map_cnt = UINT(bpf->bpf_prog_aux_buf + OFFSET(bpf_prog_aux_used_map_cnt));
+	used_maps = ULONG(bpf->bpf_prog_aux_buf + OFFSET(bpf_prog_aux_used_maps));
+
+	for (i = cnt = 0; i < used_map_cnt; i++) {
+		if (!readmem(used_maps + (sizeof(ulong)*i), KVADDR, &map,
+		    sizeof(ulong), "bpf_prog_aux.used_maps", RETURN_ON_ERROR))
+			return retbuf;
+		for (m = 0; m < bpf->maps; m++) {
+			if (map == (ulong)bpf->maplist[m].value) {
+				sprintf(&retbuf[strlen(retbuf)], "%s%ld", 
+					strlen(retbuf) ? "," : "",
+					bpf->maplist[m].index);
+			}
+		}
+	}
+
+	return retbuf;
+}
+
+static char *
+bpf_prog_tag_string(char *tag, char *buf)
+{
+	int i;
+
+	buf[0] = NULLCHAR;
+	for (i = 0; i < 8; i++)
+		sprintf(&buf[strlen(buf)], "%02x", (unsigned char)tag[i]);
+
+	return buf;
+}
+
+
+// #include <linux/bpf_common.h>
+
+/*
+ *  Taken from: "/usr/include/linux/bpf_common.h"
+ */
+
+/*
+ *  bpf_common.h
+ */
+
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+#ifndef __LINUX_BPF_COMMON_H__
+#define __LINUX_BPF_COMMON_H__
+
+/* Instruction classes */
+#define BPF_CLASS(code) ((code) & 0x07)
+#define		BPF_LD		0x00
+#define		BPF_LDX		0x01
+#define		BPF_ST		0x02
+#define		BPF_STX		0x03
+#define		BPF_ALU		0x04
+#define		BPF_JMP		0x05
+#define		BPF_RET		0x06
+#define		BPF_MISC        0x07
+
+/* ld/ldx fields */
+#define BPF_SIZE(code)  ((code) & 0x18)
+#define		BPF_W		0x00 /* 32-bit */
+#define		BPF_H		0x08 /* 16-bit */
+#define		BPF_B		0x10 /*  8-bit */
+/* eBPF		BPF_DW		0x18    64-bit */
+#define BPF_MODE(code)  ((code) & 0xe0)
+#define		BPF_IMM		0x00
+#define		BPF_ABS		0x20
+#define		BPF_IND		0x40
+#define		BPF_MEM		0x60
+#define		BPF_LEN		0x80
+#define		BPF_MSH		0xa0
+
+/* alu/jmp fields */
+#define BPF_OP(code)    ((code) & 0xf0)
+#define		BPF_ADD		0x00
+#define		BPF_SUB		0x10
+#define		BPF_MUL		0x20
+#define		BPF_DIV		0x30
+#define		BPF_OR		0x40
+#define		BPF_AND		0x50
+#define		BPF_LSH		0x60
+#define		BPF_RSH		0x70
+#define		BPF_NEG		0x80
+#define		BPF_MOD		0x90
+#define		BPF_XOR		0xa0
+
+#define		BPF_JA		0x00
+#define		BPF_JEQ		0x10
+#define		BPF_JGT		0x20
+#define		BPF_JGE		0x30
+#define		BPF_JSET        0x40
+#define BPF_SRC(code)   ((code) & 0x08)
+#define		BPF_K		0x00
+#define		BPF_X		0x08
+
+#ifndef BPF_MAXINSNS
+#define BPF_MAXINSNS 4096
+#endif
+
+#endif /* __LINUX_BPF_COMMON_H__ */
+
+
+/*
+ *  Taken from: /usr/include/asm-generic/int-ll64.h
+ */
+typedef unsigned char __u8;
+typedef __signed__ short __s16;
+typedef __signed__ int __s32;
+
+/*
+ *  Taken from: "/usr/include/linux/bpf.h"
+ */
+
+/* Extended instruction set based on top of classic BPF */
+
+/* instruction classes */
+#define BPF_ALU64	0x07	/* alu mode in double word width */
+
+/* ld/ldx fields */
+#define BPF_DW		0x18	/* double word (64-bit) */
+#define BPF_XADD	0xc0	/* exclusive add */
+
+/* alu/jmp fields */
+#define BPF_MOV		0xb0	/* mov reg to reg */
+#define BPF_ARSH	0xc0	/* sign extending arithmetic shift right */
+
+/* change endianness of a register */
+#define BPF_END		0xd0	/* flags for endianness conversion: */
+#define BPF_TO_LE	0x00	/* convert to little-endian */
+#define BPF_TO_BE	0x08	/* convert to big-endian */
+#define BPF_FROM_LE	BPF_TO_LE
+#define BPF_FROM_BE	BPF_TO_BE
+
+/* jmp encodings */
+#define BPF_JNE		0x50	/* jump != */
+#define BPF_JLT		0xa0	/* LT is unsigned, '<' */
+#define BPF_JLE		0xb0	/* LE is unsigned, '<=' */
+#define BPF_JSGT	0x60	/* SGT is signed '>', GT in x86 */
+#define BPF_JSGE	0x70	/* SGE is signed '>=', GE in x86 */
+#define BPF_JSLT	0xc0	/* SLT is signed, '<' */
+#define BPF_JSLE	0xd0	/* SLE is signed, '<=' */
+#define BPF_CALL	0x80	/* function call */
+#define BPF_EXIT	0x90	/* function return */
+
+/* Register numbers */
+enum {
+	BPF_REG_0 = 0,
+	BPF_REG_1,
+	BPF_REG_2,
+	BPF_REG_3,
+	BPF_REG_4,
+	BPF_REG_5,
+	BPF_REG_6,
+	BPF_REG_7,
+	BPF_REG_8,
+	BPF_REG_9,
+	BPF_REG_10,
+	__MAX_BPF_REG,
+};
+
+struct bpf_insn {
+        __u8    code;           /* opcode */
+        __u8    dst_reg:4;      /* dest register */
+        __u8    src_reg:4;      /* source register */
+        __s16   off;            /* signed offset */
+        __s32   imm;            /* signed immediate constant */
+};
+
+/* instruction classes */
+#define BPF_ALU64       0x07    /* alu mode in double word width */
+
+/* ld/ldx fields */
+#define BPF_DW          0x18    /* double word (64-bit) */
+#define BPF_XADD        0xc0    /* exclusive add */
+
+/* alu/jmp fields */
+#define BPF_MOV         0xb0    /* mov reg to reg */
+#define BPF_ARSH        0xc0    /* sign extending arithmetic shift right */
+
+/* change endianness of a register */
+#define BPF_END         0xd0    /* flags for endianness conversion: */
+#define BPF_TO_LE       0x00    /* convert to little-endian */
+#define BPF_TO_BE       0x08    /* convert to big-endian */
+#define BPF_FROM_LE     BPF_TO_LE
+#define BPF_FROM_BE     BPF_TO_BE
+
+/* when bpf_ldimm64->src_reg == BPF_PSEUDO_MAP_FD, bpf_ldimm64->imm == fd */
+#define BPF_PSEUDO_MAP_FD       1
+
+/* when bpf_call->src_reg == BPF_PSEUDO_CALL, bpf_call->imm == pc-relative
+ * offset to another bpf function
+ */
+#define BPF_PSEUDO_CALL         1
+
+
+
+
+static void fprint_hex(FILE *, void *, unsigned int, const char *);
+
+/*
+ *  Taken from: tools/bpf/bpftool/main.c
+ */
+void fprint_hex(FILE *f, void *arg, unsigned int n, const char *sep)
+{
+	unsigned char *data = arg;
+	unsigned int i;
+
+	for (i = 0; i < n; i++) {
+		const char *pfx = "";
+
+		if (!i)
+			/* nothing */;
+		else if (!(i % 16))
+			fprintf(f, "\n");
+		else if (!(i % 8))
+			fprintf(f, "  ");
+		else
+			pfx = sep;
+
+		fprintf(f, "%s%02hhx", i ? pfx : "", data[i]);
+	}
+}
+
+
+
+static void
+dump_bpf_insn(struct bpf_insn *insn)
+{
+	fprintf(fp, "          code: 0x%x / %d\n", insn->code, insn->code);
+	fprintf(fp, "       dst_reg: 0x%x / %d\n", insn->dst_reg, insn->dst_reg);
+	fprintf(fp, "       src_reg: 0x%x / %d\n", insn->src_reg, insn->src_reg);
+	fprintf(fp, "           off: 0x%x / %d\n", insn->off, insn->off);
+	fprintf(fp, "           imm: 0x%x / %d\n", insn->imm, insn->imm);
+}
+
+static void print_bpf_insn(struct bpf_insn *, int);
+
+/*
+ *  Adapted from: "tools/bpf/bpftool/prog.c"
+ */
+static void 
+dump_xlated_plain(void *buf, unsigned int len, int opcodes)
+{
+	struct bpf_insn *insn = buf;
+	int double_insn = FALSE;
+	unsigned int i;
+
+	for (i = 0; i < len / sizeof(*insn); i++) {
+		if (double_insn) {
+			double_insn = FALSE;
+			continue;
+		}
+
+		double_insn = insn[i].code == (BPF_LD | BPF_IMM | BPF_DW);
+
+		fprintf(fp, "% 4d: ", i);
+		print_bpf_insn(insn + i, TRUE);
+
+		if (opcodes) {
+			fprintf(fp, "       ");
+			fprint_hex(fp, insn + i, 8, " ");
+			if (double_insn && i < len - 1) {
+				fprintf(fp, " ");
+				fprint_hex(fp, insn + i + 1, 8, " ");
+			}
+			fprintf(fp, "\n");
+		}
+
+		if (CRASHDEBUG(1))
+			dump_bpf_insn(insn + i);
+	}
+}
+
+
+/*
+ *  Adapted from: kernel/bpf/disasm.c
+ */
+
+const char *const bpf_class_string[8] = {
+	[BPF_LD]    = "ld",
+	[BPF_LDX]   = "ldx",
+	[BPF_ST]    = "st",
+	[BPF_STX]   = "stx",
+	[BPF_ALU]   = "alu",
+	[BPF_JMP]   = "jmp",
+	[BPF_RET]   = "BUG",
+	[BPF_ALU64] = "alu64",
+};
+
+const char *const bpf_alu_string[16] = {
+	[BPF_ADD >> 4]  = "+=",
+	[BPF_SUB >> 4]  = "-=",
+	[BPF_MUL >> 4]  = "*=",
+	[BPF_DIV >> 4]  = "/=",
+	[BPF_OR  >> 4]  = "|=",
+	[BPF_AND >> 4]  = "&=",
+	[BPF_LSH >> 4]  = "<<=",
+	[BPF_RSH >> 4]  = ">>=",
+	[BPF_NEG >> 4]  = "neg",
+	[BPF_MOD >> 4]  = "%=",
+	[BPF_XOR >> 4]  = "^=",
+	[BPF_MOV >> 4]  = "=",
+	[BPF_ARSH >> 4] = "s>>=",
+	[BPF_END >> 4]  = "endian",
+};
+
+static const char *const bpf_ldst_string[] = {
+	[BPF_W >> 3]  = "u32",
+	[BPF_H >> 3]  = "u16",
+	[BPF_B >> 3]  = "u8",
+	[BPF_DW >> 3] = "u64",
+};
+
+static const char *const bpf_jmp_string[16] = {
+	[BPF_JA >> 4]   = "jmp",
+	[BPF_JEQ >> 4]  = "==",
+	[BPF_JGT >> 4]  = ">",
+	[BPF_JLT >> 4]  = "<",
+	[BPF_JGE >> 4]  = ">=",
+	[BPF_JLE >> 4]  = "<=",
+	[BPF_JSET >> 4] = "&",
+	[BPF_JNE >> 4]  = "!=",
+	[BPF_JSGT >> 4] = "s>",
+	[BPF_JSLT >> 4] = "s<",
+	[BPF_JSGE >> 4] = "s>=",
+	[BPF_JSLE >> 4] = "s<=",
+	[BPF_CALL >> 4] = "call",
+	[BPF_EXIT >> 4] = "exit",
+};
+
+typedef unsigned char u8;
+typedef uint64_t u64;
+typedef unsigned int u32;
+
+static const char *__func_imm_name(const struct bpf_insn *insn,
+                                   u64 full_imm, char *buff, size_t len)
+{
+	int m;
+	struct bpf_info *bpf = &bpf_info;
+
+	for (m = 0; m < bpf->maps; m++) {
+		if (full_imm == (ulong)bpf->maplist[m].value) {
+			sprintf(buff, "map[id:%ld]", 
+				bpf->maplist[m].index);
+			if (CRASHDEBUG(1))
+				sprintf(&buff[strlen(buff)], " (%lx)",
+					(ulong)bpf->maplist[m].value); 
+			return buff;
+		}
+	}
+
+	snprintf(buff, len, "0x%llx", (unsigned long long)full_imm);
+	return buff;
+}
+
+static char *__func_get_name(const struct bpf_insn *insn,
+                                   char *buff, size_t len)
+{
+	long __BPF_FUNC_MAX_ID;
+	char func_id_str[BUFSIZE];
+	ulong func_id_ptr;
+	struct syment *sp;
+	ulong offset;
+
+	if (!enumerator_value("__BPF_FUNC_MAX_ID", &__BPF_FUNC_MAX_ID))
+		return buff;
+
+	if (insn->src_reg != BPF_PSEUDO_CALL &&
+	    insn->imm >= 0 && insn->imm < __BPF_FUNC_MAX_ID &&
+	    func_id_str[insn->imm]) {
+//              return func_id_str[insn->imm];
+		if (!readmem(symbol_value("func_id_str") + (insn->imm * sizeof(void *)), 
+		    KVADDR, &func_id_ptr, sizeof(void *), "func_id_str pointer", 
+		    QUIET|RETURN_ON_ERROR))
+			error(FATAL, "cannot read func_id_str[]");
+		if (!read_string(func_id_ptr, func_id_str, BUFSIZE-1))
+			error(FATAL, "cannot read func_id_str[] string");
+		sprintf(buff, "%s", func_id_str);
+		return buff;
+	}
+
+	if ((insn->src_reg != BPF_PSEUDO_CALL) &&
+	    (sp = value_search(symbol_value("__bpf_call_base") + insn->imm, &offset)) && 
+	    !offset)
+		return(sp->name);
+
+	if (insn->src_reg == BPF_PSEUDO_CALL)
+		snprintf(buff, len, "%+d", insn->imm);
+
+	return buff;
+}
+
+
+static void 
+print_bpf_insn(struct bpf_insn *insn, int allow_ptr_leaks)
+{
+	__u8 class = BPF_CLASS(insn->code);
+
+	if (class == BPF_ALU || class == BPF_ALU64) {
+		if (BPF_OP(insn->code) == BPF_END) {
+			if (class == BPF_ALU64)
+				fprintf(fp, "BUG_alu64_%02x\n", insn->code);
+			else
+//				print_bpf_end_insn(verbose, env, insn);
+				fprintf(fp, "(%02x) r%d = %s%d r%d\n", insn->code, insn->dst_reg,
+					BPF_SRC(insn->code) == BPF_TO_BE ? "be" : "le",
+					insn->imm, insn->dst_reg);
+
+		} else if (BPF_OP(insn->code) == BPF_NEG) {
+			fprintf(fp, "(%02x) r%d = %s-r%d\n",
+				insn->code, insn->dst_reg,
+				class == BPF_ALU ? "(u32) " : "",
+				insn->dst_reg);
+		} else if (BPF_SRC(insn->code) == BPF_X) {
+			fprintf(fp, "(%02x) %sr%d %s %sr%d\n",
+				insn->code, class == BPF_ALU ? "(u32) " : "",
+				insn->dst_reg,
+				bpf_alu_string[BPF_OP(insn->code) >> 4],
+				class == BPF_ALU ? "(u32) " : "",
+				insn->src_reg);
+		} else {
+			fprintf(fp, "(%02x) %sr%d %s %s%d\n",
+				insn->code, class == BPF_ALU ? "(u32) " : "",
+				insn->dst_reg,
+				bpf_alu_string[BPF_OP(insn->code) >> 4],
+				class == BPF_ALU ? "(u32) " : "",
+				insn->imm);
+		}
+	} else if (class == BPF_STX) {
+		if (BPF_MODE(insn->code) == BPF_MEM)
+			fprintf(fp, "(%02x) *(%s *)(r%d %+d) = r%d\n",
+				insn->code,
+				bpf_ldst_string[BPF_SIZE(insn->code) >> 3],
+				insn->dst_reg,
+				insn->off, insn->src_reg);
+		else if (BPF_MODE(insn->code) == BPF_XADD)
+			fprintf(fp, "(%02x) lock *(%s *)(r%d %+d) += r%d\n",
+				insn->code,
+				bpf_ldst_string[BPF_SIZE(insn->code) >> 3],
+				insn->dst_reg, insn->off,
+				insn->src_reg);
+		else
+			fprintf(fp, "BUG_%02x\n", insn->code);
+	} else if (class == BPF_ST) {
+		if (BPF_MODE(insn->code) != BPF_MEM) {
+			fprintf(fp, "BUG_st_%02x\n", insn->code);
+			return;
+		}
+		fprintf(fp, "(%02x) *(%s *)(r%d %+d) = %d\n",
+			insn->code,
+			bpf_ldst_string[BPF_SIZE(insn->code) >> 3],
+			insn->dst_reg,
+			insn->off, insn->imm);
+	} else if (class == BPF_LDX) {
+		if (BPF_MODE(insn->code) != BPF_MEM) {
+			fprintf(fp, "BUG_ldx_%02x\n", insn->code);
+			return;
+		}
+		fprintf(fp, "(%02x) r%d = *(%s *)(r%d %+d)\n",
+			insn->code, insn->dst_reg,
+			bpf_ldst_string[BPF_SIZE(insn->code) >> 3],
+			insn->src_reg, insn->off);
+	} else if (class == BPF_LD) {
+		if (BPF_MODE(insn->code) == BPF_ABS) {
+			fprintf(fp, "(%02x) r0 = *(%s *)skb[%d]\n",
+				insn->code,
+				bpf_ldst_string[BPF_SIZE(insn->code) >> 3],
+				insn->imm);
+		} else if (BPF_MODE(insn->code) == BPF_IND) {
+			fprintf(fp, "(%02x) r0 = *(%s *)skb[r%d + %d]\n",
+				insn->code,
+				bpf_ldst_string[BPF_SIZE(insn->code) >> 3],
+				insn->src_reg, insn->imm);
+		} else if (BPF_MODE(insn->code) == BPF_IMM &&
+			   BPF_SIZE(insn->code) == BPF_DW) {
+			/* At this point, we already made sure that the second
+			 * part of the ldimm64 insn is accessible.
+			 */
+			u64 imm = ((u64)(insn + 1)->imm << 32) | (u32)insn->imm;
+			int map_ptr = insn->src_reg == BPF_PSEUDO_MAP_FD;
+			char tmp[64];
+
+			if (map_ptr && !allow_ptr_leaks)
+				imm = 0;
+
+			fprintf(fp, "(%02x) r%d = %s\n",
+				insn->code, insn->dst_reg,
+				__func_imm_name(insn, imm,
+						tmp, sizeof(tmp)));
+		} else {
+			fprintf(fp, "BUG_ld_%02x\n", insn->code);
+			return;
+		}
+	} else if (class == BPF_JMP) {
+		u8 opcode = BPF_OP(insn->code);
+
+		if (opcode == BPF_CALL) {
+			char tmp[64];
+
+			if (insn->src_reg == BPF_PSEUDO_CALL) {
+				fprintf(fp, "(%02x) call pc%s\n",
+					insn->code,
+					__func_get_name(insn,
+							tmp, sizeof(tmp)));
+			} else {
+				strcpy(tmp, "unknown");
+				fprintf(fp, "(%02x) call %s#%d\n", insn->code,
+					__func_get_name(insn,
+							tmp, sizeof(tmp)),
+					insn->imm);
+			}
+		} else if (insn->code == (BPF_JMP | BPF_JA)) {
+			fprintf(fp, "(%02x) goto pc%+d\n",
+				insn->code, insn->off);
+		} else if (insn->code == (BPF_JMP | BPF_EXIT)) {
+			fprintf(fp, "(%02x) exit\n", insn->code);
+		} else if (BPF_SRC(insn->code) == BPF_X) {
+			fprintf(fp, "(%02x) if r%d %s r%d goto pc%+d\n",
+				insn->code, insn->dst_reg,
+				bpf_jmp_string[BPF_OP(insn->code) >> 4],
+				insn->src_reg, insn->off);
+		} else {
+			fprintf(fp, "(%02x) if r%d %s 0x%x goto pc%+d\n",
+				insn->code, insn->dst_reg,
+				bpf_jmp_string[BPF_OP(insn->code) >> 4],
+				insn->imm, insn->off);
+		}
+	} else {
+		fprintf(fp, "(%02x) %s\n",
+			insn->code, bpf_class_string[class]);
+	}
+}
+

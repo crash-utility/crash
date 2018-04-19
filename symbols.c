@@ -10215,6 +10215,29 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(mod_arch_specific_orc_unwind_ip));
 	fprintf(fp, "  mod_arch_specific_orc_unwind: %ld\n",
 		OFFSET(mod_arch_specific_orc_unwind));
+	fprintf(fp, "                  bpf_prog_aux: %ld\n",
+		OFFSET(bpf_prog_aux));
+	fprintf(fp, "                 bpf_prog_type: %ld\n",
+		OFFSET(bpf_prog_type));
+	fprintf(fp, "                  bpf_prog_tag: %ld\n",
+		OFFSET(bpf_prog_tag));
+	fprintf(fp, "            bpf_prog_jited_len: %ld\n",
+		OFFSET(bpf_prog_jited_len));
+	fprintf(fp, "             bpf_prog_bpf_func: %ld\n",
+		OFFSET(bpf_prog_bpf_func));
+	fprintf(fp, "                  bpf_prog_len: %ld\n",
+		OFFSET(bpf_prog_len));
+	fprintf(fp, "               bpf_prog_insnsi: %ld\n",
+		OFFSET(bpf_prog_insnsi));
+	fprintf(fp, "             bpf_map_map_flags: %ld\n",
+		OFFSET(bpf_map_map_flags));
+	fprintf(fp, "              bpf_map_map_type: %ld\n",
+		OFFSET(bpf_map_map_type));
+	fprintf(fp, "     bpf_prog_aux_used_map_cnt: %ld\n",
+		OFFSET(bpf_prog_aux_used_map_cnt));
+	fprintf(fp, "        bpf_prog_aux_used_maps: %ld\n",
+		OFFSET(bpf_prog_aux_used_maps));
+
 
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
@@ -10461,6 +10484,14 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(sk_buff_len));
 	fprintf(fp, "                     orc_entry: %ld\n",
 		SIZE(orc_entry));
+	fprintf(fp, "                      bpf_prog: %ld\n",
+		SIZE(bpf_prog));
+	fprintf(fp, "                  bpf_prog_aux: %ld\n",
+		SIZE(bpf_prog_aux));
+	fprintf(fp, "                       bpf_map: %ld\n",
+		SIZE(bpf_map));
+	fprintf(fp, "                      bpf_insn: %ld\n",
+		SIZE(bpf_insn));
 
         fprintf(fp, "\n                   array_table:\n");
 	/*

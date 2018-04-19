@@ -2009,6 +2009,17 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long kmem_cache_random;
 	long pid_namespace_idr;
 	long idr_idr_rt;
+	long bpf_prog_aux;
+	long bpf_prog_type;
+	long bpf_prog_tag;
+	long bpf_prog_jited_len;
+	long bpf_prog_bpf_func;
+	long bpf_prog_len;
+	long bpf_prog_insnsi;
+	long bpf_map_map_type;
+	long bpf_map_map_flags;
+	long bpf_prog_aux_used_map_cnt;
+	long bpf_prog_aux_used_maps;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2160,6 +2171,10 @@ struct size_table {         /* stash of commonly-used sizes */
 	long orc_entry;
 	long task_struct_policy;
 	long pid;
+	long bpf_prog;
+	long bpf_prog_aux;
+	long bpf_map;
+	long bpf_insn;
 };
 
 struct array_table {
@@ -4722,6 +4737,7 @@ void cmd_mach(void);         /* main.c */
 void cmd_help(void);         /* help.c */
 void cmd_test(void);         /* test.c */
 void cmd_ascii(void);        /* tools.c */
+void cmd_bpf(void);          /* bfp.c */
 void cmd_set(void);          /* tools.c */
 void cmd_eval(void);         /* tools.c */
 void cmd_list(void);         /* tools.c */
@@ -5270,6 +5286,7 @@ void display_help_screen(char *);
 extern char *help_pointer[];
 extern char *help_alias[];
 extern char *help_ascii[];
+extern char *help_bpf[];
 extern char *help_bt[];
 extern char *help_btop[];
 extern char *help_dev[];
