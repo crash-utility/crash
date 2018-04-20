@@ -3865,6 +3865,44 @@ show_milliseconds(struct task_context *tc, struct psinfo *psi)
 	}
 }
 
+static char *
+read_arg_string(struct task_context *tc, char *buf, ulong start, ulong end)
+{
+	physaddr_t paddr;
+	ulong uvaddr, size, cnt;
+	char *bufptr;
+
+	uvaddr = start;
+	size = end - start;
+	bufptr = buf;
+
+	while (size > 0) {
+		if (!uvtop(tc, uvaddr, &paddr, 0)) {
+			error(INFO, "cannot access user stack address: %lx\n\n",
+				uvaddr);
+			return NULL;
+		}
+
+		cnt = PAGESIZE() - PAGEOFFSET(uvaddr);
+
+		if (cnt > size)
+			cnt = size;
+
+		if (!readmem(paddr, PHYSADDR, bufptr, cnt,
+		    "user stack contents", RETURN_ON_ERROR|QUIET)) {
+			error(INFO, "cannot access user stack address: %lx\n\n",
+				uvaddr);
+			return NULL;
+		}
+
+		uvaddr += cnt;
+		bufptr += cnt;
+		size -= cnt;
+	}
+
+	return bufptr;
+}
+
 /*
  *  Show the argv and envp strings pointed to by mm_struct->arg_start 
  *  and mm_struct->env_start.  The user addresses need to broken up
@@ -3875,10 +3913,7 @@ static void
 show_task_args(struct task_context *tc)
 {
 	ulong arg_start, arg_end, env_start, env_end;
-	char *buf, *bufptr, *p1;
-	char *as, *ae, *es, *ee;
-	physaddr_t paddr;
-	ulong uvaddr, size, cnt;
+	char *buf, *p1, *end;
 	int c, d;
 
 	print_task_header(fp, tc, 0);
@@ -3910,43 +3945,13 @@ show_task_args(struct task_context *tc)
 			env_start, env_end, env_end - env_start);
 	}
 
-	buf = GETBUF(env_end - arg_start + 1);
-
-	uvaddr = arg_start;
-	size = env_end - arg_start;
-	bufptr = buf;
-
-	while (size > 0) {
-        	if (!uvtop(tc, uvaddr, &paddr, 0)) {
-                	error(INFO, "cannot access user stack address: %lx\n\n",
-                        	uvaddr);
-			goto bailout;
-        	}
-
-		cnt = PAGESIZE() - PAGEOFFSET(uvaddr);
-
-		if (cnt > size)
-			cnt = size;
-
-        	if (!readmem(paddr, PHYSADDR, bufptr, cnt,
-                    "user stack contents", RETURN_ON_ERROR|QUIET)) {
-                	error(INFO, "cannot access user stack address: %lx\n\n",
-                        	uvaddr);
-			goto bailout;
-        	}
-		
-		uvaddr += cnt;
-                bufptr += cnt;
-                size -= cnt;
-	}
-
-	as = buf;
-	ae = &buf[arg_end - arg_start];
-	es = &buf[env_start - arg_start];
-	ee = &buf[env_end - arg_start];
+	buf = GETBUF(arg_end - arg_start + 1);
+	end = read_arg_string(tc, buf, arg_start, arg_end);
+	if (!end)
+		goto bailout;
 
 	fprintf(fp, "ARG: ");
-	for (p1 = as, c = 0; p1 < ae; p1++) {
+	for (p1 = buf, c = 0; p1 < end; p1++) {
 		if (*p1 == NULLCHAR) {
 			if (c)
 				fprintf(fp, " ");
@@ -3957,14 +3962,21 @@ show_task_args(struct task_context *tc)
 		}
 	}
 
+	FREEBUF(buf);
+
+	buf = GETBUF(env_end - env_start + 1);
+	end = read_arg_string(tc, buf, env_start, env_end);
+	if (!end)
+		goto bailout;
+
 	fprintf(fp, "\nENV: ");
-	for (p1 = es, c = d = 0; p1 < ee; p1++) {
+	for (p1 = buf, c = d = 0; p1 < end; p1++) {
 		if (*p1 == NULLCHAR) {
 			if (c)
 				fprintf(fp, "\n");
 			c = 0;
 		} else {
-			fprintf(fp, "%s%c", !c && (p1 != es) ? "     " : "", *p1);
+			fprintf(fp, "%s%c", !c && (p1 != buf) ? "     " : "", *p1);
 			c++, d++;
 		}
 	}
