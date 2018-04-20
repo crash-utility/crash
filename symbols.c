@@ -1364,9 +1364,9 @@ store_module_symbols_v1(ulong total, int mods_installed)
 	struct module_symbol *modsym;
 	struct load_module *lm;
 	char buf1[BUFSIZE];
-	char buf2[BUFSIZE];
+	char buf2[BUFSIZE*2];
 	char name[BUFSIZE];
-	char rodata[BUFSIZE];
+	char rodata[BUFSIZE*2];
 	char *strbuf, *modbuf, *modsymbuf;
 	struct syment *sp;
 	ulong first, last;
@@ -1432,7 +1432,7 @@ store_module_symbols_v1(ulong total, int mods_installed)
 			error(INFO, 
 			    "module name greater than MAX_MOD_NAME: %s\n",
 				name);
-                	strncpy(lm->mod_name, name, MAX_MOD_NAME-1);
+			BCOPY(name, lm->mod_name, MAX_MOD_NAME-1);
 		}
 
 		lm->mod_flags = MOD_EXT_SYMS;
@@ -5932,7 +5932,7 @@ static int
 dereference_pointer(ulong addr, struct datatype_member *dm, ulong flags)
 {
 	char buf1[BUFSIZE];
-	char buf2[BUFSIZE];
+	char buf2[BUFSIZE*2];
 	char *typeptr, *member, *charptr, *voidptr, *p1, *sym;
 	int found, ptrptr, funcptr, typedef_is_ptr, use_symbol;
 	ulong target, value;
@@ -11419,7 +11419,7 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
 	ulong vaddr, array_entry, attribute, owner, name, address;
 	long name_type;
 	char buf[BUFSIZE];
-	char section_name[BUFSIZE];
+	char section_name[BUFSIZE/2];
 	ulong section_vaddr;
 
 #if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
@@ -11578,7 +11578,7 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
 			}
 		}
 	
-		BZERO(section_name, BUFSIZE);
+		BZERO(section_name, BUFSIZE/2);
 		if (!read_string(name, section_name, 32)) {
 			done = TRUE;
 			retval = FALSE;
@@ -11606,7 +11606,7 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
 				buflen *= 2;
 			}
 			shift_string_right(req->buf, strlen(buf));
-			strncpy(req->buf, buf, strlen(buf));
+			BCOPY(buf, req->buf, strlen(buf));
 			retval = TRUE;
 		} else {
 			sprintf(buf, " -s %s 0x%lx", section_name, section_vaddr);

@@ -8325,7 +8325,7 @@ cmd_runq(void)
 			} else {
 				pc->curcmd_flags |= CPUMASK;
 				BZERO(arg_buf, BUFSIZE);
-				strncpy(arg_buf, optarg, strlen(optarg));
+				strcpy(arg_buf, optarg);
 				cpus = get_cpumask_buf();
 				make_cpumask(arg_buf, cpus, FAULT_ON_ERROR, NULL);
 				pc->curcmd_private = (ulong)cpus;

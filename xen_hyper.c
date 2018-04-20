@@ -534,7 +534,7 @@ xen_hyper_schedule_init(void)
 				error(FATAL, "cannot malloc scheduler_name space.\n");
 			}
 			BZERO(xhscht->name, strlen(buf) + 1);
-			strncpy(xhscht->name, buf, strlen(buf));
+			BCOPY(buf, xhscht->name, strlen(buf));
 			break;
 		}
 		addr += sizeof(long) * nr_schedulers;

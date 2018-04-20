@@ -253,7 +253,9 @@ kernel_init()
 			kt->utsname.domainname : "(not printable)");
 	}
 
-	strncpy(buf, kt->utsname.release, MIN(strlen(kt->utsname.release), 65));
+	strncpy(buf, kt->utsname.release, 65);
+	if (buf[64])
+		buf[64] = NULLCHAR;
 	if (ascii_string(kt->utsname.release)) {
 		char separator;
 
@@ -1258,11 +1260,11 @@ verify_namelist()
 {
 	int i;
 	char command[BUFSIZE];
-	char buffer[BUFSIZE];
-	char buffer2[BUFSIZE];
-	char buffer3[BUFSIZE];
-	char buffer4[BUFSIZE];
-	char buffer5[BUFSIZE];
+	char buffer[BUFSIZE/2];
+	char buffer2[BUFSIZE/2];
+	char buffer3[BUFSIZE/2];
+	char buffer4[BUFSIZE/2];
+	char buffer5[BUFSIZE*2];
 	char *p1;
 	FILE *pipe;
 	int found;
@@ -1379,12 +1381,12 @@ verify_namelist()
         else
                 sprintf(buffer, "%s", ACTIVE() ? "live system" : pc->dumpfile);
 
-	sprintf(buffer2, " %s is %s -- %s is %s\n",
+	sprintf(buffer5, " %s is %s -- %s is %s\n",
                 namelist, namelist_smp ? "SMP" : "not SMP",
                 buffer, target_smp ? "SMP" : "not SMP");
 
 	error(INFO, "incompatible arguments: %s%s",
-		strlen(buffer2) > 48 ? "\n  " : "", buffer2);
+		strlen(buffer5) > 48 ? "\n  " : "", buffer5);
 
         program_usage(SHORT_FORM);
 }
@@ -1396,7 +1398,7 @@ static void
 source_tree_init(void)
 {
 	FILE *pipe;
-	char command[BUFSIZE];
+	char command[BUFSIZE*2];
 	char buf[BUFSIZE];
 
 	if (!is_directory(kt->source_tree)) {
@@ -1429,7 +1431,7 @@ list_source_code(struct gnu_request *req, int count_entered)
 	int argc, line, last, done, assembly;
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
-	char buf3[BUFSIZE];
+	char buf3[BUFSIZE*2];
 	char file[BUFSIZE];
         char *argv[MAXARGS];
 	struct syment *sp;
@@ -2555,7 +2557,7 @@ cmd_bt(void)
 			} else {
 				bt->flags |= BT_CPUMASK;				
 				BZERO(arg_buf, BUFSIZE);
-				strncpy(arg_buf, optarg, strlen(optarg));
+				strcpy(arg_buf, optarg);
 				cpus = get_cpumask_buf();
 			}
 			break;
@@ -4748,7 +4750,7 @@ find_module_objfile(char *modref, char *filename, char *tree)
 	retbuf = module_objfile_search(modref, filename, tree);
 
 	if (!retbuf) {
-		strncpy(tmpref, modref, BUFSIZE);
+		strncpy(tmpref, modref, BUFSIZE-1);
 		for (c = 0; c < BUFSIZE && tmpref[c]; c++)
 			if (tmpref[c] == '_')
 				tmpref[c] = '-';
@@ -6244,7 +6246,7 @@ cmd_irq(void)
 			} else {
 				choose_cpu = 1;
 				BZERO(arg_buf, BUFSIZE);
-				strncpy(arg_buf, optarg, strlen(optarg));
+				strcpy(arg_buf, optarg);
 			}
 			break;
 
@@ -6988,8 +6990,8 @@ generic_get_irq_affinity(int irq)
 		BZERO(buf, BUFSIZE);
 		if (read_string(name, buf, BUFSIZE-1)) {
 			if (strlen(name_buf) != 0)
-				strncat(name_buf, ",", 2);
-			strncat(name_buf, buf, strlen(buf));
+				strcat(name_buf, ",");
+			strcat(name_buf, buf);
 		}
 
 		readmem(action+OFFSET(irqaction_next), KVADDR,
@@ -7128,8 +7130,8 @@ generic_show_interrupts(int irq, ulong *cpus)
 		BZERO(buf2, BUFSIZE);
 		if (read_string(name, buf2, BUFSIZE-1)) {
 			if (strlen(name_buf) != 0)
-				strncat(name_buf, ",", 2);
-			strncat(name_buf, buf2, strlen(buf2));
+				strcat(name_buf, ",");
+			strcat(name_buf, buf2);
 		}
 
 		readmem(action+OFFSET(irqaction_next), KVADDR,

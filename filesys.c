@@ -1366,10 +1366,10 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
 	long s_dirty;
 	ulong devp, dirp, sbp, dirty, type, name;
 	struct list_data list_data, *ld;
-	char buf1[BUFSIZE];
+	char buf1[BUFSIZE*2];
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
-	char buf4[BUFSIZE];
+	char buf4[BUFSIZE/2];
 	ulong *dentry_list, *dp, *mntlist;
 	ulong *vfsmnt;
 	char *vfsmount_buf, *super_block_buf, *mount_buf;
@@ -1494,8 +1494,8 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
                         KVADDR, &name, sizeof(void *),
                         "file_system_type name", FAULT_ON_ERROR);
 
-                if (read_string(name, buf1, BUFSIZE-1))
-			sprintf(buf3, "%-6s ", buf1);
+                if (read_string(name, buf4, BUFSIZE-1))
+			sprintf(buf3, "%-6s ", buf4);
                 else
 			sprintf(buf3, "unknown ");
 
@@ -2389,7 +2389,7 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
 	char buf4[BUFSIZE];
-	char root_pwd[BUFSIZE];
+	char root_pwd[BUFSIZE*4];
 	int root_pwd_printed = 0;
 	int file_dump_flags = 0;
 
@@ -3082,7 +3082,7 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 			break;
 
 		if (tmp_dentry != dentry) {
-			strncpy(tmpname, pathname, BUFSIZE);
+			strncpy(tmpname, pathname, BUFSIZE-1);
 			if (strlen(tmpname) + d_name_len < BUFSIZE) {
 				if ((d_name_len > 1 || !STREQ(buf, "/")) &&
 				    !STRNEQ(tmpname, "/")) {
@@ -3613,8 +3613,8 @@ get_live_memory_source(void)
 {
 	FILE *pipe;
 	char buf[BUFSIZE];
-	char modname1[BUFSIZE];
-	char modname2[BUFSIZE];
+	char modname1[BUFSIZE/2];
+	char modname2[BUFSIZE/2];
 	char *name;
 	int use_module, crashbuiltin;
 	struct stat stat1, stat2;

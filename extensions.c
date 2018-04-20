@@ -1,8 +1,8 @@
 /* extensions.c - core analysis suite
  *
  * Copyright (C) 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2013 David Anderson
- * Copyright (C) 2002-2013 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2013, 2018 David Anderson
+ * Copyright (C) 2002-2013, 2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -363,7 +363,7 @@ preload_extensions(void)
 	DIR *dirp;
 	struct dirent *dp;
 	char dirbuf[BUFSIZE];
-	char filename[BUFSIZE];
+	char filename[BUFSIZE*2];
 	int found;
 
 	if (!get_extensions_directory(dirbuf))

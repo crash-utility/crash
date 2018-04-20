@@ -1438,7 +1438,7 @@ display_memory(ulonglong addr, long count, ulong flag, int memtype, void *opt)
 	char ch;
 	int linelen;
 	char buf[BUFSIZE];
-	char slab[BUFSIZE];
+	char slab[BUFSIZE/2];
 	int ascii_start;
 	ulong error_handle;
 	char *hex_64_fmt = BITS32() ? "%.*llx " : "%.*lx ";
@@ -1952,7 +1952,7 @@ char *
 format_stack_entry(struct bt_info *bt, char *retbuf, ulong value, ulong limit)
 {
 	char buf[BUFSIZE];
-	char slab[BUFSIZE];
+	char slab[BUFSIZE/2];
 
 	if (BITS32()) {
 		if ((bt->flags & BT_FULL_SYM_SLAB) && accessible(value)) {
@@ -4014,7 +4014,7 @@ vm_area_page_dump(ulong vma,
 	int display;
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
-	char buf3[BUFSIZE];
+	char buf3[BUFSIZE*2];
 	char buf4[BUFSIZE];
 
 	if (mm == symbol_value("init_mm"))
