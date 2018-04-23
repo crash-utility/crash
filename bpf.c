@@ -878,11 +878,10 @@ static const char *const bpf_jmp_string[16] = {
 };
 
 typedef unsigned char u8;
-typedef uint64_t u64;
 typedef unsigned int u32;
 
 static const char *__func_imm_name(const struct bpf_insn *insn,
-                                   u64 full_imm, char *buff, size_t len)
+                                   uint64_t full_imm, char *buff, size_t len)
 {
 	int m;
 	struct bpf_info *bpf = &bpf_info;
@@ -1025,7 +1024,7 @@ print_bpf_insn(struct bpf_insn *insn, int allow_ptr_leaks)
 			/* At this point, we already made sure that the second
 			 * part of the ldimm64 insn is accessible.
 			 */
-			u64 imm = ((u64)(insn + 1)->imm << 32) | (u32)insn->imm;
+			uint64_t imm = ((uint64_t)(insn + 1)->imm << 32) | (u32)insn->imm;
 			int map_ptr = insn->src_reg == BPF_PSEUDO_MAP_FD;
 			char tmp[64];
 
