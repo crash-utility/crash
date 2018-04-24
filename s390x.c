@@ -246,6 +246,15 @@ set_s390x_max_physmem_bits(void)
 	if (!kernel_symbol_exists("mem_section"))
 		return TRUE;
 
+	/*
+	 *  The mem_section was changed to be a pointer in 4.15, so it's 
+	 *  guaranteed to be a newer kernel.
+	 */
+	if (get_symbol_type("mem_section", NULL, NULL) == TYPE_CODE_PTR) {
+		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_NEW;
+		return TRUE;
+	}
+
 	if (!(array_len = get_array_length("mem_section", &dimension, 0)))
 		return FALSE;
 
