@@ -1,7 +1,7 @@
 /* netdump.c 
  *
- * Copyright (C) 2002-2017 David Anderson
- * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2018 David Anderson
+ * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -4098,19 +4098,26 @@ read_proc_kcore(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 	Elf64_Phdr *lp64;
 	off_t offset;
 
-	if (!machdep->verify_paddr(paddr)) {
-		if (CRASHDEBUG(1))
-			error(INFO, "verify_paddr(%lx) failed\n", paddr);
-		return READ_ERROR;
+	if (paddr != KCORE_USE_VADDR) {
+		if (!machdep->verify_paddr(paddr)) {
+			if (CRASHDEBUG(1))
+				error(INFO, "verify_paddr(%lx) failed\n", paddr);
+			return READ_ERROR;
+		}
 	}
 
 	/*
-	 *  Turn the physical address into a unity-mapped kernel 
-	 *  virtual address, which should work for 64-bit architectures,
-	 *  and for lowmem access for 32-bit architectures.
+	 *  Unless specified otherwise, turn the physical address into 
+	 *  a unity-mapped kernel virtual address, which should work 
+	 *  for 64-bit architectures, and for lowmem access for 32-bit
+	 *  architectures.
 	 */
+	if (paddr == KCORE_USE_VADDR)
+		kvaddr = addr;
+	else
+		kvaddr =  PTOV((ulong)paddr);
+
 	offset = UNINITIALIZED;
-	kvaddr =  PTOV((ulong)paddr);
 	readcnt = cnt;
 
 	switch (pkd->flags & (KCORE_ELF32|KCORE_ELF64)) 

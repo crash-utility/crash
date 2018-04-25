@@ -443,7 +443,7 @@ arm64_verify_symbol(const char *name, ulong value, char type)
 		machdep->machspec->kernel_flags = le64toh(value);
 
 	if ((type == 'A') && STREQ(name, "_kernel_flags_le_hi32"))
-		machdep->machspec->kernel_flags |= (le32toh(value) << 32);
+		machdep->machspec->kernel_flags |= ((ulong)le32toh(value) << 32);
 
 	if ((type == 'A') && STREQ(name, "_kernel_flags_le_lo32"))
 		machdep->machspec->kernel_flags |= le32toh(value);
@@ -842,7 +842,10 @@ arm64_calc_phys_offset(void)
 
 		if ((machdep->flags & NEW_VMEMMAP) &&
 		    ms->kimage_voffset && (sp = kernel_symbol_search("memstart_addr"))) {
-			paddr =	sp->value - machdep->machspec->kimage_voffset;
+			if (pc->flags & PROC_KCORE)
+				paddr = KCORE_USE_VADDR;
+			else
+				paddr =	sp->value - machdep->machspec->kimage_voffset;
 			if (READMEM(pc->mfd, &phys_offset, sizeof(phys_offset),
 			    sp->value, paddr) > 0) {
 				ms->phys_offset = phys_offset;

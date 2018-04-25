@@ -184,6 +184,7 @@ static inline int string_exists(char *s) { return (s ? TRUE : FALSE); }
 typedef uint64_t physaddr_t;
 
 #define PADDR_NOT_AVAILABLE (0x1ULL)
+#define KCORE_USE_VADDR      (-1ULL)
 
 typedef unsigned long long int ulonglong;
 struct number_option {
