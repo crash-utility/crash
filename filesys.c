@@ -199,9 +199,13 @@ memory_source_init(void)
 			if (!proc_kcore_init(fp))
 				error(FATAL, 
 				    "/proc/kcore: initialization failed\n");
-		} else
-			error(FATAL, "unknown memory device: %s\n",
-				pc->live_memsrc);
+		} else {
+			if (!pc->live_memsrc)
+				error(FATAL, "cannot find a live memory device\n");
+			else
+				error(FATAL, "unknown memory device: %s\n",
+					pc->live_memsrc);
+		}
 
 		return;
         } 
@@ -3625,7 +3629,13 @@ get_live_memory_source(void)
 	if (pc->live_memsrc)
 		goto live_report;
 
-	pc->live_memsrc = "/dev/mem";
+	if (file_exists("/dev/mem", NULL))
+		pc->live_memsrc = "/dev/mem";
+	else if (file_exists("/proc/kcore", NULL)) {
+		pc->flags &= ~DEVMEM;
+		pc->flags |= PROC_KCORE;
+		pc->live_memsrc = "/proc/kcore";
+	}
 	use_module = crashbuiltin = FALSE;
 
 	if (file_exists("/dev/mem", &stat1) &&
@@ -3684,7 +3694,7 @@ get_live_memory_source(void)
 	}
 
 	if (use_module) {
-		pc->flags &= ~DEVMEM;
+		pc->flags &= ~(DEVMEM|PROC_KCORE);
 		pc->flags |= MEMMOD;
 		pc->readmem = read_memory_device;
 		pc->writemem = write_memory_device;
@@ -3692,7 +3702,7 @@ get_live_memory_source(void)
 	}
 
 	if (crashbuiltin) {
-		pc->flags &= ~DEVMEM;
+		pc->flags &= ~(DEVMEM|PROC_KCORE);
 		pc->flags |= CRASHBUILTIN;
 		pc->readmem = read_memory_device;
 		pc->writemem = write_memory_device;

@@ -1101,8 +1101,13 @@ setup_environment(int argc, char **argv)
 	pc->flags2 |= REDZONE;
 	pc->confd = -2;
 	pc->machine_type = MACHINE_TYPE;
-	pc->readmem = read_dev_mem;      /* defaults until argv[] is parsed */
-	pc->writemem = write_dev_mem;
+	if (file_exists("/dev/mem", NULL)) {     /* defaults until argv[] is parsed */
+		pc->readmem = read_dev_mem;
+		pc->writemem = write_dev_mem;
+	} else if (file_exists("/proc/kcore", NULL)) {
+		pc->readmem = read_proc_kcore;
+		pc->writemem = write_proc_kcore;
+	}
 	pc->read_vmcoreinfo = no_vmcoreinfo;
 	pc->memory_module = NULL;
 	pc->memory_device = MEMORY_DRIVER_DEVICE;
