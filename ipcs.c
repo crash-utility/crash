@@ -71,6 +71,8 @@ struct ipcs_table {
 	ulong shm_f_op_huge_addr;
 	int use_shm_f_op;
 	int seq_multiplier;
+	int rt_cnt;
+	struct radix_tree_pair *rtp;
 };
 
 /*
@@ -92,6 +94,7 @@ static void get_sem_info(struct sem_info *, ulong, int);
 static void get_msg_info(struct msg_info *, ulong, int);
 static void add_rss_swap(ulong, int, ulong *, ulong *);
 static int is_file_hugepages(ulong);
+static void gather_radix_tree_entries(ulong);
 
 /*
  * global data
@@ -574,7 +577,7 @@ ipc_search_array(ulong ipc_ids_p, int specified, ulong specified_value, int (*fn
 static int
 ipc_search_idr(ulong ipc_ids_p, int specified, ulong specified_value, int (*fn)(ulong, int, ulong, int, int), int verbose)
 {
-	int in_use;
+	int i, in_use;
 	ulong ipcs_idr_p;
 	ulong ipc;
 	int next_id, total;
@@ -591,16 +594,32 @@ ipc_search_idr(ulong ipc_ids_p, int specified, ulong specified_value, int (*fn)(
 		return 0;
 	}
 
-	for (total = 0, next_id = 0; total < in_use; next_id++) {
-		ipc = idr_find(ipcs_idr_p, next_id);
-		if (ipc == 0)
-			continue;
-		
-		total++;
-		if (fn(ipc, specified, specified_value, next_id, verbose)) {
-			found = 1;
-			if (specified != SPECIFIED_NOTHING)
-				break;
+	if (VALID_MEMBER(idr_idr_rt)) {
+		gather_radix_tree_entries(ipcs_idr_p);
+
+		for (i = 0; i < ipcs_table.rt_cnt; i++) {
+			ipc = (ulong)ipcs_table.rtp[i].value;
+			if (fn(ipc, specified, specified_value, UNUSED, verbose)) {
+				found = 1;
+				if (specified != SPECIFIED_NOTHING)
+					break;
+			}
+		}
+
+		if (ipcs_table.rtp)
+			FREEBUF(ipcs_table.rtp);
+	} else {
+		for (total = 0, next_id = 0; total < in_use; next_id++) {
+			ipc = idr_find(ipcs_idr_p, next_id);
+			if (ipc == 0)
+				continue;
+			
+			total++;
+			if (fn(ipc, specified, specified_value, next_id, verbose)) {
+				found = 1;
+				if (specified != SPECIFIED_NOTHING)
+					break;
+			}
 		}
 	}
 	
@@ -885,7 +904,7 @@ get_shm_info(struct shm_info *shm_info, ulong shp, int id)
 	add_rss_swap(inodep, is_file_hugepages(filep), &shm_info->rss,
                  &shm_info->swap);
 
-	shm_info->deleted = UINT(buf + OFFSET(shmid_kernel_shm_perm) +
+	shm_info->deleted = UCHAR(buf + OFFSET(shmid_kernel_shm_perm) +
 				OFFSET(kern_ipc_perm_deleted));
 }
 
@@ -930,7 +949,7 @@ get_sem_info(struct sem_info *sem_info, ulong shp, int id)
 
 	sem_info->nsems = ULONG(buf + OFFSET(sem_array_sem_nsems));
 
-	sem_info->deleted = UINT(buf + OFFSET(sem_array_sem_perm) +
+	sem_info->deleted = UCHAR(buf + OFFSET(sem_array_sem_perm) +
 				OFFSET(kern_ipc_perm_deleted));
 }
 
@@ -976,7 +995,7 @@ get_msg_info(struct msg_info *msg_info, ulong shp, int id)
 
 	msg_info->messages = ULONG(buf + OFFSET(msg_queue_q_qnum));
 	
-	msg_info->deleted = UINT(buf + OFFSET(msg_queue_q_perm) +
+	msg_info->deleted = UCHAR(buf + OFFSET(msg_queue_q_perm) +
 				OFFSET(kern_ipc_perm_deleted));
 }
 
@@ -1081,5 +1100,21 @@ again:
 	}
 
 	return 0;
+}
+
+static void
+gather_radix_tree_entries(ulong ipcs_idr_p)
+{
+	long len;
+
+	ipcs_table.rt_cnt = do_radix_tree(ipcs_idr_p, RADIX_TREE_COUNT, NULL);
+
+	if (ipcs_table.rt_cnt) {
+		len = sizeof(struct radix_tree_pair) * (ipcs_table.rt_cnt+1);
+		ipcs_table.rtp = (struct radix_tree_pair *)GETBUF(len);
+		ipcs_table.rtp[0].index = ipcs_table.rt_cnt;
+		ipcs_table.rt_cnt = do_radix_tree(ipcs_idr_p, RADIX_TREE_GATHER, ipcs_table.rtp);
+	} else
+		ipcs_table.rtp = NULL;
 }
 
