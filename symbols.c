@@ -10227,17 +10227,37 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(bpf_prog_bpf_func));
 	fprintf(fp, "                  bpf_prog_len: %ld\n",
 		OFFSET(bpf_prog_len));
+	fprintf(fp, "                bpf_prog_pages: %ld\n",
+		OFFSET(bpf_prog_pages));
 	fprintf(fp, "               bpf_prog_insnsi: %ld\n",
 		OFFSET(bpf_prog_insnsi));
 	fprintf(fp, "             bpf_map_map_flags: %ld\n",
 		OFFSET(bpf_map_map_flags));
 	fprintf(fp, "              bpf_map_map_type: %ld\n",
 		OFFSET(bpf_map_map_type));
+	fprintf(fp, "                 bpf_map_pages: %ld\n",
+		OFFSET(bpf_map_pages));
+	fprintf(fp, "              bpf_map_key_size: %ld\n",
+		OFFSET(bpf_map_key_size));
+	fprintf(fp, "            bpf_map_value_size: %ld\n",
+		OFFSET(bpf_map_value_size));
+	fprintf(fp, "           bpf_map_max_entries: %ld\n",
+		OFFSET(bpf_map_max_entries));
+	fprintf(fp, "                  bpf_map_name: %ld\n",
+		OFFSET(bpf_map_name));
+	fprintf(fp, "                  bpf_map_user: %ld\n",
+		OFFSET(bpf_map_user));
+
 	fprintf(fp, "     bpf_prog_aux_used_map_cnt: %ld\n",
 		OFFSET(bpf_prog_aux_used_map_cnt));
 	fprintf(fp, "        bpf_prog_aux_used_maps: %ld\n",
 		OFFSET(bpf_prog_aux_used_maps));
-
+	fprintf(fp, "        bpf_prog_aux_load_time: %ld\n",
+		OFFSET(bpf_prog_aux_load_time));
+	fprintf(fp, "             bpf_prog_aux_user: %ld\n",
+		OFFSET(bpf_prog_aux_user));
+	fprintf(fp, "               user_struct_uid: %ld\n",
+		OFFSET(user_struct_uid));
 
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));

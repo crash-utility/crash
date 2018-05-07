@@ -833,6 +833,10 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 	readflags = pc->curcmd_flags & PARTIAL_READ_OK ?
 		RETURN_ON_ERROR|RETURN_PARTIAL : RETURN_ON_ERROR;
 
+	if (STREQ(pc->curcmd, "bpf") && pc->curcmd_private &&
+	    (addr > (ulong)pc->curcmd_private))
+		readflags |= QUIET;
+
 	if (pc->curcmd_flags & MEMTYPE_UVADDR)
 		memtype = UVADDR;
 	else if (pc->curcmd_flags & MEMTYPE_FILEADDR)

@@ -33,34 +33,37 @@ struct bpf_info {
 	.status = UNINITIALIZED,
 };
 
-static void do_bpf(ulong, ulong, char *, int);
+static void do_bpf(ulong, ulong, ulong, int);
 static void bpf_init(struct bpf_info *);
 static int bpf_type_size_init(void);
 static char *bpf_prog_type_string(int, char *);
 static char *bpf_map_map_type_string(int, char *);
 static char *bpf_prog_used_maps(int, char *);
 static char *bpf_prog_tag_string(char *, char *);
+static void bpf_prog_gpl_compatible(char *, ulong);
 
 static void dump_xlated_plain(void *, unsigned int, int);
+static void print_boot_time(unsigned long long, char *, unsigned int);
 
-#define PROG_ID      (0x1)
-#define MAP_ID       (0x2)
-#define DUMP_STRUCT  (0x4)
-#define JITED        (0x8)
-#define XLATED      (0x10)
-#define OPCODES     (0x20)
+
+#define PROG_ID        (0x1)
+#define MAP_ID         (0x2)
+#define DUMP_STRUCT    (0x4)
+#define JITED          (0x8)
+#define XLATED        (0x10)
+#define OPCODES       (0x20)
+#define PROG_VERBOSE  (0x40)
+#define MAP_VERBOSE   (0x80)
 
 void
 cmd_bpf(void)
 {
 	int c, radix;
-	ulong flags, id;
-	char *structarg;
+	ulong flags, prog_id, map_id;
 
-	flags = id = radix = 0;
-	structarg = NULL;
+	flags = prog_id = map_id = radix = 0;
 
-	while ((c = getopt(argcnt, args, "tTjsxdm:p:")) != EOF) {
+	while ((c = getopt(argcnt, args, "PMtTjsxdm:p:")) != EOF) {
 		switch(c)
 		{
 		case 'j':
@@ -73,20 +76,21 @@ cmd_bpf(void)
 			flags |= XLATED;
 			break;
 		case 'm':
-			if (flags & PROG_ID)
-				error(FATAL, "-m and -p options are mutually exclusive\n");
-			id = stol(optarg, FAULT_ON_ERROR, NULL);
+			map_id = stol(optarg, FAULT_ON_ERROR, NULL);
 			flags |= MAP_ID;
 			break;
 		case 'p':	
-			if (flags & MAP_ID)
-				error(FATAL, "-m and -p options are mutually exclusive\n");
-			id = stol(optarg, FAULT_ON_ERROR, NULL);
+			prog_id = stol(optarg, FAULT_ON_ERROR, NULL);
 			flags |= PROG_ID;
 			break;
 		case 's':
 			flags |= DUMP_STRUCT;
-			structarg = optarg;
+			break;
+		case 'P':
+			flags |= PROG_VERBOSE;
+			break;
+		case 'M':
+			flags |= MAP_VERBOSE;
 			break;
 		case 'x':
 			if (radix == 10)
@@ -107,30 +111,28 @@ cmd_bpf(void)
 	if (argerrs)
 		cmd_usage(pc->curcmd, SYNOPSIS);
 
-	if ((flags & JITED) && !(flags & PROG_ID))
-		error(FATAL, "-j option only applicable with -p\n");
-	if ((flags & XLATED) && !(flags & PROG_ID))
-		error(FATAL, "-t option only applicable with -p\n");
-	if ((flags & DUMP_STRUCT) && !(flags & (PROG_ID|MAP_ID)))
-		error(FATAL, "-s option requires either -m or -p\n");
+	if ((flags & JITED) && !(flags & (PROG_ID|PROG_VERBOSE)))
+		error(FATAL, "-j option only applicable with -p or -P\n");
+	if ((flags & XLATED) && !(flags & (PROG_ID|PROG_VERBOSE)))
+		error(FATAL, "-t option only applicable with -p or -P\n");
+	if ((flags & DUMP_STRUCT) && !(flags & (PROG_ID|PROG_VERBOSE|MAP_ID|MAP_VERBOSE)))
+		error(FATAL, "-s option requires either -p, -P, -m or -M\n");
 
-	if (radix && !(flags & (PROG_ID|MAP_ID)))
-		error(FATAL, "-%c option requires either -m or -p\n",
-			radix == 10 ? 'd' : 'x');
+	if (radix && !(flags & (PROG_ID|PROG_VERBOSE|MAP_ID|MAP_VERBOSE)))
+		error(FATAL, "-%c option requires -s\n", radix == 10 ? 'd' : 'x');
 
 	while (args[optind]) {
-		;
+		error(FATAL, "invalid argument: %s\n", args[optind]);
 		optind++;
 	}
 
-	do_bpf(flags, id, structarg, radix);
+	do_bpf(flags, prog_id, map_id, radix);
 }
 
 static void
 bpf_init(struct bpf_info *bpf)
 {
 	long len;
-	ulong cnt ATTRIBUTE_UNUSED;
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
@@ -179,6 +181,19 @@ bpf_init(struct bpf_info *bpf)
 			bpf->status = FALSE;
 			command_not_supported();
 		}	
+		/*
+		 *  Not required for basic functionality
+		 */
+		MEMBER_OFFSET_INIT(bpf_prog_pages, "bpf_prog", "pages");
+		MEMBER_OFFSET_INIT(bpf_prog_aux_load_time, "bpf_prog_aux", "load_time");
+		MEMBER_OFFSET_INIT(bpf_prog_aux_user, "bpf_prog_aux", "user");
+		MEMBER_OFFSET_INIT(bpf_map_key_size, "bpf_map", "key_size");
+		MEMBER_OFFSET_INIT(bpf_map_value_size, "bpf_map", "value_size");
+		MEMBER_OFFSET_INIT(bpf_map_max_entries, "bpf_map", "max_entries");
+		MEMBER_OFFSET_INIT(bpf_map_pages, "bpf_map", "pages");
+		MEMBER_OFFSET_INIT(bpf_map_name, "bpf_map", "name");
+		MEMBER_OFFSET_INIT(bpf_map_user, "bpf_map", "user");
+		MEMBER_OFFSET_INIT(user_struct_uid, "user_struct", "uid");
 
 		if (!bpf_type_size_init()) {
 			bpf->status = FALSE;
@@ -211,7 +226,7 @@ bpf_init(struct bpf_info *bpf)
 		len = sizeof(struct radix_tree_pair) * (bpf->progs+1);
 		bpf->proglist = (struct radix_tree_pair *)GETBUF(len);
 		bpf->proglist[0].index = bpf->progs;
-		cnt = do_radix_tree(symbol_value("prog_idr") + OFFSET(idr_idr_rt),
+		bpf->progs = do_radix_tree(symbol_value("prog_idr") + OFFSET(idr_idr_rt),
 			RADIX_TREE_GATHER, bpf->proglist);
 	}
 
@@ -220,8 +235,8 @@ bpf_init(struct bpf_info *bpf)
 	if (bpf->maps) {
 		len = sizeof(struct radix_tree_pair) * (bpf->maps+1);
 		bpf->maplist = (struct radix_tree_pair *)GETBUF(len);
-		bpf->maplist[0].index = bpf->progs;
-		cnt = do_radix_tree(symbol_value("map_idr") + OFFSET(idr_idr_rt),
+		bpf->maplist[0].index = bpf->maps;
+		bpf->maps = do_radix_tree(symbol_value("map_idr") + OFFSET(idr_idr_rt),
 			RADIX_TREE_GATHER, bpf->maplist);
 	}
 
@@ -231,18 +246,23 @@ bpf_init(struct bpf_info *bpf)
 }
 
 static void
-do_bpf(ulong flags, ulong id, char *structarg, int radix)
+do_bpf(ulong flags, ulong prog_id, ulong map_id, int radix)
 {
-	int i, c, found, type;
 	struct bpf_info *bpf;
-	ulong bpf_prog_aux, bpf_func, end_func, addr, insnsi;
+	int i, c, found, entries, type;
+	uint uid, map_pages, key_size, value_size, max_entries;
+	ulong bpf_prog_aux, bpf_func, end_func, addr, insnsi, user;
+	ulong do_progs, do_maps;
+	ulonglong load_time;
 	char *symbol;
+	ushort prog_pages;
 	int jited_len, len;
 	char *arglist[MAXARGS];
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
 	char buf4[BUFSIZE];
+	char buf5[BUFSIZE/2];
 	
 	bpf = &bpf_info;
 	bpf->proglist = bpf->maplist = NULL;
@@ -251,47 +271,51 @@ do_bpf(ulong flags, ulong id, char *structarg, int radix)
 
 	bpf_init(bpf);
 
-	switch (flags & (MAP_ID|PROG_ID)) 
-	{
-	case PROG_ID: 
+	if (flags & PROG_ID) {
 		for (i = found = 0; i < bpf->progs; i++) {
-			if (id == bpf->proglist[i].index) {
+			if (prog_id == bpf->proglist[i].index) {
 				found++;
 				break;
 			}
 		}
 		if (!found) {
-			error(INFO, "invalid program ID: %ld\n", id);
+			error(INFO, "invalid program ID: %ld\n", prog_id);
 			goto bailout;
 		}
-		break;
-
-	case MAP_ID:
-		for (i = found = 0; i < bpf->maps; i++) {
-			if (id == bpf->maplist[i].index) {
-				found++;
-				break;
-			}
-		}
-		if (!found) {
-			error(INFO, "invalid map ID: %ld\n", id);
-			goto bailout;
-		}
-		break;
 	}
 
-	if (flags & MAP_ID)
+	if (flags & MAP_ID) {
+		for (i = found = 0; i < bpf->maps; i++) {
+			if (map_id == bpf->maplist[i].index) {
+				found++;
+				break;
+			}
+		}
+		if (!found) {
+			error(INFO, "invalid map ID: %ld\n", map_id);
+			goto bailout;
+		}
+	}
+
+	if (!(flags & (PROG_ID|PROG_VERBOSE|MAP_ID|MAP_VERBOSE)))
+		do_progs = do_maps = TRUE;
+	else {
+		do_progs = do_maps = FALSE;
+		if (flags & (PROG_ID|PROG_VERBOSE))
+			do_progs = TRUE;
+		if (flags & (MAP_ID|MAP_VERBOSE))
+			do_maps = TRUE;
+	}
+
+	if (!do_progs)
 		goto do_map_only;
 
-	fprintf(fp, "%s\n", bpf->prog_hdr1);
+	for (i = entries = 0; i < bpf->progs; i++) {
+		if (bpf->proglist[i].value == 0) 
+			continue;
 
-	for (i = 0; i < bpf->progs; i++) {
-		if ((i == 0) && (bpf->proglist[i].value == 0)) {
-			fprintf(fp, "(none loaded)\n");
-			break;
-		}
-
-		if ((flags & PROG_ID) && (id != bpf->proglist[i].index))
+		if (((flags & (PROG_ID|PROG_VERBOSE)) == PROG_ID) && 
+		    (prog_id != bpf->proglist[i].index)) 
 			continue;
 
 		if (!readmem((ulong)bpf->proglist[i].value, KVADDR, bpf->bpf_prog_buf, 
@@ -301,6 +325,11 @@ do_bpf(ulong flags, ulong id, char *structarg, int radix)
 		if (!readmem(bpf_prog_aux, KVADDR, bpf->bpf_prog_aux_buf, 
 		    SIZE(bpf_prog_aux), "struct bpf_prog_aux", RETURN_ON_ERROR))
 			goto bailout;
+
+		if (entries && (flags & PROG_VERBOSE))
+			fprintf(fp, "\n%s\n", bpf->prog_hdr1);
+		if (entries++ == 0)
+			fprintf(fp, "%s\n", bpf->prog_hdr1);
 
 		fprintf(fp, "%s %s %s ", 
 			mkstring(buf1, 4, CENTER|LJUST|LONG_DEC, MKSTR(bpf->proglist[i].index)),
@@ -314,8 +343,43 @@ do_bpf(ulong flags, ulong id, char *structarg, int radix)
 			mkstring(buf1, strlen("USED_MAPS"), CENTER|LJUST, bpf_prog_used_maps(i, buf2)));
 		fprintf(fp, "\n");
 
-		if (flags & PROG_ID) {
-			;   /* TBD */
+		if (flags & (PROG_ID|PROG_VERBOSE)) {
+			jited_len = UINT(bpf->bpf_prog_buf + OFFSET(bpf_prog_jited_len));
+			len = UINT(bpf->bpf_prog_buf + OFFSET(bpf_prog_len));
+			len *= SIZE(bpf_insn);
+			if (VALID_MEMBER(bpf_prog_pages)) {
+				prog_pages = USHORT(bpf->bpf_prog_buf + OFFSET(bpf_prog_pages));
+				prog_pages *= PAGESIZE();
+			} else
+				prog_pages = 0;
+
+			fprintf(fp, "     XLATED: %d  JITED: %d  MEMLOCK: ", len, jited_len);
+			if (VALID_MEMBER(bpf_prog_pages)) {
+				fprintf(fp, "%d\n", prog_pages);
+			} else
+				fprintf(fp, "(unknown)\n");
+
+			fprintf(fp, "     LOAD_TIME: ");
+			if (VALID_MEMBER(bpf_prog_aux_load_time)) {
+				load_time = ULONGLONG(bpf->bpf_prog_aux_buf + OFFSET(bpf_prog_aux_load_time));
+				print_boot_time(load_time, buf5, BUFSIZE);
+				fprintf(fp, "%s\n", buf5);
+			} else
+				fprintf(fp, "(unknown)\n");
+
+			bpf_prog_gpl_compatible(buf1, (ulong)bpf->proglist[i].value);
+			fprintf(fp, "     GPL_COMPATIBLE: %s", buf1);
+
+			fprintf(fp, "  UID: ");
+			if (VALID_MEMBER(bpf_prog_aux_user) && VALID_MEMBER(user_struct_uid)) {
+				user = ULONG(bpf->bpf_prog_aux_buf + OFFSET(bpf_prog_aux_user));
+				if (readmem(user + OFFSET(user_struct_uid), KVADDR, &uid, sizeof(uint), 
+				    "user_struct.uid", QUIET|RETURN_ON_ERROR))
+					fprintf(fp, "%d\n", uid);
+				else
+					fprintf(fp, "(unknown)\n");
+			} else
+				fprintf(fp, "(unknown)\n");
 		}
 
 		if (flags & JITED) {
@@ -326,6 +390,7 @@ do_bpf(ulong flags, ulong id, char *structarg, int radix)
 
 			if (jited_len) {
 				open_tmpfile();
+				pc->curcmd_private = (ulonglong)end_func;
 				sprintf(buf1, "x/%di 0x%lx", jited_len, bpf_func);
 				gdb_pass_through(buf1, NULL, GNU_RETURN_ON_ERROR);
 				rewind(pc->tmpfile);
@@ -350,6 +415,7 @@ do_bpf(ulong flags, ulong id, char *structarg, int radix)
 					}
 					fprintf(pc->saved_fp, "%s %s\n", buf2, symbol ? symbol : "");
 				}
+				pc->curcmd_private = 0;
 				close_tmpfile();
 			} else
 				fprintf(fp, "(program not jited)\n");
@@ -378,21 +444,25 @@ do_bpf(ulong flags, ulong id, char *structarg, int radix)
 		}
 	}
 
-	if (flags & PROG_ID)
+	if (!do_maps)
 		goto bailout;
 	else
 		fprintf(fp, "\n");
 
 do_map_only:
-	fprintf(fp, "%s\n", bpf->map_hdr1);
 
-	for (i = 0; i < bpf->maps; i++) {
-		if ((i == 0) && (bpf->maplist[0].value == 0)) {
-			fprintf(fp, "(none loaded)\n");
-			break;
-		}
-		if ((flags & MAP_ID) && (id != bpf->maplist[i].index))
+	for (i = entries = 0; i < bpf->maps; i++) {
+		if (bpf->maplist[i].value == 0) 
 			continue;
+
+		if (((flags & (MAP_ID|MAP_VERBOSE)) == MAP_ID) && 
+		    (map_id != bpf->maplist[i].index))
+			continue;
+
+		if (entries && (flags & MAP_VERBOSE))
+			fprintf(fp, "\n%s\n", bpf->map_hdr1);
+		if (entries++ == 0)
+			fprintf(fp, "%s\n", bpf->map_hdr1);
 
 		if (!readmem((ulong)bpf->maplist[i].value, KVADDR, bpf->bpf_map_buf, 
 		    SIZE(bpf_map), "struct bpf_map", RETURN_ON_ERROR))
@@ -407,8 +477,57 @@ do_map_only:
 		fprintf(fp, " %08x ", UINT(bpf->bpf_map_buf + OFFSET(bpf_map_map_flags)));
 		fprintf(fp, "\n");
 
-		if (flags & MAP_ID) {
-			;  /* TBD */
+		if (flags & (MAP_ID|MAP_VERBOSE)) {
+			fprintf(fp, "     KEY_SIZE: ");
+			if (VALID_MEMBER(bpf_map_key_size)) {
+				key_size = UINT(bpf->bpf_map_buf + OFFSET(bpf_map_key_size));
+				fprintf(fp, "%d", key_size);
+			} else
+				fprintf(fp, "(unknown)");
+
+			fprintf(fp, "  VALUE_SIZE: ");
+			if (VALID_MEMBER(bpf_map_value_size)) {
+				value_size = UINT(bpf->bpf_map_buf + OFFSET(bpf_map_value_size));
+				fprintf(fp, "%d", value_size);
+			} else
+				fprintf(fp, "(unknown)");
+
+			fprintf(fp, "  MAX_ENTRIES: ");
+			if (VALID_MEMBER(bpf_map_max_entries)) {
+				max_entries = UINT(bpf->bpf_map_buf + OFFSET(bpf_map_max_entries));
+				fprintf(fp, "%d", max_entries);
+
+			} else
+				fprintf(fp, "(unknown)");
+
+			fprintf(fp, "  MEMLOCK: ");
+			if (VALID_MEMBER(bpf_map_pages)) {
+				map_pages = UINT(bpf->bpf_map_buf + OFFSET(bpf_map_pages));
+				fprintf(fp, "%d\n", map_pages * PAGESIZE());
+			} else
+				fprintf(fp, "(unknown)\n");
+
+			fprintf(fp, "     NAME: ");
+			if (VALID_MEMBER(bpf_map_name)) {
+				BCOPY(&bpf->bpf_map_buf[OFFSET(bpf_map_name)], buf1, 16);
+				buf1[17] = NULLCHAR;
+				if (strlen(buf1))
+					fprintf(fp, "\"%s\"", buf1);
+				else
+					fprintf(fp, "(unused)");
+			} else
+				fprintf(fp, "(unknown)\n");
+
+			fprintf(fp, "  UID: ");
+			if (VALID_MEMBER(bpf_map_user) && VALID_MEMBER(user_struct_uid)) {
+				user = ULONG(bpf->bpf_map_buf + OFFSET(bpf_map_user));
+				if (readmem(user + OFFSET(user_struct_uid), KVADDR, &uid, sizeof(uint), 
+				    "user_struct.uid", QUIET|RETURN_ON_ERROR))
+					fprintf(fp, "%d\n", uid);
+				else
+					fprintf(fp, "(unknown)\n");
+			} else
+				fprintf(fp, "(unknown)\n");
 		}
 
 		if (flags & DUMP_STRUCT) {
@@ -577,6 +696,29 @@ bpf_prog_tag_string(char *tag, char *buf)
 		sprintf(&buf[strlen(buf)], "%02x", (unsigned char)tag[i]);
 
 	return buf;
+}
+
+static void
+bpf_prog_gpl_compatible(char *retbuf, ulong bpf_prog)
+{
+	char buf[BUFSIZE];
+
+	sprintf(retbuf, "(unknown)");
+
+	open_tmpfile();
+        sprintf(buf, "p (*(struct bpf_prog *)0x%lx).gpl_compatible", bpf_prog);
+	gdb_pass_through(buf, NULL, GNU_RETURN_ON_ERROR);
+	rewind(pc->tmpfile);
+	while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+		if (strstr(buf, " = 1")) {
+			sprintf(retbuf, "yes");
+			break;
+		} else if (strstr(buf, " = 0")) {
+			sprintf(retbuf, "no");
+			break;
+		}
+	}
+	close_tmpfile();
 }
 
 
@@ -1079,3 +1221,30 @@ print_bpf_insn(struct bpf_insn *insn, int allow_ptr_leaks)
 	}
 }
 
+static void 
+print_boot_time(unsigned long long nsecs, char *buf, unsigned int size)
+{
+	struct timespec real_time_ts, boot_time_ts;
+	time_t wallclock_secs;
+	struct tm load_tm;
+
+	buf[--size] = '\0';
+
+	if (clock_gettime(CLOCK_REALTIME, &real_time_ts) ||
+	    clock_gettime(CLOCK_BOOTTIME, &boot_time_ts)) {
+		perror("Can't read clocks");
+		snprintf(buf, size, "%llu", nsecs / 1000000000);
+		return;
+	}
+
+	wallclock_secs = (real_time_ts.tv_sec - boot_time_ts.tv_sec) +
+		nsecs / 1000000000;
+
+	if (!localtime_r(&wallclock_secs, &load_tm)) {
+		snprintf(buf, size, "%llu", nsecs / 1000000000);
+		return;
+	}
+
+//	strftime(buf, size, "%b %d/%H:%M", &load_tm);
+	strftime(buf, size, "%a %b %d %H:%M:%S %Y", &load_tm);
+}

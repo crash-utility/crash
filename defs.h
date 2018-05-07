@@ -2017,10 +2017,20 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long bpf_prog_bpf_func;
 	long bpf_prog_len;
 	long bpf_prog_insnsi;
+	long bpf_prog_pages;
 	long bpf_map_map_type;
 	long bpf_map_map_flags;
+	long bpf_map_pages;
+	long bpf_map_key_size;
+	long bpf_map_value_size;
+	long bpf_map_max_entries;
+	long bpf_map_user;
+	long bpf_map_name;
 	long bpf_prog_aux_used_map_cnt;
 	long bpf_prog_aux_used_maps;
+	long bpf_prog_aux_load_time;
+	long bpf_prog_aux_user;
+	long user_struct_uid;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
