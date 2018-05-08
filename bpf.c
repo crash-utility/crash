@@ -1224,6 +1224,7 @@ print_bpf_insn(struct bpf_insn *insn, int allow_ptr_leaks)
 static void 
 print_boot_time(unsigned long long nsecs, char *buf, unsigned int size)
 {
+#ifdef CLOCK_BOOTTIME
 	struct timespec real_time_ts, boot_time_ts;
 	time_t wallclock_secs;
 	struct tm load_tm;
@@ -1247,4 +1248,7 @@ print_boot_time(unsigned long long nsecs, char *buf, unsigned int size)
 
 //	strftime(buf, size, "%b %d/%H:%M", &load_tm);
 	strftime(buf, size, "%a %b %d %H:%M:%S %Y", &load_tm);
+#else
+	sprintf(buf, "(unknown)");
+#endif
 }
