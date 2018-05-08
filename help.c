@@ -2685,7 +2685,7 @@ char *help_bpf[] = {
 "    }, ",
 "    name = \"\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\"",
 "  }",
-" "
+" ",
 "  Display the bpf_prog and bpf_prog_aux structures for program ID 13:\n",
 "  %s> bpf -p 13 -s",
 "   ID      BPF_PROG       BPF_PROG_AUX   BPF_PROG_TYPE       TAG       USED_MAPS",
