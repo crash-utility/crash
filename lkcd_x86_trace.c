@@ -1953,13 +1953,24 @@ find_trace(
 static int 
 kernel_entry_from_user_space(sframe_t *curframe, struct bt_info *bt)
 {
+	ulong stack_segment;
+
 	if (is_kernel_thread(bt->tc->task))
 		return FALSE;
 
-	if (((curframe->fp + 4 + SIZE(pt_regs)) == GET_STACKTOP(bt->task)) &&
-	    !is_kernel_thread(bt->tc->task))
-		return TRUE;
-	else if (userspace_return(curframe->fp+4, bt))
+	stack_segment = GET_STACK_ULONG(curframe->fp + 4 + SIZE(pt_regs) - sizeof(kaddr_t));
+
+	if ((curframe->fp + 4 + SIZE(pt_regs)) == GET_STACKTOP(bt->task)) {
+		if ((stack_segment == 0x7b) || (stack_segment == 0x2b))
+			return TRUE;
+	}
+
+	if ((curframe->fp + 4 + SIZE(pt_regs) + 8) == GET_STACKTOP(bt->task)) {
+		if ((stack_segment == 0x7b) || (stack_segment == 0x2b))
+			return TRUE;
+	}
+
+	if (userspace_return(curframe->fp+4, bt))
 		return TRUE;
 	else
 		return FALSE;
