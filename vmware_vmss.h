@@ -89,16 +89,79 @@ struct memregion {
 };
 typedef struct memregion	memregion;
 
+#define VMW_GPREGS_SIZE (128)
+#define VMW_CR64_SIZE (72)
+#define VMW_IDTR_SIZE (10)
+struct vmssregs64 {
+	/* read from vmss */
+	uint64_t	rax;
+	uint64_t	rcx;
+	uint64_t	rdx;
+	uint64_t	rbx;
+	uint64_t	rbp;
+	uint64_t	rsp;
+	uint64_t	rsi;
+	uint64_t	rdi;
+	uint64_t	r8;
+	uint64_t	r9;
+	uint64_t	r10;
+	uint64_t	r11;
+	uint64_t	r12;
+	uint64_t	r13;
+	uint64_t	r14;
+	uint64_t	r15;
+	/* manually managed */
+	uint64_t	idtr;
+	uint64_t	cr[VMW_CR64_SIZE / 8];
+	uint64_t	rip;
+	uint64_t	rflags;
+};
+typedef struct vmssregs64 vmssregs64;
+
+#define REGS_PRESENT_RAX    1<<0
+#define REGS_PRESENT_RCX    1<<1
+#define REGS_PRESENT_RDX    1<<2
+#define REGS_PRESENT_RBX    1<<3
+#define REGS_PRESENT_RBP    1<<4
+#define REGS_PRESENT_RSP    1<<5
+#define REGS_PRESENT_RSI    1<<6
+#define REGS_PRESENT_RDI    1<<7
+#define REGS_PRESENT_R8     1<<8
+#define REGS_PRESENT_R9     1<<9
+#define REGS_PRESENT_R10    1<<10
+#define REGS_PRESENT_R11    1<<11
+#define REGS_PRESENT_R12    1<<12
+#define REGS_PRESENT_R13    1<<13
+#define REGS_PRESENT_R14    1<<14
+#define REGS_PRESENT_R15    1<<15
+#define REGS_PRESENT_IDTR   1<<16
+#define REGS_PRESENT_CR0    1<<17
+#define REGS_PRESENT_CR1    1<<18
+#define REGS_PRESENT_CR2    1<<19
+#define REGS_PRESENT_CR3    1<<20
+#define REGS_PRESENT_CR4    1<<21
+#define REGS_PRESENT_RIP    1<<22
+#define REGS_PRESENT_RFLAGS 1<<23
+#define REGS_PRESENT_GPREGS 65535
+#define REGS_PRESENT_CRS    4063232
+#define REGS_PRESENT_ALL    16777215
+
 #define MAX_REGIONS	3
 struct vmssdata {
 	int32_t	cpt64bit;
 	FILE	*dfp;
+	char	*filename;
 	/* about the memory */
 	uint32_t	alignmask;
 	uint32_t	regionscount;
         memregion	regions[MAX_REGIONS];
 	uint64_t	memoffset;
 	uint64_t	memsize;
+	ulong		phys_base;
+	int		separate_vmem;
+	uint32_t	*vcpu_regs;
+	uint64_t	num_vcpus;
+	vmssregs64	**regs64;
 };
 typedef struct vmssdata vmssdata;
 

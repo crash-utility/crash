@@ -1,7 +1,7 @@
 /* netdump.h
  *
- * Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 David Anderson
- * Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2009, 2017 David Anderson
+ * Copyright (C) 2002-2009, 2017 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -77,6 +77,8 @@ struct vmcore_data {
 	ulonglong backup_src_start;
 	ulong backup_src_size;
 	ulonglong backup_offset;
+	ulong arch_data;
+	ulong phys_base;
 };
 
 #define DUMP_ELF_INCOMPLETE  0x1   /* dumpfile is incomplete */
@@ -141,26 +143,3 @@ struct proc_kcore_data {
         Elf32_Ehdr *elf32;
 	Elf32_Phdr *load32;
 };
-
-struct QEMUCPUSegment {
-    uint32_t selector;
-    uint32_t limit;
-    uint32_t flags;
-    uint32_t pad;
-    uint64_t base;
-};
-
-typedef struct QEMUCPUSegment QEMUCPUSegment;
-
-struct QEMUCPUState {
-    uint32_t version;
-    uint32_t size;
-    uint64_t rax, rbx, rcx, rdx, rsi, rdi, rsp, rbp;
-    uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
-    uint64_t rip, rflags;
-    QEMUCPUSegment cs, ds, es, fs, gs, ss;
-    QEMUCPUSegment ldt, tr, gdt, idt;
-    uint64_t cr[5];
-};
-
-typedef struct QEMUCPUState QEMUCPUState;

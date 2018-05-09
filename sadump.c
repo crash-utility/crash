@@ -157,9 +157,6 @@ read_dump_header(char *file)
 	}
 
 restart:
-	if (block_size < 0)
-		return FALSE;
-
 	if (!read_device(sph, block_size, &offset)) {
 		error(INFO, "sadump: cannot read partition header\n");
 		goto err;
@@ -1558,13 +1555,26 @@ sadump_display_regs(int cpu, FILE *ofp)
  */
 int sadump_phys_base(ulong *phys_base)
 {
-	if (SADUMP_VALID()) {
+	if (SADUMP_VALID() && !sd->phys_base) {
 		if (CRASHDEBUG(1))
 			error(NOTE, "sadump: does not save phys_base.\n");
 		return FALSE;
 	}
 
+	if (sd->phys_base) {
+		*phys_base = sd->phys_base;
+		return TRUE;
+	}
+
 	return FALSE;
+}
+
+int
+sadump_set_phys_base(ulong phys_base)
+{
+	sd->phys_base = phys_base;
+
+	return TRUE;
 }
 
 /*
@@ -1649,3 +1659,47 @@ get_sadump_data(void)
 {
 	return sd;
 }
+
+#ifdef X86_64
+static int
+get_sadump_smram_cpu_state_any(struct sadump_smram_cpu_state *smram)
+{
+        ulong offset;
+        struct sadump_header *sh = sd->dump_header;
+        int apicid;
+        struct sadump_smram_cpu_state scs, zero;
+
+        offset = sd->sub_hdr_offset + sizeof(uint32_t) +
+                 sd->dump_header->nr_cpus * sizeof(struct sadump_apic_state);
+
+        memset(&zero, 0, sizeof(zero));
+
+        for (apicid = 0; apicid < sh->nr_cpus; ++apicid) {
+                if (!read_device(&scs, sizeof(scs), &offset)) {
+                        error(INFO, "sadump: cannot read sub header "
+                              "cpu_state\n");
+                        return FALSE;
+                }
+                if (memcmp(&scs, &zero, sizeof(scs)) != 0) {
+                        *smram = scs;
+                        return TRUE;
+                }
+        }
+
+        return FALSE;
+}
+
+int
+sadump_get_cr3_idtr(ulong *cr3, ulong *idtr)
+{
+	struct sadump_smram_cpu_state scs;
+
+	memset(&scs, 0, sizeof(scs));
+	get_sadump_smram_cpu_state_any(&scs);
+
+	*cr3 = scs.Cr3;
+	*idtr = ((uint64_t)scs.IdtUpper)<<32 | (uint64_t)scs.IdtLower;
+
+	return TRUE;
+}
+#endif /* X86_64 */

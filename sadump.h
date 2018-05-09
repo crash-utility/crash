@@ -219,6 +219,7 @@ struct sadump_data {
 	ulonglong backup_offset;
 
 	uint64_t max_mapnr;
+	ulong phys_base;
 };
 
 struct sadump_data *sadump_get_sadump_data(void);

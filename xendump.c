@@ -19,7 +19,7 @@
 #include "xendump.h"
 
 static struct xendump_data xendump_data = { 0 };
-static struct xendump_data *xd = &xendump_data;
+struct xendump_data *xd = &xendump_data;
 
 static int xc_save_verify(char *);
 static int xc_core_verify(char *, char *);

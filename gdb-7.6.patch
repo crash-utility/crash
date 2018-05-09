@@ -2323,3 +2323,72 @@ diff -up gdb-7.6/opcodes/configure.orig gdb-7.6/opcodes/configure
      NO_WERROR="-Wno-error"
  fi
  
+--- gdb-7.6/gdb/symtab.c.orig
++++ gdb-7.6/gdb/symtab.c
+@@ -5266,6 +5266,7 @@ gdb_get_line_number(struct gnu_request *
+ {
+         struct symtab_and_line sal;
+ 	struct symbol *sym;
++	struct objfile *objfile;
+         CORE_ADDR pc;
+ 
+ #define LASTCHAR(s)      (s[strlen(s)-1])
+@@ -5281,8 +5282,22 @@ gdb_get_line_number(struct gnu_request *
+         sal = find_pc_line(pc, 0);
+ 
+ 	if (!sal.symtab) {
+-		req->buf[0] = '\0';
+-		return;
++		/*
++		 *  If a module address line number can't be found, it's typically
++		 *  due to its addrmap still containing offset values because its 
++		 *  objfile doesn't have full symbols loaded.
++		 */
++		if (req->lm) {
++			objfile = req->lm->loaded_objfile;
++			if (!objfile_has_full_symbols(objfile) && objfile->sf) { 
++				objfile->sf->qf->expand_all_symtabs(objfile);
++				sal = find_pc_line(pc, 0);
++			}
++		}
++		if (!sal.symtab) {
++			req->buf[0] = '\0';
++			return;
++		}
+ 	}
+ 
+         if (sal.symtab->filename && sal.symtab->dirname) {
+@@ -5557,7 +5572,6 @@ struct load_module *gdb_current_load_mod
+ static void 
+ gdb_add_symbol_file(struct gnu_request *req)
+ {
+-	register struct objfile *loaded_objfile = NULL;
+ 	register struct objfile *objfile;
+ 	register struct minimal_symbol *m;
+ 	struct load_module *lm;
+@@ -5576,6 +5590,7 @@ gdb_add_symbol_file(struct gnu_request *
+ 
+ 	req->name = lm->mod_namelist;
+ 	gdb_delete_symbol_file(req);
++	lm->loaded_objfile = NULL;
+ 
+ 	if ((lm->mod_flags & MOD_NOPATCH) == 0) {
+ 	        for (i = 0 ; i < lm->mod_sections; i++) {
+@@ -5623,12 +5638,15 @@ gdb_add_symbol_file(struct gnu_request *
+ 
+         ALL_OBJFILES(objfile) {
+ 		if (same_file(objfile->name, lm->mod_namelist)) {
+-                        loaded_objfile = objfile;
++			if (objfile->separate_debug_objfile)
++				lm->loaded_objfile = objfile->separate_debug_objfile;
++			else
++				lm->loaded_objfile = objfile;
+ 			break;
+ 		}
+         }
+ 
+-	if (!loaded_objfile)
++	if (!lm->loaded_objfile)
+                 req->flags |= GNU_COMMAND_FAILED;
+ }
+ 

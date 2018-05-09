@@ -1,7 +1,7 @@
 /* ppc64.c -- core analysis suite
  *
- * Copyright (C) 2004-2015 David Anderson
- * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2015,2017 David Anderson
+ * Copyright (C) 2004-2015,2017 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2004, 2006 Haren Myneni, IBM Corporation
  *
  * This program is free software; you can redistribute it and/or modify
@@ -447,10 +447,16 @@ ppc64_init(int when)
 				} else if (!(machdep->flags & BOOK3E) &&
 				    (THIS_KERNEL_VERSION >= LINUX(4,6,0))) {
 					m->l1_index_size = PTE_INDEX_SIZE_L4_64K_3_10;
-					m->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_6;
-					m->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_6;
-					m->l4_index_size = PGD_INDEX_SIZE_L4_64K_3_10;
 
+					if (THIS_KERNEL_VERSION >= LINUX(4,12,0)) {
+						m->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_12;
+						m->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_12;
+						m->l4_index_size = PGD_INDEX_SIZE_L4_64K_4_12;
+					} else {
+						m->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_6;
+						m->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_6;
+						m->l4_index_size = PGD_INDEX_SIZE_L4_64K_3_10;
+					}
 				} else if (THIS_KERNEL_VERSION >= LINUX(3,10,0)) {
 					m->l1_index_size = PTE_INDEX_SIZE_L4_64K_3_10;
 					m->l2_index_size = PMD_INDEX_SIZE_L4_64K_3_10;
@@ -1507,6 +1513,8 @@ ppc64_translate_pte(ulong pte, void *physaddr, ulonglong pte_rpn_shift)
         char *arglist[MAXARGS];
         ulong paddr;
 
+	if (STREQ(pc->curcmd, "pte"))
+		pte_rpn_shift = machdep->machspec->pte_rpn_shift;
         paddr =  PTOB(pte >> pte_rpn_shift);
         page_present = !!(pte & _PAGE_PRESENT);
 
@@ -1517,12 +1525,12 @@ ppc64_translate_pte(ulong pte, void *physaddr, ulonglong pte_rpn_shift)
 
         sprintf(ptebuf, "%lx", pte);
         len1 = MAX(strlen(ptebuf), strlen("PTE"));
-        fprintf(fp, "%s  ", mkstring(buf, len1, CENTER|LJUST, "PTE"));
 
         if (!page_present && pte) {
                 swap_location(pte, buf);
                 if ((c = parse_line(buf, arglist)) != 3)
                         error(FATAL, "cannot determine swap location\n");
+                fprintf(fp, "%s  ", mkstring(buf2, len1, CENTER|LJUST, "PTE"));
 
                 len2 = MAX(strlen(arglist[0]), strlen("SWAP"));
                 len3 = MAX(strlen(arglist[2]), strlen("OFFSET"));
@@ -1541,6 +1549,7 @@ ppc64_translate_pte(ulong pte, void *physaddr, ulonglong pte_rpn_shift)
                 return page_present;
         }
 
+        fprintf(fp, "%s  ", mkstring(buf, len1, CENTER|LJUST, "PTE"));
         sprintf(physbuf, "%lx", paddr);
         len2 = MAX(strlen(physbuf), strlen("PHYSICAL"));
         fprintf(fp, "%s  ", mkstring(buf, len2, CENTER|LJUST, "PHYSICAL"));
@@ -2328,6 +2337,14 @@ retry:
                         *nip = *up;
                         *ksp = bt->stackbase + 
 				((char *)(up) - 16 - bt->stackbuf);
+			/*
+			 * Check whether this symbol relates to a
+			 * backtrace or not
+			 */
+			ur_ksp =  *(ulong *)&bt->stackbuf[(*ksp) - bt->stackbase];
+			if (!INSTACK(ur_ksp, bt))
+				continue;
+
                         return TRUE;
                 }
 	}

@@ -70,7 +70,7 @@ static void show_net_devices_v3(ulong);
 static void print_neighbour_q(ulong, int);
 static void get_netdev_info(ulong, struct devinfo *);
 static void get_device_name(ulong, char *);
-static void get_device_address(ulong, char *);
+static long get_device_address(ulong, char **, long);
 static void get_sock_info(ulong, char *);
 static void dump_arp(void);
 static void arp_state_to_flags(unsigned char);
@@ -441,7 +441,8 @@ show_net_devices(ulong task)
 {
 	ulong next;
 	long flen;
-	char buf[BUFSIZE];
+	char *buf;
+	long buflen = BUFSIZE;
 
 	if (symbol_exists("dev_base_head")) {
 		show_net_devices_v2(task);
@@ -459,6 +460,7 @@ show_net_devices(ulong task)
 	if (!net->netdevice || !next)
 		return;
 
+	buf = GETBUF(buflen);
 	flen = MAX(VADDR_PRLEN, strlen(net->netdevice));
 
 	fprintf(fp, "%s  NAME   IP ADDRESS(ES)\n",
@@ -472,12 +474,14 @@ show_net_devices(ulong task)
 		get_device_name(next, buf);
 		fprintf(fp, "%-6s ", buf);
 
-		get_device_address(next, buf);
+		buflen = get_device_address(next, &buf, buflen);
 		fprintf(fp, "%s\n", buf);
 
         	readmem(next+net->dev_next, KVADDR, &next, 
 			sizeof(void *), "(net_)device.next", FAULT_ON_ERROR);
 	} while (next);
+
+	FREEBUF(buf);
 }
 
 static void
@@ -485,13 +489,15 @@ show_net_devices_v2(ulong task)
 {
 	struct list_data list_data, *ld;
 	char *net_device_buf;
-	char buf[BUFSIZE];
+	char *buf;
+	long buflen = BUFSIZE;
 	int ndevcnt, i;
 	long flen;
 
 	if (!net->netdevice) /* initialized in net_init() */
 		return;
 
+	buf = GETBUF(buflen);
 	flen = MAX(VADDR_PRLEN, strlen(net->netdevice));
 
 	fprintf(fp, "%s  NAME   IP ADDRESS(ES)\n",
@@ -521,12 +527,13 @@ show_net_devices_v2(ulong task)
 		get_device_name(ld->list_ptr[i], buf);
 		fprintf(fp, "%-6s ", buf);
 
-		get_device_address(ld->list_ptr[i], buf);
+		buflen = get_device_address(ld->list_ptr[i], &buf, buflen);
 		fprintf(fp, "%s\n", buf);
 	}
 	
 	FREEBUF(ld->list_ptr);
 	FREEBUF(net_device_buf);
+	FREEBUF(buf);
 }
 
 static void
@@ -535,13 +542,15 @@ show_net_devices_v3(ulong task)
 	ulong nsproxy_p, net_ns_p;
 	struct list_data list_data, *ld;
 	char *net_device_buf;
-	char buf[BUFSIZE];
+	char *buf;
+	long buflen = BUFSIZE;
 	int ndevcnt, i;
 	long flen;
 
 	if (!net->netdevice) /* initialized in net_init() */
 		return;
 
+	buf = GETBUF(buflen);
 	flen = MAX(VADDR_PRLEN, strlen(net->netdevice));
 
 	fprintf(fp, "%s  NAME   IP ADDRESS(ES)\n",
@@ -581,12 +590,13 @@ show_net_devices_v3(ulong task)
 		get_device_name(ld->list_ptr[i], buf);
 		fprintf(fp, "%-6s ", buf);
 
-		get_device_address(ld->list_ptr[i], buf);
+		buflen = get_device_address(ld->list_ptr[i], &buf, buflen);
 		fprintf(fp, "%s\n", buf);
 	}
 	
 	FREEBUF(ld->list_ptr);
 	FREEBUF(net_device_buf);
+	FREEBUF(buf);
 }
 
 /*
@@ -869,19 +879,24 @@ get_device_name(ulong devaddr, char *buf)
  *  in_ifaddr->ifa_next points to the next in_ifaddr in the list (if any).
  * 
  */
-static void
-get_device_address(ulong devaddr, char *buf)
+static long
+get_device_address(ulong devaddr, char **bufp, long buflen)
 {
 	ulong ip_ptr, ifa_list;
 	struct in_addr ifa_address;
+	char *buf;
+	char buf2[BUFSIZE];
+	long pos = 0;
 
-	BZERO(buf, BUFSIZE);
+	buf = *bufp;
+	BZERO(buf, buflen);
+	BZERO(buf2, BUFSIZE);
 
         readmem(devaddr + net->dev_ip_ptr, KVADDR,
         	&ip_ptr, sizeof(ulong), "ip_ptr", FAULT_ON_ERROR);
 
 	if (!ip_ptr)
-		return;
+		return buflen;
 
         readmem(ip_ptr + OFFSET(in_device_ifa_list), KVADDR,
         	&ifa_list, sizeof(ulong), "ifa_list", FAULT_ON_ERROR);
@@ -891,13 +906,20 @@ get_device_address(ulong devaddr, char *buf)
         		&ifa_address, sizeof(struct in_addr), "ifa_address", 
 			FAULT_ON_ERROR);
 
-		sprintf(&buf[strlen(buf)], "%s%s", 
-			strlen(buf) ? ", " : "",
-			inet_ntoa(ifa_address));
+		sprintf(buf2, "%s%s", pos ? ", " : "", inet_ntoa(ifa_address));
+		if (pos + strlen(buf2) >= buflen) {
+			RESIZEBUF(*bufp, buflen, buflen * 2);
+			buf = *bufp;
+			BZERO(buf + buflen, buflen);
+			buflen *= 2;
+		}
+		BCOPY(buf2, &buf[pos], strlen(buf2));
+		pos += strlen(buf2);
 
         	readmem(ifa_list + OFFSET(in_ifaddr_ifa_next), KVADDR,
         		&ifa_list, sizeof(ulong), "ifa_next", FAULT_ON_ERROR);
 	}
+	return buflen;
 }
 
 /*

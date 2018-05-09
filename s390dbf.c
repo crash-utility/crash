@@ -57,6 +57,9 @@
 #define KL_PTRSZ 4
 #endif
 
+/* Start TOD time of kernel in usecs for relative time stamps */
+static uint64_t tod_clock_base_us;
+
 typedef unsigned long uaddr_t;
 typedef unsigned long kaddr_t;
 
@@ -162,13 +165,23 @@ static inline int set_cmd_flags(command_t *cmd, int flags, char *extraops)
 	return 0;
 }
 
+/* Time of day clock value for 1970/01/01 */
+#define TOD_UNIX_EPOCH (0x8126d60e46000000LL - (0x3c26700LL * 1000000 * 4096))
+/* Time of day clock value for 1970/01/01 in usecs */
+#define TOD_UNIX_EPOCH_US (TOD_UNIX_EPOCH >> 12)
+
 static inline void kl_s390tod_to_timeval(uint64_t todval, struct timeval *xtime)
 {
-	todval -= 0x8126d60e46000000LL - (0x3c26700LL * 1000000 * 4096);
+	uint64_t todval_us;
 
-	todval >>= 12;
-	xtime->tv_sec  = todval / 1000000;
-	xtime->tv_usec = todval % 1000000;
+	/* Convert TOD to usec (51th bit of TOD is us) */
+	todval_us = todval >> 12;
+	/* Add base if we have relative time stamps */
+	todval_us += tod_clock_base_us;
+	/* Subtract EPOCH that we get time in usec since 1970 */
+	todval_us -= TOD_UNIX_EPOCH_US;
+	xtime->tv_sec  = todval_us / 1000000;
+	xtime->tv_usec = todval_us % 1000000;
 }
 
 static inline int kl_struct_len(char* struct_name)
@@ -846,10 +859,38 @@ find_debug_area(const char *area_name)
 	return NULL;
 }
 
+static void tod_clock_base_init(void)
+{
+	if (kernel_symbol_exists("tod_clock_base")) {
+		/*
+		 * Kernels >= 4.14 that contain 6e2ef5e4f6cc5734 ("s390/time:
+		 * add support for the TOD clock epoch extension")
+		 */
+		get_symbol_data("tod_clock_base", sizeof(tod_clock_base_us),
+				&tod_clock_base_us);
+		/* Bit for usecs is at position 59 - therefore shift 4 */
+		tod_clock_base_us >>= 4;
+	} else if (kernel_symbol_exists("sched_clock_base_cc") &&
+		   !kernel_symbol_exists("tod_to_timeval")) {
+		/*
+		 * Kernels >= 4.11 that contain ea417aa8a38bc7db ("s390/debug:
+		 * make debug event time stamps relative to the boot TOD clock")
+		 */
+		get_symbol_data("sched_clock_base_cc",
+				sizeof(tod_clock_base_us), &tod_clock_base_us);
+		/* Bit for usecs is at position 51 - therefore shift 12 */
+		tod_clock_base_us >>= 12;
+	} else {
+		/* All older kernels use absolute time stamps */
+		tod_clock_base_us = 0;
+	}
+}
+
 static void
 dbf_init(void)
 {
 	if (!initialized) {
+		tod_clock_base_init();
 		if(dbf_version >= DBF_VERSION_V2)
 			add_lcrash_debug_view(&pages_view);
 		add_lcrash_debug_view(&ascii_view);

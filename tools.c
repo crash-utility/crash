@@ -423,9 +423,10 @@ strip_hex(char *line)
  *  Turn a string into upper-case.
  */
 char *
-upper_case(char *s, char *buf)
+upper_case(const char *s, char *buf)
 {
-	char *p1, *p2;
+	const char *p1;
+	char *p2;
 
 	p1 = s;
 	p2 = buf;
@@ -3925,7 +3926,7 @@ cmd_tree()
 	td = &tree_data;
 	BZERO(td, sizeof(struct tree_data));
 
-	while ((c = getopt(argcnt, args, "xdt:r:o:s:S:pN")) != EOF) {
+	while ((c = getopt(argcnt, args, "xdt:r:o:s:S:plN")) != EOF) {
 		switch (c)
 		{
 		case 't':
@@ -3943,6 +3944,10 @@ cmd_tree()
 				cmd_usage(pc->curcmd, SYNOPSIS);
 			}
 				
+			break;
+
+		case 'l':
+			td->flags |= TREE_LINEAR_ORDER;
 			break;
 
 		case 'r':
@@ -4018,12 +4023,15 @@ cmd_tree()
 	if (argerrs)
 		cmd_usage(pc->curcmd, SYNOPSIS);
 
+	if ((type_flag & RADIXTREE_REQUEST) && (td->flags & TREE_LINEAR_ORDER))
+		error(FATAL, "-l option is not applicable to radix trees\n");
+
 	if ((type_flag & RADIXTREE_REQUEST) && (td->flags & TREE_NODE_OFFSET_ENTERED))
 		error(FATAL, "-o option is not applicable to radix trees\n");
 
 	if ((td->flags & TREE_ROOT_OFFSET_ENTERED) && 
 	    (td->flags & TREE_NODE_POINTER))
-		error(INFO, "-r and -N options are mutually exclusive\n");
+		error(FATAL, "-r and -N options are mutually exclusive\n");
 
 	if (!args[optind]) {
 		error(INFO, "a starting address is required\n");
@@ -4129,6 +4137,10 @@ static void do_radix_tree_iter(ulong node, uint height, char *path,
 			       ulong index, struct radix_tree_ops *ops)
 {
 	uint off;
+
+	if (!hq_enter(node))
+		error(FATAL,
+			"\nduplicate tree node: %lx\n", node);
 
 	for (off = 0; off < RADIX_TREE_MAP_SIZE; off++) {
 		ulong slot;
@@ -4286,12 +4298,7 @@ static void do_rdtree_entry(ulong node, ulong slot, const char *path,
 			e[i] = fill_member_offsets(td->structname[i]);
 	}
 
-	if (hq_enter(slot))
-		td->count++;
-	else
-		error(FATAL,
-		      "\nduplicate tree entry: radix_tree_node: %lx  slots[%d]: %lx\n",
-		      node, index, slot);
+	td->count++;
 
 	if (td->flags & VERBOSE)
 		fprintf(fp, "%lx\n", slot);
@@ -4374,8 +4381,8 @@ rbtree_iteration(ulong node_p, struct tree_data *td, char *pos)
 {
 	int i;
 	uint print_radix;
-	ulong struct_p, left_p, right_p;
-	char left_pos[BUFSIZE], right_pos[BUFSIZE];
+	ulong struct_p, new_p, test_p;
+	char new_pos[BUFSIZE];
 	static struct req_entry **e;
 
 	if (!node_p)
@@ -4396,6 +4403,18 @@ rbtree_iteration(ulong node_p, struct tree_data *td, char *pos)
 		td->count++;
 	else
 		error(FATAL, "\nduplicate tree entry: %lx\n", node_p);
+
+	if ((td->flags & TREE_LINEAR_ORDER) &&
+	    readmem(node_p+OFFSET(rb_node_rb_left), KVADDR, &new_p,
+	    sizeof(void *), "rb_node rb_left", RETURN_ON_ERROR) && new_p) {
+		if (readmem(new_p+OFFSET(rb_node_rb_left), KVADDR, &test_p,
+			sizeof(void *), "rb_node rb_left", RETURN_ON_ERROR|QUIET)) {
+			sprintf(new_pos, "%s/l", pos);
+			rbtree_iteration(new_p, td, new_pos);
+		} else
+			error(INFO, "rb_node: %lx: corrupted rb_left pointer: %lx\n",
+					node_p, new_p);
+	}
 
 	struct_p = node_p - td->node_member_offset;
 
@@ -4430,16 +4449,28 @@ rbtree_iteration(ulong node_p, struct tree_data *td, char *pos)
 		}
 	}
 
-	readmem(node_p+OFFSET(rb_node_rb_left), KVADDR, &left_p,
-		sizeof(void *), "rb_node rb_left", FAULT_ON_ERROR);
-	readmem(node_p+OFFSET(rb_node_rb_right), KVADDR, &right_p,
-		sizeof(void *), "rb_node rb_right", FAULT_ON_ERROR);
+	if (!(td->flags & TREE_LINEAR_ORDER) &&
+	    readmem(node_p+OFFSET(rb_node_rb_left), KVADDR, &new_p,
+	    sizeof(void *), "rb_node rb_left", RETURN_ON_ERROR) && new_p) {
+		if (readmem(new_p+OFFSET(rb_node_rb_left), KVADDR, &test_p,
+			sizeof(void *), "rb_node rb_left", RETURN_ON_ERROR|QUIET)) {
+			sprintf(new_pos, "%s/l", pos);
+			rbtree_iteration(new_p, td, new_pos);
+		} else
+			error(INFO, "rb_node: %lx: corrupted rb_left pointer: %lx\n",
+					node_p, new_p);
+	}
 
-	sprintf(left_pos, "%s/l", pos);
-	sprintf(right_pos, "%s/r", pos);
-
-	rbtree_iteration(left_p, td, left_pos);
-	rbtree_iteration(right_p, td, right_pos);		
+	if (readmem(node_p+OFFSET(rb_node_rb_right), KVADDR, &new_p,
+	    sizeof(void *), "rb_node rb_right", RETURN_ON_ERROR) && new_p) {
+		if (readmem(new_p+OFFSET(rb_node_rb_left), KVADDR, &test_p,
+			sizeof(void *), "rb_node rb_left", RETURN_ON_ERROR|QUIET)) {
+			sprintf(new_pos, "%s/r", pos);
+			rbtree_iteration(new_p, td, new_pos);
+		} else
+			error(INFO, "rb_node: %lx: corrupted rb_right pointer: %lx\n",
+					node_p, new_p);
+	}
 }
 
 void

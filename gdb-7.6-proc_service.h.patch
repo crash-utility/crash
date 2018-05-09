@@ -53,3 +53,15 @@
  		    lwpid_t lwpid, int idx, void **base)
  {
    /* NOTE: cagney/2003-08-26: The definition of this buffer is found
+--- gdb-7.6/gdb/mips-linux-nat.c.orig
++++ gdb-7.6/gdb/mips-linux-nat.c
+@@ -154,7 +154,7 @@ mips64_linux_register_addr (struct gdbarch *gdbarch, int regno, int store)
+ /* Fetch the thread-local storage pointer for libthread_db.  */
+ 
+ ps_err_e
+-ps_get_thread_area (const struct ps_prochandle *ph,
++ps_get_thread_area (struct ps_prochandle *ph,
+                     lwpid_t lwpid, int idx, void **base)
+ {
+   if (ptrace (PTRACE_GET_THREAD_AREA, lwpid, NULL, base) != 0)
+

@@ -1,8 +1,8 @@
 /* gdb_interface.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015,2017 David Anderson
- * Copyright (C) 2002-2015,2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015,2018 David Anderson
+ * Copyright (C) 2002-2015,2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -737,6 +737,13 @@ is_restricted_command(char *cmd, ulong flags)
 				newline, newline, pc->program_name);
 		}
 	}
+
+	if (kt->relocate && 
+	    STRNEQ("disassemble", cmd) && STRNEQ(cmd, "disas"))
+               	error(FATAL, 
+		    "the gdb \"disassemble\" command is prohibited because the kernel text\n"
+		    "%swas relocated%s; use the crash \"dis\" command instead.\n",
+			space(strlen(pc->curcmd)+2), kt->flags2 & KASLR ? " by KASLR" : "");
 	
 	return FALSE;
 }
@@ -826,6 +833,10 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 	readflags = pc->curcmd_flags & PARTIAL_READ_OK ?
 		RETURN_ON_ERROR|RETURN_PARTIAL : RETURN_ON_ERROR;
 
+	if (STREQ(pc->curcmd, "bpf") && pc->curcmd_private &&
+	    (addr > (ulong)pc->curcmd_private))
+		readflags |= QUIET;
+
 	if (pc->curcmd_flags & MEMTYPE_UVADDR)
 		memtype = UVADDR;
 	else if (pc->curcmd_flags & MEMTYPE_FILEADDR)
@@ -854,6 +865,12 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 	switch (len)
 	{
 	case SIZEOF_8BIT:
+		if (STREQ(pc->curcmd, "bt")) {
+			if (readmem(addr, memtype, buf, SIZEOF_8BIT,
+		    	    "gdb_readmem_callback", readflags)) 
+				return TRUE;
+		}
+
 		p1 = (char *)buf;
 		if ((memtype == KVADDR) && 
 		    text_value_cache_byte(addr, (unsigned char *)p1)) 
@@ -871,6 +888,12 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 		return TRUE;
 
 	case SIZEOF_32BIT:
+		if (STREQ(pc->curcmd, "bt")) {
+			if (readmem(addr, memtype, buf, SIZEOF_32BIT,
+		    	    "gdb_readmem_callback", readflags)) 
+				return TRUE;
+		}
+
 		if ((memtype == KVADDR) && text_value_cache(addr, 0, buf)) 
 			return TRUE;
 

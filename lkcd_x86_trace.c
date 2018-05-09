@@ -5,8 +5,8 @@
 /* 
  *  lkcd_x86_trace.c
  *
- *  Copyright (C) 2002-2012, 2017 David Anderson
- *  Copyright (C) 2002-2012, 2017 Red Hat, Inc. All rights reserved.
+ *  Copyright (C) 2002-2012, 2017-2018 David Anderson
+ *  Copyright (C) 2002-2012, 2017-2018 Red Hat, Inc. All rights reserved.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -44,6 +44,7 @@ static syment_t *kl_lkup_symaddr(kaddr_t);
 static k_error_t kl_get_task_struct(kaddr_t, int, void *);
 static kaddr_t kl_kernelstack(kaddr_t);
 static kaddr_t get_call_pc(kaddr_t);
+static kaddr_t get_call_pc_v2(kaddr_t);
 static int get_jmp_instr(kaddr_t, kaddr_t, kaddr_t *, char *, char **);
 static int is_push(unsigned int);
 static int is_pop(unsigned int);
@@ -278,7 +279,73 @@ get_call_pc(kaddr_t ra)
 		addr = irp->prev->addr;
 	}
 	free_instr_stream(irp);
+
+	/*
+	 *  If the old LKCD code fails, try disassembling...
+	 */
+	if (!addr)
+		return get_call_pc_v2(ra);
+
 	return(addr);
+}
+
+kaddr_t
+get_call_pc_v2(kaddr_t ra)
+{
+	int c ATTRIBUTE_UNUSED; 
+	int line, len;
+	kaddr_t addr, addr2;
+	ulong offset;
+	struct syment *sp;
+	char *arglist[MAXARGS];
+	char buf[BUFSIZE];
+
+	if ((sp = value_search(ra, &offset))) {
+		if (offset == 0)
+			return 0;
+	} else
+		return 0;
+
+	addr = 0;
+
+	for (len = 2; len < 8; len++) {
+		open_tmpfile2();
+		sprintf(buf, "x/2i 0x%x", ra - len);
+		if (!gdb_pass_through(buf, pc->tmpfile2, GNU_RETURN_ON_ERROR)) {
+			close_tmpfile2();
+			return 0;
+		}
+	
+		rewind(pc->tmpfile2);
+		line = 1;
+		while (fgets(buf, BUFSIZE, pc->tmpfile2)) {
+			c = parse_line(buf, arglist);
+			if ((line == 1) && !STREQ(arglist[2], "call"))
+				break;
+			if (line == 2) {
+				addr2 = (kaddr_t)htol(arglist[0], RETURN_ON_ERROR|QUIET, 0);
+				if (addr2 == ra) {
+					addr = ra - len;
+					break;
+				}
+			}
+			line++;
+		}
+
+		close_tmpfile2();
+
+		if (addr) {
+			if (CRASHDEBUG(1)) {
+				fprintf(fp, "get_call_pc_v2(ra: %x) -> %x -> ", ra, addr); 
+				if (value_to_symstr(addr, buf, 0))
+					fprintf(fp, "%s", buf);
+				fprintf(fp, "\n");
+			}
+			break;
+		}
+	}
+
+	return addr;
 }
 
 /*
@@ -1341,7 +1408,7 @@ eframe_incr(kaddr_t addr, char *funcname)
 	console("  next: %lx size: %d  opcode: 0x%x insn: \"%s\"\n",
 		next, size, irp.opcode, irp.opcodep->name);
 
-	if (STREQ(irp.opcodep->name, "jmp"))
+	if (STREQ(irp.opcodep->name, "jmp") || STREQ(irp.opcodep->name, "nop"))
 		val = 4;
 	else
 		val = 12;
@@ -1886,13 +1953,24 @@ find_trace(
 static int 
 kernel_entry_from_user_space(sframe_t *curframe, struct bt_info *bt)
 {
+	ulong stack_segment;
+
 	if (is_kernel_thread(bt->tc->task))
 		return FALSE;
 
-	if (((curframe->fp + 4 + SIZE(pt_regs)) == GET_STACKTOP(bt->task)) &&
-	    !is_kernel_thread(bt->tc->task))
-		return TRUE;
-	else if (userspace_return(curframe->fp+4, bt))
+	stack_segment = GET_STACK_ULONG(curframe->fp + 4 + SIZE(pt_regs) - sizeof(kaddr_t));
+
+	if ((curframe->fp + 4 + SIZE(pt_regs)) == GET_STACKTOP(bt->task)) {
+		if ((stack_segment == 0x7b) || (stack_segment == 0x2b))
+			return TRUE;
+	}
+
+	if ((curframe->fp + 4 + SIZE(pt_regs) + 8) == GET_STACKTOP(bt->task)) {
+		if ((stack_segment == 0x7b) || (stack_segment == 0x2b))
+			return TRUE;
+	}
+
+	if (userspace_return(curframe->fp+4, bt))
 		return TRUE;
 	else
 		return FALSE;
@@ -2139,6 +2217,7 @@ task_trace(kaddr_t task, int flags, FILE *ofp)
 {
 	void *tsp;
 	kaddr_t saddr, eip, esp;
+	ulong contents;
 	trace_t *trace;
 
 #ifdef REDHAT
@@ -2259,6 +2338,14 @@ task_trace(kaddr_t task, int flags, FILE *ofp)
 			if (saddr <= bt->stackbase)
 				break;
 		}
+	}
+
+	if (STREQ(kl_funcname(bt->instptr), "crash_kexec") ||
+	    STREQ(kl_funcname(bt->instptr), "crash_nmi_callback")) {
+		if (readmem(bt->stkptr-4, KVADDR, &contents, sizeof(ulong), 
+		    "stkptr-4 contents", RETURN_ON_ERROR|QUIET) &&
+		    (contents == bt->instptr))
+			bt->stkptr -= 4;
 	}
 
 	if (!verify_back_trace(bt) && !recoverable(bt, ofp) && 

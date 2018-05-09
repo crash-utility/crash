@@ -1,8 +1,8 @@
 /*
  * arm64.c - core analysis suite
  *
- * Copyright (C) 2012-2017 David Anderson
- * Copyright (C) 2012-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2012-2018 David Anderson
+ * Copyright (C) 2012-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -72,6 +72,7 @@ static void arm64_cmd_mach(void);
 static void arm64_display_machine_stats(void);
 static int arm64_get_smp_cpus(void);
 static void arm64_clear_machdep_cache(void);
+static int arm64_on_process_stack(struct bt_info *, ulong);
 static int arm64_in_alternate_stack(int, ulong);
 static int arm64_on_irq_stack(int, ulong);
 static void arm64_set_irq_stack(struct bt_info *);
@@ -171,8 +172,14 @@ arm64_init(int when)
 		if (!machdep->pagesize &&
 		    kernel_symbol_exists("swapper_pg_dir") &&
 		    kernel_symbol_exists("idmap_pg_dir")) {
-			value = symbol_value("swapper_pg_dir") -
-				symbol_value("idmap_pg_dir");
+			if (kernel_symbol_exists("tramp_pg_dir"))
+				value = symbol_value("tramp_pg_dir");
+			else if (kernel_symbol_exists("reserved_ttbr0"))
+				value = symbol_value("reserved_ttbr0");
+			else
+				value = symbol_value("swapper_pg_dir");
+
+			value -= symbol_value("idmap_pg_dir");
 			/*
 			 * idmap_pg_dir is 2 pages prior to 4.1,
 			 * and 3 pages thereafter.  Only 4K and 64K 
@@ -435,6 +442,12 @@ arm64_verify_symbol(const char *name, ulong value, char type)
 	if ((type == 'A') && STREQ(name, "_kernel_flags_le"))
 		machdep->machspec->kernel_flags = le64toh(value);
 
+	if ((type == 'A') && STREQ(name, "_kernel_flags_le_hi32"))
+		machdep->machspec->kernel_flags |= ((ulong)le32toh(value) << 32);
+
+	if ((type == 'A') && STREQ(name, "_kernel_flags_le_lo32"))
+		machdep->machspec->kernel_flags |= le32toh(value);
+
 	if (((type == 'A') || (type == 'a')) && (highest_bit_long(value) != 63))
 		return FALSE;
 
@@ -484,6 +497,8 @@ arm64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sKDUMP_ENABLED", others++ ? "|" : "");
 	if (machdep->flags & IRQ_STACKS)
 		fprintf(fp, "%sIRQ_STACKS", others++ ? "|" : "");
+	if (machdep->flags & UNW_4_14)
+		fprintf(fp, "%sUNW_4_14", others++ ? "|" : "");
 	if (machdep->flags & MACHDEP_BT_TEXT)
 		fprintf(fp, "%sMACHDEP_BT_TEXT", others++ ? "|" : "");
 	if (machdep->flags & NEW_VMEMMAP)
@@ -608,6 +623,8 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "      exp_entry2_start: %lx\n", ms->exp_entry2_start);
 	fprintf(fp, "        exp_entry2_end: %lx\n", ms->exp_entry2_end);
 	fprintf(fp, "       panic_task_regs: %lx\n", (ulong)ms->panic_task_regs);
+	fprintf(fp, "    user_eframe_offset: %ld\n", ms->user_eframe_offset);
+	fprintf(fp, "    kern_eframe_offset: %ld\n", ms->kern_eframe_offset);
 	fprintf(fp, "         PTE_PROT_NONE: %lx\n", ms->PTE_PROT_NONE);
 	fprintf(fp, "              PTE_FILE: ");
 	if (ms->PTE_FILE)
@@ -628,6 +645,8 @@ arm64_dump_machdep_table(ulong arg)
         	fprintf(fp, "%lx\n", ms->__SWP_OFFSET_MASK);
 	else
 		fprintf(fp, "(unused)\n");
+	fprintf(fp, "   machine_kexec_start: %lx\n", ms->machine_kexec_start);
+	fprintf(fp, "     machine_kexec_end: %lx\n", ms->machine_kexec_end);
 	fprintf(fp, "     crash_kexec_start: %lx\n", ms->crash_kexec_start);
 	fprintf(fp, "       crash_kexec_end: %lx\n", ms->crash_kexec_end);
 	fprintf(fp, "  crash_save_cpu_start: %lx\n", ms->crash_save_cpu_start);
@@ -823,7 +842,10 @@ arm64_calc_phys_offset(void)
 
 		if ((machdep->flags & NEW_VMEMMAP) &&
 		    ms->kimage_voffset && (sp = kernel_symbol_search("memstart_addr"))) {
-			paddr =	sp->value - machdep->machspec->kimage_voffset;
+			if (pc->flags & PROC_KCORE)
+				paddr = KCORE_USE_VADDR;
+			else
+				paddr =	sp->value - machdep->machspec->kimage_voffset;
 			if (READMEM(pc->mfd, &phys_offset, sizeof(phys_offset),
 			    sp->value, paddr) > 0) {
 				ms->phys_offset = phys_offset;
@@ -1330,34 +1352,83 @@ arm64_irq_stack_init(void)
 	int i;
 	struct syment *sp;
 	struct gnu_request request, *req;
-	req = &request;
 	struct machine_specific *ms = machdep->machspec;
+	ulong p, sz;
+	req = &request;
 
-	if (!symbol_exists("irq_stack") ||
-	    !(sp = per_cpu_symbol_search("irq_stack")) ||
-	    !get_symbol_type("irq_stack", NULL, req) ||
-	    (req->typecode != TYPE_CODE_ARRAY) ||
-	    (req->target_typecode != TYPE_CODE_INT))
-		return;
+	if (symbol_exists("irq_stack") &&
+	    (sp = per_cpu_symbol_search("irq_stack")) &&
+	    get_symbol_type("irq_stack", NULL, req)) {
+		/* before v4.14 or CONFIG_VMAP_STACK disabled */
+		if (CRASHDEBUG(1)) {
+			fprintf(fp, "irq_stack: \n");
+			fprintf(fp, "  type: %s\n",
+				(req->typecode == TYPE_CODE_ARRAY) ?
+						"TYPE_CODE_ARRAY" : "other");
+			fprintf(fp, "  target_typecode: %s\n",
+				req->target_typecode == TYPE_CODE_INT ?
+						"TYPE_CODE_INT" : "other");
+			fprintf(fp, "  target_length: %ld\n",
+						req->target_length);
+			fprintf(fp, "  length: %ld\n", req->length);
+		}
 
-	if (CRASHDEBUG(1)) {
-		fprintf(fp, "irq_stack: \n");
-		fprintf(fp, "  type: %s\n", 
-			(req->typecode == TYPE_CODE_ARRAY) ? "TYPE_CODE_ARRAY" : "other");
-		fprintf(fp, "  target_typecode: %s\n", 
-			req->target_typecode == TYPE_CODE_INT ? "TYPE_CODE_INT" : "other");
-		fprintf(fp, "  target_length: %ld\n", req->target_length);
-		fprintf(fp, "  length: %ld\n", req->length);
-	}
+		if (!(ms->irq_stacks = (ulong *)malloc((size_t)(kt->cpus * sizeof(ulong)))))
+			error(FATAL, "cannot malloc irq_stack addresses\n");
+		ms->irq_stack_size = req->length;
+		machdep->flags |= IRQ_STACKS;
 
-	ms->irq_stack_size = req->length;
-	if (!(ms->irq_stacks = (ulong *)malloc((size_t)(kt->cpus * sizeof(ulong)))))
-		error(FATAL, "cannot malloc irq_stack addresses\n");
+		for (i = 0; i < kt->cpus; i++)
+			ms->irq_stacks[i] = kt->__per_cpu_offset[i] + sp->value;
+	} else if (symbol_exists("irq_stack_ptr") &&
+	    (sp = per_cpu_symbol_search("irq_stack_ptr")) &&
+	    get_symbol_type("irq_stack_ptr", NULL, req)) {
+		/* v4.14 and later with CONFIG_VMAP_STACK enabled */
+		if (CRASHDEBUG(1)) {
+			fprintf(fp, "irq_stack_ptr: \n");
+			fprintf(fp, "  type: %x, %s\n",
+				(int)req->typecode,
+				(req->typecode == TYPE_CODE_PTR) ?
+						"TYPE_CODE_PTR" : "other");
+			fprintf(fp, "  target_typecode: %x, %s\n",
+				(int)req->target_typecode,
+				req->target_typecode == TYPE_CODE_INT ?
+						"TYPE_CODE_INT" : "other");
+			fprintf(fp, "  target_length: %ld\n",
+						req->target_length);
+			fprintf(fp, "  length: %ld\n", req->length);
+		}
 
-	for (i = 0; i < kt->cpus; i++)
-		ms->irq_stacks[i] = kt->__per_cpu_offset[i] + sp->value;
+		if (!(ms->irq_stacks = (ulong *)malloc((size_t)(kt->cpus * sizeof(ulong)))))
+			error(FATAL, "cannot malloc irq_stack addresses\n");
 
-	machdep->flags |= IRQ_STACKS;
+		/*
+		 *  Determining the IRQ_STACK_SIZE is tricky, but for now
+		 *  4.14 kernel has:
+		 *
+		 *    #define IRQ_STACK_SIZE          THREAD_SIZE
+		 *
+		 *  and finding a solid usage of THREAD_SIZE is hard, but:   
+		 *
+		 *    union thread_union {
+		 *            ... 
+	         *            unsigned long stack[THREAD_SIZE/sizeof(long)];
+		 *    };
+		 */
+		if (MEMBER_EXISTS("thread_union", "stack")) { 
+			if ((sz = MEMBER_SIZE("thread_union", "stack")) > 0)
+				ms->irq_stack_size = sz;
+		} else
+			ms->irq_stack_size = ARM64_IRQ_STACK_SIZE;
+
+		machdep->flags |= IRQ_STACKS;
+
+		for (i = 0; i < kt->cpus; i++) {
+			p = kt->__per_cpu_offset[i] + sp->value;
+			readmem(p, KVADDR, &(ms->irq_stacks[i]), sizeof(ulong),
+			    "IRQ stack pointer", RETURN_ON_ERROR);
+		}
+	} 
 }
 
 /*
@@ -1369,12 +1440,20 @@ arm64_stackframe_init(void)
 	long task_struct_thread;
 	long thread_struct_cpu_context;
 	long context_sp, context_pc, context_fp;
-	struct syment *sp1, *sp1n, *sp2, *sp2n;
+	struct syment *sp1, *sp1n, *sp2, *sp2n, *sp3, *sp3n;
 
 	STRUCT_SIZE_INIT(note_buf, "note_buf_t");
 	STRUCT_SIZE_INIT(elf_prstatus, "elf_prstatus");
 	MEMBER_OFFSET_INIT(elf_prstatus_pr_pid, "elf_prstatus", "pr_pid");
 	MEMBER_OFFSET_INIT(elf_prstatus_pr_reg, "elf_prstatus", "pr_reg");
+
+	if (MEMBER_EXISTS("pt_regs", "stackframe")) {
+		machdep->machspec->user_eframe_offset = SIZE(pt_regs);
+		machdep->machspec->kern_eframe_offset = SIZE(pt_regs) - 16;
+	} else {
+		machdep->machspec->user_eframe_offset = SIZE(pt_regs) + 16;
+		machdep->machspec->kern_eframe_offset = SIZE(pt_regs);
+	}
 
 	machdep->machspec->__exception_text_start = 
 		symbol_value("__exception_text_start");
@@ -1398,11 +1477,15 @@ arm64_stackframe_init(void)
 	if ((sp1 = kernel_symbol_search("crash_kexec")) &&
 	    (sp1n = next_symbol(NULL, sp1)) && 
 	    (sp2 = kernel_symbol_search("crash_save_cpu")) &&
-	    (sp2n = next_symbol(NULL, sp2))) {
+	    (sp2n = next_symbol(NULL, sp2)) &&
+	    (sp3 = kernel_symbol_search("machine_kexec")) &&
+	    (sp3n = next_symbol(NULL, sp3))) {
 		machdep->machspec->crash_kexec_start = sp1->value;
 		machdep->machspec->crash_kexec_end = sp1n->value;
 		machdep->machspec->crash_save_cpu_start = sp2->value;
 		machdep->machspec->crash_save_cpu_end = sp2n->value;
+		machdep->machspec->machine_kexec_start = sp3->value;
+		machdep->machspec->machine_kexec_end = sp3n->value;
 		machdep->flags |= KDUMP_ENABLED;
 	}
 
@@ -1421,19 +1504,21 @@ arm64_stackframe_init(void)
 	 */
 	if (offsetof(struct arm64_stackframe, sp) != 
 	    MEMBER_OFFSET("stackframe", "sp")) {
-		error(INFO, "builtin stackframe.sp offset incorrect!\n");
-		return;
+		if (CRASHDEBUG(1))
+			error(INFO, "builtin stackframe.sp offset differs from kernel version\n");
 	}
 	if (offsetof(struct arm64_stackframe, fp) != 
 	    MEMBER_OFFSET("stackframe", "fp")) {
-		error(INFO, "builtin stackframe.fp offset incorrect!\n");
-		return;
+		if (CRASHDEBUG(1))
+			error(INFO, "builtin stackframe.fp offset differs from kernel version\n");
 	}
 	if (offsetof(struct arm64_stackframe, pc) != 
 	    MEMBER_OFFSET("stackframe", "pc")) {
-		error(INFO, "builtin stackframe.pc offset incorrect!\n");
-		return;
+		if (CRASHDEBUG(1))
+			error(INFO, "builtin stackframe.pc offset differs from kernel version\n");
 	}
+	if (!MEMBER_EXISTS("stackframe", "sp"))
+		machdep->flags |= UNW_4_14;
 
 	context_sp = MEMBER_OFFSET("cpu_context", "sp");
 	context_fp = MEMBER_OFFSET("cpu_context", "fp");
@@ -1461,7 +1546,8 @@ arm64_stackframe_init(void)
 #define KERNEL_MODE (1)
 #define USER_MODE   (2)
 
-#define USER_EFRAME_OFFSET (304)
+#define USER_EFRAME_OFFSET (machdep->machspec->user_eframe_offset)
+#define KERN_EFRAME_OFFSET (machdep->machspec->kern_eframe_offset)
 
 /*
  * PSR bits
@@ -1740,11 +1826,20 @@ arm64_display_full_frame(struct bt_info *bt, ulong sp)
 	if (bt->frameptr == sp)
 		return;
 
-	if (!INSTACK(sp, bt) || !INSTACK(bt->frameptr, bt)) {
-		if (sp == 0)
-			sp = bt->stacktop - USER_EFRAME_OFFSET;
-		else
-			return;
+	if (INSTACK(bt->frameptr, bt)) {
+		if (INSTACK(sp, bt)) {
+			; /* normal case */
+		} else {
+			if (sp == 0)
+				/* interrupt in user mode */
+				sp = bt->stacktop - USER_EFRAME_OFFSET;
+			else
+				/* interrupt in kernel mode */
+				sp = bt->stacktop;
+		}
+	} else { 
+		/* This is a transition case from irq to process stack. */
+		return;
 	}
 
 	words = (sp - bt->frameptr) / sizeof(ulong);
@@ -1847,6 +1942,44 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 	frame->fp = GET_STACK_ULONG(fp);
 	frame->pc = GET_STACK_ULONG(fp + 8);
 
+	if ((frame->fp == 0) && (frame->pc == 0))
+		return FALSE;
+
+	if (!(machdep->flags & IRQ_STACKS))
+		return TRUE;
+
+	if (!(machdep->flags & IRQ_STACKS))
+		return TRUE;
+
+	if (machdep->flags & UNW_4_14) {
+		if ((bt->flags & BT_IRQSTACK) &&
+		    !arm64_on_irq_stack(bt->tc->processor, frame->fp)) {
+			if (arm64_on_process_stack(bt, frame->fp)) {
+				arm64_set_process_stack(bt);
+
+				frame->sp = frame->fp - KERN_EFRAME_OFFSET;
+				/*
+				 * for switch_stack
+				 * fp still points to irq stack
+				 */
+				bt->bptr = fp;
+				/*
+				 * for display_full_frame
+				 * sp points to process stack
+				 *
+				 * If we want to see pt_regs,
+				 * comment out the below.
+				 * bt->frameptr = frame->sp;
+				 */
+			} else {
+				/* irq -> user */
+				return FALSE;
+			}
+		}
+
+		return TRUE;
+	}
+
 	/*
 	 * The kernel's manner of determining the end of the IRQ stack:
 	 *
@@ -1859,29 +1992,27 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 	 *  irq_stack_ptr = IRQ_STACK_PTR(raw_smp_processor_id());
 	 *  orig_sp = IRQ_STACK_TO_TASK_STACK(irq_stack_ptr);   (pt_regs pointer on process stack)
 	 */
-	if (machdep->flags & IRQ_STACKS) {
-		ms = machdep->machspec;
-		irq_stack_ptr = ms->irq_stacks[bt->tc->processor] + ms->irq_stack_size - 16;
+	ms = machdep->machspec;
+	irq_stack_ptr = ms->irq_stacks[bt->tc->processor] + ms->irq_stack_size - 16;
 
-		if (frame->sp == irq_stack_ptr) {
-			orig_sp = GET_STACK_ULONG(irq_stack_ptr - 8);
-			arm64_set_process_stack(bt);
-			if (INSTACK(orig_sp, bt) && (INSTACK(frame->fp, bt) || (frame->fp == 0))) {
-				ptregs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(orig_sp))];
-				frame->sp = orig_sp;
-				frame->pc = ptregs->pc;
-				bt->bptr = fp;
-				if (CRASHDEBUG(1))
-					error(INFO, 
-					    "arm64_unwind_frame: switch stacks: fp: %lx sp: %lx  pc: %lx\n",
-						frame->fp, frame->sp, frame->pc);
-			} else {
-				error(WARNING, 
-				    "arm64_unwind_frame: on IRQ stack: oriq_sp: %lx%s fp: %lx%s\n",
-					orig_sp, INSTACK(orig_sp, bt) ? "" : " (?)",
-					frame->fp, INSTACK(frame->fp, bt) ? "" : " (?)");
-				return FALSE;
-			}
+	if (frame->sp == irq_stack_ptr) {
+		orig_sp = GET_STACK_ULONG(irq_stack_ptr - 8);
+		arm64_set_process_stack(bt);
+		if (INSTACK(orig_sp, bt) && (INSTACK(frame->fp, bt) || (frame->fp == 0))) {
+			ptregs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(orig_sp))];
+			frame->sp = orig_sp;
+			frame->pc = ptregs->pc;
+			bt->bptr = fp;
+			if (CRASHDEBUG(1))
+				error(INFO,
+				    "arm64_unwind_frame: switch stacks: fp: %lx sp: %lx  pc: %lx\n",
+					frame->fp, frame->sp, frame->pc);
+		} else {
+			error(WARNING,
+			    "arm64_unwind_frame: on IRQ stack: oriq_sp: %lx%s fp: %lx%s\n",
+				orig_sp, INSTACK(orig_sp, bt) ? "" : " (?)",
+				frame->fp, INSTACK(frame->fp, bt) ? "" : " (?)");
+			return FALSE;
 		}
 	}
 
@@ -2198,6 +2329,11 @@ arm64_back_trace_cmd(struct bt_info *bt)
 	FILE *ofp;
 
 	if (bt->flags & BT_OPT_BACK_TRACE) {
+		if (machdep->flags & UNW_4_14) {
+			option_not_supported('o');
+			return;
+		}
+
 		arm64_back_trace_cmd_v2(bt);
 		return;
 	}
@@ -2232,6 +2368,10 @@ arm64_back_trace_cmd(struct bt_info *bt)
 		stackframe.sp = bt->hp->esp + 8;
 		bt->flags &= ~BT_REGS_NOT_FOUND;
 	} else {
+		if (arm64_on_irq_stack(bt->tc->processor, bt->frameptr)) {
+			arm64_set_irq_stack(bt);
+			bt->flags |= BT_IRQSTACK;
+		}
 		stackframe.sp = bt->stkptr;
 		stackframe.pc = bt->instptr;
 		stackframe.fp = bt->frameptr;
@@ -2255,7 +2395,7 @@ arm64_back_trace_cmd(struct bt_info *bt)
 			goto complete_user;
 
 		if (DUMPFILE() && is_task_active(bt->task)) {
-			exception_frame = stackframe.fp - SIZE(pt_regs);
+			exception_frame = stackframe.fp - KERN_EFRAME_OFFSET;
 			if (arm64_is_kernel_exception_frame(bt, exception_frame))
 				arm64_print_exception_frame(bt, exception_frame, 
 					KERNEL_MODE, ofp);
@@ -2286,12 +2426,14 @@ arm64_back_trace_cmd(struct bt_info *bt)
 
 		if (arm64_in_exception_text(bt->instptr) && INSTACK(stackframe.fp, bt)) {
 			if (!(bt->flags & BT_IRQSTACK) ||
-			    (((stackframe.sp + SIZE(pt_regs)) < bt->stacktop)))
-				exception_frame = stackframe.fp - SIZE(pt_regs);
+			    ((stackframe.sp + SIZE(pt_regs)) < bt->stacktop)) {
+				if (arm64_is_kernel_exception_frame(bt, stackframe.fp - KERN_EFRAME_OFFSET))
+					exception_frame = stackframe.fp - KERN_EFRAME_OFFSET;
+			}
 		}
 
 		if ((bt->flags & BT_IRQSTACK) &&
-		    !arm64_on_irq_stack(bt->tc->processor, stackframe.sp)) {
+		    !arm64_on_irq_stack(bt->tc->processor, stackframe.fp)) {
 			bt->flags &= ~BT_IRQSTACK;
 			if (arm64_switch_stack(bt, &stackframe, ofp) == USER_MODE)
 				break;
@@ -2339,6 +2481,10 @@ arm64_back_trace_cmd_v2(struct bt_info *bt)
 		stackframe.sp = bt->bptr + 16;
 		bt->frameptr = stackframe.fp;
 	} else {
+		if (arm64_on_irq_stack(bt->tc->processor, bt->frameptr)) {
+			arm64_set_irq_stack(bt);
+			bt->flags |= BT_IRQSTACK;
+		}
 		stackframe.sp = bt->stkptr;
 		stackframe.pc = bt->instptr;
 		stackframe.fp = bt->frameptr;
@@ -2488,6 +2634,7 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 {
 	ulong *ptr, *start, *base;
 	struct machine_specific *ms;
+	ulong crash_kexec_frame;
 
 	if (!(machdep->flags & KDUMP_ENABLED))
 		return FALSE;
@@ -2502,6 +2649,7 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 			start = (ulong *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(bt->stacktop))];
 	}
 
+	crash_kexec_frame = 0;
 	ms = machdep->machspec;
 	for (ptr = start - 8; ptr >= base; ptr--) {
 		if (bt->flags & BT_OPT_BACK_TRACE) {
@@ -2524,12 +2672,26 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 				return TRUE;
 			}
 		} else {
-			if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+			if ((*ptr >= ms->machine_kexec_start) && (*ptr < ms->machine_kexec_end)) {
 				bt->bptr = ((ulong)ptr - (ulong)base)
 					   + task_to_stackbase(bt->tc->task);
 				if (CRASHDEBUG(1))
-					fprintf(fp, "%lx: %lx (crash_kexec)\n", bt->bptr, *ptr);
+					fprintf(fp, "%lx: %lx (machine_kexec)\n", bt->bptr, *ptr);
 				return TRUE;
+			}
+			if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+				/*
+				 *  Stash the first crash_kexec frame in case the machine_kexec
+				 *  frame is not found.
+				 */
+				if (!crash_kexec_frame) {
+					crash_kexec_frame = ((ulong)ptr - (ulong)base)
+						+ task_to_stackbase(bt->tc->task);
+					if (CRASHDEBUG(1))
+						fprintf(fp, "%lx: %lx (crash_kexec)\n", 
+							bt->bptr, *ptr);
+				}
+				continue;
 			}
 			if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
 				bt->bptr = ((ulong)ptr - (ulong)base)
@@ -2540,6 +2702,11 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 			}
 		}
 	} 
+
+	if (crash_kexec_frame) {
+		bt->bptr = crash_kexec_frame;
+		return TRUE;
+	}
 
 	return FALSE;
 }
@@ -2648,7 +2815,9 @@ arm64_switch_stack(struct bt_info *bt, struct arm64_stackframe *frame, FILE *ofp
 	if (frame->fp == 0)
 		return USER_MODE;
 
-	arm64_print_exception_frame(bt, frame->sp, KERNEL_MODE, ofp);
+	if (!(machdep->flags & UNW_4_14))
+		arm64_print_exception_frame(bt, frame->sp, KERNEL_MODE, ofp);
+
 	return KERNEL_MODE;
 }
 
@@ -3339,6 +3508,20 @@ arm64_clear_machdep_cache(void) {
 	 * TBD: probably not necessary...
 	 */
 	return;
+}
+
+static int
+arm64_on_process_stack(struct bt_info *bt, ulong stkptr)
+{
+	ulong stackbase, stacktop;
+
+	stackbase = GET_STACKBASE(bt->task);
+	stacktop = GET_STACKTOP(bt->task);
+
+	if ((stkptr >= stackbase) && (stkptr < stacktop))
+		return TRUE;
+
+	return FALSE;
 }
 
 static int

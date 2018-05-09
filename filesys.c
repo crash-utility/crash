@@ -1,8 +1,8 @@
 /* filesys.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2017 David Anderson
- * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2018 David Anderson
+ * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -199,9 +199,13 @@ memory_source_init(void)
 			if (!proc_kcore_init(fp))
 				error(FATAL, 
 				    "/proc/kcore: initialization failed\n");
-		} else
-			error(FATAL, "unknown memory device: %s\n",
-				pc->live_memsrc);
+		} else {
+			if (!pc->live_memsrc)
+				error(FATAL, "cannot find a live memory device\n");
+			else
+				error(FATAL, "unknown memory device: %s\n",
+					pc->live_memsrc);
+		}
 
 		return;
         } 
@@ -308,6 +312,7 @@ match_proc_version(void)
 #define CREATE  1
 #define DESTROY 0
 #define DEFAULT_SEARCHDIRS 5
+#define EXTRA_SEARCHDIRS 5
 
 static char **
 build_searchdirs(int create, int *preferred)
@@ -340,11 +345,15 @@ build_searchdirs(int create, int *preferred)
 		*preferred = 0;
 
 	/*
-	 *  Allow, at a minimum, the defaults plus an extra three directories 
-	 *  for the two possible /usr/src/redhat/BUILD/kernel-xxx locations 
-	 *  plus the Red Hat debug directory.
+	 *  Allow, at a minimum, the defaults plus an extra four directories: 
+	 *
+	 *    /lib/modules
+	 *    /usr/src/redhat/BUILD/kernel-<version>/linux
+	 *    /usr/src/redhat/BUILD/kernel-<version>/linux-<version>
+	 *    /usr/lib/debug/lib/modules
+	 *
 	 */  
-	cnt = DEFAULT_SEARCHDIRS + 3;  
+	cnt = DEFAULT_SEARCHDIRS + EXTRA_SEARCHDIRS;  
 
         if ((dirp = opendir("/usr/src"))) {
                 for (dp = readdir(dirp); dp != NULL; dp = readdir(dirp)) 
@@ -620,7 +629,7 @@ find_booted_kernel(void)
 
 			if (mount_point(kernel) ||
 			    !file_readable(kernel) || 
-                            !is_elf_file(kernel))
+                            !is_kernel(kernel))
 				continue;
 
 			if (CRASHDEBUG(1)) 
@@ -1361,10 +1370,10 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
 	long s_dirty;
 	ulong devp, dirp, sbp, dirty, type, name;
 	struct list_data list_data, *ld;
-	char buf1[BUFSIZE];
+	char buf1[BUFSIZE*2];
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
-	char buf4[BUFSIZE];
+	char buf4[BUFSIZE/2];
 	ulong *dentry_list, *dp, *mntlist;
 	ulong *vfsmnt;
 	char *vfsmount_buf, *super_block_buf, *mount_buf;
@@ -1489,8 +1498,8 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
                         KVADDR, &name, sizeof(void *),
                         "file_system_type name", FAULT_ON_ERROR);
 
-                if (read_string(name, buf1, BUFSIZE-1))
-			sprintf(buf3, "%-6s ", buf1);
+                if (read_string(name, buf4, BUFSIZE-1))
+			sprintf(buf3, "%-6s ", buf4);
                 else
 			sprintf(buf3, "unknown ");
 
@@ -2078,38 +2087,6 @@ vfs_init(void)
 	if (!(ft->inode_cache = (char *)malloc(SIZE(inode)*INODE_CACHE)))
 		error(FATAL, "cannot malloc inode cache\n");
 
-	if (symbol_exists("height_to_maxindex") ||
-	    symbol_exists("height_to_maxnodes")) {
-		int newver = symbol_exists("height_to_maxnodes");
-		int tmp ATTRIBUTE_UNUSED;
-		if (!newver) {
-			if (LKCD_KERNTYPES())
-				ARRAY_LENGTH_INIT_ALT(tmp, "height_to_maxindex",
-					"radix_tree_preload.nodes", NULL, 0);
-			else
-				ARRAY_LENGTH_INIT(tmp, height_to_maxindex,
-					"height_to_maxindex", NULL, 0);
-		} else {
-			if (LKCD_KERNTYPES())
-				ARRAY_LENGTH_INIT_ALT(tmp, "height_to_maxnodes",
-					"radix_tree_preload.nodes", NULL, 0);
-			else
-				ARRAY_LENGTH_INIT(tmp, height_to_maxnodes,
-					"height_to_maxnodes", NULL, 0);
-		}
-		STRUCT_SIZE_INIT(radix_tree_root, "radix_tree_root");
-		STRUCT_SIZE_INIT(radix_tree_node, "radix_tree_node");
-		MEMBER_OFFSET_INIT(radix_tree_root_height, 
-			"radix_tree_root","height");
-		MEMBER_OFFSET_INIT(radix_tree_root_rnode, 
-			"radix_tree_root","rnode");
-		MEMBER_OFFSET_INIT(radix_tree_node_slots, 
-			"radix_tree_node","slots");
-		MEMBER_OFFSET_INIT(radix_tree_node_height, 
-			"radix_tree_node","height");
-		MEMBER_OFFSET_INIT(radix_tree_node_shift,
-			"radix_tree_node","shift");
-	}
 	MEMBER_OFFSET_INIT(rb_root_rb_node, 
 		"rb_root","rb_node");
 	MEMBER_OFFSET_INIT(rb_node_rb_left, 
@@ -2416,7 +2393,7 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
 	char buf4[BUFSIZE];
-	char root_pwd[BUFSIZE];
+	char root_pwd[BUFSIZE*4];
 	int root_pwd_printed = 0;
 	int file_dump_flags = 0;
 
@@ -3109,7 +3086,7 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 			break;
 
 		if (tmp_dentry != dentry) {
-			strncpy(tmpname, pathname, BUFSIZE);
+			strncpy(tmpname, pathname, BUFSIZE-1);
 			if (strlen(tmpname) + d_name_len < BUFSIZE) {
 				if ((d_name_len > 1 || !STREQ(buf, "/")) &&
 				    !STRNEQ(tmpname, "/")) {
@@ -3640,8 +3617,8 @@ get_live_memory_source(void)
 {
 	FILE *pipe;
 	char buf[BUFSIZE];
-	char modname1[BUFSIZE];
-	char modname2[BUFSIZE];
+	char modname1[BUFSIZE/2];
+	char modname2[BUFSIZE/2];
 	char *name;
 	int use_module, crashbuiltin;
 	struct stat stat1, stat2;
@@ -3652,7 +3629,13 @@ get_live_memory_source(void)
 	if (pc->live_memsrc)
 		goto live_report;
 
-	pc->live_memsrc = "/dev/mem";
+	if (file_exists("/dev/mem", NULL))
+		pc->live_memsrc = "/dev/mem";
+	else if (file_exists("/proc/kcore", NULL)) {
+		pc->flags &= ~DEVMEM;
+		pc->flags |= PROC_KCORE;
+		pc->live_memsrc = "/proc/kcore";
+	}
 	use_module = crashbuiltin = FALSE;
 
 	if (file_exists("/dev/mem", &stat1) &&
@@ -3711,7 +3694,7 @@ get_live_memory_source(void)
 	}
 
 	if (use_module) {
-		pc->flags &= ~DEVMEM;
+		pc->flags &= ~(DEVMEM|PROC_KCORE);
 		pc->flags |= MEMMOD;
 		pc->readmem = read_memory_device;
 		pc->writemem = write_memory_device;
@@ -3719,7 +3702,7 @@ get_live_memory_source(void)
 	}
 
 	if (crashbuiltin) {
-		pc->flags &= ~DEVMEM;
+		pc->flags &= ~(DEVMEM|PROC_KCORE);
 		pc->flags |= CRASHBUILTIN;
 		pc->readmem = read_memory_device;
 		pc->writemem = write_memory_device;
