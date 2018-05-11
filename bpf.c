@@ -573,6 +573,10 @@ bpf_type_size_init(void)
 		close_tmpfile();
 		return FALSE;
 	}
+	/*
+	 * Keep bpf program header at 80 columns
+	 */
+	bpf->bpf_prog_type_size = MIN(13, bpf->bpf_prog_type_size);
 	close_tmpfile();
 
 	open_tmpfile();
