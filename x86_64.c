@@ -5972,13 +5972,14 @@ x86_64_framepointer_init(void)
 	unsigned int push_rbp_mov_rsp_rbp;
 	int i, check;
 	char *checkfuncs[] = {"sys_open", "sys_fork", "sys_read",
+		"__x64_sys_open", "__x64_sys_fork", "__x64_sys_read",
 		"do_futex", "do_fork", "_do_fork", "sys_write", 
 		"vfs_read", "__schedule"};
 
 	if (pc->flags & KERNEL_DEBUG_QUERY)
 		return;
 
-	for (i = check = 0; i < 9; i++) {
+	for (i = check = 0; i < 12; i++) {
 		if (!kernel_symbol_exists(checkfuncs[i]))
 			continue;
 

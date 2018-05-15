@@ -5110,7 +5110,13 @@ PG_reserved_flag_init(void)
 		return;
 	}
 
-	vaddr = kt->stext ? kt->stext : symbol_value("sys_read");
+	vaddr = kt->stext;
+	if (!vaddr) {
+		if (kernel_symbol_exists("sys_read"))
+			vaddr = symbol_value("sys_read");
+		else if (kernel_symbol_exists("__x64_sys_read"))
+			vaddr = symbol_value("__x64_sys_read");
+	}
 
 	if (!phys_to_page((physaddr_t)VTOP(vaddr), &pageptr))
 		return;
@@ -13781,7 +13787,7 @@ show_hits:
                 for (i = vhits = 0; i < VMA_CACHE; i++)
                         vhits += vt->cached_vma_hits[i];
 
-                fprintf(stderr, "%s       vma hit rate: %2ld%% (%ld of %ld)\n",
+                fprintf(fp, "%s       vma hit rate: %2ld%% (%ld of %ld)\n",
 			verbose ? "" : "  ",
                         (vhits * 100)/vt->vma_cache_fills,
                         vhits, vt->vma_cache_fills);
