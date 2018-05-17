@@ -1498,7 +1498,7 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
                         KVADDR, &name, sizeof(void *),
                         "file_system_type name", FAULT_ON_ERROR);
 
-                if (read_string(name, buf4, BUFSIZE-1))
+                if (read_string(name, buf4, (BUFSIZE/2)-1))
 			sprintf(buf3, "%-6s ", buf4);
                 else
 			sprintf(buf3, "unknown ");
