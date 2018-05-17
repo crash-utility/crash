@@ -1437,8 +1437,8 @@ display_memory(ulonglong addr, long count, ulong flag, int memtype, void *opt)
 	char hexchars[MAX_HEXCHARS_PER_LINE+1];
 	char ch;
 	int linelen;
-	char buf[BUFSIZE];
-	char slab[BUFSIZE/2];
+	char buf[BUFSIZE*2];
+	char slab[BUFSIZE];
 	int ascii_start;
 	ulong error_handle;
 	char *hex_64_fmt = BITS32() ? "%.*llx " : "%.*lx ";
@@ -1951,8 +1951,8 @@ cmd_wr(void)
 char *
 format_stack_entry(struct bt_info *bt, char *retbuf, ulong value, ulong limit)
 {
-	char buf[BUFSIZE];
-	char slab[BUFSIZE/2];
+	char buf[BUFSIZE*2];
+	char slab[BUFSIZE];
 
 	if (BITS32()) {
 		if ((bt->flags & BT_FULL_SYM_SLAB) && accessible(value)) {
