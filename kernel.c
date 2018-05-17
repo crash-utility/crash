@@ -1294,7 +1294,7 @@ verify_namelist()
 
 	found = FALSE;
 	sprintf(buffer3, "(unknown)");
-        while (fgets(buffer, BUFSIZE-1, pipe)) {
+        while (fgets(buffer, (BUFSIZE/2)-1, pipe)) {
 		if (!strstr(buffer, "Linux version 2.") &&
 		    !strstr(buffer, "Linux version 3.") &&
 		    !strstr(buffer, "Linux version 4.") &&
