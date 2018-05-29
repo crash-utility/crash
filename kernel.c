@@ -7740,7 +7740,7 @@ ktime_to_ns(const void *ktime)
 	if (VALID_MEMBER(ktime_t_tv64)) {
 		readmem((ulong)ktime + OFFSET(ktime_t_tv64), KVADDR, &ns,
 			sizeof(ns), "ktime_t tv64", QUIET|RETURN_ON_ERROR);
-	} else {
+	} else if (VALID_MEMBER(ktime_t_sec) && VALID_MEMBER(ktime_t_nsec)) {
 		uint32_t sec, nsec;
 
 		sec = 0;
@@ -7753,6 +7753,9 @@ ktime_to_ns(const void *ktime)
 			sizeof(nsec), "ktime_t nsec", QUIET|RETURN_ON_ERROR);
 
 		ns = sec * 1000000000L + nsec;
+	} else {
+		readmem((ulong)ktime, KVADDR, &ns,
+			sizeof(ns), "ktime_t", QUIET|RETURN_ON_ERROR);
 	}
 
 	return ns;
