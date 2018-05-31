@@ -1,8 +1,8 @@
 /* x86.c - core analysis suite
  *
  * Portions Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2014,2017 David Anderson
- * Copyright (C) 2002-2014,2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2014,2017-2018 David Anderson
+ * Copyright (C) 2002-2014,2017-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1967,15 +1967,27 @@ x86_init(int when)
 		}
 		MEMBER_OFFSET_INIT(thread_struct_cr3, "thread_struct", "cr3");
 		STRUCT_SIZE_INIT(cpuinfo_x86, "cpuinfo_x86");
-		STRUCT_SIZE_INIT(e820map, "e820map");
-		STRUCT_SIZE_INIT(e820entry, "e820entry");
 		STRUCT_SIZE_INIT(irq_ctx, "irq_ctx");
+		if (STRUCT_EXISTS("e820map")) {
+			STRUCT_SIZE_INIT(e820map, "e820map");
+			MEMBER_OFFSET_INIT(e820map_nr_map, "e820map", "nr_map");
+		} else {
+			STRUCT_SIZE_INIT(e820map, "e820_table");
+			MEMBER_OFFSET_INIT(e820map_nr_map, "e820_table", "nr_entries");
+		}
+		if (STRUCT_EXISTS("e820entry")) {
+			STRUCT_SIZE_INIT(e820entry, "e820entry");
+			MEMBER_OFFSET_INIT(e820entry_addr, "e820entry", "addr");
+			MEMBER_OFFSET_INIT(e820entry_size, "e820entry", "size");
+			MEMBER_OFFSET_INIT(e820entry_type, "e820entry", "type");
+		} else {
+			STRUCT_SIZE_INIT(e820entry, "e820_entry");
+			MEMBER_OFFSET_INIT(e820entry_addr, "e820_entry", "addr");
+			MEMBER_OFFSET_INIT(e820entry_size, "e820_entry", "size");
+			MEMBER_OFFSET_INIT(e820entry_type, "e820_entry", "type");
+		}
 		if (!VALID_STRUCT(irq_ctx))
 			STRUCT_SIZE_INIT(irq_ctx, "irq_stack");
-		MEMBER_OFFSET_INIT(e820map_nr_map, "e820map", "nr_map");
-		MEMBER_OFFSET_INIT(e820entry_addr, "e820entry", "addr");
-		MEMBER_OFFSET_INIT(e820entry_size, "e820entry", "size");
-		MEMBER_OFFSET_INIT(e820entry_type, "e820entry", "type");
 		if (KVMDUMP_DUMPFILE())
 			set_kvm_iohole(NULL);
 		if (symbol_exists("irq_desc"))
@@ -4415,33 +4427,54 @@ static char *e820type[] = {
 static void
 x86_display_memmap(void)
 {
-	ulong e820;
-	int nr_map, i;
-	char *buf, *e820entry_ptr;
-	ulonglong addr, size;
-	ulong type;
+        ulong e820;
+        int nr_map, i;
+        char *buf, *e820entry_ptr;
+        ulonglong addr, size;
+        uint type;
 
-	e820 = symbol_value("e820");
-	buf = (char *)GETBUF(SIZE(e820map));
-
-        readmem(e820, KVADDR, &buf[0], SIZE(e820map), 
-		"e820map", FAULT_ON_ERROR);
-
-	nr_map = INT(buf + OFFSET(e820map_nr_map));
-
-	fprintf(fp, "      PHYSICAL ADDRESS RANGE         TYPE\n");
-
-	for (i = 0; i < nr_map; i++) {
-		e820entry_ptr = buf + sizeof(int) + (SIZE(e820entry) * i);
-		addr = ULONGLONG(e820entry_ptr + OFFSET(e820entry_addr));
-		size = ULONGLONG(e820entry_ptr + OFFSET(e820entry_size));
-		type = ULONG(e820entry_ptr + OFFSET(e820entry_type));
-		fprintf(fp, "%016llx - %016llx  ", addr, addr+size);
-		if (type >= (sizeof(e820type)/sizeof(char *)))
-			fprintf(fp, "type %ld\n", type);
+	if (kernel_symbol_exists("e820")) {
+		if (get_symbol_type("e820", NULL, NULL) == TYPE_CODE_PTR)
+			get_symbol_data("e820", sizeof(void *), &e820);
 		else
-			fprintf(fp, "%s\n", e820type[type]);
+			e820 = symbol_value("e820");
+
+	} else if (kernel_symbol_exists("e820_table"))
+		get_symbol_data("e820_table", sizeof(void *), &e820);
+	else
+		error(FATAL, "neither e820 or e820_table symbols exist\n");
+
+	if (CRASHDEBUG(1)) {
+		if (STRUCT_EXISTS("e820map"))
+			dump_struct("e820map", e820, RADIX(16));
+		else if (STRUCT_EXISTS("e820_table"))
+			dump_struct("e820_table", e820, RADIX(16));
 	}
+        buf = (char *)GETBUF(SIZE(e820map));
+
+        readmem(e820, KVADDR, &buf[0], SIZE(e820map),
+                "e820map", FAULT_ON_ERROR);
+
+        nr_map = INT(buf + OFFSET(e820map_nr_map));
+
+        fprintf(fp, "      PHYSICAL ADDRESS RANGE         TYPE\n");
+
+        for (i = 0; i < nr_map; i++) {
+                e820entry_ptr = buf + sizeof(int) + (SIZE(e820entry) * i);
+                addr = ULONGLONG(e820entry_ptr + OFFSET(e820entry_addr));
+                size = ULONGLONG(e820entry_ptr + OFFSET(e820entry_size));
+                type = UINT(e820entry_ptr + OFFSET(e820entry_type));
+		fprintf(fp, "%016llx - %016llx  ", addr, addr+size);
+		if (type >= (sizeof(e820type)/sizeof(char *))) {
+			if (type == 12)
+				fprintf(fp, "E820_PRAM\n");
+			else if (type == 128)
+				fprintf(fp, "E820_RESERVED_KERN\n");
+			else
+				fprintf(fp, "type %d\n", type);
+		} else
+			fprintf(fp, "%s\n", e820type[type]);
+        }
 }
 
 /*

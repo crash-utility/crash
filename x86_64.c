@@ -415,12 +415,26 @@ x86_64_init(int when)
 			STRUCT_SIZE_INIT(gate_struct, "gate_desc");
 		else
 			STRUCT_SIZE_INIT(gate_struct, "gate_struct");
-                STRUCT_SIZE_INIT(e820map, "e820map");
-                STRUCT_SIZE_INIT(e820entry, "e820entry");
-                MEMBER_OFFSET_INIT(e820map_nr_map, "e820map", "nr_map");
-                MEMBER_OFFSET_INIT(e820entry_addr, "e820entry", "addr");
-                MEMBER_OFFSET_INIT(e820entry_size, "e820entry", "size");
-                MEMBER_OFFSET_INIT(e820entry_type, "e820entry", "type");
+
+		if (STRUCT_EXISTS("e820map")) {
+			STRUCT_SIZE_INIT(e820map, "e820map");
+			MEMBER_OFFSET_INIT(e820map_nr_map, "e820map", "nr_map");
+		} else {
+			STRUCT_SIZE_INIT(e820map, "e820_table");
+			MEMBER_OFFSET_INIT(e820map_nr_map, "e820_table", "nr_entries");
+		}
+		if (STRUCT_EXISTS("e820entry")) {
+			STRUCT_SIZE_INIT(e820entry, "e820entry");
+			MEMBER_OFFSET_INIT(e820entry_addr, "e820entry", "addr");
+			MEMBER_OFFSET_INIT(e820entry_size, "e820entry", "size");
+			MEMBER_OFFSET_INIT(e820entry_type, "e820entry", "type");
+		} else {
+			STRUCT_SIZE_INIT(e820entry, "e820_entry");
+			MEMBER_OFFSET_INIT(e820entry_addr, "e820_entry", "addr");
+			MEMBER_OFFSET_INIT(e820entry_size, "e820_entry", "size");
+			MEMBER_OFFSET_INIT(e820entry_type, "e820_entry", "type");
+		}
+
 		if (KVMDUMP_DUMPFILE())
 			set_kvm_iohole(NULL);
 		MEMBER_OFFSET_INIT(thread_struct_rip, "thread_struct", "rip");
@@ -5643,12 +5657,23 @@ x86_64_display_memmap(void)
         ulonglong addr, size;
         uint type;
 
-	if (get_symbol_type("e820", NULL, NULL) == TYPE_CODE_PTR)
-		get_symbol_data("e820", sizeof(void *), &e820);
+	if (kernel_symbol_exists("e820")) {
+		if (get_symbol_type("e820", NULL, NULL) == TYPE_CODE_PTR)
+			get_symbol_data("e820", sizeof(void *), &e820);
+		else
+			e820 = symbol_value("e820");
+
+	} else if (kernel_symbol_exists("e820_table"))
+		get_symbol_data("e820_table", sizeof(void *), &e820);
 	else
-		e820 = symbol_value("e820");
-	if (CRASHDEBUG(1))
-		dump_struct("e820map", e820, RADIX(16));
+		error(FATAL, "neither e820 or e820_table symbols exist\n");
+
+	if (CRASHDEBUG(1)) {
+		if (STRUCT_EXISTS("e820map"))
+			dump_struct("e820map", e820, RADIX(16));
+		else if (STRUCT_EXISTS("e820_table"))
+			dump_struct("e820_table", e820, RADIX(16));
+	}
         buf = (char *)GETBUF(SIZE(e820map));
 
         readmem(e820, KVADDR, &buf[0], SIZE(e820map),
@@ -5664,9 +5689,14 @@ x86_64_display_memmap(void)
                 size = ULONGLONG(e820entry_ptr + OFFSET(e820entry_size));
                 type = UINT(e820entry_ptr + OFFSET(e820entry_type));
 		fprintf(fp, "%016llx - %016llx  ", addr, addr+size);
-		if (type >= (sizeof(e820type)/sizeof(char *)))
-			fprintf(fp, "type %d\n", type);
-		else
+		if (type >= (sizeof(e820type)/sizeof(char *))) {
+			if (type == 12)
+				fprintf(fp, "E820_PRAM\n");
+			else if (type == 128)
+				fprintf(fp, "E820_RESERVED_KERN\n");
+			else
+				fprintf(fp, "type %d\n", type);
+		} else
 			fprintf(fp, "%s\n", e820type[type]);
         }
 }
