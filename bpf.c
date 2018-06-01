@@ -362,7 +362,7 @@ do_bpf(ulong flags, ulong prog_id, ulong map_id, int radix)
 			fprintf(fp, "     LOAD_TIME: ");
 			if (VALID_MEMBER(bpf_prog_aux_load_time)) {
 				load_time = ULONGLONG(bpf->bpf_prog_aux_buf + OFFSET(bpf_prog_aux_load_time));
-				print_boot_time(load_time, buf5, BUFSIZE);
+				print_boot_time(load_time, buf5, BUFSIZE/2);
 				fprintf(fp, "%s\n", buf5);
 			} else
 				fprintf(fp, "(unknown)\n");
