@@ -1060,8 +1060,7 @@ static char *__func_get_name(const struct bpf_insn *insn,
 		return buff;
 
 	if (insn->src_reg != BPF_PSEUDO_CALL &&
-	    insn->imm >= 0 && insn->imm < __BPF_FUNC_MAX_ID &&
-	    func_id_str[insn->imm]) {
+	    insn->imm >= 0 && insn->imm < __BPF_FUNC_MAX_ID) {
 //              return func_id_str[insn->imm];
 		if (!readmem(symbol_value("func_id_str") + (insn->imm * sizeof(void *)), 
 		    KVADDR, &func_id_ptr, sizeof(void *), "func_id_str pointer", 
