@@ -3391,6 +3391,9 @@ struct arm64_stackframe {
 #define VSYSCALL_START             0xffffffffff600000
 #define VSYSCALL_END               0xffffffffff601000
 
+#define CPU_ENTRY_AREA_START       0xfffffe0000000000
+#define CPU_ENTRY_AREA_END         0xfffffe7fffffffff
+
 #define PTOV(X)               ((unsigned long)(X)+(machdep->kvbase))
 #define VTOP(X)               x86_64_VTOP((ulong)(X))
 #define IS_VMALLOC_ADDR(X)    x86_64_IS_VMALLOC_ADDR((ulong)(X))
@@ -5829,6 +5832,8 @@ struct machine_specific {
 	ulong kpti_entry_stack;
 	ulong kpti_entry_stack_size;
 	ulong ptrs_per_pgd;
+	ulong cpu_entry_area_start;
+	ulong cpu_entry_area_end;
 };
 
 #define KSYMS_START    (0x1)

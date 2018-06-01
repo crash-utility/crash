@@ -407,6 +407,11 @@ x86_64_init(int when)
 				machdep->machspec->modules_end = MODULES_END_2_6_31;
 			}
 		}
+		if (STRUCT_EXISTS("cpu_entry_area")) {
+			machdep->machspec->cpu_entry_area_start = CPU_ENTRY_AREA_START;	
+			machdep->machspec->cpu_entry_area_end = CPU_ENTRY_AREA_END;	
+		}
+
                 STRUCT_SIZE_INIT(cpuinfo_x86, "cpuinfo_x86");
 		/* 
 		 * Before 2.6.25 the structure was called gate_struct
@@ -879,20 +884,21 @@ x86_64_dump_machdep_table(ulong arg)
 
 	/* pml4 and upml is legacy for extension modules */
 	if (ms->pml4) {
-		fprintf(fp, "			  pml4: %lx\n", (ulong)ms->pml4);
-		fprintf(fp, "		last_pml4_read: %lx\n", (ulong)ms->last_pml4_read);
+		fprintf(fp, "                     pml4: %lx\n", (ulong)ms->pml4);
+		fprintf(fp, "           last_pml4_read: %lx\n", (ulong)ms->last_pml4_read);
 
 	} else {
-		fprintf(fp, "		      pml4: (unused)\n");
-		fprintf(fp, "	    last_pml4_read: (unused)\n");
+		fprintf(fp, "                     pml4: (unused)\n");
+		fprintf(fp, "           last_pml4_read: (unused)\n");
 	}
 
 	if (ms->upml) {
-		fprintf(fp, "		      upml: %lx\n", (ulong)ms->upml);
-		fprintf(fp, "	    last_upml_read: %lx\n", (ulong)ms->last_upml_read);
+		fprintf(fp, "                     upml: %lx\n", (ulong)ms->upml);
+		fprintf(fp, "           last_upml_read: %lx\n", (ulong)ms->last_upml_read);
 	} else {
-		fprintf(fp, "		      upml: (unused)\n");
-		fprintf(fp, "	    last_upml_read: (unused)\n");
+		fprintf(fp, "                 GART_end: %lx\n", ms->GART_end);
+		fprintf(fp, "                     upml: (unused)\n");
+		fprintf(fp, "           last_upml_read: (unused)\n");
 	}
 
 	if (ms->p4d) {
@@ -1016,10 +1022,14 @@ x86_64_dump_machdep_table(ulong arg)
 			fprintf(fp, "\n   ");
 		fprintf(fp, "%016lx ", ms->stkinfo.ibase[c]);
 	}
-	fprintf(fp, "\n                 kpti_entry_stack_size: %ld", ms->kpti_entry_stack_size);
-	fprintf(fp, "\n                      kpti_entry_stack: ");
+	fprintf(fp, "\n    kpti_entry_stack_size: ");
+	if (ms->kpti_entry_stack_size)
+		fprintf(fp, "%ld", ms->kpti_entry_stack_size);
+	else
+		fprintf(fp, "(unused)");
+	fprintf(fp, "\n         kpti_entry_stack: ");
 	if (machdep->flags & KPTI) {
-		fprintf(fp, "%lx\n   ", ms->kpti_entry_stack);
+		fprintf(fp, "(percpu: %lx):\n   ", ms->kpti_entry_stack);
 		for (c = 0; c < cpus; c++) {
 			if (c && !(c%4))
 				fprintf(fp, "\n   ");
@@ -1027,6 +1037,16 @@ x86_64_dump_machdep_table(ulong arg)
 		}
 		fprintf(fp, "\n");
 	} else
+		fprintf(fp, "(unused)\n");
+	fprintf(fp, "     cpu_entry_area_start: ");
+	if (ms->cpu_entry_area_start)
+		fprintf(fp, "%016lx\n", (ulong)ms->cpu_entry_area_start);
+	else
+		fprintf(fp, "(unused)\n");
+	fprintf(fp, "       cpu_entry_area_end: ");
+	if (ms->cpu_entry_area_end)
+		fprintf(fp, "%016lx\n", (ulong)ms->cpu_entry_area_end);
+	else
 		fprintf(fp, "(unused)\n");
 }
 
@@ -1586,7 +1606,10 @@ x86_64_IS_VMALLOC_ADDR(ulong vaddr)
                 ((machdep->flags & VMEMMAP) && 
 		 (vaddr >= VMEMMAP_VADDR && vaddr <= VMEMMAP_END)) ||
                 (vaddr >= MODULES_VADDR && vaddr <= MODULES_END) ||
-		(vaddr >= VSYSCALL_START && vaddr < VSYSCALL_END));
+		(vaddr >= VSYSCALL_START && vaddr < VSYSCALL_END) ||
+		(machdep->machspec->cpu_entry_area_start && 
+		 vaddr >= machdep->machspec->cpu_entry_area_start &&
+		 vaddr <= machdep->machspec->cpu_entry_area_end));
 }
 
 static int 
