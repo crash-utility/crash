@@ -4334,11 +4334,8 @@ kcore_memory_dump(FILE *ofp)
 	Elf32_Phdr *lp32;
 	Elf64_Phdr *lp64;
 
-	if (!(pkd->flags & KCORE_LOCAL))
-		return FALSE;
-
 	fprintf(ofp, "proc_kcore_data:\n");
-	fprintf(ofp, "       flags: %lx (", nd->flags);
+	fprintf(ofp, "       flags: %x (", pkd->flags);
 	others = 0;
 	if (pkd->flags & KCORE_LOCAL)
 		fprintf(ofp, "%sKCORE_LOCAL", others++ ? "|" : "");
