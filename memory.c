@@ -2243,9 +2243,11 @@ readmem(ulonglong addr, int memtype, void *buffer, long size,
 				error(INFO, READ_ERRMSG, memtype_string(memtype, 0), addr, type);
 			if ((pc->flags & DEVMEM) && (kt->flags & PRE_KERNEL_INIT) &&
 			    !(error_handle & NO_DEVMEM_SWITCH) && devmem_is_restricted() && 
-			    switch_to_proc_kcore())
+			    switch_to_proc_kcore()) {
+				error_handle &= ~QUIET;
 				return(readmem(addr, memtype, bufptr, size,
 					type, error_handle));
+			}
 			goto readmem_error;
 
 		case PAGE_EXCLUDED:
@@ -2457,7 +2459,7 @@ devmem_is_restricted(void)
 		    QUIET|RETURN_ON_ERROR|NO_DEVMEM_SWITCH))
 			restricted = TRUE;
 
-		if (restricted)
+		if (restricted && CRASHDEBUG(1))
 			error(INFO, 
  	    		    "this kernel may be configured with CONFIG_STRICT_DEVMEM,"
 			    " which\n       renders /dev/mem unusable as a live memory "
@@ -2472,9 +2474,10 @@ switch_to_proc_kcore(void)
 {
 	close(pc->mfd);
 
-	if (file_exists("/proc/kcore", NULL))
-		error(INFO, "trying /proc/kcore as an alternative to /dev/mem\n\n");
-	else
+	if (file_exists("/proc/kcore", NULL)) {
+		if (CRASHDEBUG(1))
+			error(INFO, "trying /proc/kcore as an alternative to /dev/mem\n\n");
+	} else
 		return FALSE;
 
 	if ((pc->mfd = open("/proc/kcore", O_RDONLY)) < 0) {

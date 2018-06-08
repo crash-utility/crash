@@ -1,7 +1,7 @@
 /* ppc64.c -- core analysis suite
  *
- * Copyright (C) 2004-2015,2017 David Anderson
- * Copyright (C) 2004-2015,2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2015,2018 David Anderson
+ * Copyright (C) 2004-2015,2018 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2004, 2006 Haren Myneni, IBM Corporation
  *
  * This program is free software; you can redistribute it and/or modify
@@ -343,8 +343,9 @@ ppc64_init(int when)
 
 		if (symbol_exists("vmemmap_populate")) {
 			if (symbol_exists("vmemmap")) {
-				get_symbol_data("vmemmap", sizeof(void *),
-					&machdep->machspec->vmemmap_base);
+				readmem(symbol_value("vmemmap"), KVADDR,
+					&machdep->machspec->vmemmap_base,
+					sizeof(void *), "vmemmap", QUIET|FAULT_ON_ERROR);
 			} else
 				machdep->machspec->vmemmap_base =
 					VMEMMAP_REGION_ID << REGION_SHIFT;

@@ -356,7 +356,7 @@ x86_64_init(int when)
 			machdep->flags |= RANDOMIZED;
 			readmem(symbol_value("page_offset_base"), KVADDR,
 				&machdep->machspec->page_offset, sizeof(ulong),
-				"page_offset_base", FAULT_ON_ERROR);
+				"page_offset_base", QUIET|FAULT_ON_ERROR);
 			machdep->kvbase = machdep->machspec->page_offset;
 			machdep->identity_map_base = machdep->machspec->page_offset;
 		}

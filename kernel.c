@@ -882,7 +882,7 @@ cpu_maps_init(void)
 {
         int i, c, m, cpu, len;
         char *buf;
-        ulong *maskptr, addr;
+        ulong *maskptr, addr, error_handle;
 	struct mapinfo {
 		ulong cpu_flag;
 		char *name;
@@ -902,8 +902,9 @@ cpu_maps_init(void)
 		if (!(addr = cpu_map_addr(mapinfo[m].name)))
 			continue;
 
+		error_handle = pc->flags & DEVMEM ? RETURN_ON_ERROR|QUIET : RETURN_ON_ERROR;
 		if (!readmem(addr, KVADDR, buf, len,
-		    mapinfo[m].name, RETURN_ON_ERROR)) {
+		    mapinfo[m].name, error_handle)) {
 			error(WARNING, "cannot read cpu_%s_map\n",
 			      mapinfo[m].name);
 			continue;
