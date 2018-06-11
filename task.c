@@ -440,7 +440,7 @@ task_init(void)
 	} else if (VALID_SIZE(thread_union) && 
 	    	((len = SIZE(thread_union)) != STACKSIZE())) {
 		machdep->stacksize = len;
-	} else {
+	} else if (!VALID_SIZE(thread_union) && !VALID_SIZE(task_union)) {
 		if (kernel_symbol_exists("__start_init_task") &&
 		    kernel_symbol_exists("__end_init_task")) {
 			len = symbol_value("__end_init_task");
