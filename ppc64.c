@@ -451,7 +451,10 @@ ppc64_init(int when)
 
 					if (THIS_KERNEL_VERSION >= LINUX(4,12,0)) {
 						m->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_12;
-						m->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_12;
+						if (THIS_KERNEL_VERSION >= LINUX(4,17,0))
+							m->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_17;
+						else
+							m->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_12;
 						m->l4_index_size = PGD_INDEX_SIZE_L4_64K_4_12;
 					} else {
 						m->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_6;
