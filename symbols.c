@@ -2755,9 +2755,14 @@ is_kernel_text(ulong value)
 					section);
 				end = start + (ulong)bfd_section_size(st->bfd, 
 					section);
+
+				if (kt->flags2 & KASLR) {
+					start += (kt->relocate * -1);
+					end += (kt->relocate * -1);
+				}
 	
-	        		if ((value >= start) && (value < end)) 
-	                		return TRUE;
+				if ((value >= start) && (value < end)) 
+					return TRUE;
 			}
 		}
 	}
@@ -2833,7 +2838,16 @@ is_kernel_text_offset(ulong value)
 int
 is_symbol_text(struct syment *sp)
 {
-	return ((sp->type == 'T') || (sp->type == 't'));
+	if ((sp->type == 'T') || (sp->type == 't'))
+		return TRUE;
+
+	if ((sp->type == 'W') || (sp->type == 'w')) {
+		if ((sp->value >= kt->stext) &&
+		    (sp->value < kt->etext))
+			return TRUE;
+	}
+
+	return FALSE;
 }
 
 /*
