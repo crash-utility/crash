@@ -4285,6 +4285,12 @@ x86_64_exception_frame(ulong flags, ulong kvaddr, char *local,
 	long err;
 	char buf[BUFSIZE];
 
+	if (flags == EFRAME_VERIFY) {
+		if (!accessible(kvaddr) || 
+		    !accessible(kvaddr + SIZE(pt_regs) - sizeof(long)))
+			return FALSE;
+	}
+
 	ms = machdep->machspec;
 	sp = NULL;
 
@@ -6282,6 +6288,9 @@ static ulong
 x86_64_irq_eframe_link(ulong stkref, struct bt_info *bt, FILE *ofp)
 {
 	ulong irq_eframe;
+
+	if (x86_64_exception_frame(EFRAME_VERIFY, stkref, 0, bt, ofp))
+		return stkref;
 
 	irq_eframe = stkref - machdep->machspec->irq_eframe_link;
 
