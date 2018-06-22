@@ -17498,13 +17498,12 @@ vm_stat_init(void)
 			STREQ(arglist[0], "NR_VM_ZONE_STAT_ITEMS")) {
 			continue;
 		} else {
-			stringlen += strlen(arglist[0]);
+			stringlen += strlen(arglist[0]) + 1;
 			count++;
 		}
         }
 
-	total = stringlen + vt->nr_vm_stat_items + 
-		(sizeof(void *) * vt->nr_vm_stat_items);
+	total = stringlen + (sizeof(void *) * vt->nr_vm_stat_items);
         if (!(vt->vm_stat_items = (char **)malloc(total))) {
 		close_tmpfile();
                 error(FATAL, "cannot malloc vm_stat_items cache\n");
