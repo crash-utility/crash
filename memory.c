@@ -17422,7 +17422,7 @@ vm_stat_init(void)
 	int c ATTRIBUTE_UNUSED;
         struct gnu_request *req;
 	char *start;
-	long enum_value, zc = -1;
+	long enum_value, zone_cnt = -1, node_cnt = -1;
 	int split_vmstat = 0, ni = 0;
 
 	if (vt->flags & VM_STAT)
@@ -17451,11 +17451,21 @@ vm_stat_init(void)
 		} else if (symbol_exists("vm_zone_stat") &&
 			get_symbol_type("vm_zone_stat",
 			NULL, NULL) == TYPE_CODE_ARRAY) {
-			vt->nr_vm_stat_items =
-				get_array_length("vm_zone_stat", NULL, 0)
-				+ get_array_length("vm_node_stat", NULL, 0);
-			split_vmstat = 1;
-			enumerator_value("NR_VM_ZONE_STAT_ITEMS", &zc);
+			if (symbol_exists("vm_numa_stat")) {
+				vt->nr_vm_stat_items =
+					get_array_length("vm_zone_stat", NULL, 0)
+					+ get_array_length("vm_node_stat", NULL, 0) 
+					+ get_array_length("vm_numa_stat", NULL, 0);
+				split_vmstat = 2;
+				enumerator_value("NR_VM_ZONE_STAT_ITEMS", &zone_cnt);
+				enumerator_value("NR_VM_NODE_STAT_ITEMS", &node_cnt);
+			} else {
+				vt->nr_vm_stat_items =
+					get_array_length("vm_zone_stat", NULL, 0)
+					+ get_array_length("vm_node_stat", NULL, 0);
+				split_vmstat = 1;
+				enumerator_value("NR_VM_ZONE_STAT_ITEMS", &zone_cnt);
+			}
 		} else {
 			goto bailout;
 		}
@@ -17468,9 +17478,16 @@ vm_stat_init(void)
         req->flags = GNU_PRINT_ENUMERATORS;
         gdb_interface(req);
 
-	if (split_vmstat) {
+	if (split_vmstat >= 1) {
 		req->command = GNU_GET_DATATYPE;
 		req->name = "node_stat_item";
+		req->flags = GNU_PRINT_ENUMERATORS;
+		gdb_interface(req);
+	}
+
+	if (split_vmstat == 2) {
+		req->command = GNU_GET_DATATYPE;
+		req->name = "numa_stat_item";
 		req->flags = GNU_PRINT_ENUMERATORS;
 		gdb_interface(req);
 	}
@@ -17488,14 +17505,19 @@ vm_stat_init(void)
 		c = parse_line(buf, arglist);
 		if ((!split_vmstat &&
 			STREQ(arglist[0], "NR_VM_ZONE_STAT_ITEMS")) ||
-			(split_vmstat &&
-			STREQ(arglist[0], "NR_VM_NODE_STAT_ITEMS"))) {
+			((split_vmstat == 1) &&
+			STREQ(arglist[0], "NR_VM_NODE_STAT_ITEMS")) ||
+			((split_vmstat == 2) &&
+			STREQ(arglist[0], "NR_VM_NUMA_STAT_ITEMS"))) {
 			if (LKCD_KERNTYPES())
 				vt->nr_vm_stat_items = 
 					MAX(atoi(arglist[2]), count);
 			break;
-		} else if (split_vmstat &&
+		} else if ((split_vmstat == 1) &&
 			STREQ(arglist[0], "NR_VM_ZONE_STAT_ITEMS")) {
+			continue;
+		} else if ((split_vmstat == 2) && 
+			STREQ(arglist[0], "NR_VM_NODE_STAT_ITEMS")) {
 			continue;
 		} else {
 			stringlen += strlen(arglist[0]) + 1;
@@ -17523,8 +17545,11 @@ vm_stat_init(void)
 		}
 
 		i = ni + enum_value;
-		if (!ni && (enum_value == zc)) {
-			ni = zc;
+		if (!ni && (enum_value == zone_cnt)) {
+			ni = zone_cnt;
+			continue;
+		} else if ((ni == zone_cnt) && (enum_value == node_cnt)) {
+			ni += node_cnt;
 			continue;
 		}
 
@@ -17556,8 +17581,8 @@ dump_vm_stat(char *item, long *retval, ulong zone)
 	char *buf;
 	ulong *vp;
 	ulong location;
-	int i, maxlen, len;
-	long tc, zc = 0, nc = 0;
+	int i, maxlen, len, node_start = -1, numa_start = 1;
+	long total_cnt, zone_cnt = 0, node_cnt = 0, numa_cnt = 0;
 	int split_vmstat = 0;
 
 	if (!vm_stat_init()) {
@@ -17570,48 +17595,86 @@ dump_vm_stat(char *item, long *retval, ulong zone)
 
 	buf = GETBUF(sizeof(ulong) * vt->nr_vm_stat_items);
 
-	if (symbol_exists("vm_node_stat") && symbol_exists("vm_zone_stat"))
+	if (symbol_exists("vm_node_stat") && symbol_exists("vm_zone_stat") &&
+	    symbol_exists("vm_numa_stat"))
+		split_vmstat = 2;
+	else if (symbol_exists("vm_node_stat") && symbol_exists("vm_zone_stat"))
 		split_vmstat = 1;
 	else
 		location = zone ? zone : symbol_value("vm_stat");
 
-	if (split_vmstat) {
-		enumerator_value("NR_VM_ZONE_STAT_ITEMS", &zc);
+	if (split_vmstat == 1) {
+		enumerator_value("NR_VM_ZONE_STAT_ITEMS", &zone_cnt);
 		location = zone ? zone : symbol_value("vm_zone_stat");
 		readmem(location, KVADDR, buf,
-			sizeof(ulong) * zc,
+			sizeof(ulong) * zone_cnt,
 			"vm_zone_stat", FAULT_ON_ERROR);
 		if (!zone) {
 			location = symbol_value("vm_node_stat");
-			enumerator_value("NR_VM_NODE_STAT_ITEMS", &nc);
-			readmem(location, KVADDR, buf + (sizeof(ulong) * zc),
-				sizeof(ulong) * nc,
+			enumerator_value("NR_VM_NODE_STAT_ITEMS", &node_cnt);
+			readmem(location, KVADDR, buf + (sizeof(ulong) * zone_cnt),
+				sizeof(ulong) * node_cnt,
 				"vm_node_stat", FAULT_ON_ERROR);
 		}
-		tc = zc + nc;
+		node_start = zone_cnt;
+		total_cnt = zone_cnt + node_cnt;
+	} else if (split_vmstat == 2) {
+		enumerator_value("NR_VM_ZONE_STAT_ITEMS", &zone_cnt);
+		location = zone ? zone : symbol_value("vm_zone_stat");
+		readmem(location, KVADDR, buf,
+			sizeof(ulong) * zone_cnt,
+			"vm_zone_stat", FAULT_ON_ERROR);
+		if (!zone) {
+			location = symbol_value("vm_node_stat");
+			enumerator_value("NR_VM_NODE_STAT_ITEMS", &node_cnt);
+			readmem(location, KVADDR, buf + (sizeof(ulong) * zone_cnt),
+				sizeof(ulong) * node_cnt,
+				"vm_node_stat", FAULT_ON_ERROR);
+		}
+		node_start = zone_cnt;
+		if (!zone) {
+			location = symbol_value("vm_numa_stat");
+			enumerator_value("NR_VM_NUMA_STAT_ITEMS", &numa_cnt);
+			readmem(location, KVADDR, buf + (sizeof(ulong) * (zone_cnt+node_cnt)),
+				sizeof(ulong) * numa_cnt,
+				"vm_numa_stat", FAULT_ON_ERROR);
+		}
+		numa_start = zone_cnt+node_cnt;
+		total_cnt = zone_cnt + node_cnt + numa_cnt;
 	} else {
 		readmem(location, KVADDR, buf,
 			sizeof(ulong) * vt->nr_vm_stat_items,
 			"vm_stat", FAULT_ON_ERROR);
-		tc = vt->nr_vm_stat_items;
+		total_cnt = vt->nr_vm_stat_items;
 	}
 
 	if (!item) {
-		if (!zone)
-			fprintf(fp, "  VM_STAT:\n");
-		for (i = maxlen = 0; i < tc; i++)
+		if (!zone) {
+			if (symbol_exists("vm_zone_stat"))
+				fprintf(fp, "  VM_ZONE_STAT:\n");
+			else
+				fprintf(fp, "  VM_STAT:\n");
+		}
+		for (i = maxlen = 0; i < total_cnt; i++)
 			if ((len = strlen(vt->vm_stat_items[i])) > maxlen)
 				maxlen = len;
 		vp = (ulong *)buf;
-		for (i = 0; i < tc; i++)
+		for (i = 0; i < total_cnt; i++) {
+			if (!zone) {
+				if ((i == node_start) && symbol_exists("vm_node_stat")) 
+					fprintf(fp, "\n  VM_NODE_STAT:\n"); 
+				if ((i == numa_start) && symbol_exists("vm_numa_stat")) 
+					fprintf(fp, "\n  VM_NUMA_STAT:\n"); 
+			}
 			fprintf(fp, "%s%s: %ld\n",
 				space(maxlen - strlen(vt->vm_stat_items[i])),
 				 vt->vm_stat_items[i], vp[i]);
+		}
 		return TRUE;
 	}
 
 	vp = (ulong *)buf;
-	for (i = 0; i < tc; i++) {
+	for (i = 0; i < total_cnt; i++) {
 		if (STREQ(vt->vm_stat_items[i], item)) {
 			*retval = vp[i];
 			return TRUE;
