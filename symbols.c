@@ -10055,6 +10055,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(idr_layers));
 	fprintf(fp, "                       idr_top: %ld\n",
 		OFFSET(idr_top));
+	fprintf(fp, "                       idr_cur: %ld\n",
+		OFFSET(idr_cur));
 	fprintf(fp, "                  ipc_id_ary_p: %ld\n",
 		OFFSET(ipc_id_ary_p));
 	fprintf(fp, "               ipc_ids_entries: %ld\n",

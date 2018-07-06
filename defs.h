@@ -2031,6 +2031,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long bpf_prog_aux_load_time;
 	long bpf_prog_aux_user;
 	long user_struct_uid;
+	long idr_cur;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -5590,6 +5591,12 @@ enum {
  */
 void dev_init(void);
 void dump_dev_table(void);
+
+/*
+ *  ipcs.c
+ */
+void ipcs_init(void);
+ulong idr_find(ulong, int);
 
 #ifdef ARM
 void arm_init(int);
