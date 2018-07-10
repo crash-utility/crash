@@ -294,25 +294,6 @@ x86_64_init(int when)
 			machdep->machspec->pgdir_shift = PGDIR_SHIFT;
 			machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD;
 			break;
-
-		case VM_5LEVEL:
-			machdep->machspec->userspace_top = USERSPACE_TOP_5LEVEL;
-			machdep->machspec->page_offset = PAGE_OFFSET_5LEVEL;
-			machdep->machspec->vmalloc_start_addr = VMALLOC_START_ADDR_5LEVEL;
-			machdep->machspec->vmalloc_end = VMALLOC_END_5LEVEL;
-			machdep->machspec->modules_vaddr = MODULES_VADDR_5LEVEL;
-			machdep->machspec->modules_end = MODULES_END_5LEVEL;
-			machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_5LEVEL;
-			machdep->machspec->vmemmap_end = VMEMMAP_END_5LEVEL;
-			if (symbol_exists("vmemmap_populate"))
-				machdep->flags |= VMEMMAP;
-			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_5LEVEL;
-			machdep->machspec->pgdir_shift = PGDIR_SHIFT_5LEVEL;
-			machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD_5LEVEL;
-			if ((machdep->machspec->p4d = (char *)malloc(PAGESIZE())) == NULL)
-				error(FATAL, "cannot malloc p4d space.");
-			machdep->machspec->last_p4d_read = 0;
-			machdep->uvtop = x86_64_uvtop_level4;  /* 5-level is optional per-task */
 		}
 	        machdep->kvbase = (ulong)PAGE_OFFSET;
 		machdep->identity_map_base = (ulong)PAGE_OFFSET;
@@ -346,6 +327,43 @@ x86_64_init(int when)
 		break;
 
 	case POST_RELOC:
+		/* Check for 5-level paging */
+		if (!(machdep->flags & VM_5LEVEL)) {
+			int l5_enabled = 0;
+			if ((string = pc->read_vmcoreinfo("NUMBER(pgtable_l5_enabled)"))) {
+				l5_enabled = atoi(string);
+				free(string);
+			} else if (kernel_symbol_exists("__pgtable_l5_enabled"))
+				readmem(symbol_value("__pgtable_l5_enabled"), KVADDR,
+					&l5_enabled, sizeof(int), "__pgtable_l5_enabled",
+					FAULT_ON_ERROR);
+
+			if (l5_enabled)
+				machdep->flags |= VM_5LEVEL;
+		}
+		if (machdep->flags & VM_5LEVEL) {
+			machdep->machspec->userspace_top = USERSPACE_TOP_5LEVEL;
+			machdep->machspec->page_offset = PAGE_OFFSET_5LEVEL;
+			machdep->machspec->vmalloc_start_addr = VMALLOC_START_ADDR_5LEVEL;
+			machdep->machspec->vmalloc_end = VMALLOC_END_5LEVEL;
+			machdep->machspec->modules_vaddr = MODULES_VADDR_5LEVEL;
+			machdep->machspec->modules_end = MODULES_END_5LEVEL;
+			machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_5LEVEL;
+			machdep->machspec->vmemmap_end = VMEMMAP_END_5LEVEL;
+			if (symbol_exists("vmemmap_populate"))
+				machdep->flags |= VMEMMAP;
+			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_5LEVEL;
+			machdep->machspec->pgdir_shift = PGDIR_SHIFT_5LEVEL;
+			machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD_5LEVEL;
+			if ((machdep->machspec->p4d = (char *)malloc(PAGESIZE())) == NULL)
+				error(FATAL, "cannot malloc p4d space.");
+			machdep->machspec->last_p4d_read = 0;
+			machdep->uvtop = x86_64_uvtop_level4;  /* 5-level is optional per-task */
+			machdep->kvbase = (ulong)PAGE_OFFSET;
+			machdep->identity_map_base = (ulong)PAGE_OFFSET;
+
+		}
+
 		/*
 		 *  Check for CONFIG_RANDOMIZE_MEMORY, and set page_offset here.
 		 *  The remainder of the virtual address range setups will get
