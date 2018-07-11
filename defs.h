@@ -2491,6 +2491,7 @@ struct list_data {             /* generic structure used by do_list() to walk */
 #define CALLBACK_RETURN     (VERBOSE << 12)
 #define LIST_PARSE_MEMBER   (VERBOSE << 13)
 #define LIST_READ_MEMBER    (VERBOSE << 14)
+#define LIST_BRENT_ALGO     (VERBOSE << 15)
 
 struct tree_data {
 	ulong flags;
@@ -4944,6 +4945,7 @@ char *shift_string_right(char *, int);
 int bracketed(char *, char *, int);
 void backspace(int);
 int do_list(struct list_data *);
+int do_list_no_hash(struct list_data *);
 struct radix_tree_ops {
 	void (*entry)(ulong node, ulong slot, const char *path,
 		      ulong index, void *private);

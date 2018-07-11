@@ -3266,9 +3266,12 @@ cmd_list(void)
 	BZERO(ld, sizeof(struct list_data));
 	struct_list_offset = 0;
 
-	while ((c = getopt(argcnt, args, "Hhrs:S:e:o:xdl:")) != EOF) {
+	while ((c = getopt(argcnt, args, "BHhrs:S:e:o:xdl:")) != EOF) {
                 switch(c)
 		{
+		case 'B':
+			ld->flags |= LIST_BRENT_ALGO;
+			break;
 		case 'H':
 			ld->flags |= LIST_HEAD_FORMAT;
 			ld->flags |= LIST_HEAD_POINTER;
@@ -3516,9 +3519,13 @@ next_arg:
 	ld->flags &= ~(LIST_OFFSET_ENTERED|LIST_START_ENTERED);
 	ld->flags |= VERBOSE;
 
-	hq_open();
-	c = do_list(ld);
-	hq_close();
+	if (ld->flags & LIST_BRENT_ALGO)
+		c = do_list_no_hash(ld);
+	else {
+		hq_open();
+		c = do_list(ld);
+		hq_close();
+	}
 
         if (ld->structname_args)
 		FREEBUF(ld->structname);
@@ -3858,6 +3865,283 @@ do_list(struct list_data *ld)
 		if (close_hq_on_return)
 			hq_close();
 	}
+
+	return count;
+}
+
+static void 
+do_list_debug_entry(struct list_data *ld)
+{
+	int i, others;
+
+	if (CRASHDEBUG(1)) {
+		others = 0;
+		console("             flags: %lx (", ld->flags);
+		if (ld->flags & VERBOSE)
+			console("%sVERBOSE", others++ ? "|" : "");
+		if (ld->flags & LIST_OFFSET_ENTERED)
+			console("%sLIST_OFFSET_ENTERED", others++ ? "|" : "");
+		if (ld->flags & LIST_START_ENTERED)
+			console("%sLIST_START_ENTERED", others++ ? "|" : "");
+		if (ld->flags & LIST_HEAD_FORMAT)
+			console("%sLIST_HEAD_FORMAT", others++ ? "|" : "");
+		if (ld->flags & LIST_HEAD_POINTER)
+			console("%sLIST_HEAD_POINTER", others++ ? "|" : "");
+		if (ld->flags & RETURN_ON_DUPLICATE)
+			console("%sRETURN_ON_DUPLICATE", others++ ? "|" : "");
+		if (ld->flags & RETURN_ON_LIST_ERROR)
+			console("%sRETURN_ON_LIST_ERROR", others++ ? "|" : "");
+		if (ld->flags & RETURN_ON_LIST_ERROR)
+			console("%sRETURN_ON_LIST_ERROR", others++ ? "|" : "");
+		if (ld->flags & LIST_STRUCT_RADIX_10)
+			console("%sLIST_STRUCT_RADIX_10", others++ ? "|" : "");
+		if (ld->flags & LIST_STRUCT_RADIX_16)
+			console("%sLIST_STRUCT_RADIX_16", others++ ? "|" : "");
+		if (ld->flags & LIST_ALLOCATE)
+			console("%sLIST_ALLOCATE", others++ ? "|" : "");
+		if (ld->flags & LIST_CALLBACK)
+			console("%sLIST_CALLBACK", others++ ? "|" : "");
+		if (ld->flags & CALLBACK_RETURN)
+			console("%sCALLBACK_RETURN", others++ ? "|" : "");
+		console(")\n");
+		console("             start: %lx\n", ld->start);
+		console("     member_offset: %ld\n", ld->member_offset);
+		console("  list_head_offset: %ld\n", ld->list_head_offset);
+		console("               end: %lx\n", ld->end);
+		console("         searchfor: %lx\n", ld->searchfor);
+		console("   structname_args: %lx\n", ld->structname_args);
+		if (!ld->structname_args)
+			console("        structname: (unused)\n");
+		for (i = 0; i < ld->structname_args; i++)
+			console("     structname[%d]: %s\n", i, ld->structname[i]);
+		console("            header: %s\n", ld->header);
+		console("          list_ptr: %lx\n", (ulong)ld->list_ptr);
+		console("     callback_func: %lx\n", (ulong)ld->callback_func);
+		console("     callback_data: %lx\n", (ulong)ld->callback_data);
+		console("struct_list_offset: %lx\n", ld->struct_list_offset);
+	}
+}
+
+
+static void 
+do_list_output_struct(struct list_data *ld, ulong next, ulong offset,
+				  unsigned int radix, struct req_entry **e)
+{
+	int i;
+
+	for (i = 0; i < ld->structname_args; i++) {
+		switch (count_chars(ld->structname[i], '.'))
+		{
+			case 0:
+				dump_struct(ld->structname[i],
+					    next - offset, radix);
+				break;
+			default:
+				if (ld->flags & LIST_PARSE_MEMBER)
+					dump_struct_members(ld, i, next);
+				else if (ld->flags & LIST_READ_MEMBER)
+					dump_struct_members_fast(e[i],
+						 radix, next - offset);
+				break;
+		}
+	}
+}
+
+static int 
+do_list_no_hash_readmem(struct list_data *ld, ulong *next_ptr,
+				   ulong readflag)
+{
+	if (!readmem(*next_ptr + ld->member_offset, KVADDR, next_ptr,
+		     sizeof(void *), "list entry", readflag)) {
+		error(INFO, "\ninvalid list entry: %lx\n", *next_ptr);
+		return -1;
+	}
+	return 0;
+}
+
+static ulong brent_x; /* tortoise */
+static ulong brent_y; /* hare */
+static ulong brent_r; /* power */
+static ulong brent_lambda; /* loop length */
+static ulong brent_mu; /* distance to start of loop */
+static ulong brent_loop_detect;
+static ulong brent_loop_exit;
+/*
+ * 'ptr': representative of x or y; modified on return
+ */
+static int 
+brent_f(ulong *ptr, struct list_data *ld, ulong readflag)
+{
+       return do_list_no_hash_readmem(ld, ptr, readflag);
+}
+
+/*
+ * Similar to do_list() but without the hash_table or LIST_ALLOCATE.
+ * Useful for the 'list' command and other callers needing faster list
+ * enumeration.
+ */
+int
+do_list_no_hash(struct list_data *ld)
+{
+	ulong next, last, first, offset;
+	ulong searchfor, readflag;
+	int i, count, ret;
+	unsigned int radix;
+	struct req_entry **e = NULL;
+
+	do_list_debug_entry(ld);
+
+	count = 0;
+	searchfor = ld->searchfor;
+	ld->searchfor = 0;
+	if (ld->flags & LIST_STRUCT_RADIX_10)
+		radix = 10;
+	else if (ld->flags & LIST_STRUCT_RADIX_16)
+		radix = 16;
+	else
+		radix = 0;
+	next = ld->start;
+
+	readflag = ld->flags & RETURN_ON_LIST_ERROR ?
+		(RETURN_ON_ERROR|QUIET) : FAULT_ON_ERROR;
+
+	if (!readmem(next + ld->member_offset, KVADDR, &first, sizeof(void *),
+            "first list entry", readflag)) {
+                error(INFO, "\ninvalid list entry: %lx\n", next);
+		return -1;
+	}
+
+	if (ld->header)
+		fprintf(fp, "%s", ld->header);
+
+	offset = ld->list_head_offset + ld->struct_list_offset;
+
+	if (ld->structname && (ld->flags & LIST_READ_MEMBER)) {
+		e = (struct req_entry **)GETBUF(sizeof(*e) * ld->structname_args);
+		for (i = 0; i < ld->structname_args; i++)
+			e[i] = fill_member_offsets(ld->structname[i]);
+	}
+
+	brent_loop_detect = brent_loop_exit = 0;
+	brent_lambda = 0;
+	brent_r = 2;
+	brent_x = brent_y = next;
+	ret = brent_f(&brent_y, ld, readflag);
+	if (ret == -1)
+		return -1;
+	while (1) {
+		if (!brent_loop_detect && ld->flags & VERBOSE) {
+			fprintf(fp, "%lx\n", next - ld->list_head_offset);
+			if (ld->structname) {
+				do_list_output_struct(ld, next, offset, radix, e);
+			}
+		}
+
+                if (next && brent_loop_exit) {
+			if (ld->flags &
+			    (RETURN_ON_DUPLICATE|RETURN_ON_LIST_ERROR)) {
+				error(INFO, "\nduplicate list entry: %lx\n",
+					brent_x);
+				return -1;
+			}
+			error(FATAL, "\nduplicate list entry: %lx\n", brent_x);
+		}
+
+		if ((searchfor == next) ||
+		    (searchfor == (next - ld->list_head_offset)))
+			ld->searchfor = searchfor;
+
+		count++;
+                last = next;
+
+		if ((ld->flags & LIST_CALLBACK) &&
+		    ld->callback_func((void *)(next - ld->list_head_offset),
+		    ld->callback_data) && (ld->flags & CALLBACK_RETURN))
+			break;
+
+		ret = do_list_no_hash_readmem(ld, &next, readflag);
+		if (ret == -1)
+			return -1;
+
+		if (!brent_loop_detect) {
+			if (brent_x == brent_y) {
+				brent_loop_detect = 1;
+				error(INFO, "loop detected, loop length: %lx\n", brent_lambda);
+				/* reset x and y to start; advance y loop length */
+				brent_mu = 0;
+				brent_x = brent_y = ld->start;
+				while (brent_lambda--) {
+					ret = brent_f(&brent_y, ld, readflag);
+					if (ret == -1)
+						return -1;
+				}
+			} else {
+				if (brent_r == brent_lambda) {
+					brent_x = brent_y;
+					brent_r *= 2;
+					brent_lambda = 0;
+				}
+				brent_y = next;
+				brent_lambda++;
+			}
+		} else {
+			if (!brent_loop_exit && brent_x == brent_y) {
+				brent_loop_exit = 1;
+				error(INFO, "length from start to loop: %lx",
+					brent_mu);
+			} else {
+				ret = brent_f(&brent_x, ld, readflag);
+				if (ret == -1)
+					return -1;
+				ret = brent_f(&brent_y, ld, readflag);
+				if (ret == -1)
+					return -1;
+				brent_mu++;
+			}
+		}
+
+		if (next == 0) {
+			if (ld->flags & LIST_HEAD_FORMAT) {
+				error(INFO, "\ninvalid list entry: 0\n");
+				return -1;
+			}
+			if (CRASHDEBUG(1))
+				console("do_list end: next:%lx\n", next);
+
+			break;
+		}
+
+		if (next == ld->end) {
+			if (CRASHDEBUG(1))
+				console("do_list end: next:%lx == end:%lx\n",
+					next, ld->end);
+			break;
+		}
+
+		if (next == ld->start) {
+			if (CRASHDEBUG(1))
+				console("do_list end: next:%lx == start:%lx\n",
+					next, ld->start);
+			break;
+		}
+
+		if (next == last) {
+			if (CRASHDEBUG(1))
+				console("do_list end: next:%lx == last:%lx\n",
+					next, last);
+			break;
+		}
+
+		if ((next == first) && (count != 1)) {
+			if (CRASHDEBUG(1))
+		      console("do_list end: next:%lx == first:%lx (count %d)\n",
+				next, last, count);
+			break;
+		}
+	}
+
+	if (CRASHDEBUG(1))
+		console("do_list count: %d\n", count);
 
 	return count;
 }
