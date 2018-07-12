@@ -4662,6 +4662,8 @@ x86_64_eframe_verify(struct bt_info *bt, long kvaddr, long cs, long ss,
 		    STREQ(sp->name, "page_fault"))
 			return TRUE;
 			
+		if ((kvaddr + SIZE(pt_regs)) == rsp)
+			return TRUE;
 	}
 
         if ((cs == 0x10) && kvaddr) {
@@ -8393,7 +8395,7 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp)
 			*p1 = NULLCHAR;
 			p2 = arglist[arg];
 			reterror = 0;
-			offset =  htol(p2+1, RETURN_ON_ERROR, &reterror);
+			offset =  htol(p2+1, RETURN_ON_ERROR|QUIET, &reterror);
 			if (reterror)
 				continue;
 			framesize += offset;
