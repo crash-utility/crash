@@ -335,7 +335,7 @@ x86_64_init(int when)
 			} else if (kernel_symbol_exists("__pgtable_l5_enabled"))
 				readmem(symbol_value("__pgtable_l5_enabled"), KVADDR,
 					&l5_enabled, sizeof(int), "__pgtable_l5_enabled",
-					FAULT_ON_ERROR);
+					QUIET|FAULT_ON_ERROR);
 
 			if (l5_enabled)
 				machdep->flags |= VM_5LEVEL;
