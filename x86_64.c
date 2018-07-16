@@ -24,7 +24,6 @@ static int x86_64_uvtop(struct task_context *, ulong, physaddr_t *, int);
 static int x86_64_uvtop_level4(struct task_context *, ulong, physaddr_t *, int);
 static int x86_64_uvtop_level4_xen_wpt(struct task_context *, ulong, physaddr_t *, int);
 static int x86_64_uvtop_level4_rhel4_xen_wpt(struct task_context *, ulong, physaddr_t *, int);
-static int x86_64_task_uses_5level(struct task_context *);
 static ulong x86_64_vmalloc_start(void);
 static int x86_64_is_task_addr(ulong);
 static int x86_64_verify_symbol(const char *, ulong, char);
@@ -341,6 +340,7 @@ x86_64_init(int when)
 			if (l5_enabled)
 				machdep->flags |= VM_5LEVEL;
 		}
+
 		if (machdep->flags & VM_5LEVEL) {
 			machdep->machspec->userspace_top = USERSPACE_TOP_5LEVEL;
 			machdep->machspec->page_offset = PAGE_OFFSET_5LEVEL;
@@ -361,7 +361,6 @@ x86_64_init(int when)
 			machdep->uvtop = x86_64_uvtop_level4;  /* 5-level is optional per-task */
 			machdep->kvbase = (ulong)PAGE_OFFSET;
 			machdep->identity_map_base = (ulong)PAGE_OFFSET;
-
 		}
 
 		/*
@@ -812,7 +811,7 @@ x86_64_dump_machdep_table(ulong arg)
 	else if (machdep->uvtop == x86_64_uvtop_level4) {
         	fprintf(fp, "              uvtop: x86_64_uvtop_level4()");
 		if (machdep->flags & VM_5LEVEL)
-        		fprintf(fp, " or x86_64_uvtop_5level()");
+			fprintf(fp, " (uses 5-level page tables)");
 		fprintf(fp, "\n");
 	} else if (machdep->uvtop == x86_64_uvtop_level4_xen_wpt)
         	fprintf(fp, "              uvtop: x86_64_uvtop_level4_xen_wpt()\n");
@@ -1915,7 +1914,7 @@ x86_64_uvtop_level4(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, in
 		goto no_upage;
 
 	/* If the VM is in 5-level page table */
-	if (machdep->flags & VM_5LEVEL && x86_64_task_uses_5level(tc)) {
+	if (machdep->flags & VM_5LEVEL) {
 		ulong p4d_pte;
 		/*
 		 *  p4d = p4d_offset(pgd, address);
@@ -1983,12 +1982,6 @@ x86_64_uvtop_level4(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, in
 
 no_upage:
 
-	return FALSE;
-}
-
-static int
-x86_64_task_uses_5level(struct task_context *tc)
-{
 	return FALSE;
 }
 
