@@ -5172,6 +5172,7 @@ static long _WAKING_ = TASK_STATE_UNINITIALIZED;
 static long _NONINTERACTIVE_ = TASK_STATE_UNINITIALIZED;
 static long _PARKED_ = TASK_STATE_UNINITIALIZED;
 static long _NOLOAD_ = TASK_STATE_UNINITIALIZED;
+static long _NEW_ = TASK_STATE_UNINITIALIZED;
 
 #define valid_task_state(X) ((X) != TASK_STATE_UNINITIALIZED)
 
@@ -5249,6 +5250,10 @@ dump_task_states(void)
 	if (valid_task_state(_NOLOAD_))
 		fprintf(fp, "            NOLOAD: %3ld (0x%lx)\n", 
 			_NOLOAD_, _NOLOAD_);
+
+	if (valid_task_state(_NEW_))
+		fprintf(fp, "               NEW: %3ld (0x%lx)\n",
+			_NEW_, _NEW_);
 }
 
 
@@ -5282,6 +5287,7 @@ old_defaults:
 	/*
 	 *  If the later version of stat_nam[] array exists that contains 
 	 *  WAKING, WAKEKILL and PARKED, use it instead of task_state_array[].
+	 *  Available since kernel version 2.6.33 to 4.13.
 	 */
 	if (((len = get_array_length("stat_nam", NULL, 0)) > 0) &&
 	    read_string(symbol_value("stat_nam"), buf, BUFSIZE-1) &&
@@ -5330,6 +5336,9 @@ old_defaults:
 				break;
 			case 'N':
 				_NOLOAD_ = (1 << (i-1));
+				break;
+			case 'n':
+				_NEW_ = (1 << (i-1));
 				break;
 			}
 		}
@@ -5393,7 +5402,16 @@ old_defaults:
 		_NONINTERACTIVE_ = 64;
 	}
 
-	if (THIS_KERNEL_VERSION >= LINUX(2,6,32)) {
+	if (THIS_KERNEL_VERSION >= LINUX(4,14,0)) {
+		if (valid_task_state(_PARKED_)) {
+			bitpos = _PARKED_;
+			_DEAD_ |= (bitpos << 1);    /* TASK_DEAD */
+			_WAKEKILL_ = (bitpos << 2); /* TASK_WAKEKILL */
+			_WAKING_ = (bitpos << 3);   /* TASK_WAKING */
+			_NOLOAD_ = (bitpos << 4);   /* TASK_NOLOAD */
+			_NEW_ = (bitpos << 5);      /* TASK_NEW */
+		}
+	} else if (THIS_KERNEL_VERSION >= LINUX(2,6,32)) {
 		/*
 	 	 * Account for states not listed in task_state_array[]
 		 */
@@ -5481,6 +5499,10 @@ task_state_string_verbose(ulong task, char *buf)
 		sprintf(&buf[strlen(buf)], "%sTASK_NOLOAD",
 			count++ ? "|" : "");
 
+	if (valid_task_state(_NEW_) && (state & _NEW_))
+		sprintf(&buf[strlen(buf)], "%sTASK_NEW",
+			count++ ? "|" : "");
+
 	if (valid_task_state(_NONINTERACTIVE_) &&
 	    (state & _NONINTERACTIVE_))
 		sprintf(&buf[strlen(buf)], "%sTASK_NONINTERACTIVE",
@@ -5530,7 +5552,11 @@ task_state_string(ulong task, char *buf, int verbose)
 	}
 
 	if (state & _UNINTERRUPTIBLE_) {
-		sprintf(buf, "UN");
+		if (valid_task_state(_NOLOAD_) &&
+		    (state & _NOLOAD_))
+			sprintf(buf, "ID");
+		else
+			sprintf(buf, "UN");
 		valid++; 
 		set++;
 	}
@@ -5573,6 +5599,11 @@ task_state_string(ulong task, char *buf, int verbose)
 
 	if (state == _WAKING_) {
 		sprintf(buf, "WA"); 
+		valid++;
+	}
+
+	if (state == _NEW_) {
+		sprintf(buf, "NE");
 		valid++;
 	}
 
@@ -6273,6 +6304,8 @@ cmd_foreach(void)
 		    STREQ(args[optind], "DE") ||
 		    STREQ(args[optind], "PA") ||
 		    STREQ(args[optind], "WA") ||
+		    STREQ(args[optind], "ID") ||
+		    STREQ(args[optind], "NE") ||
 		    STREQ(args[optind], "SW")) {
 
 			if (fd->flags & FOREACH_STATE)
@@ -6298,6 +6331,10 @@ cmd_foreach(void)
 				fd->state = _PARKED_;
 			else if (STREQ(args[optind], "WA"))
 				fd->state = _WAKING_;
+			else if (STREQ(args[optind], "ID"))
+				fd->state = _UNINTERRUPTIBLE_|_NOLOAD_;
+			else if (STREQ(args[optind], "NE"))
+				fd->state = _NEW_;
 
 			if (fd->state == TASK_STATE_UNINITIALIZED)
 				error(FATAL, 
@@ -6678,6 +6715,19 @@ foreach(struct foreach_data *fd)
 			if (fd->state == _RUNNING_) {
 				if (task_state(tc->task) != _RUNNING_)
 					continue;
+			} else if (fd->state & _UNINTERRUPTIBLE_) {
+				if (!(task_state(tc->task) & _UNINTERRUPTIBLE_))
+					continue;
+
+				if (valid_task_state(_NOLOAD_)) {
+					if (fd->state & _NOLOAD_) {
+						if (!(task_state(tc->task) & _NOLOAD_))
+							continue;
+					} else {
+						if ((task_state(tc->task) & _NOLOAD_))
+							continue;
+					}
+				}
 			} else if (!(task_state(tc->task) & fd->state))
 				continue;
 		}
