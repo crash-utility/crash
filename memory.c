@@ -172,7 +172,6 @@ static void dump_kmem_cache(struct meminfo *);
 static void dump_kmem_cache_percpu_v1(struct meminfo *);
 static void dump_kmem_cache_percpu_v2(struct meminfo *);
 static void dump_kmem_cache_slub(struct meminfo *);
-static void dump_kmem_cache_info_v2(struct meminfo *);
 static void kmem_cache_list_common(void);
 static ulong get_cpu_slab_ptr(struct meminfo *, int, ulong *);
 static unsigned int oo_order(ulong);
@@ -9379,7 +9378,7 @@ kmem_cache_init(void)
 
 	if (!strlen(kmem_cache_hdr)) 
 		sprintf(kmem_cache_hdr,
-     "CACHE%sNAME                 OBJSIZE  ALLOCATED     TOTAL  SLABS  SSIZE\n",
+     "CACHE%s OBJSIZE  ALLOCATED     TOTAL  SLABS  SSIZE  NAME\n",
 			space(VADDR_PRLEN > 8 ? 12 : 4));
 
 	if (!strlen(free_inuse_hdr)) 
@@ -9964,55 +9963,36 @@ ignore_cache(struct meminfo *si, char *name)
 #define KMEM_SLAB_OVERLOAD_PAGE (8)
 #define KMEM_SLAB_FREELIST      (9)
 
-#define DUMP_KMEM_CACHE_INFO_V1() \
-      {  \
-	char b1[BUFSIZE]; \
-	fprintf(fp, "%s %-18s  %8ld  ", \
-		mkstring(b1, VADDR_PRLEN, LJUST|LONG_HEX, MKSTR(si->cache)), \
-        	buf, si->size); \
-        fprintf(fp, "%9ld  %8ld  %5ld   %3ldk\n", \
-		vt->flags & PERCPU_KMALLOC_V1 ? \
-		si->inuse - si->cpucached_cache : \
-                si->inuse, si->num_slabs * si->c_num, \
-                si->num_slabs, si->slabsize/1024); \
-      }
-
-#define DUMP_KMEM_CACHE_INFO_V2()  dump_kmem_cache_info_v2(si) 
+#define DUMP_KMEM_CACHE_INFO()  dump_kmem_cache_info(si)
 
 static void
-dump_kmem_cache_info_v2(struct meminfo *si)
+dump_kmem_cache_info(struct meminfo *si)
 {
 	char b1[BUFSIZE];
-	char b2[BUFSIZE];
-	int namelen, sizelen, spacelen;
+	ulong objsize, allocated, total;
 
-	fprintf(fp, "%s ",
-		mkstring(b1, VADDR_PRLEN, LJUST|LONG_HEX, MKSTR(si->cache))); 
+	if (si->flags & SLAB_GATHER_FAILURE)
+		error(INFO, "%s: cannot gather relevant slab data\n", si->curname);
 
-	namelen = strlen(si->curname);
-	sprintf(b2, "%ld", si->size);
-	sizelen = strlen(b2);
-	spacelen = 0;
+	objsize = (vt->flags & KMALLOC_SLUB) ? si->objsize : si->size;
 
-	if (namelen++ > 18) {
-		spacelen = 29 - namelen - sizelen;
-		fprintf(fp, "%s%s%ld  ", si->curname,
-			space(spacelen <= 0 ? 1 : spacelen), si->size); 
-		if (spacelen > 0)
-			spacelen = 1;
-		sprintf(b1, "%c%dld  ", '%', 9 + spacelen - 1);
+	fprintf(fp, "%s %8ld  ",
+		mkstring(b1, VADDR_PRLEN, LJUST|LONG_HEX, MKSTR(si->cache)),
+		objsize);
+
+	if (si->flags & SLAB_GATHER_FAILURE) {
+		fprintf(fp, "%9s  %8s  %5s  ", "?", "?", "?");
 	} else {
-		fprintf(fp, "%-18s  %8ld  ", si->curname, si->size); 
-		sprintf(b1, "%c%dld  ", '%', 9);
+		allocated = (vt->flags & (PERCPU_KMALLOC_V1|PERCPU_KMALLOC_V2)) ?
+				si->inuse - si->cpucached_cache : si->inuse;
+		total = (vt->flags & KMALLOC_SLUB) ?
+				si->inuse + si->free : si->num_slabs * si->c_num;
+
+		fprintf(fp, "%9ld  %8ld  %5ld  ",
+			allocated, total, si->num_slabs);
 	}
 
-        fprintf(fp, b1, vt->flags & (PERCPU_KMALLOC_V2) ?
-                si->inuse - si->cpucached_cache : si->inuse); 
-
-	fprintf(fp, "%8ld %s%5ld  %s%3ldk\n",
-		si->num_slabs * si->c_num, 
-		si->num_slabs < 100000 ? " " : "", si->num_slabs, 
-		(si->slabsize/1024) < 1000 ? " " : "", si->slabsize/1024); 
+	fprintf(fp, "%4ldk  %s\n", si->slabsize/1024, si->curname);
 }
 
 #define DUMP_SLAB_INFO() \
@@ -10152,7 +10132,7 @@ dump_kmem_cache(struct meminfo *si)
 			do_slab_chain(SLAB_GET_COUNTS, si);
 
 			if (!(si->flags & (ADDRESS_SPECIFIED|GET_SLAB_PAGES))) 
-				DUMP_KMEM_CACHE_INFO_V1();
+				DUMP_KMEM_CACHE_INFO();
 
 			if (si->flags == GET_SLAB_PAGES) 
 				si->retval += (si->num_slabs * 
@@ -10166,7 +10146,7 @@ dump_kmem_cache(struct meminfo *si)
 
 				if (si->found) {
 					fprintf(fp, "%s", kmem_cache_hdr);
-					DUMP_KMEM_CACHE_INFO_V1();
+					DUMP_KMEM_CACHE_INFO();
 					fprintf(fp, "%s", slab_hdr);
 					DUMP_SLAB_INFO();
 
@@ -10362,7 +10342,7 @@ dump_kmem_cache_percpu_v1(struct meminfo *si)
 		do_slab_chain_percpu_v1(SLAB_GET_COUNTS, si);
 
 		if (!(si->flags & (ADDRESS_SPECIFIED|GET_SLAB_PAGES))) {
-			DUMP_KMEM_CACHE_INFO_V1();
+			DUMP_KMEM_CACHE_INFO();
 			if (CRASHDEBUG(3))
 				dump_struct("kmem_cache_s", si->cache, 0);
 		}
@@ -10382,7 +10362,7 @@ dump_kmem_cache_percpu_v1(struct meminfo *si)
 
 			if (si->found) {
 				fprintf(fp, "%s", kmem_cache_hdr);
-				DUMP_KMEM_CACHE_INFO_V1();
+				DUMP_KMEM_CACHE_INFO();
 				fprintf(fp, "%s", slab_hdr);
         			gather_slab_cached_count(si);
 				DUMP_SLAB_INFO();
@@ -10617,7 +10597,7 @@ dump_kmem_cache_percpu_v2(struct meminfo *si)
 			do_slab_chain_percpu_v2(SLAB_GET_COUNTS, si);
 
 		if (!(si->flags & (ADDRESS_SPECIFIED|GET_SLAB_PAGES))) {
-			DUMP_KMEM_CACHE_INFO_V2();
+			DUMP_KMEM_CACHE_INFO();
 			if (CRASHDEBUG(3))
 				dump_struct("kmem_cache_s", si->cache, 0);
 		}
@@ -10644,7 +10624,7 @@ dump_kmem_cache_percpu_v2(struct meminfo *si)
 
 			if (si->found) {
 				fprintf(fp, "%s", kmem_cache_hdr);
-				DUMP_KMEM_CACHE_INFO_V2();
+				DUMP_KMEM_CACHE_INFO();
 				fprintf(fp, "%s", slab_hdr);
         			gather_slab_cached_count(si);
 				DUMP_SLAB_INFO();
@@ -18064,56 +18044,6 @@ kmem_cache_list_common(void)
 	FREEBUF(cache_list);
 }
 
-#define DUMP_KMEM_CACHE_INFO_SLUB()  dump_kmem_cache_info_slub(si)
-
-static void
-dump_kmem_cache_info_slub(struct meminfo *si)
-{
-	char b1[BUFSIZE];
-	char b2[BUFSIZE];
-	int namelen, sizelen, spacelen;
-
-	if (si->flags & SLAB_GATHER_FAILURE)
-		error(INFO, "%s: cannot gather relevant slab data\n", si->curname);
-
-	fprintf(fp, "%s ",
-		mkstring(b1, VADDR_PRLEN, LJUST|LONG_HEX, MKSTR(si->cache))); 
-
-	namelen = strlen(si->curname);
-	sprintf(b2, "%ld", si->objsize);
-	sizelen = strlen(b2);
-	spacelen = 0;
-
-	if (namelen++ > 18) {
-		spacelen = 29 - namelen - sizelen;
-		fprintf(fp, "%s%s%ld  ", si->curname,
-			space(spacelen <= 0 ? 1 : spacelen), si->objsize); 
-		if (spacelen > 0)
-			spacelen = 1;
-		if (si->flags & SLAB_GATHER_FAILURE)
-			sprintf(b1, "%c%ds  ", '%', 9 + spacelen - 1);
-		else
-			sprintf(b1, "%c%dld  ", '%', 9 + spacelen - 1);
-	} else {
-		fprintf(fp, "%-18s  %8ld  ", si->curname, si->objsize); 
-		if (si->flags & SLAB_GATHER_FAILURE)
-			sprintf(b1, "%c%ds  ", '%', 9);
-		else
-			sprintf(b1, "%c%dld  ", '%', 9);
-	}
-
-	if (si->flags & SLAB_GATHER_FAILURE) {
-		fprintf(fp, b1, "?");
-		fprintf(fp, "%8s  %5s  %4ldk\n",  
-			"?", "?", si->slabsize/1024); 
-	} else {
-		fprintf(fp, b1, si->inuse);
-		fprintf(fp, "%8ld  %5ld  %4ldk\n",  
-			si->inuse + si->free,
-			si->num_slabs, si->slabsize/1024); 
-	}
-}
-
 static void
 dump_kmem_cache_slub(struct meminfo *si)
 {
@@ -18214,7 +18144,7 @@ dump_kmem_cache_slub(struct meminfo *si)
 		    !get_kmem_cache_slub_data(GET_SLUB_OBJECTS, si))
 			si->flags |= SLAB_GATHER_FAILURE;
 
-		DUMP_KMEM_CACHE_INFO_SLUB();
+		DUMP_KMEM_CACHE_INFO();
 
 		if (si->flags & SLAB_GATHER_FAILURE) {
 			si->flags &= ~SLAB_GATHER_FAILURE;
