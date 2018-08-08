@@ -28,7 +28,6 @@ static void store_sysmap_symbols(void);
 static ulong relocate(ulong, char *, int);
 static int relocate_force(ulong, char *);
 static void kaslr_init(void);
-static ulong symbol_value_from_proc_kallsyms(char *);
 static void strip_module_symbol_end(char *s);
 static int compare_syms(const void *, const void *);
 static int compare_mods(const void *, const void *);
@@ -997,7 +996,7 @@ relocate_force(ulong symval, char *symname)
 /*
  *  Get a symbol value from /proc/kallsyms.
  */
-static ulong
+ulong
 symbol_value_from_proc_kallsyms(char *symname)
 {
         FILE *kp;

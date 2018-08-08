@@ -5067,6 +5067,7 @@ struct syment *per_cpu_symbol_search(char *);
 int symbol_exists(char *s);
 int kernel_symbol_exists(char *s);
 struct syment *kernel_symbol_search(char *);
+ulong symbol_value_from_proc_kallsyms(char *);
 int get_syment_array(char *, struct syment **, int);
 void set_temporary_radix(unsigned int, unsigned int *);
 void restore_current_radix(unsigned int);
