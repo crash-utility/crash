@@ -9963,6 +9963,9 @@ ignore_cache(struct meminfo *si, char *name)
 #define KMEM_SLAB_OVERLOAD_PAGE (8)
 #define KMEM_SLAB_FREELIST      (9)
 
+#define DUMP_KMEM_CACHE_TAG(addr, name, tag) \
+	fprintf(fp, "%lx %-43s  %s\n", addr, tag, name)
+
 #define DUMP_KMEM_CACHE_INFO()  dump_kmem_cache_info(si)
 
 static void
@@ -10094,7 +10097,7 @@ dump_kmem_cache(struct meminfo *si)
 			goto next_cache;
 
 		if (ignore_cache(si, buf)) {
-			fprintf(fp, "%lx %-18s [IGNORED]\n", si->cache, buf);
+			DUMP_KMEM_CACHE_TAG(si->cache, buf, "[IGNORED]");
 			goto next_cache;
 		}
 
@@ -10303,7 +10306,7 @@ dump_kmem_cache_percpu_v1(struct meminfo *si)
 			goto next_cache;
 
                 if (ignore_cache(si, buf)) {
-                        fprintf(fp, "%lx %-18s [IGNORED]\n", si->cache, buf);
+                        DUMP_KMEM_CACHE_TAG(si->cache, buf, "[IGNORED]");
                         goto next_cache;
                 }
 
@@ -10547,12 +10550,12 @@ dump_kmem_cache_percpu_v2(struct meminfo *si)
 			goto next_cache;
 
                 if (ignore_cache(si, buf)) {
-                        fprintf(fp, "%lx %-18s [IGNORED]\n", si->cache, buf);
+                        DUMP_KMEM_CACHE_TAG(si->cache, buf, "[IGNORED]");
                         goto next_cache;
                 }
 
 		if (bad_slab_cache(si->cache)) {
-                        fprintf(fp, "%lx %-18s [INVALID/CORRUPTED]\n", si->cache, buf);
+                        DUMP_KMEM_CACHE_TAG(si->cache, buf, "[INVALID/CORRUPTED]");
                         goto next_cache;
 		}
 
@@ -18109,8 +18112,7 @@ dump_kmem_cache_slub(struct meminfo *si)
 			fprintf(fp, "%s", kmem_cache_hdr);
 		}
 		if (ignore_cache(si, buf)) {
-			fprintf(fp, "%lx %-18s [IGNORED]\n", 
-				si->cache_list[i], buf);
+			DUMP_KMEM_CACHE_TAG(si->cache_list[i], buf, "[IGNORED]");
 			goto next_cache;
 		}
 

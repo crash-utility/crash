@@ -6495,7 +6495,6 @@ char *help_kmem[] = {
 "            all slab cache names and addresses are listed.",
 "   -I slab  when used with -s or -S, one or more slab cache names in a",
 "            comma-separated list may be specified as slab caches to ignore.",
-"            their hugepage size, total and free counts, and name.",
 "        -g  displays the enumerator value of all bits in the page structure's",
 "            \"flags\" field.",
 "     flags  when used with -g, translates all bits in this hexadecimal page",
