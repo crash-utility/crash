@@ -1373,7 +1373,8 @@ dump_sockets_workhorse(ulong task, ulong flag, struct reference *ref)
 	int max_fdset = 0;
 	int max_fds = 0;
 	ulong open_fds_addr = 0;
-	fd_set open_fds;
+	ulong *open_fds;
+	int open_fds_size;
 	ulong fd;
 	ulong file;
 	int i, j;
@@ -1446,12 +1447,18 @@ dump_sockets_workhorse(ulong task, ulong flag, struct reference *ref)
             		sizeof(void *), "files_struct fd addr", FAULT_ON_ERROR);
 	}
 
+	open_fds_size = MAX(max_fdset, max_fds) / BITS_PER_BYTE;
+	open_fds = (ulong *)GETBUF(open_fds_size);
+	if (!open_fds)
+		return;
+
 	if (open_fds_addr) 
-		readmem(open_fds_addr, KVADDR, &open_fds, sizeof(fd_set),
+		readmem(open_fds_addr, KVADDR, open_fds, open_fds_size,
 	               	"files_struct open_fds", FAULT_ON_ERROR);
     	if (!open_fds_addr || !fd) { 
 		if (!NET_REFERENCE_CHECK(ref))
 			fprintf(fp, "No open sockets.\n");
+		FREEBUF(open_fds);
         	return;
 	}
 
@@ -1479,10 +1486,10 @@ dump_sockets_workhorse(ulong task, ulong flag, struct reference *ref)
     	j = 0;
     	for (;;) {
 	        unsigned long set;
-	        i = j * __NFDBITS;
+	        i = j * BITS_PER_LONG;
 	        if (((max_fdset >= 0) && (i >= max_fdset)) || (i >= max_fds))
 	            	break;
-	        set = open_fds.__fds_bits[j++];
+	        set = open_fds[j++];
 	        while (set) {
 	            	if (set & 1) {
 		                readmem(fd + i*sizeof(struct file *), KVADDR, 
@@ -1505,6 +1512,8 @@ dump_sockets_workhorse(ulong task, ulong flag, struct reference *ref)
 
 	if (NET_REFERENCE_FOUND(ref))
 		fprintf(fp, "\n");
+
+	FREEBUF(open_fds);
 }
 
 

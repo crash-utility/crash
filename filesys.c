@@ -2380,7 +2380,8 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 	int max_fdset = 0;
 	int max_fds = 0;
 	ulong open_fds_addr;
-	fd_set open_fds;
+	int open_fds_size;
+	ulong *open_fds;
 	ulong fd;
 	ulong file;
 	ulong value;
@@ -2583,16 +2584,25 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 		open_fds_addr = ULONG(files_struct_buf +
 			OFFSET(files_struct_open_fds));
 
+	open_fds_size = MAX(max_fdset, max_fds) / BITS_PER_BYTE;	
+	open_fds = (ulong *)GETBUF(open_fds_size);
+	if (!open_fds) {
+		if (fdtable_buf)
+			FREEBUF(fdtable_buf);
+		FREEBUF(files_struct_buf);
+		return;
+	}
+
 	if (open_fds_addr) {
 		if (VALID_MEMBER(files_struct_open_fds_init) && 
 		    (open_fds_addr == (files_struct_addr + 
 		    OFFSET(files_struct_open_fds_init)))) 
 			BCOPY(files_struct_buf + 
 			        OFFSET(files_struct_open_fds_init),
-				&open_fds, sizeof(fd_set));
+				open_fds, open_fds_size);
 		else
-			readmem(open_fds_addr, KVADDR, &open_fds,
-				sizeof(fd_set), "fdtable open_fds",
+			readmem(open_fds_addr, KVADDR, open_fds,
+				open_fds_size, "fdtable open_fds",
 				FAULT_ON_ERROR);
 	} 
 
@@ -2607,6 +2617,7 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 		if (fdtable_buf)
 			FREEBUF(fdtable_buf);
 		FREEBUF(files_struct_buf);
+		FREEBUF(open_fds);
 		return;
 	}
 
@@ -2617,11 +2628,11 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 	j = 0;
 	for (;;) {
 		unsigned long set;
-		i = j * __NFDBITS;
+		i = j * BITS_PER_LONG;
 		if (((max_fdset >= 0) && (i >= max_fdset)) || 
 		    (i >= max_fds))
 			 break;
-		set = open_fds.__fds_bits[j++];
+		set = open_fds[j++];
 		while (set) {
 			if (set & 1) {
         			readmem(fd + i*sizeof(struct file *), KVADDR, 
@@ -2665,6 +2676,7 @@ open_files_dump(ulong task, int flags, struct reference *ref)
 	if (fdtable_buf)
 		FREEBUF(fdtable_buf);
 	FREEBUF(files_struct_buf);
+	FREEBUF(open_fds);
 }
 
 /*
