@@ -943,6 +943,10 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "                          sp_reg: %d\n", ms->orc.kernel_orc_entry.sp_reg);
 		fprintf(fp, "                          bp_reg: %d\n", ms->orc.kernel_orc_entry.bp_reg);
 		fprintf(fp, "                            type: %d\n", ms->orc.kernel_orc_entry.type);
+		if (MEMBER_EXISTS("orc_entry", "end"))
+			fprintf(fp, "                             end: %d\n", ms->orc.kernel_orc_entry.end);
+		else
+			fprintf(fp, "                             end: (n/a)\n");
 	} 
 	fprintf(fp, "                      pto: %s",
 		machdep->flags & PT_REGS_INIT ? "\n" : "(uninitialized)\n");
@@ -8287,12 +8291,16 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp)
 		return 0;
 
 	if ((machdep->flags & ORC) && (korc = orc_find(textaddr))) {
-		if (CRASHDEBUG(1))
+		if (CRASHDEBUG(1)) {
 			fprintf(fp, 
-			    "rsp: %lx textaddr: %lx framesize: %d -> spo: %d bpo: %d spr: %d bpr: %d type: %d %s\n", 
-	    			rsp, textaddr, framesize, korc->sp_offset, korc->bp_offset, 
+			    "rsp: %lx textaddr: %lx framesize: %d -> spo: %d bpo: %d spr: %d bpr: %d type: %d %s", 
+				rsp, textaddr, framesize, korc->sp_offset, korc->bp_offset, 
 				korc->sp_reg, korc->bp_reg, korc->type,
 				(korc->type == ORC_TYPE_CALL) && (korc->sp_reg == ORC_REG_SP) ? "" : "(UNUSED)");
+			if (MEMBER_EXISTS("orc_entry", "end"))
+				fprintf(fp, " end: %d", korc->end);
+			fprintf(fp, "\n");
+		}
 
 		if ((korc->type == ORC_TYPE_CALL) && (korc->sp_reg == ORC_REG_SP)) {
 			framesize = (korc->sp_offset - 8);
@@ -8814,8 +8822,11 @@ __orc_find(ulong ip_table_ptr, ulong u_table_ptr, uint num_entries, ulong ip)
 	if (CRASHDEBUG(2)) {
 		fprintf(fp, "  found: %lx  index: %d\n", (ulong)found, index);
                 fprintf(fp, 
-		    "  orc_entry: %lx  sp_offset: %d bp_offset: %d sp_reg: %d bp_reg: %d type: %d\n",
+		    "  orc_entry: %lx  sp_offset: %d bp_offset: %d sp_reg: %d bp_reg: %d type: %d",
 			orc->orc_entry, korc->sp_offset, korc->bp_offset, korc->sp_reg, korc->bp_reg, korc->type);
+		if (MEMBER_EXISTS("orc_entry", "end"))
+			fprintf(fp, " end: %d", korc->end); 
+		fprintf(fp, "\n"); 
 	}
 
 	return korc;
@@ -8970,8 +8981,11 @@ next_in_func:
 	    "kernel orc_entry", RETURN_ON_ERROR)) 
 		error(FATAL, "cannot read orc_entry\n");
 	korc = &orc->kernel_orc_entry;
-	fprintf(fp, "orc: %lx  spo: %d bpo: %d spr: %d bpr: %d type: %d\n",
+	fprintf(fp, "orc: %lx  spo: %d bpo: %d spr: %d bpr: %d type: %d",
 			orc->orc_entry, korc->sp_offset, korc->bp_offset, korc->sp_reg, korc->bp_reg, korc->type);
+	if (MEMBER_EXISTS("orc_entry", "end"))
+		fprintf(fp, " end: %d", korc->end);
+	fprintf(fp, "\n");
 
 	orc->ip_entry += sizeof(int);
 	orc->orc_entry += sizeof(kernel_orc_entry);

@@ -5775,6 +5775,7 @@ typedef struct __attribute__((__packed__)) {
         unsigned int sp_reg:4;
         unsigned int bp_reg:4;
         unsigned int type:2;
+        unsigned int end:1;
 } kernel_orc_entry;
 
 struct ORC_data {
