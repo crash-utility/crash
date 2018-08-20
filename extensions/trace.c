@@ -853,8 +853,18 @@ static int syscall_get_enter_fields(ulong call, ulong *fields)
 	inited = 1;
 	data_offset = MAX(MEMBER_OFFSET("ftrace_event_call", "data"), 
 		MEMBER_OFFSET("trace_event_call", "data"));
-	if (data_offset < 0)
-		return -1;
+	if (data_offset < 0) {
+		/*
+		 *  rhel-7.6 moved the .data member into an anonymous union.
+		 */
+		if (MEMBER_EXISTS("ftrace_event_call", "rh_data") &&
+		    MEMBER_EXISTS("ftrace_event_data", "data")) {
+			data_offset = MEMBER_OFFSET("ftrace_event_call", "rh_data") +
+				MEMBER_OFFSET("ftrace_event_data", "data");
+			inited = 2;
+		} else
+			return -1;
+	}
 
 	enter_fields_offset = MEMBER_OFFSET("syscall_metadata", "enter_fields");
 	if (enter_fields_offset < 0)
@@ -867,6 +877,12 @@ work:
 	if (!readmem(call + data_offset, KVADDR, &metadata, sizeof(metadata),
 			"read ftrace_event_call data", RETURN_ON_ERROR))
 		return -1;
+
+	if (inited == 2) {
+		if (!readmem(metadata, KVADDR, &metadata, sizeof(metadata),
+		    "read ftrace_event_call data (indirect rh_data)", RETURN_ON_ERROR))
+			return -1;
+	}
 
 	*fields = metadata + enter_fields_offset;
 	return 0;
