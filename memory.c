@@ -15706,6 +15706,7 @@ get_swapdev(ulong type, char *buf)
 {
 	unsigned int i, swap_info_len;
 	ulong swap_info, swap_info_ptr, swap_file;
+	struct syment *sp;
 	ulong vfsmnt;
 	char *devname;
 	char buf1[BUFSIZE];
@@ -15716,6 +15717,25 @@ get_swapdev(ulong type, char *buf)
 
 	swap_info_len = (i = ARRAY_LENGTH(swap_info)) ?
 		i : get_array_length("swap_info", NULL, 0);
+
+	/*
+	 *  Even though the swap_info[] array is declared statically as:
+	 *
+	 *    struct swap_info_struct *swap_info[MAX_SWAPFILES];
+	 *
+	 *  the dimension may not be shown by the debuginfo data,
+	 *  for example:
+	 *
+	 *    struct swap_info_struct *swap_info[28];
+	 *      or
+	 *    struct swap_info_struct *swap_info[];
+	 *
+	 *  In that case, calculate its length by checking the next
+	 *  symbol's value.
+	 */
+	if ((swap_info_len == 0) && (vt->flags & SWAPINFO_V2) &&
+	    (sp = next_symbol("swap_info", NULL)))
+		swap_info_len = (sp->value - swap_info) / sizeof(void *);
 
         sprintf(buf, "(unknown swap location)");
 
