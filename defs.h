@@ -3478,8 +3478,8 @@ struct arm64_stackframe {
 
 #define SWP_TYPE(entry) (((entry) >> 1) & 0x3f)
 #define SWP_OFFSET(entry) ((entry) >> 8)
-#define __swp_type(entry)   SWP_TYPE(entry)
-#define __swp_offset(entry) SWP_OFFSET(entry)
+#define __swp_type(entry)   x86_64_swp_type(entry)
+#define __swp_offset(entry) x86_64_swp_offset(entry)
 
 #define TIF_SIGPENDING  (2)
 
@@ -5725,6 +5725,8 @@ void x86_64_dump_machdep_table(ulong);
 ulong x86_64_PTOV(ulong);
 ulong x86_64_VTOP(ulong);
 int x86_64_IS_VMALLOC_ADDR(ulong);
+ulong x86_64_swp_type(ulong);
+ulong x86_64_swp_offset(ulong);
 void x86_64_display_idt_table(void);
 #define display_idt_table() x86_64_display_idt_table()
 long x86_64_exception_frame(ulong, ulong, char *, struct bt_info *, FILE *);
@@ -5864,6 +5866,7 @@ struct machine_specific {
 #define VM_5LEVEL   (0x2000)
 #define ORC         (0x4000)
 #define KPTI        (0x8000)
+#define L1TF       (0x10000)
 
 #define VM_FLAGS (VM_ORIG|VM_2_6_11|VM_XEN|VM_XEN_RHEL4|VM_5LEVEL)
 

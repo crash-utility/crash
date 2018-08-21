@@ -89,6 +89,7 @@ static void x86_64_init_kernel_pgd(void);
 static void x86_64_cpu_pda_init(void);
 static void x86_64_per_cpu_init(void);
 static void x86_64_ist_init(void);
+static void x86_64_l1tf_init(void);
 static void x86_64_irq_stack_gap_init(void);
 static void x86_64_entry_trampoline_init(void);
 static void x86_64_post_init(void);
@@ -694,6 +695,7 @@ x86_64_init(int when)
 		x86_64_framepointer_init();
 		x86_64_ORC_init();
 		x86_64_thread_return_init();
+		x86_64_l1tf_init();
 
 		if (THIS_KERNEL_VERSION >= LINUX(2,6,28))
 			machdep->machspec->page_protnone = _PAGE_GLOBAL;
@@ -774,6 +776,8 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sRANDOMIZED", others++ ? "|" : "");
 	if (machdep->flags & KPTI)
 		fprintf(fp, "%sKPTI", others++ ? "|" : "");
+	if (machdep->flags & L1TF)
+		fprintf(fp, "%sL1TF", others++ ? "|" : "");
         fprintf(fp, ")\n");
 
 	fprintf(fp, "             kvbase: %lx\n", machdep->kvbase);
@@ -1502,6 +1506,17 @@ x86_64_irq_stack_gap_init(void)
 			break;
 		}
 	}
+}
+
+/*
+ *  Check kernel version and/or backport for L1TF
+ */
+static void
+x86_64_l1tf_init(void)
+{
+	if (THIS_KERNEL_VERSION >= LINUX(4,18,1) ||
+	    kernel_symbol_exists("l1tf_mitigation"))
+		machdep->flags |= L1TF;
 }
 
 static void 
@@ -9062,4 +9077,45 @@ x86_64_in_kpti_entry_stack(int cpu, ulong rsp)
 
 	return 0;
 }
+
+/*
+ *  Original:
+ *
+ *    #define SWP_TYPE(entry) (((entry) >> 1) & 0x3f)
+ *    #define SWP_OFFSET(entry) ((entry) >> 8)
+ *
+ *  4.8:
+ *    | OFFSET (14-63)  |  TYPE (9-13) |0|X|X|X| X| X|X|X|0|
+ *
+ *  l1tf:
+ *    |     ...            | 11| 10|  9|8|7|6|5| 4| 3|2| 1|0| <- bit number
+ *    |     ...            |SW3|SW2|SW1|G|L|D|A|CD|WT|U| W|P| <- bit names
+ *    | TYPE (59-63) | ~OFFSET (9-58)  |0|0|X|X| X| X|X|SD|0| <- swp entry
+ */
+
+
+ulong 
+x86_64_swp_type(ulong entry)
+{
+	if (machdep->flags & L1TF)
+ 		return(entry >> 59);
+
+	if (THIS_KERNEL_VERSION >= LINUX(4,8,0))
+ 		return((entry >> 9) & 0x1f);
+ 
+	return SWP_TYPE(entry);
+}
+
+ulong 
+x86_64_swp_offset(ulong entry)
+{
+	if (machdep->flags & L1TF)
+		return((~entry << 5) >> 14);
+
+	if (THIS_KERNEL_VERSION >= LINUX(4,8,0))
+ 		return(entry >> 14);
+
+	return SWP_OFFSET(entry);
+}
+
 #endif  /* X86_64 */ 
