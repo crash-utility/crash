@@ -8457,6 +8457,8 @@ builtin_array_length(char *s, int len, int *two_dim)
 		lenptr = &array_table.task_struct_rlim;
 	else if (STREQ(s, "signal_struct.rlim"))
 		lenptr = &array_table.signal_struct_rlim;
+	else if (STREQ(s, "vm_numa_stat"))
+		lenptr = &array_table.vm_numa_stat;
 
 	if (!lenptr)                /* not stored */
 		return(len);        
@@ -10594,6 +10596,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		ARRAY_LENGTH(task_struct_rlim));
 	fprintf(fp, "            signal_struct_rlim: %d\n",
 		ARRAY_LENGTH(signal_struct_rlim));
+	fprintf(fp, "                  vm_numa_stat: %d\n",
+		ARRAY_LENGTH(vm_numa_stat));
 
 	if (spec) {
 		int in_size_table, in_array_table, arrays, offsets, sizes;

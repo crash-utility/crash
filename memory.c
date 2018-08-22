@@ -17454,11 +17454,12 @@ vm_stat_init(void)
 		} else if (symbol_exists("vm_zone_stat") &&
 			get_symbol_type("vm_zone_stat",
 			NULL, NULL) == TYPE_CODE_ARRAY) {
-			if (symbol_exists("vm_numa_stat")) {
+			if (symbol_exists("vm_numa_stat") &&
+			    get_array_length("vm_numa_stat", NULL, 0)) {
 				vt->nr_vm_stat_items =
 					get_array_length("vm_zone_stat", NULL, 0)
 					+ get_array_length("vm_node_stat", NULL, 0) 
-					+ get_array_length("vm_numa_stat", NULL, 0);
+					+ ARRAY_LENGTH(vm_numa_stat);
 				split_vmstat = 2;
 				enumerator_value("NR_VM_ZONE_STAT_ITEMS", &zone_cnt);
 				enumerator_value("NR_VM_NODE_STAT_ITEMS", &node_cnt);
@@ -17599,7 +17600,7 @@ dump_vm_stat(char *item, long *retval, ulong zone)
 	buf = GETBUF(sizeof(ulong) * vt->nr_vm_stat_items);
 
 	if (symbol_exists("vm_node_stat") && symbol_exists("vm_zone_stat") &&
-	    symbol_exists("vm_numa_stat"))
+	    symbol_exists("vm_numa_stat") && ARRAY_LENGTH(vm_numa_stat))
 		split_vmstat = 2;
 	else if (symbol_exists("vm_node_stat") && symbol_exists("vm_zone_stat"))
 		split_vmstat = 1;
@@ -17666,7 +17667,8 @@ dump_vm_stat(char *item, long *retval, ulong zone)
 			if (!zone) {
 				if ((i == node_start) && symbol_exists("vm_node_stat")) 
 					fprintf(fp, "\n  VM_NODE_STAT:\n"); 
-				if ((i == numa_start) && symbol_exists("vm_numa_stat")) 
+				if ((i == numa_start) && symbol_exists("vm_numa_stat")
+				    && ARRAY_LENGTH(vm_numa_stat))
 					fprintf(fp, "\n  VM_NUMA_STAT:\n"); 
 			}
 			fprintf(fp, "%s%s: %ld\n",

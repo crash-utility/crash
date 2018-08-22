@@ -2220,6 +2220,7 @@ struct array_table {
 	int height_to_maxnodes;
 	int task_struct_rlim;
 	int signal_struct_rlim;
+	int vm_numa_stat;
 };
 
 /*
