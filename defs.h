@@ -2032,6 +2032,10 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long bpf_prog_aux_user;
 	long user_struct_uid;
 	long idr_cur;
+	long kmem_cache_memcg_params;
+	long memcg_cache_params___root_caches_node;
+	long memcg_cache_params_children;
+	long memcg_cache_params_children_node;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2438,6 +2442,7 @@ struct vm_table {                /* kernel VM-related data */
 #define PAGEFLAGS             (0x4000000)
 #define SLAB_OVERLOAD_PAGE    (0x8000000)
 #define SLAB_CPU_CACHE       (0x10000000)
+#define SLAB_ROOT_CACHES     (0x20000000)
 
 #define IS_FLATMEM()		(vt->flags & FLATMEM)
 #define IS_DISCONTIGMEM()	(vt->flags & DISCONTIGMEM)

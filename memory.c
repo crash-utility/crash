@@ -167,12 +167,12 @@ static int kmem_cache_downsize(void);
 static int ignore_cache(struct meminfo *, char *);
 static char *is_kmem_cache_addr(ulong, char *);
 static char *is_kmem_cache_addr_common(ulong, char *);
-static void kmem_cache_list(void);
+static void kmem_cache_list(struct meminfo *);
 static void dump_kmem_cache(struct meminfo *);
 static void dump_kmem_cache_percpu_v1(struct meminfo *);
 static void dump_kmem_cache_percpu_v2(struct meminfo *);
 static void dump_kmem_cache_slub(struct meminfo *);
-static void kmem_cache_list_common(void);
+static void kmem_cache_list_common(struct meminfo *);
 static ulong get_cpu_slab_ptr(struct meminfo *, int, ulong *);
 static unsigned int oo_order(ulong);
 static unsigned int oo_objects(ulong);
@@ -276,6 +276,8 @@ static int generic_read_dumpfile(ulonglong, void *, long, char *, ulong);
 static int generic_write_dumpfile(ulonglong, void *, long, char *, ulong);
 static int page_to_nid(ulong);
 static int get_kmem_cache_list(ulong **);
+static int get_kmem_cache_root_list(ulong **);
+static int get_kmem_cache_child_list(ulong **, ulong);
 static int get_kmem_cache_slub_data(long, struct meminfo *);
 static ulong compound_head(ulong);
 static long count_partial(ulong, struct meminfo *, ulong *);
@@ -813,6 +815,23 @@ vm_init(void)
 			"kmem_slab_s", "s_offset");
 		MEMBER_OFFSET_INIT(kmem_slab_s_s_magic,   
 			"kmem_slab_s", "s_magic");
+	}
+
+	if (kernel_symbol_exists("slab_root_caches")) {
+		MEMBER_OFFSET_INIT(kmem_cache_memcg_params,
+			"kmem_cache", "memcg_params");
+		MEMBER_OFFSET_INIT(memcg_cache_params___root_caches_node,
+			"memcg_cache_params", "__root_caches_node");
+		MEMBER_OFFSET_INIT(memcg_cache_params_children,
+			"memcg_cache_params", "children");
+		MEMBER_OFFSET_INIT(memcg_cache_params_children_node,
+			"memcg_cache_params", "children_node");
+
+		if (VALID_MEMBER(kmem_cache_memcg_params)
+		    && VALID_MEMBER(memcg_cache_params___root_caches_node)
+		    && VALID_MEMBER(memcg_cache_params_children)
+		    && VALID_MEMBER(memcg_cache_params_children_node))
+			vt->flags |= SLAB_ROOT_CACHES;
 	}
 
 	if (!kt->kernel_NR_CPUS) {
@@ -4713,6 +4732,7 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 #define SLAB_OVERLOAD_PAGE_PTR (ADDRESS_SPECIFIED << 24)
 #define SLAB_BITFIELD          (ADDRESS_SPECIFIED << 25)
 #define SLAB_GATHER_FAILURE    (ADDRESS_SPECIFIED << 26)
+#define GET_SLAB_ROOT_CACHES   (ADDRESS_SPECIFIED << 27)
 
 #define GET_ALL \
 	(GET_SHARED_PAGES|GET_TOTALRAM_PAGES|GET_BUFFERS_PAGES|GET_SLAB_PAGES)
@@ -4724,6 +4744,7 @@ cmd_kmem(void)
 	int c;
 	int sflag, Sflag, pflag, fflag, Fflag, vflag, zflag, oflag, gflag; 
 	int nflag, cflag, Cflag, iflag, lflag, Lflag, Pflag, Vflag, hflag;
+	int rflag;
 	struct meminfo meminfo;
 	ulonglong value[MAXARGS];
 	char buf[BUFSIZE];
@@ -4733,13 +4754,13 @@ cmd_kmem(void)
 	spec_addr = 0;
         sflag =	Sflag = pflag = fflag = Fflag = Pflag = zflag = oflag = 0;
 	vflag = Cflag = cflag = iflag = nflag = lflag = Lflag = Vflag = 0;
-	gflag = hflag = 0;
+	gflag = hflag = rflag = 0;
 	escape = FALSE;
 	BZERO(&meminfo, sizeof(struct meminfo));
 	BZERO(&value[0], sizeof(ulonglong)*MAXARGS);
 	pc->curcmd_flags &= ~HEADER_PRINTED;
 
-        while ((c = getopt(argcnt, args, "gI:sSFfm:pvczCinl:L:PVoh")) != EOF) {
+        while ((c = getopt(argcnt, args, "gI:sSrFfm:pvczCinl:L:PVoh")) != EOF) {
                 switch(c)
 		{
 		case 'V':
@@ -4775,11 +4796,15 @@ cmd_kmem(void)
 			break;
 
 		case 's':
-			sflag = 1; Sflag = 0;
+			sflag = 1; Sflag = rflag = 0;
 			break;
 
 		case 'S':
-			Sflag = 1; sflag = 0;
+			Sflag = 1; sflag = rflag = 0;
+			break;
+
+		case 'r':
+			rflag = 1; sflag = Sflag = 0;
 			break;
 
 		case 'F':
@@ -4859,12 +4884,13 @@ cmd_kmem(void)
 		cmd_usage(pc->curcmd, SYNOPSIS);
 
         if ((sflag + Sflag + pflag + fflag + Fflag + Vflag + oflag +
-            vflag + Cflag + cflag + iflag + lflag + Lflag + gflag + hflag) > 1) {
+            vflag + Cflag + cflag + iflag + lflag + Lflag + gflag +
+            hflag + rflag) > 1) {
 		error(INFO, "only one flag allowed!\n");
 		cmd_usage(pc->curcmd, SYNOPSIS);
 	} 
 
-	if (sflag || Sflag || !(vt->flags & KMEM_CACHE_INIT))
+	if (sflag || Sflag || rflag || !(vt->flags & KMEM_CACHE_INIT))
 		kmem_cache_init();
 
 	while (args[optind]) {
@@ -4881,7 +4907,7 @@ cmd_kmem(void)
 				escape = TRUE;
 			} else
 				meminfo.reqname = args[optind];
-                        if (!sflag && !Sflag)
+                        if (!sflag && !Sflag && !rflag)
                                 cmd_usage(pc->curcmd, SYNOPSIS);
                 }
 
@@ -4994,7 +5020,7 @@ cmd_kmem(void)
                  * no value arguments allowed! 
                  */
                 if (zflag || nflag || iflag || Fflag || Cflag || Lflag || 
-		    Vflag || oflag || hflag) {
+		    Vflag || oflag || hflag || rflag) {
 			error(INFO, 
 			    "no address arguments allowed with this option\n");
                         cmd_usage(pc->curcmd, SYNOPSIS);
@@ -5030,9 +5056,15 @@ cmd_kmem(void)
 	if (hflag == 1) 
 		dump_hstates();
 
-	if (sflag == 1) {
+	if (sflag == 1 || rflag == 1) {
+		if (rflag) {
+			if (!((vt->flags & KMALLOC_SLUB)
+			    && (vt->flags & SLAB_ROOT_CACHES)))
+				option_not_supported('r');
+			meminfo.flags = GET_SLAB_ROOT_CACHES;
+		}
 		if (!escape && STREQ(meminfo.reqname, "list"))
-			kmem_cache_list();
+			kmem_cache_list(&meminfo);
                 else if (vt->flags & KMEM_CACHE_UNAVAIL)
                      	error(FATAL, 
 			    "kmem cache slab subsystem not available\n");
@@ -5042,7 +5074,7 @@ cmd_kmem(void)
 
 	if (Sflag == 1) {
 		if (STREQ(meminfo.reqname, "list"))
-			kmem_cache_list();
+			kmem_cache_list(&meminfo);
                 else if (vt->flags & KMEM_CACHE_UNAVAIL)
                      	error(FATAL, 
 			    "kmem cache slab subsystem not available\n");
@@ -5092,7 +5124,8 @@ cmd_kmem(void)
 
 	if (!(sflag + Sflag + pflag + fflag + Fflag + vflag + 
 	      Vflag + zflag + oflag + cflag + Cflag + iflag + 
-	      nflag + lflag + Lflag + gflag + hflag + meminfo.calls))
+	      nflag + lflag + Lflag + gflag + hflag + rflag +
+	      meminfo.calls))
 		cmd_usage(pc->curcmd, SYNOPSIS);
 
 }
@@ -9117,7 +9150,7 @@ is_kmem_cache_addr(ulong vaddr, char *kbuf)
  *  dumps all slab cache names and their addresses.
  */
 static void
-kmem_cache_list(void)
+kmem_cache_list(struct meminfo *mi)
 {
         ulong cache, cache_cache, name;
 	long next_offset, name_offset;
@@ -9132,7 +9165,7 @@ kmem_cache_list(void)
 	}
 
 	if (vt->flags & (KMALLOC_SLUB|KMALLOC_COMMON)) {
-		kmem_cache_list_common();
+		kmem_cache_list_common(mi);
 		return;		
 	}
 
@@ -13564,6 +13597,8 @@ dump_vm_table(int verbose)
 		fprintf(fp, "%sSLAB_OVERLOAD_PAGE", others++ ? "|" : "");\
 	if (vt->flags & SLAB_CPU_CACHE)
 		fprintf(fp, "%sSLAB_CPU_CACHE", others++ ? "|" : "");\
+	if (vt->flags & SLAB_ROOT_CACHES)
+		fprintf(fp, "%sSLAB_ROOT_CACHES", others++ ? "|" : "");\
 	if (vt->flags & USE_VMAP_AREA)
 		fprintf(fp, "%sUSE_VMAP_AREA", others++ ? "|" : "");\
 	if (vt->flags & CONFIG_NUMA)
@@ -18044,14 +18079,17 @@ kmem_cache_init_slub(void)
 }
 
 static void 
-kmem_cache_list_common(void)
+kmem_cache_list_common(struct meminfo *mi)
 {
         int i, cnt;
         ulong *cache_list;
         ulong name;
 	char buf[BUFSIZE];
 
-	cnt = get_kmem_cache_list(&cache_list);
+	if (mi->flags & GET_SLAB_ROOT_CACHES)
+		cnt = get_kmem_cache_root_list(&cache_list);
+	else
+		cnt = get_kmem_cache_list(&cache_list);
 
 	for (i = 0; i < cnt; i++) {
 		fprintf(fp, "%lx ", cache_list[i]);
@@ -18087,7 +18125,11 @@ dump_kmem_cache_slub(struct meminfo *si)
 	}
 
 	order = objects = 0;
-	si->cache_count = get_kmem_cache_list(&si->cache_list);
+	if (si->flags & GET_SLAB_ROOT_CACHES)
+		si->cache_count = get_kmem_cache_root_list(&si->cache_list);
+	else
+		si->cache_count = get_kmem_cache_list(&si->cache_list);
+
 	si->cache_buf = GETBUF(SIZE(kmem_cache));
 
 	if (VALID_MEMBER(page_objects) &&
@@ -18167,6 +18209,79 @@ dump_kmem_cache_slub(struct meminfo *si)
 		if (!get_kmem_cache_slub_data(GET_SLUB_SLABS, si) ||
 		    !get_kmem_cache_slub_data(GET_SLUB_OBJECTS, si))
 			si->flags |= SLAB_GATHER_FAILURE;
+
+		/* accumulate children's slabinfo */
+		if (si->flags & GET_SLAB_ROOT_CACHES) {
+			struct meminfo *mi;
+			int j;
+			char buf2[BUFSIZE];
+
+			mi = (struct meminfo *)GETBUF(sizeof(struct meminfo));
+			memcpy(mi, si, sizeof(struct meminfo));
+
+			mi->cache_count = get_kmem_cache_child_list(&mi->cache_list,
+						si->cache_list[i]);
+
+			if (!mi->cache_count)
+				goto no_children;
+
+			mi->cache_buf = GETBUF(SIZE(kmem_cache));
+
+			for (j = 0; j < mi->cache_count; j++) {
+				BZERO(mi->cache_buf, SIZE(kmem_cache));
+				if (!readmem(mi->cache_list[j], KVADDR, mi->cache_buf,
+				    SIZE(kmem_cache), "kmem_cache buffer",
+				    RETURN_ON_ERROR|RETURN_PARTIAL))
+					continue;
+
+				name = ULONG(mi->cache_buf + OFFSET(kmem_cache_name));
+				if (!read_string(name, buf2, BUFSIZE-1))
+					sprintf(buf2, "(unknown)");
+
+				objsize = UINT(mi->cache_buf + OFFSET(kmem_cache_objsize));
+				size = UINT(mi->cache_buf + OFFSET(kmem_cache_size));
+				offset = UINT(mi->cache_buf + OFFSET(kmem_cache_offset));
+				if (VALID_MEMBER(kmem_cache_objects)) {
+					objects = UINT(mi->cache_buf +
+						OFFSET(kmem_cache_objects));
+					order = UINT(mi->cache_buf + OFFSET(kmem_cache_order));
+				} else if (VALID_MEMBER(kmem_cache_oo)) {
+					oo = ULONG(mi->cache_buf + OFFSET(kmem_cache_oo));
+					objects = oo_objects(oo);
+					order = oo_order(oo);
+				} else
+					error(FATAL, "cannot determine "
+						"kmem_cache objects/order values\n");
+
+				mi->cache = mi->cache_list[j];
+				mi->curname = buf2;
+				mi->objsize = objsize;
+				mi->size = size;
+				mi->objects = objects;
+				mi->slabsize = (PAGESIZE() << order);
+				mi->inuse = mi->num_slabs = 0;
+				mi->slab_offset = offset;
+				mi->random = VALID_MEMBER(kmem_cache_random) ?
+					ULONG(mi->cache_buf + OFFSET(kmem_cache_random)) : 0;
+
+				if (!get_kmem_cache_slub_data(GET_SLUB_SLABS, mi) ||
+				    !get_kmem_cache_slub_data(GET_SLUB_OBJECTS, mi)) {
+					si->flags |= SLAB_GATHER_FAILURE;
+					continue;
+				}
+
+				si->inuse += mi->inuse;
+				si->free += mi->free;
+				si->num_slabs += mi->num_slabs;
+
+				if (CRASHDEBUG(1))
+					dump_kmem_cache_info(mi);
+			}
+			FREEBUF(mi->cache_buf);
+			FREEBUF(mi->cache_list);
+no_children:
+			FREEBUF(mi);
+		}
 
 		DUMP_KMEM_CACHE_INFO();
 
@@ -18964,6 +19079,70 @@ get_kmem_cache_list(ulong **cache_buf)
 	return cnt;
 }
 
+static int
+get_kmem_cache_root_list(ulong **cache_buf)
+{
+	int cnt;
+	ulong vaddr;
+	struct list_data list_data, *ld;
+
+	get_symbol_data("slab_root_caches", sizeof(void *), &vaddr);
+
+	ld = &list_data;
+	BZERO(ld, sizeof(struct list_data));
+	ld->flags |= LIST_ALLOCATE;
+	ld->start = vaddr;
+	ld->list_head_offset = OFFSET(kmem_cache_memcg_params)
+		+ OFFSET(memcg_cache_params___root_caches_node);
+	ld->end = symbol_value("slab_root_caches");
+	if (CRASHDEBUG(3))
+		ld->flags |= VERBOSE;
+
+	cnt = do_list(ld);
+	*cache_buf = ld->list_ptr;
+
+	return cnt;
+}
+
+static int
+get_kmem_cache_child_list(ulong **cache_buf, ulong root)
+{
+	int cnt;
+	ulong vaddr, children;
+	struct list_data list_data, *ld;
+
+	children = root + OFFSET(kmem_cache_memcg_params)
+			+ OFFSET(memcg_cache_params_children);
+
+	readmem(children, KVADDR, &vaddr, sizeof(ulong),
+		"kmem_cache.memcg_params.children",
+		FAULT_ON_ERROR);
+
+	/*
+	 * When no children, since there is the difference of offset
+	 * of children list between root and child, do_list returns
+	 * an incorrect cache_buf[0]. So we determine wheather it has
+	 * children or not with the value of list_head.next.
+	 */
+	if (children == vaddr)
+		return 0;
+
+	ld = &list_data;
+	BZERO(ld, sizeof(struct list_data));
+	ld->flags |= LIST_ALLOCATE;
+	ld->start = vaddr;
+	ld->list_head_offset =
+		OFFSET(kmem_cache_memcg_params)
+		+ OFFSET(memcg_cache_params_children_node);
+	ld->end = children;
+	if (CRASHDEBUG(3))
+		ld->flags |= VERBOSE;
+
+	cnt = do_list(ld);
+	*cache_buf = ld->list_ptr;
+
+	return cnt;
+}
 
 /*
  *  Get the address of the head page of a compound page.

@@ -9451,6 +9451,15 @@ dump_offset_table(char *spec, ulong makestruct)
         fprintf(fp, "              kmem_cache_flags: %ld\n",
                 OFFSET(kmem_cache_flags));
 
+	fprintf(fp, "       kmem_cache_memcg_params: %ld\n",
+		OFFSET(kmem_cache_memcg_params));
+	fprintf(fp, "memcg_cache_params___root_caches_node: %ld\n",
+		OFFSET(memcg_cache_params___root_caches_node));
+	fprintf(fp, "          memcg_cache_params_children: %ld\n",
+		OFFSET(memcg_cache_params_children));
+	fprintf(fp, "     memcg_cache_params_children_node: %ld\n",
+		OFFSET(memcg_cache_params_children_node));
+
 	fprintf(fp, "               net_device_next: %ld\n",
         	OFFSET(net_device_next));
 	fprintf(fp, "               net_device_name: %ld\n",
