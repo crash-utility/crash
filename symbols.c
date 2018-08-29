@@ -1595,11 +1595,39 @@ store_module_symbols_v1(ulong total, int mods_installed)
                 st->flags |= INSMOD_BUILTIN;
 }
 
-struct kernel_symbol
-{
-        unsigned long value;
-        const char *name;
+union kernel_symbol {
+	struct kernel_symbol_v1 {
+		unsigned long value;
+		const char *name;
+	} v1;
+	/* kernel 4.19 introduced relative symbol positionning */
+	struct kernel_symbol_v2 {
+		int value_offset;
+		int name_offset;
+	} v2;
 };
+
+static ulong
+modsym_name(ulong syms, union kernel_symbol *modsym, int i)
+{
+	if (VALID_MEMBER(kernel_symbol_value))
+		return (ulong)modsym->v1.name;
+
+	return syms + i * sizeof(struct kernel_symbol_v2) +
+		offsetof(struct kernel_symbol_v2, name_offset) +
+		modsym->v2.name_offset;
+}
+
+static ulong
+modsym_value(ulong syms, union kernel_symbol *modsym, int i)
+{
+	if (VALID_MEMBER(kernel_symbol_value))
+		return (ulong)modsym->v1.value;
+
+	return syms + i * sizeof(struct kernel_symbol_v2) +
+		offsetof(struct kernel_symbol_v2, value_offset) +
+		modsym->v2.value_offset;
+}
 
 void
 store_module_symbols_v2(ulong total, int mods_installed)
@@ -1614,7 +1642,8 @@ store_module_symbols_v2(ulong total, int mods_installed)
 	long strbuflen;
 	ulong size;
 	int mcnt, lm_mcnt;
-	struct kernel_symbol *modsym;
+	union kernel_symbol *modsym;
+	size_t kernel_symbol_size;
 	struct load_module *lm;
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
@@ -1637,6 +1666,13 @@ store_module_symbols_v2(ulong total, int mods_installed)
 	if (st->flags & MODULE_SYMS) {
 		error(FATAL, 
 		  "re-initialization of module symbols not implemented yet!\n");
+	}
+
+	MEMBER_OFFSET_INIT(kernel_symbol_value, "kernel_symbol", "value");
+	if (VALID_MEMBER(kernel_symbol_value)) {
+		kernel_symbol_size = sizeof(struct kernel_symbol_v1);
+	} else {
+		kernel_symbol_size = sizeof(struct kernel_symbol_v2);
 	}
 
         if ((st->ext_module_symtable = (struct syment *)
@@ -1750,20 +1786,20 @@ store_module_symbols_v2(ulong total, int mods_installed)
 		}
 
 		if (nsyms) {
-			modsymbuf = GETBUF(sizeof(struct kernel_symbol)*nsyms);
+			modsymbuf = GETBUF(kernel_symbol_size*nsyms);
 			readmem((ulong)syms, KVADDR, modsymbuf,
-				nsyms * sizeof(struct kernel_symbol),
+				nsyms * kernel_symbol_size,
 				"module symbols", FAULT_ON_ERROR);
 		} 
 
 		for (i = first = last = 0; i < nsyms; i++) {
-			modsym = (struct kernel_symbol *)
-			    (modsymbuf + (i * sizeof(struct kernel_symbol)));
+			modsym = (union kernel_symbol *)
+			    (modsymbuf + (i * kernel_symbol_size));
 			if (!first
-			    || first > (ulong)modsym->name)
-				first = (ulong)modsym->name;
-			if ((ulong)modsym->name > last)
-				last = (ulong)modsym->name;
+			    || first > modsym_name(syms, modsym, i))
+				first = modsym_name(syms, modsym, i);
+			if (modsym_name(syms, modsym, i) > last)
+				last = modsym_name(syms, modsym, i);
 		}
 
 		if (last > first) {
@@ -1787,21 +1823,21 @@ store_module_symbols_v2(ulong total, int mods_installed)
 
 		for (i = 0; i < nsyms; i++) {
 
-			modsym = (struct kernel_symbol *)
-			    (modsymbuf + (i * sizeof(struct kernel_symbol)));
+			modsym = (union kernel_symbol *)
+			    (modsymbuf + (i * kernel_symbol_size));
 
 			BZERO(buf1, BUFSIZE);
 
 			if (strbuf) 
 				strcpy(buf1,
-					&strbuf[(ulong)modsym->name - first]);
+					&strbuf[modsym_name(syms, modsym, i) - first]);
 			else 
-				read_string((ulong)modsym->name, buf1,
+				read_string(modsym_name(syms, modsym, i), buf1,
                             		BUFSIZE-1);
 
                 	if (strlen(buf1)) {
 				st->ext_module_symtable[mcnt].value = 
-					modsym->value;
+					modsym_value(syms, modsym, i);
 				st->ext_module_symtable[mcnt].type = '?'; 
 				st->ext_module_symtable[mcnt].flags |= MODULE_SYMBOL;
 				strip_module_symbol_end(buf1);
@@ -1823,21 +1859,21 @@ store_module_symbols_v2(ulong total, int mods_installed)
 			FREEBUF(strbuf);
 
 		if (ngplsyms) {
-			modsymbuf = GETBUF(sizeof(struct kernel_symbol) *
+			modsymbuf = GETBUF(kernel_symbol_size *
 				ngplsyms);
 			readmem((ulong)gpl_syms, KVADDR, modsymbuf,
-				ngplsyms * sizeof(struct kernel_symbol),
+				ngplsyms * kernel_symbol_size,
 				"module gpl symbols", FAULT_ON_ERROR);
 		} 
 
 		for (i = first = last = 0; i < ngplsyms; i++) {
-			modsym = (struct kernel_symbol *)
-			    (modsymbuf + (i * sizeof(struct kernel_symbol)));
+			modsym = (union kernel_symbol *)
+			    (modsymbuf + (i * kernel_symbol_size));
 			if (!first
-			    || first > (ulong)modsym->name)
-				first = (ulong)modsym->name;
-			if ((ulong)modsym->name > last)
-				last = (ulong)modsym->name;
+			    || first > modsym_name(gpl_syms, modsym, i))
+				first = modsym_name(gpl_syms, modsym, i);
+			if (modsym_name(gpl_syms, modsym, i) > last)
+				last = modsym_name(gpl_syms, modsym, i);
 		}
 
 		if (last > first) {
@@ -1860,21 +1896,21 @@ store_module_symbols_v2(ulong total, int mods_installed)
 
 		for (i = 0; i < ngplsyms; i++) {
 
-			modsym = (struct kernel_symbol *)
-			    (modsymbuf + (i * sizeof(struct kernel_symbol)));
+			modsym = (union kernel_symbol *)
+			    (modsymbuf + (i * kernel_symbol_size));
 
 			BZERO(buf1, BUFSIZE);
 
 			if (strbuf) 
 				strcpy(buf1,
-					&strbuf[(ulong)modsym->name - first]);
+					&strbuf[modsym_name(gpl_syms, modsym, i) - first]);
 			else 
-				read_string((ulong)modsym->name, buf1,
+				read_string(modsym_name(gpl_syms, modsym, i), buf1,
                             		BUFSIZE-1);
 
                 	if (strlen(buf1)) {
 				st->ext_module_symtable[mcnt].value = 
-					modsym->value;
+					modsym_value(gpl_syms, modsym, i);
 				st->ext_module_symtable[mcnt].type = '?'; 
 				st->ext_module_symtable[mcnt].flags |= MODULE_SYMBOL;
 				strip_module_symbol_end(buf1);
@@ -8975,7 +9011,8 @@ dump_offset_table(char *spec, ulong makestruct)
         	OFFSET(kallsyms_section_size));
         fprintf(fp, "     kallsyms_section_name_off: %ld\n",
         	OFFSET(kallsyms_section_name_off));
-
+        fprintf(fp, "           kernel_symbol_value: %ld\n",
+        	OFFSET(kernel_symbol_value));
 	fprintf(fp, "                 module_taints: %ld\n",
 		OFFSET(module_taints));
 	fprintf(fp, "          module_license_gplok: %ld\n",
