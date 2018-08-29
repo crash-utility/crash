@@ -314,6 +314,7 @@ task_init(void)
 	        strcpy(buf, "alias last ps -l");
         	alias_init(buf);
 	}
+	MEMBER_OFFSET_INIT(task_struct_pid_links, "task_struct", "pid_links");
 	MEMBER_OFFSET_INIT(pid_link_pid, "pid_link", "pid");
 	MEMBER_OFFSET_INIT(pid_hash_chain, "pid", "hash_chain");
 
@@ -2382,7 +2383,10 @@ retry_radix_tree:
 		pid_tasks_0 = ULONG(pidbuf + OFFSET(pid_tasks));
 		if (!pid_tasks_0)
 			continue;
-		task = pid_tasks_0 - OFFSET(task_struct_pids);
+		if (VALID_MEMBER(task_struct_pids))
+			task = pid_tasks_0 - OFFSET(task_struct_pids);
+		else
+			task = pid_tasks_0 - OFFSET(task_struct_pid_links);
 
 		if (CRASHDEBUG(1))
 			console("pid: %lx  ns: %lx  tasks[0]: %lx task: %lx\n",

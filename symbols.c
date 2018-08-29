@@ -8606,6 +8606,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(task_rss_stat_count));
         fprintf(fp, "              task_struct_pids: %ld\n",
                 OFFSET(task_struct_pids));
+        fprintf(fp, "         task_struct_pid_links: %ld\n",
+                OFFSET(task_struct_pid_links));
         fprintf(fp, "          task_struct_last_run: %ld\n",
                 OFFSET(task_struct_last_run));
         fprintf(fp, "         task_struct_timestamp: %ld\n",

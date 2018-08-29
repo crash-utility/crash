@@ -2036,6 +2036,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long memcg_cache_params___root_caches_node;
 	long memcg_cache_params_children;
 	long memcg_cache_params_children_node;
+	long task_struct_pid_links;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
