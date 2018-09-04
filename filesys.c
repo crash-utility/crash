@@ -2207,6 +2207,11 @@ dump_inode_page_cache_info(ulong inode)
 		RJUST|LONG_DEC,
 		MKSTR(nrpages)));
 
+	FREEBUF(inode_buf);
+
+	if (!nrpages)
+		return;
+
 	root_rnode = i_mapping + OFFSET(address_space_page_tree);
 	rtp.index = 0;
 	rtp.value = (void *)&dump_inode_page;
@@ -2217,7 +2222,6 @@ dump_inode_page_cache_info(ulong inode)
 		error(INFO, "page_tree count: %ld  nrpages: %ld\n",
 			count, nrpages);
 
-	FREEBUF(inode_buf);
 	return;
 }
 
@@ -2275,7 +2279,7 @@ cmd_files(void)
 			return;
 
 		case 'c':
-			if (VALID_MEMBER(address_space_page_tree) &&
+			if (VALID_MEMBER(address_space_nrpages) &&
 			    VALID_MEMBER(inode_i_mapping))
 				open_flags |= PRINT_NRPAGES;
 			else
