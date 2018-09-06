@@ -4031,6 +4031,11 @@ static void do_radix_tree_dump_cb(ulong node, ulong slot, const char *path,
 
 	/* Caller defined operation */
 	if (!cb(slot)) {
+		if ((slot & RADIX_TREE_ENTRY_MASK) == RADIX_TREE_EXCEPTIONAL_ENTRY) {
+			if (CRASHDEBUG(1))
+				error(INFO, "RADIX_TREE_EXCEPTIONAL_ENTRY: %lx\n", slot); 
+			return;
+		}
 		error(FATAL, "do_radix_tree: callback "
 		      "operation failed: entry: %ld  item: %lx\n",
 		      info->count, slot);

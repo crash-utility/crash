@@ -5252,6 +5252,12 @@ struct radix_tree_pair {
 	void *value;
 };
 ulong do_radix_tree(ulong, int, struct radix_tree_pair *);
+/*
+ * from: "include/linux/radix-tree.h"
+ */
+#define RADIX_TREE_ENTRY_MASK           3UL
+#define RADIX_TREE_EXCEPTIONAL_ENTRY    2
+
 int file_dump(ulong, ulong, ulong, int, int);
 #define DUMP_FULL_NAME      0x1
 #define DUMP_INODE_ONLY     0x2
