@@ -2093,15 +2093,10 @@ ppc64_print_stack_entry(int frame,
 					lr);
 				return;
 			}
-			if (req->pc != lr) {
-				fprintf(fp, "\n%s[Link Register] ", 
-					frame < 10 ? " " : "");
-				fprintf(fp, "[%lx] %s at %lx",
-					req->sp, lrname, lr);
-			}
 			req->ra = lr;
 		}
-		if (!req->name || STREQ(req->name,lrname)) 
+		if (!req->name || STREQ(req->name, lrname) ||
+		    !is_kernel_text(req->pc))
 			fprintf(fp, "  (unreliable)");
 		
 		fprintf(fp, "\n"); 
@@ -2219,6 +2214,22 @@ ppc64_print_regs(struct ppc64_pt_regs *regs)
         fprintf(fp, "    Syscall Result: %016lx\n", regs->result);
 }
 
+static void ppc64_print_nip_lr(struct ppc64_pt_regs *regs, int print_lr)
+{
+	char buf[BUFSIZE];
+	char *sym_buf;
+
+	sym_buf = value_to_symstr(regs->nip, buf, 0);
+	if (sym_buf[0] != NULLCHAR)
+		fprintf(fp, " [NIP  : %s]\n", sym_buf);
+
+	if (print_lr) {
+		sym_buf = value_to_symstr(regs->link, buf, 0);
+		if (sym_buf[0] != NULLCHAR)
+			fprintf(fp, " [LR   : %s]\n", sym_buf);
+	}
+}
+
 /*
  * Print the exception frame information
  */
@@ -2231,6 +2242,59 @@ ppc64_print_eframe(char *efrm_str, struct ppc64_pt_regs *regs,
 
 	fprintf(fp, " %s [%lx] exception frame:\n", efrm_str, regs->trap);
 	ppc64_print_regs(regs);
+	ppc64_print_nip_lr(regs, 1);
+}
+
+/*
+ * For vmcore typically saved with KDump or FADump, get SP and IP values
+ * from the saved ptregs.
+ */
+static int
+ppc64_vmcore_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
+{
+	struct ppc64_pt_regs *pt_regs;
+	unsigned long unip;
+
+	pt_regs = (struct ppc64_pt_regs *)bt_in->machdep;
+	if (!pt_regs || !pt_regs->gpr[1]) {
+		/*
+		 * Not collected regs. May be the corresponding CPU not
+		 * responded to an IPI in case of KDump OR f/w has not
+		 * not provided the register info in case of FADump.
+		 */
+		fprintf(fp, "%0lx: GPR1 register value (SP) was not saved\n",
+			bt_in->task);
+		return FALSE;
+	}
+	*ksp = pt_regs->gpr[1];
+	if (IS_KVADDR(*ksp)) {
+		readmem(*ksp+16, KVADDR, &unip, sizeof(ulong), "Regs NIP value",
+			FAULT_ON_ERROR);
+		*nip = unip;
+	} else {
+		if (IN_TASK_VMA(bt_in->task, *ksp))
+			fprintf(fp, "%0lx: Task is running in user space\n",
+				bt_in->task);
+		else
+			fprintf(fp, "%0lx: Invalid Stack Pointer %0lx\n",
+				bt_in->task, *ksp);
+		*nip = pt_regs->nip;
+	}
+
+	if (bt_in->flags &&
+	((BT_TEXT_SYMBOLS|BT_TEXT_SYMBOLS_PRINT|BT_TEXT_SYMBOLS_NOPRINT)))
+		return TRUE;
+
+	/*
+	 * Print the collected regs for the active task
+	 */
+	ppc64_print_regs(pt_regs);
+	if (!IS_KVADDR(*ksp))
+		return FALSE;
+
+	ppc64_print_nip_lr(pt_regs, (unip != pt_regs->link) ? 1 : 0);
+
+	return TRUE;
 }
 
 /*
@@ -2239,7 +2303,7 @@ ppc64_print_eframe(char *efrm_str, struct ppc64_pt_regs *regs,
 static int
 ppc64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 {
-	int i;
+	int i, ret, panic_task;
 	char *sym;
 	ulong *up;
 	struct bt_info bt_local, *bt;
@@ -2251,11 +2315,29 @@ ppc64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 	struct ppc64_pt_regs *pt_regs;
 	struct syment *sp;
 
-        bt = &bt_local;
-        BCOPY(bt_in, bt, sizeof(struct bt_info));
-        ms = machdep->machspec;
+	bt = &bt_local;
+	BCOPY(bt_in, bt, sizeof(struct bt_info));
+	ms = machdep->machspec;
+	ur_nip = ur_ksp = 0;
+
+	panic_task = tt->panic_task == bt->task ? TRUE : FALSE;
 
 	check_hardirq = check_softirq = tt->flags & IRQSTACKS ? TRUE : FALSE;
+	if (panic_task && bt->machdep) {
+		pt_regs = (struct ppc64_pt_regs *)bt->machdep;
+		ur_nip = pt_regs->nip;
+		ur_ksp = pt_regs->gpr[1];
+	} else if ((pc->flags & KDUMP) ||
+		   ((pc->flags & DISKDUMP) &&
+		    (*diskdump_flags & KDUMP_CMPRS_LOCAL))) {
+		/*
+		 * For the KDump or FADump vmcore, use SP and IP values
+		 * that are saved in ptregs.
+		 */
+		ret = ppc64_vmcore_stack_frame(bt_in, nip, ksp);
+		if (ret)
+			return TRUE;
+	}
 
 	if (bt->task != tt->panic_task) {
 		char cpu_frozen = FALSE;
@@ -2385,38 +2467,14 @@ retry:
 		check_intrstack = FALSE;
 		goto retry;
 	}
-
 	/*
-	 * We didn't find what we were looking for, so try to use
-	 * the SP and IP values saved in ptregs.
+	 *  We didn't find what we were looking for, so just use what was
+	 *  passed in the ELF header.
 	 */
-	pt_regs = (struct ppc64_pt_regs *)bt_in->machdep;
-	if (!pt_regs || !pt_regs->gpr[1]) {
-		/*
-		 * Not collected regs. May be the corresponding CPU did not
-		 * respond to an IPI.
-		 */
-		if (CRASHDEBUG(1))
-			fprintf(fp, "%0lx: GPR1(SP) register value not saved\n",
-				bt_in->task);
-	} else {
-		*ksp = pt_regs->gpr[1];
-		if (IS_KVADDR(*ksp)) {
-			readmem(*ksp+16, KVADDR, nip, sizeof(ulong),
-				"Regs NIP value", FAULT_ON_ERROR);
-			ppc64_print_regs(pt_regs);
-			return TRUE;
-		} else {
-			if (IN_TASK_VMA(bt_in->task, *ksp))
-				fprintf(fp, "%0lx: Task is running in user space\n",
-					bt_in->task);
-			else
-				fprintf(fp, "%0lx: Invalid Stack Pointer %0lx\n",
-					bt_in->task, *ksp);
-			*nip = pt_regs->nip;
-			ppc64_print_regs(pt_regs);
-			return FALSE;
-		}
+	if (ur_nip && ur_ksp) {
+		*nip = ur_nip;
+		*ksp = ur_ksp;
+		return TRUE;
 	}
 
         console("ppc64_get_dumpfile_stack_frame: cannot find SP for panic task\n");
