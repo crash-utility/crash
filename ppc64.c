@@ -2254,6 +2254,7 @@ ppc64_vmcore_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 {
 	struct ppc64_pt_regs *pt_regs;
 	unsigned long unip;
+	int in_user_space = FALSE;
 
 	pt_regs = (struct ppc64_pt_regs *)bt_in->machdep;
 	if (!pt_regs || !pt_regs->gpr[1]) {
@@ -2272,10 +2273,11 @@ ppc64_vmcore_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 			FAULT_ON_ERROR);
 		*nip = unip;
 	} else {
-		if (IN_TASK_VMA(bt_in->task, *ksp))
+		if (IN_TASK_VMA(bt_in->task, *ksp)) {
 			fprintf(fp, "%0lx: Task is running in user space\n",
 				bt_in->task);
-		else
+			in_user_space = TRUE;
+		} else
 			fprintf(fp, "%0lx: Invalid Stack Pointer %0lx\n",
 				bt_in->task, *ksp);
 		*nip = pt_regs->nip;
@@ -2289,6 +2291,8 @@ ppc64_vmcore_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 	 * Print the collected regs for the active task
 	 */
 	ppc64_print_regs(pt_regs);
+	if (in_user_space)
+		return TRUE;
 	if (!IS_KVADDR(*ksp))
 		return FALSE;
 
