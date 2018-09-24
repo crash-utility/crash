@@ -24,6 +24,7 @@ static void dump_blkdevs_v3(ulong);
 static ulong search_cdev_map_probes(char *, int, int, ulong *);
 static ulong search_bdev_map_probes(char *, int, int, ulong *);
 static void do_pci(void); 
+static void do_pci2(void);
 static void do_io(void);
 static void do_resource_list(ulong, char *, int);
 
@@ -51,11 +52,23 @@ dev_init(void)
         MEMBER_OFFSET_INIT(pci_dev_global_list, "pci_dev", "global_list");
         MEMBER_OFFSET_INIT(pci_dev_next, "pci_dev", "next");
         MEMBER_OFFSET_INIT(pci_dev_bus, "pci_dev", "bus");
+	MEMBER_OFFSET_INIT(pci_dev_dev, "pci_dev", "dev");
         MEMBER_OFFSET_INIT(pci_dev_devfn, "pci_dev", "devfn");
         MEMBER_OFFSET_INIT(pci_dev_class, "pci_dev", "class");
         MEMBER_OFFSET_INIT(pci_dev_device, "pci_dev", "device");
+	MEMBER_OFFSET_INIT(pci_dev_hdr_type, "pci_dev", "hdr_type");
+	MEMBER_OFFSET_INIT(pci_dev_pcie_flags_reg, "pci_dev", "pcie_flags_reg");
         MEMBER_OFFSET_INIT(pci_dev_vendor, "pci_dev", "vendor");
 	MEMBER_OFFSET_INIT(pci_bus_number, "pci_bus", "number");
+	MEMBER_OFFSET_INIT(pci_bus_node, "pci_bus", "node");
+	MEMBER_OFFSET_INIT(pci_bus_devices, "pci_bus", "devices");
+	MEMBER_OFFSET_INIT(pci_bus_dev, "pci_bus", "dev");
+	MEMBER_OFFSET_INIT(pci_bus_children, "pci_bus", "children");
+	MEMBER_OFFSET_INIT(pci_bus_parent, "pci_bus", "parent");
+	MEMBER_OFFSET_INIT(pci_bus_self, "pci_bus", "self");
+
+	MEMBER_OFFSET_INIT(device_kobj, "device", "kobj");
+	MEMBER_OFFSET_INIT(kobject_name, "kobject", "name");
 
         STRUCT_SIZE_INIT(resource, "resource");
 	if ((VALID_STRUCT(resource) && symbol_exists("do_resource_list")) ||
@@ -114,10 +127,14 @@ cmd_dev(void)
 			return;
 
 		case 'p':
-			if (machine_type("S390X") ||
-			    (THIS_KERNEL_VERSION >= LINUX(2,6,26)))
+			if (machine_type("S390X"))
 				option_not_supported(c);
-			do_pci();
+			if (symbol_exists("pci_devices"))
+				do_pci();
+			else if (symbol_exists("pci_root_buses"))
+				do_pci2();
+			else
+				option_not_supported(c);
 			return;
 
                 default:
@@ -2217,6 +2234,313 @@ do_resource_list(ulong first_entry, char *resource_buf, int size)
 
 #endif /* USE_2_2_17_PCI_H */
 
+#define PCI_EXP_FLAGS_TYPE      0x00f0  /* Device/Port type */
+#define  PCI_EXP_TYPE_ENDPOINT  0x0     /* Express Endpoint */
+#define  PCI_EXP_TYPE_LEG_END   0x1     /* Legacy Endpoint */
+#define  PCI_EXP_TYPE_ROOT_PORT 0x4     /* Root Port */
+#define  PCI_EXP_TYPE_UPSTREAM  0x5     /* Upstream Port */
+#define  PCI_EXP_TYPE_DOWNSTREAM 0x6    /* Downstream Port */
+#define  PCI_EXP_TYPE_PCI_BRIDGE 0x7    /* PCIe to PCI/PCI-X Bridge */
+#define  PCI_EXP_TYPE_PCIE_BRIDGE 0x8   /* PCI/PCI-X to PCIe Bridge */
+#define  PCI_EXP_TYPE_RC_END    0x9     /* Root Complex Integrated Endpoint */
+#define  PCI_EXP_TYPE_RC_EC     0xa     /* Root Complex Event Collector */
+
+static void
+fill_dev_name(ulong pci_dev, char *name)
+{
+	ulong kobj, value;
+
+	memset(name, 0, sizeof(*name) * BUFSIZE);
+
+	kobj = pci_dev + OFFSET(pci_dev_dev) + OFFSET(device_kobj);
+
+	readmem(kobj + OFFSET(kobject_name),
+		KVADDR, &value, sizeof(void *), "kobject name",
+		FAULT_ON_ERROR);
+
+	read_string(value, name, BUFSIZE-1);
+}
+
+static void
+fill_bus_name(ulong pci_bus, char *name)
+{
+	ulong kobj, value;
+
+	memset(name, 0, sizeof(*name) * BUFSIZE);
+
+	kobj = pci_bus + OFFSET(pci_bus_dev) + OFFSET(device_kobj);
+
+	readmem(kobj + OFFSET(kobject_name),
+		KVADDR, &value, sizeof(void *), "kobject name",
+		FAULT_ON_ERROR);
+
+	read_string(value, name, BUFSIZE-1);
+}
+
+static void
+fill_dev_id(ulong pci_dev, char *id)
+{
+	unsigned short device, vendor;
+
+	memset(id, 0, sizeof(*id) * BUFSIZE);
+
+	readmem(pci_dev + OFFSET(pci_dev_device),
+		KVADDR, &device, sizeof(short), "pci dev device",
+		FAULT_ON_ERROR);
+	readmem(pci_dev + OFFSET(pci_dev_vendor), KVADDR,
+		&vendor, sizeof(short), "pci dev vendor", FAULT_ON_ERROR);
+
+	sprintf(id, "%x:%x", vendor, device);
+}
+
+static void
+fill_dev_class(ulong pci_dev, char *c)
+{
+	unsigned int class;
+
+	memset(c, 0, sizeof(*c) * BUFSIZE);
+	readmem(pci_dev + OFFSET(pci_dev_class), KVADDR,
+		&class, sizeof(int), "pci class", FAULT_ON_ERROR);
+
+	class >>= 8;
+
+	sprintf(c, "%04x", class);
+}
+
+static int
+pci_pcie_type(ulong cap)
+{
+	return (cap & PCI_EXP_FLAGS_TYPE) >> 4;
+}
+
+static int
+pci_is_bridge(unsigned char hdr_type)
+{
+	return hdr_type == PCI_HEADER_TYPE_BRIDGE ||
+		hdr_type == PCI_HEADER_TYPE_CARDBUS;
+}
+
+static void
+fill_pcie_type(ulong pcidev, char *t)
+{
+	int type, bufidx = 0;
+	unsigned short pciecap;
+	unsigned char hdr_type;
+
+	memset(t, 0, sizeof(*t) * BUFSIZE);
+
+	readmem(pcidev + OFFSET(pci_dev_hdr_type), KVADDR, &hdr_type,
+		sizeof(char), "pci dev hdr_type", FAULT_ON_ERROR);
+
+	if (!VALID_MEMBER(pci_dev_pcie_flags_reg))
+		goto bridge_chk;
+
+	readmem(pcidev + OFFSET(pci_dev_pcie_flags_reg), KVADDR, &pciecap,
+		sizeof(unsigned short), "pci dev pcie_flags_reg", FAULT_ON_ERROR);
+
+	type = pci_pcie_type(pciecap);
+
+	if (type == PCI_EXP_TYPE_ENDPOINT)
+		bufidx = sprintf(t, "ENDPOINT");
+	else if (type == PCI_EXP_TYPE_LEG_END)
+		bufidx = sprintf(t, "LEG_END");
+	else if (type == PCI_EXP_TYPE_ROOT_PORT)
+		bufidx = sprintf(t, "ROOT_PORT");
+	else if (type == PCI_EXP_TYPE_UPSTREAM)
+		bufidx = sprintf(t, "UPSTREAM");
+	else if (type == PCI_EXP_TYPE_DOWNSTREAM)
+		bufidx = sprintf(t, "DOWNSTREAM");
+	else if (type == PCI_EXP_TYPE_PCI_BRIDGE)
+		bufidx = sprintf(t, "PCI_BRIDGE");
+	else if (type == PCI_EXP_TYPE_PCIE_BRIDGE)
+		bufidx = sprintf(t, "PCIE_BRIDGE");
+	else if (type == PCI_EXP_TYPE_RC_END)
+		bufidx = sprintf(t, "RC_END");
+	else if (type == PCI_EXP_TYPE_RC_EC)
+		bufidx = sprintf(t, "RC_EC");
+
+bridge_chk:
+	if (pci_is_bridge(hdr_type))
+		sprintf(t + bufidx, " [BRIDGE]");
+}
+
+static void
+walk_devices(ulong pci_bus)
+{
+	struct list_data list_data, *ld;
+	int devcnt, i;
+	ulong *devlist, self;
+	char name[BUFSIZE], class[BUFSIZE], id[BUFSIZE], type[BUFSIZE];
+	char pcidev_hdr[BUFSIZE];
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char buf3[BUFSIZE];
+	char buf4[BUFSIZE];
+	char buf5[BUFSIZE];
+
+	ld = &list_data;
+
+	BZERO(ld, sizeof(struct list_data));
+
+	readmem(pci_bus + OFFSET(pci_bus_devices), KVADDR,
+		&ld->start, sizeof(void *), "pci bus devices",
+		FAULT_ON_ERROR);
+
+	if (VALID_MEMBER(pci_dev_pcie_flags_reg))
+		snprintf(pcidev_hdr, sizeof(pcidev_hdr), "%s %s %s %s %s\n",
+			mkstring(buf1, VADDR_PRLEN, CENTER, "PCI DEV"),
+			mkstring(buf2, strlen("0000:00:00.0"), CENTER, "DO:BU:SL.FN"),
+			mkstring(buf3, strlen("0000") + 2, CENTER, "CLASS"),
+			mkstring(buf4, strlen("0000:0000"), CENTER, "PCI_ID"),
+			mkstring(buf5, 10, CENTER, "TYPE"));
+	else
+		snprintf(pcidev_hdr, sizeof(pcidev_hdr), "%s %s %s %s\n",
+			mkstring(buf1, VADDR_PRLEN, CENTER, "PCI DEV"),
+			mkstring(buf2, strlen("0000:00:00.0"), CENTER, "DO:BU:SL.FN"),
+			mkstring(buf3, strlen("0000") + 2, CENTER, "CLASS"),
+			mkstring(buf4, strlen("0000:0000"), CENTER, "PCI_ID"));
+
+	fprintf(fp, "  %s", pcidev_hdr);
+
+	readmem(pci_bus + OFFSET(pci_bus_self), KVADDR, &self,
+		sizeof(void *), "pci bus self", FAULT_ON_ERROR);
+	if (self) {
+		fill_dev_name(self, name);
+		fill_dev_class(self, class);
+		fill_dev_id(self, id);
+		fill_pcie_type(self, type);
+		fprintf(fp, "  %s %s %s %s %s\n",
+			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX,
+			MKSTR(self)),
+			mkstring(buf2, strlen("0000:00:00.0"), CENTER, name),
+			mkstring(buf3, strlen("0000") + 2, CENTER, class),
+			mkstring(buf4, strlen("0000:0000"), CENTER, id),
+			mkstring(buf5, 10, CENTER, type));
+	}
+
+	if (ld->start == (pci_bus + OFFSET(pci_bus_devices)))
+		return;
+
+	ld->end = pci_bus + OFFSET(pci_bus_devices);
+	hq_open();
+	devcnt = do_list(ld);
+	devlist = (ulong *)GETBUF(devcnt * sizeof(ulong));
+	devcnt = retrieve_list(devlist, devcnt);
+	hq_close();
+
+	for (i = 0; i < devcnt; i++) {
+		fill_dev_name(devlist[i], name);
+		fill_dev_class(devlist[i], class);
+		fill_dev_id(devlist[i], id);
+		fill_pcie_type(devlist[i], type);
+		fprintf(fp, "  %s %s %s %s %s\n",
+			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX,
+			MKSTR(devlist[i])),
+			mkstring(buf2, strlen("0000:00:00.0"), CENTER, name),
+			mkstring(buf3, strlen("0000") + 2, CENTER, class),
+			mkstring(buf4, strlen("0000:0000"), CENTER, id),
+			mkstring(buf5, 10, CENTER, type));
+	}
+	FREEBUF(devlist);
+}
+
+static void
+walk_buses(ulong pci_bus)
+{
+	struct list_data list_data, *ld;
+	int buscnt, i;
+	ulong *buslist, parent;
+	char pcibus_hdr[BUFSIZE];
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+
+	ld = &list_data;
+
+	BZERO(ld, sizeof(struct list_data));
+
+	readmem(pci_bus + OFFSET(pci_bus_children), KVADDR,
+		&ld->start, sizeof(void *), "pci bus children",
+		FAULT_ON_ERROR);
+
+	if (ld->start == (pci_bus + OFFSET(pci_bus_children)))
+		return;
+
+	ld->end = pci_bus + OFFSET(pci_bus_children);
+	hq_open();
+	buscnt = do_list(ld);
+	buslist = (ulong *)GETBUF(buscnt * sizeof(ulong));
+	buscnt = retrieve_list(buslist, buscnt);
+	hq_close();
+
+	snprintf(pcibus_hdr, sizeof(pcibus_hdr), "%s %s\n",
+		mkstring(buf1, VADDR_PRLEN, CENTER, "PCI BUS"),
+		mkstring(buf2, VADDR_PRLEN, CENTER, "PARENT BUS"));
+
+	for (i = 0; i < buscnt; i++) {
+		readmem(buslist[i] + OFFSET(pci_bus_parent), KVADDR, &parent,
+			sizeof(void *), "pci bus parent", FAULT_ON_ERROR);
+
+		fprintf(fp, "  %s", pcibus_hdr);
+
+		fprintf(fp, "  %s %s\n",
+			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX,
+			MKSTR(buslist[i])),
+			mkstring(buf2, VADDR_PRLEN, LJUST|LONG_HEX,
+			MKSTR(parent)));
+		walk_devices(buslist[i]);
+		fprintf(fp, "\n");
+		walk_buses(buslist[i]);
+	}
+	FREEBUF(buslist);
+}
+
+static void
+do_pci2(void)
+{
+	struct list_data list_data, *ld;
+	int rootbuscnt, i;
+	ulong *rootbuslist;
+	unsigned long pci_root_bus_addr = symbol_value("pci_root_buses");
+	char name[BUFSIZE];
+	char pcirootbus_hdr[BUFSIZE];
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+
+	ld = &list_data;
+	BZERO(ld, sizeof(struct list_data));
+
+	get_symbol_data("pci_root_buses", sizeof(void *), &ld->start);
+
+	if (ld->start == pci_root_bus_addr)
+		error(FATAL, "no PCI devices found on this system.\n");
+
+	ld->end = pci_root_bus_addr;
+
+	hq_open();
+	rootbuscnt = do_list(ld);
+	rootbuslist = (ulong *)GETBUF(rootbuscnt * sizeof(ulong));
+	rootbuscnt = retrieve_list(rootbuslist, rootbuscnt);
+	hq_close();
+
+	snprintf(pcirootbus_hdr, sizeof(pcirootbus_hdr), "%s %s\n",
+			mkstring(buf1, VADDR_PRLEN, CENTER, "ROOT BUS"),
+			mkstring(buf2, strlen("0000:00"), CENTER, "BUSNAME"));
+
+	for (i = 0; i < rootbuscnt; i++) {
+		fprintf(fp, "%s", pcirootbus_hdr);
+		fill_bus_name(rootbuslist[i], name);
+		fprintf(fp, "%s %s\n",
+			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX,
+			MKSTR(rootbuslist[i])),
+			mkstring(buf2, strlen("0000:00"), CENTER, name));
+		 walk_devices(rootbuslist[i]);
+		 walk_buses(rootbuslist[i]);
+
+		fprintf(fp, "\n");
+	}
+	FREEBUF(rootbuslist);
+}
+
 static void
 do_pci(void)
 {
@@ -2229,9 +2553,6 @@ do_pci(void)
 	char 		  buf1[BUFSIZE];
 	char 		  buf2[BUFSIZE];
 	char 		  buf3[BUFSIZE];
-
-	if (!symbol_exists("pci_devices"))
-		error(FATAL, "no PCI devices found on this system.\n");
 
 	BZERO(&pcilist_data, sizeof(struct list_data));
 

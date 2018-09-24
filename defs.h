@@ -2038,6 +2038,17 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long memcg_cache_params_children_node;
 	long task_struct_pid_links;
 	long kernel_symbol_value;
+	long pci_dev_dev;
+        long pci_dev_hdr_type;
+        long pci_dev_pcie_flags_reg;
+        long pci_bus_node;
+        long pci_bus_devices;
+        long pci_bus_dev;
+        long pci_bus_children;
+        long pci_bus_parent;
+        long pci_bus_self;
+	long device_kobj;
+	long kobject_name;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
