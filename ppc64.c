@@ -554,7 +554,10 @@ ppc64_init(int when)
 			ppc64_vmemmap_init();
 
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
-		if (THIS_KERNEL_VERSION >= LINUX(3,7,0))
+		if ((machdep->flags & VMEMMAP) &&
+		    (THIS_KERNEL_VERSION >= LINUX(4,19,0)))
+			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_4_19;
+		else if (THIS_KERNEL_VERSION >= LINUX(3,7,0))
 			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_3_7;
 		else
 			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;

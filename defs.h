@@ -4073,6 +4073,7 @@ struct efi_memory_desc_t {
 #define _SECTION_SIZE_BITS	24
 #define _MAX_PHYSMEM_BITS	44
 #define _MAX_PHYSMEM_BITS_3_7   46
+#define _MAX_PHYSMEM_BITS_4_19  47
 
 #endif /* PPC64 */
 
