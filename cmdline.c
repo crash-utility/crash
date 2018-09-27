@@ -806,7 +806,7 @@ output_command_to_pids(void)
         char buf1[BUFSIZE];
         char buf2[BUFSIZE];
         char lookfor[BUFSIZE+2];
-        char *pid, *name, *status, *p_pid, *pgrp;
+        char *pid, *name, *status, *p_pid, *pgrp, *comm;
 	char *arglist[MAXARGS];
 	int argc;
 	FILE *pipe;
@@ -815,7 +815,8 @@ output_command_to_pids(void)
 	retries = 0;
 	shell_has_exited = FALSE;
 	pc->pipe_pid = pc->pipe_shell_pid = 0;
-        sprintf(lookfor, "(%s)", pc->pipe_command);
+	comm = strrchr(pc->pipe_command, '/');
+	sprintf(lookfor, "(%s)", comm ? ++comm : pc->pipe_command);
 	stall(1000);
 retry:
         if (is_directory("/proc") && (dirp = opendir("/proc"))) {
