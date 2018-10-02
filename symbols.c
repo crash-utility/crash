@@ -9744,6 +9744,28 @@ dump_offset_table(char *spec, ulong makestruct)
         fprintf(fp, "                pci_bus_number: %ld\n",
         	OFFSET(pci_bus_number));
 
+        fprintf(fp, "                   pci_dev_dev: %ld\n",
+        	OFFSET(pci_dev_dev));
+        fprintf(fp, "              pci_dev_hdr_type: %ld\n",
+        	OFFSET(pci_dev_hdr_type));
+        fprintf(fp, "        pci_dev_pcie_flags_reg: %ld\n",
+        	OFFSET(pci_dev_pcie_flags_reg));
+        fprintf(fp, "                  pci_bus_node: %ld\n",
+        	OFFSET(pci_bus_node));
+        fprintf(fp, "               pci_bus_devices: %ld\n",
+        	OFFSET(pci_bus_devices));
+        fprintf(fp, "                   pci_bus_dev: %ld\n",
+        	OFFSET(pci_bus_dev));
+        fprintf(fp, "              pci_bus_children: %ld\n",
+        	OFFSET(pci_bus_children));
+        fprintf(fp, "                pci_bus_parent: %ld\n",
+        	OFFSET(pci_bus_parent));
+        fprintf(fp, "                  pci_bus_self: %ld\n",
+        	OFFSET(pci_bus_self));
+        fprintf(fp, "                   device_kobj: %ld\n",
+        	OFFSET(device_kobj));
+        fprintf(fp, "                  kobject_name: %ld\n",
+        	OFFSET(kobject_name));
 
         fprintf(fp, "         resource_entry_t_from: %ld\n",
         	OFFSET(resource_entry_t_from));
