@@ -5963,6 +5963,12 @@ struct ppc64_elf_prstatus {
 
 #ifdef PPC64
 
+struct ppc64_opal {
+	uint64_t base;
+	uint64_t entry;
+	uint64_t size;
+};
+
 struct ppc64_vmemmap {
         unsigned long phys;
         unsigned long virt;
@@ -6013,6 +6019,7 @@ struct machine_specific {
 	ulong _page_accessed;
 	int (*is_kvaddr)(ulong);
 	int (*is_vmaddr)(ulong);
+	struct ppc64_opal opal;
 };
 
 void ppc64_init(int);
@@ -6030,6 +6037,7 @@ void ppc64_dump_machdep_table(ulong);
  * in the kernel is also 0x40.
  */
 #define RADIX_MMU       (0x40)
+#define OPAL_FW         (0x80)
 
 #define REGION_SHIFT       (60UL)
 #define REGION_ID(addr)    (((unsigned long)(addr)) >> REGION_SHIFT)
