@@ -2049,6 +2049,15 @@ struct offset_table {                    /* stash of commonly-used offsets */
         long pci_bus_self;
 	long device_kobj;
 	long kobject_name;
+	long memory_block_dev;
+	long memory_block_start_section_nr;
+	long memory_block_end_section_nr;
+	long memory_block_state;
+	long memory_block_nid;
+	long mem_section_pageblock_flags;
+	long bus_type_p;
+	long device_private_device;
+	long device_private_knode_bus;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

@@ -255,13 +255,14 @@ static void PG_slab_flag_init(void);
 static ulong nr_blockdev_pages(void);
 void sparse_mem_init(void);
 void dump_mem_sections(int);
+void dump_memory_blocks(int);
 void list_mem_sections(void);
 ulong sparse_decode_mem_map(ulong, ulong);
 char *read_mem_section(ulong);
 ulong nr_to_section(ulong);
 int valid_section(ulong);
 int section_has_mem_map(ulong);
-ulong section_mem_map_addr(ulong);
+ulong section_mem_map_addr(ulong, int);
 ulong valid_section_nr(ulong);
 ulong pfn_to_map(ulong);
 static int get_nodes_online(void);
@@ -5528,7 +5529,7 @@ dump_mem_map_SPARSEMEM(struct meminfo *mi)
 			pc->curcmd_flags |= HEADER_PRINTED;
 		}
 
-		pp = section_mem_map_addr(section);
+		pp = section_mem_map_addr(section, 0);
 		pp = sparse_decode_mem_map(pp, section_nr);
 		phys = (physaddr_t) section_nr * PAGES_PER_SECTION() * PAGESIZE();
 		section_size = PAGES_PER_SECTION();
@@ -13389,7 +13390,7 @@ is_page_ptr(ulong addr, physaddr_t *phys)
 		nr_mem_sections = vt->max_mem_section_nr+1;
 	        for (nr = 0; nr < nr_mem_sections ; nr++) {
 	                if ((sec_addr = valid_section_nr(nr))) {
-	                        coded_mem_map = section_mem_map_addr(sec_addr);
+	                        coded_mem_map = section_mem_map_addr(sec_addr, 0);
 	                        mem_map = sparse_decode_mem_map(coded_mem_map, nr);
 				end_mem_map = mem_map + (PAGES_PER_SECTION() * SIZE(page));
 
@@ -16354,8 +16355,10 @@ dump_memory_nodes(int initialize)
 		vt->numnodes = n;
 	}
 
-	if (IS_SPARSEMEM())
+	if (IS_SPARSEMEM()) {
 		dump_mem_sections(initialize);
+		dump_memory_blocks(initialize);
+	}
 }
 
 /*
@@ -17140,7 +17143,7 @@ section_has_mem_map(ulong addr)
 }
 
 ulong 
-section_mem_map_addr(ulong addr)
+section_mem_map_addr(ulong addr, int raw)
 {   
 	char *mem_section;
 	ulong map;
@@ -17148,7 +17151,8 @@ section_mem_map_addr(ulong addr)
 	if ((mem_section = read_mem_section(addr))) {
 		map = ULONG(mem_section + 
 			OFFSET(mem_section_section_mem_map));
-		map &= SECTION_MAP_MASK;
+		if (!raw)
+			map &= SECTION_MAP_MASK;
 		return map;
 	}
 	return 0;
@@ -17179,7 +17183,7 @@ pfn_to_map(ulong pfn)
 
 	if (section_has_mem_map(section)) {
 		page_offset = pfn - section_nr_to_pfn(section_nr);
-		coded_mem_map = section_mem_map_addr(section);
+		coded_mem_map = section_mem_map_addr(section, 0);
 		mem_map = sparse_decode_mem_map(coded_mem_map, section_nr) +
 			(page_offset * SIZE(page));
 		return mem_map;
@@ -17188,16 +17192,33 @@ pfn_to_map(ulong pfn)
 	return 0;
 }
 
+static void
+fill_mem_section_state(ulong state, char *buf)
+{
+	int bufidx = 0;
+
+	memset(buf, 0, sizeof(*buf) * BUFSIZE);
+
+	if (state & SECTION_MARKED_PRESENT)
+		bufidx += sprintf(buf + bufidx, "%s", "P");
+	if (state & SECTION_HAS_MEM_MAP)
+		bufidx += sprintf(buf + bufidx, "%s", "M");
+	if (state & SECTION_IS_ONLINE)
+		bufidx += sprintf(buf + bufidx, "%s", "O");
+}
+
 void 
 dump_mem_sections(int initialize)
 {
 	ulong nr, max, addr;
 	ulong nr_mem_sections;
 	ulong coded_mem_map, mem_map, pfn;
+	char statebuf[BUFSIZE];
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
 	char buf4[BUFSIZE];
+	char buf5[BUFSIZE];
 
 	nr_mem_sections = NR_MEM_SECTIONS();
 
@@ -17212,19 +17233,23 @@ dump_mem_sections(int initialize)
 
 	fprintf(fp, "\n");
 	pad_line(fp, BITS32() ? 59 : 67, '-');
-        fprintf(fp, "\n\nNR  %s  %s  %s  PFN\n",
+	fprintf(fp, "\n\nNR  %s  %s  %s  %s PFN\n",
                 mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "SECTION"),
                 mkstring(buf2, MAX(VADDR_PRLEN,strlen("CODED_MEM_MAP")), 
 		CENTER|LJUST, "CODED_MEM_MAP"),
-                mkstring(buf3, VADDR_PRLEN, CENTER|LJUST, "MEM_MAP"));
+		mkstring(buf3, VADDR_PRLEN, CENTER|LJUST, "MEM_MAP"),
+		mkstring(buf4, strlen("STATE"), CENTER, "STATE"));
 
 	for (nr = 0; nr < nr_mem_sections ; nr++) {
 		if ((addr = valid_section_nr(nr))) {
-			coded_mem_map = section_mem_map_addr(addr);
+			coded_mem_map = section_mem_map_addr(addr, 0);
 			mem_map = sparse_decode_mem_map(coded_mem_map,nr);
 			pfn = section_nr_to_pfn(nr);
+			fill_mem_section_state(section_mem_map_addr(addr, 1),
+						statebuf);
 
-        		fprintf(fp, "%2ld  %s  %s  %s  %s\n",
+
+			fprintf(fp, "%2ld  %s  %s  %s  %s %s\n",
                 		nr,
                 		mkstring(buf1, VADDR_PRLEN,
                         	CENTER|LONG_HEX, MKSTR(addr)),
@@ -17233,13 +17258,246 @@ dump_mem_sections(int initialize)
                         	CENTER|LONG_HEX|RJUST, MKSTR(coded_mem_map)),
                 		mkstring(buf3, VADDR_PRLEN,
                         	CENTER|LONG_HEX|RJUST, MKSTR(mem_map)),
+				mkstring(buf4, strlen("STATE"), CENTER, statebuf),
 				pc->output_radix == 10 ?
-                		mkstring(buf4, VADDR_PRLEN,
+				mkstring(buf5, VADDR_PRLEN,
                         	LONG_DEC|LJUST, MKSTR(pfn)) :
-                		mkstring(buf4, VADDR_PRLEN,
+				mkstring(buf5, VADDR_PRLEN,
                         	LONG_HEX|LJUST, MKSTR(pfn)));
 		}
 	}
+}
+
+#define MEM_ONLINE		(1<<0)
+#define MEM_GOING_OFFLINE	(1<<1)
+#define MEM_OFFLINE		(1<<2)
+#define MEM_GOING_ONLINE	(1<<3)
+#define MEM_CANCEL_ONLINE	(1<<4)
+#define MEM_CANCEL_OFFLINE	(1<<5)
+
+static void
+fill_memory_block_state(ulong memblock, char *buf)
+{
+	ulong state;
+
+	memset(buf, 0, sizeof(*buf) * BUFSIZE);
+
+	readmem(memblock + OFFSET(memory_block_state), KVADDR, &state,
+		sizeof(void *), "memory_block state", FAULT_ON_ERROR);
+
+	switch (state) {
+	case MEM_ONLINE:
+		sprintf(buf, "%s", "ONLINE");
+		break;
+	case MEM_GOING_OFFLINE:
+		sprintf(buf, "%s", "GOING_OFFLINE");
+		break;
+	case MEM_OFFLINE:
+		sprintf(buf, "%s", "OFFLINE");
+		break;
+	case MEM_GOING_ONLINE:
+		sprintf(buf, "%s", "GOING_ONLINE");
+		break;
+	case MEM_CANCEL_ONLINE:
+		sprintf(buf, "%s", "CANCEL_ONLINE");
+		break;
+	case MEM_CANCEL_OFFLINE:
+		sprintf(buf, "%s",  "CANCEL_OFFLINE");
+		break;
+	default:
+		sprintf(buf, "%s", "UNKNOWN");
+	}
+}
+
+static ulong
+pfn_to_phys(ulong pfn)
+{
+	return pfn << PAGE_SHIFT;
+}
+
+static void
+fill_memory_block_name(ulong memblock, char *name)
+{
+	ulong kobj, value;
+
+	memset(name, 0, sizeof(*name) * BUFSIZE);
+
+	kobj = memblock + OFFSET(memory_block_dev) + OFFSET(device_kobj);
+
+	readmem(kobj + OFFSET(kobject_name),
+		KVADDR, &value, sizeof(void *), "kobject name",
+		FAULT_ON_ERROR);
+
+	read_string(value, name, BUFSIZE-1);
+}
+
+static void
+fill_memory_block_srange(ulong start_sec, ulong end_sec, char *srange)
+{
+	memset(srange, 0, sizeof(*srange) * BUFSIZE);
+
+	if (start_sec == end_sec)
+		sprintf(srange, "%lu", start_sec);
+	else
+		sprintf(srange, "%lu-%lu", start_sec, end_sec);
+}
+
+static void
+print_memory_block(ulong memory_block)
+{
+	ulong start_sec, end_sec, start_pfn, end_pfn, nid;
+	char statebuf[BUFSIZE];
+	char srangebuf[BUFSIZE];
+	char name[BUFSIZE];
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char buf3[BUFSIZE];
+	char buf4[BUFSIZE];
+	char buf5[BUFSIZE];
+	char buf6[BUFSIZE];
+	char buf7[BUFSIZE];
+
+	readmem(memory_block + OFFSET(memory_block_start_section_nr), KVADDR,
+		&start_sec, sizeof(void *), "memory_block start_section_nr",
+		FAULT_ON_ERROR);
+	readmem(memory_block + OFFSET(memory_block_end_section_nr), KVADDR,
+		&end_sec, sizeof(void *), "memory_block end_section_nr",
+		FAULT_ON_ERROR);
+
+	start_pfn = section_nr_to_pfn(start_sec);
+	end_pfn = section_nr_to_pfn(end_sec + 1);
+	fill_memory_block_state(memory_block, statebuf);
+	fill_memory_block_name(memory_block, name);
+	fill_memory_block_srange(start_sec, end_sec, srangebuf);
+
+	if (MEMBER_EXISTS("memory_block", "nid")) {
+		readmem(memory_block + OFFSET(memory_block_nid), KVADDR, &nid,
+			sizeof(void *), "memory_block nid", FAULT_ON_ERROR);
+		fprintf(fp, " %s %s %s - %s %s %s %s\n",
+			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX,
+			MKSTR(memory_block)),
+			mkstring(buf2, 12, CENTER, name),
+			mkstring(buf3, PADDR_PRLEN, RJUST|LONG_HEX,
+			MKSTR(pfn_to_phys(start_pfn))),
+			mkstring(buf4, PADDR_PRLEN, LJUST|LONG_HEX,
+			MKSTR(pfn_to_phys(end_pfn) - 1)),
+			mkstring(buf5, strlen("NODE"), CENTER|LONG_DEC,
+			MKSTR(nid)),
+			mkstring(buf6, strlen("CANCEL_OFFLINE"), LJUST,
+			statebuf),
+			mkstring(buf7, 12, LJUST, srangebuf));
+	} else
+		fprintf(fp, " %s %s %s - %s %s %s\n",
+			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX,
+			MKSTR(memory_block)),
+			mkstring(buf2, 10, CENTER, name),
+			mkstring(buf3, PADDR_PRLEN, RJUST|LONG_HEX,
+			MKSTR(pfn_to_phys(start_pfn))),
+			mkstring(buf4, PADDR_PRLEN, LJUST|LONG_HEX,
+			MKSTR(pfn_to_phys(end_pfn) - 1)),
+			mkstring(buf5, strlen("CANCEL_OFFLINE"), LJUST,
+			statebuf),
+			mkstring(buf6, 12, LJUST, srangebuf));
+}
+
+static void
+init_memory_block_offset(void)
+{
+	MEMBER_OFFSET_INIT(bus_type_p, "bus_type", "p");
+	MEMBER_OFFSET_INIT(subsys_private_klist_devices,
+				"subsys_private", "klist_devices");
+	MEMBER_OFFSET_INIT(klist_k_list, "klist", "k_list");
+	MEMBER_OFFSET_INIT(klist_node_n_node, "klist_node", "n_node");
+	MEMBER_OFFSET_INIT(device_private_knode_bus,
+				"device_private", "knode_bus");
+	MEMBER_OFFSET_INIT(device_private_device, "device_private", "device");
+	MEMBER_OFFSET_INIT(memory_block_dev, "memory_block", "dev");
+	MEMBER_OFFSET_INIT(memory_block_start_section_nr,
+				"memory_block", "start_section_nr");
+	MEMBER_OFFSET_INIT(memory_block_end_section_nr,
+				"memory_block", "end_section_nr");
+	MEMBER_OFFSET_INIT(memory_block_state, "memory_block", "state");
+	if (MEMBER_EXISTS("memory_block", "nid"))
+		MEMBER_OFFSET_INIT(memory_block_nid, "memory_block", "nid");
+}
+
+static void
+init_memory_block(struct list_data *ld, int *klistcnt, ulong **klistbuf)
+{
+	ulong memory_subsys = symbol_value("memory_subsys");
+	ulong private, klist, start;
+
+	init_memory_block_offset();
+
+	readmem(memory_subsys + OFFSET(bus_type_p), KVADDR, &private,
+		sizeof(void *), "memory_subsys.private", FAULT_ON_ERROR);
+	klist = private + OFFSET(subsys_private_klist_devices) +
+					OFFSET(klist_k_list);
+	BZERO(ld, sizeof(struct list_data));
+
+	readmem(klist, KVADDR, &start,
+		sizeof(void *), "klist klist", FAULT_ON_ERROR);
+
+	ld->start = start;
+	ld->end = klist;
+	ld->list_head_offset = OFFSET(klist_node_n_node) +
+					OFFSET(device_private_knode_bus);
+	hq_open();
+	*klistcnt = do_list(ld);
+	*klistbuf = (ulong *)GETBUF(*klistcnt * sizeof(ulong));
+	*klistcnt = retrieve_list(*klistbuf, *klistcnt);
+	hq_close();
+}
+
+void
+dump_memory_blocks(int initialize)
+{
+	ulong memory_block, device;
+	ulong *klistbuf;
+	int klistcnt, i;
+	struct list_data list_data;
+	char mb_hdr[BUFSIZE];
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char buf3[BUFSIZE];
+	char buf4[BUFSIZE];
+	char buf5[BUFSIZE];
+	char buf6[BUFSIZE];
+
+	if ((!STRUCT_EXISTS("memory_block")) ||
+				(!symbol_exists("memory_subsys")))
+		return;
+
+	if (initialize)
+		return;
+
+	init_memory_block(&list_data, &klistcnt, &klistbuf);
+
+	if (MEMBER_EXISTS("memory_block", "nid"))
+		sprintf(mb_hdr, "\n%s %s %s     %s %s %s\n",
+			mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "MEM_BLOCK"),
+			mkstring(buf2, 10, CENTER, "NAME"),
+			mkstring(buf3, PADDR_PRLEN*2 + 2, CENTER, "PHYSICAL RANGE"),
+			mkstring(buf4, strlen("NODE"), CENTER, "NODE"),
+			mkstring(buf5, strlen("CANCEL_OFFLINE"), LJUST, "STATE"),
+			mkstring(buf6, 12, LJUST, "SECTIONS"));
+	else
+		sprintf(mb_hdr, "\n%s %s %s     %s %s\n",
+			mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "MEM_BLOCK"),
+			mkstring(buf2, 10, CENTER, "NAME"),
+			mkstring(buf3, PADDR_PRLEN*2, CENTER, "PHYSICAL RANGE"),
+			mkstring(buf4, strlen("CANCEL_OFFLINE"), LJUST, "STATE"),
+			mkstring(buf5, 12, LJUST, "SECTIONS"));
+	fprintf(fp, "%s", mb_hdr);
+
+	for (i = 0; i < klistcnt; i++) {
+		readmem(klistbuf[i] + OFFSET(device_private_device), KVADDR,
+			&device, sizeof(void *), "device_private device",
+			FAULT_ON_ERROR);
+		memory_block = device - OFFSET(memory_block_dev);
+		print_memory_block(memory_block);
+	}
+	FREEBUF(klistbuf);
 }
 
 void 
@@ -17251,7 +17509,7 @@ list_mem_sections(void)
 
 	for (nr = 0; nr <= nr_mem_sections ; nr++) {
 		if ((addr = valid_section_nr(nr))) {
-			coded_mem_map = section_mem_map_addr(addr);
+			coded_mem_map = section_mem_map_addr(addr, 0);
 			fprintf(fp,
 			    "nr=%ld section = %lx coded_mem_map=%lx pfn=%ld mem_map=%lx\n",
 				nr,

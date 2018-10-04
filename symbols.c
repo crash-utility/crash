@@ -9960,6 +9960,18 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(tss_struct_ist));
 	fprintf(fp, "   mem_section_section_mem_map: %ld\n",
 		OFFSET(mem_section_section_mem_map));
+	fprintf(fp, "   mem_section_pageblock_flags: %ld\n",
+		OFFSET(mem_section_pageblock_flags));
+	fprintf(fp, "              memory_block_dev: %ld\n",
+		OFFSET(memory_block_dev));
+	fprintf(fp, "              memory_block_nid: %ld\n",
+		OFFSET(memory_block_nid));
+	fprintf(fp, " memory_block_start_section_nr: %ld\n",
+		OFFSET(memory_block_start_section_nr));
+	fprintf(fp, "   memory_block_end_section_nr: %ld\n",
+		OFFSET(memory_block_end_section_nr));
+	fprintf(fp, "            memory_block_state: %ld\n",
+		OFFSET(memory_block_state));
 
 	fprintf(fp, "  vcpu_guest_context_user_regs: %ld\n",
 		OFFSET(vcpu_guest_context_user_regs));
@@ -10053,6 +10065,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(unwind_idx_addr));
 	fprintf(fp, "               unwind_idx_insn: %ld\n",
 		OFFSET(unwind_idx_insn));
+	fprintf(fp, "                    bus_type_p: %ld\n",
+		OFFSET(bus_type_p));
 	fprintf(fp, "                 class_devices: %ld\n",
 		OFFSET(class_devices));
 	fprintf(fp, "                       class_p: %ld\n",
@@ -10063,6 +10077,10 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(device_knode_class));
 	fprintf(fp, "                   device_node: %ld\n",
 		OFFSET(device_node));
+	fprintf(fp, "         device_private_device: %ld\n",
+		OFFSET(device_private_device));
+	fprintf(fp, "      device_private_knode_bus: %ld\n",
+		OFFSET(device_private_knode_bus));
 	fprintf(fp, "                   gendisk_dev: %ld\n",
 		OFFSET(gendisk_dev));
 	fprintf(fp, "                  gendisk_kobj: %ld\n",
