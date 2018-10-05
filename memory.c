@@ -17312,7 +17312,7 @@ fill_memory_block_state(ulong memblock, char *buf)
 static ulong
 pfn_to_phys(ulong pfn)
 {
-	return pfn << PAGE_SHIFT;
+	return pfn << PAGESHIFT();
 }
 
 static void
