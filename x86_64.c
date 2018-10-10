@@ -394,8 +394,12 @@ x86_64_init(int when)
 				readmem(symbol_value("vmalloc_base"), KVADDR,
 					&machdep->machspec->vmalloc_start_addr,
 					sizeof(ulong), "vmalloc_base", FAULT_ON_ERROR);
-				machdep->machspec->vmalloc_end =
-					machdep->machspec->vmalloc_start_addr + TERABYTES(32) - 1;
+				if (machdep->flags & VM_5LEVEL)
+					machdep->machspec->vmalloc_end =
+						machdep->machspec->vmalloc_start_addr + TERABYTES(1280) - 1;
+				else
+					machdep->machspec->vmalloc_end =
+						machdep->machspec->vmalloc_start_addr + TERABYTES(32) - 1;
 				if (kernel_symbol_exists("vmemmap_base")) {
 					readmem(symbol_value("vmemmap_base"), KVADDR,
 						&machdep->machspec->vmemmap_vaddr, sizeof(ulong),
@@ -1645,7 +1649,8 @@ x86_64_IS_VMALLOC_ADDR(ulong vaddr)
 		(vaddr >= VSYSCALL_START && vaddr < VSYSCALL_END) ||
 		(machdep->machspec->cpu_entry_area_start && 
 		 vaddr >= machdep->machspec->cpu_entry_area_start &&
-		 vaddr <= machdep->machspec->cpu_entry_area_end));
+		 vaddr <= machdep->machspec->cpu_entry_area_end) ||
+		((machdep->flags & VM_5LEVEL) && vaddr > VMALLOC_END && vaddr < VMEMMAP_VADDR));
 }
 
 static int 
