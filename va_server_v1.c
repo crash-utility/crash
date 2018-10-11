@@ -253,7 +253,7 @@ u_long vas_find_end_v1(void)
 }
 int read_maps_v1(char *crash_file)
 {
-	int *cur_entry_p;
+	int *cur_entry_p, *cp;
 	int ret, items, blk_pos;
 
 	cur_entry_p = (int *)malloc(Page_Size);
@@ -266,25 +266,32 @@ int read_maps_v1(char *crash_file)
 	vas_file_p = fopen(crash_file, "r");
 	if(vas_file_p == (FILE *)0) {
 		printf("read_maps: bad ret from fopen for %s: %s\n", crash_file, strerror(errno));
+		free(cur_entry_p);
 		return -1;
 	}
 	ret = fseek(vas_file_p, (long)0, SEEK_SET);
 	if(ret == -1) {
 		printf("read_maps: unable to fseek in  %s, errno = %d\n", crash_file, ferror(vas_file_p));
+		free(cur_entry_p);
 		return -1;
 	}	
 	items = fread((void *)cur_entry_p, 1, Page_Size, vas_file_p);
 	if(items != Page_Size) {
 		printf("read_maps: unable to read header from %s, errno = %d\n", crash_file, ferror(vas_file_p));
+		free(cur_entry_p);
 		return -1;
 	}
 	ret = -1;
-	while ((blk_pos = *cur_entry_p++)) {
-		if (read_map_v1(blk_pos))
+	cp = cur_entry_p;
+	while ((blk_pos = *cp++)) {
+		if (read_map_v1(blk_pos)) {
+			free(cur_entry_p);
 			return -1;
+		}
 		ret = 0;
 	}
 
+	free(cur_entry_p);
 	return ret;
 }
 
@@ -308,21 +315,28 @@ int read_map_v1(int blk_pos)
 	ret = fseek(vas_file_p, (long)(blk_pos*Page_Size), SEEK_SET);
 	if(ret == -1) {
 		console("va_server: unable to fseek, err = %d\n", ferror(vas_file_p));
+		free(hdr);
 		free(disk_hdr);
 		return -1;
 	}
 	items = fread((void *)disk_hdr, 1, Page_Size, vas_file_p);
 	if(items != Page_Size) {
+		free(hdr);
+		free(disk_hdr);
 		return -1;
 	}
 	if(disk_hdr->magic[0] != CRASH_MAGIC) {
 		console("va_server: bad magic 0x%lx\n", disk_hdr->magic[0]);
+		free(hdr);
+		free(disk_hdr);
 		return -1;
 	}
 	ret = fseek(vas_file_p, (long)((blk_pos + disk_hdr->map_block) * disk_hdr->blk_size), SEEK_SET);
 
 	if(ret == -1) {
 		printf("va_server: unable to fseek, err = %d\n", ferror(vas_file_p));
+		free(hdr);
+		free(disk_hdr);
 		return -1;
 	}
 
@@ -338,6 +352,8 @@ int read_map_v1(int blk_pos)
 		      vas_file_p);
 	if(items != hdr->map_entries) {
 		printf("unable to read map entries, err = %d\n", errno);
+		free(hdr);
+		free(disk_hdr);
 		return -1;
 	}
 

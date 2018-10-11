@@ -2775,8 +2775,10 @@ xc_core_dump_elfnote(off_t sh_offset, size_t sh_size, int store)
 		index += sizeof(struct elfnote) + elfnote->descsz;
 	}
 
-	if (!store)
+	if (!store) {
+		free(notes_buffer);
 		return;
+	}
 
 	if (elfnote_header) {
 		xd->xc_core.header.xch_magic = elfnote_header->xch_magic;
@@ -2798,6 +2800,7 @@ xc_core_dump_elfnote(off_t sh_offset, size_t sh_size, int store)
 		xd->xc_core.format_version = format_version->version;
 	}
 
+	free(notes_buffer);
 }
 
 /*

@@ -184,6 +184,7 @@ lkcd_dump_init_v8_arch(dump_header_t *dh)
 
 	memcpy(&dump_header_asm_v8, &arch_hdr, sizeof(dump_header_asm_t));
 
+	free(hdr_buf);
 	return 0;
 
 err:

@@ -846,8 +846,10 @@ kvmdump_mapfile_exists(void)
 
 	sprintf(filename, "%s.map", pc->dumpfile);
 
-	if (!file_exists(filename, &stat) || !S_ISREG(stat.st_mode))
+	if (!file_exists(filename, &stat) || !S_ISREG(stat.st_mode)) {
+		free(filename);
 		return FALSE;
+	}
 
 	if (is_kvmdump_mapfile(filename)) {
 		pc->kvmdump_mapfile = filename;

@@ -1319,8 +1319,10 @@ is_shell_script(char *s)
         if ((fd = open(s, O_RDONLY)) < 0) 
                 return FALSE;
         
-        if (isatty(fd)) 
+        if (isatty(fd)) {
+                close(fd);
                 return FALSE;
+	}
         
         if (read(fd, interp, 2) != 2) {
                 close(fd);

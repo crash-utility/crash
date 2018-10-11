@@ -819,6 +819,7 @@ try_eh_frame:
 				error(WARNING, "cannot read %s data from %s\n",
 			        	is_ehframe ? ".eh_frame" : ".debug_frame", pc->namelist);
 			free(unwind_table);
+			close(fd);
 			return;
 		}
 

@@ -3898,12 +3898,10 @@ is_bfd_format(char *filename)
 #else
         struct bfd *bfd;
 #endif
-        char **matching;
-
         if ((bfd = bfd_openr(filename, NULL)) == NULL) 
                 return FALSE;
         
-        if (!bfd_check_format_matches(bfd, bfd_object, &matching)) {
+        if (!bfd_check_format_matches(bfd, bfd_object, NULL)) {
                 bfd_close(bfd);
                 return FALSE;
         }

@@ -313,20 +313,27 @@ int read_map(char *crash_file)
 	ret = fseek(vas_file_p, (long)0, SEEK_SET);
 	if(ret == -1) {
 		printf("va_server: unable to fseek, err = %d\n", ferror(vas_file_p));
+		free(hdr);
 		free(disk_hdr);
 		return -1;
 	}
 	items = fread((void *)disk_hdr, 1, Page_Size, vas_file_p);
 	if(items != Page_Size) {
+		free(hdr);
+		free(disk_hdr);
 		return -1;
 	}
 	if(disk_hdr->magic[0] != CRASH_MAGIC) {
+		free(hdr);
+		free(disk_hdr);
 		return -1;
 	}
 	ret = fseek(vas_file_p, (long)((disk_hdr->map_block) * disk_hdr->blk_size), SEEK_SET);
 
 	if(ret == -1) {
 		printf("va_server: unable to fseek, err = %d\n", ferror(vas_file_p));
+		free(hdr);
+		free(disk_hdr);
 		return -1;
 	}
 
@@ -338,10 +345,13 @@ int read_map(char *crash_file)
 		      vas_file_p);
 	if(items != disk_hdr->map_blocks) {
 		printf("unable to read map entries, err = %d\n", errno);
+		free(hdr);
+		free(disk_hdr);
 		return -1;
 	}
 
 	vas_map_base = hdr;
+	free(disk_hdr);
 	return 0;
 }
 
