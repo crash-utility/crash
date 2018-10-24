@@ -3278,6 +3278,18 @@ x86_64_in_alternate_stack(int cpu, ulong rsp)
 	return FALSE;
 }
 
+static char *
+x86_64_exception_RIP_message(struct bt_info *bt, ulong rip)
+{
+	physaddr_t phys;
+	
+	if (IS_VMALLOC_ADDR(rip) && 
+	    machdep->kvtop(bt->tc, rip, &phys, 0))
+		return ("no symbolic reference");
+ 
+	return ("unknown or invalid address");
+}
+
 #define STACK_TRANSITION_ERRMSG_E_I_P \
 "cannot transition from exception stack to IRQ stack to current process stack:\n    exception stack pointer: %lx\n          IRQ stack pointer: %lx\n      process stack pointer: %lx\n         current stack base: %lx\n" 
 #define STACK_TRANSITION_ERRMSG_E_P \
@@ -3389,7 +3401,7 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 				fprintf(ofp, (*gdb_output_radix == 16) ?
 					"+0x%lx" : "+%ld", offset);
 		} else
-			fprintf(ofp, "unknown or invalid address");
+			fprintf(ofp, "%s", x86_64_exception_RIP_message(bt, bt->instptr));
 		fprintf(ofp, "]\n");
 		if (KVMDUMP_DUMPFILE())
 			kvmdump_display_regs(bt->tc->processor, ofp);
@@ -4477,9 +4489,9 @@ x86_64_exception_frame(ulong flags, ulong kvaddr, char *local,
 						    (*gdb_output_radix == 16) ? 
 						    "+0x%lx" : "+%ld", 
 						    offset);
-				} else 
-					fprintf(ofp, 
-						"unknown or invalid address");
+				} else
+					fprintf(ofp, "%s", 
+						x86_64_exception_RIP_message(bt, rip));
 				fprintf(ofp, "]\n");
 			}
 		} else if (!(cs & 3)) {
@@ -4491,7 +4503,7 @@ x86_64_exception_frame(ulong flags, ulong kvaddr, char *local,
 						"+0x%lx" : "+%ld", offset);
 				bt->eframe_ip = rip;
 			} else
-                		fprintf(ofp, "unknown or invalid address");
+				fprintf(ofp, "%s", x86_64_exception_RIP_message(bt, rip));
 			fprintf(ofp, "]\n");
 		}
 		fprintf(ofp, "    RIP: %016lx  RSP: %016lx  RFLAGS: %08lx\n", 
@@ -4635,6 +4647,7 @@ x86_64_eframe_verify(struct bt_info *bt, long kvaddr, long cs, long ss,
 	int estack;
 	struct syment *sp;
 	ulong offset, exception;
+	physaddr_t phys;
 
 	if ((rflags & RAZ_MASK) || !(rflags & 0x2))
 		return FALSE;
@@ -4698,6 +4711,12 @@ x86_64_eframe_verify(struct bt_info *bt, long kvaddr, long cs, long ss,
 	if ((cs == 0x10) && kvaddr) {
                 if (is_kernel_text(rip) && IS_KVADDR(rsp) &&
 		    x86_64_in_exception_stack(bt, NULL))
+			return TRUE;
+	}
+
+	if ((cs == 0x10) && kvaddr) {
+                if (IS_KVADDR(rsp) && IS_VMALLOC_ADDR(rip) && 
+		    machdep->kvtop(bt->tc, rip, &phys, 0))
 			return TRUE;
 	}
 
