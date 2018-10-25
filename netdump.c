@@ -4236,13 +4236,12 @@ proc_kcore_init_32(FILE *fp)
 {
 	Elf32_Ehdr *elf32;
 	Elf32_Phdr *load32;
+	Elf32_Phdr *notes32;
 	char eheader[MAX_KCORE_ELF_HEADER_SIZE];
 	char buf[BUFSIZE];
-	size_t size;
+	size_t load_size, notes_size;
 
-	size = MAX_KCORE_ELF_HEADER_SIZE;
-
-	if (read(pc->mfd, eheader, size) != size) {
+	if (read(pc->mfd, eheader, MAX_KCORE_ELF_HEADER_SIZE) != MAX_KCORE_ELF_HEADER_SIZE) {
 		sprintf(buf, "/proc/kcore: read");
 		perror(buf);
 		goto bailout;
@@ -4255,18 +4254,27 @@ proc_kcore_init_32(FILE *fp)
 	}
 
 	elf32 = (Elf32_Ehdr *)&eheader[0];
+	notes32 = (Elf32_Phdr *)&eheader[sizeof(Elf32_Ehdr)];
 	load32 = (Elf32_Phdr *)&eheader[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
 
 	pkd->segments = elf32->e_phnum - 1;
 
-	size = (ulong)(load32+(elf32->e_phnum)) - (ulong)elf32;
-	if ((pkd->elf_header = (char *)malloc(size)) == NULL) {
+	notes_size = load_size = 0;
+	if (notes32->p_type == PT_NOTE)
+		notes_size = notes32->p_offset + notes32->p_filesz;
+	if (notes32->p_type == PT_LOAD)
+		load_size = (ulong)(load32+(elf32->e_phnum)) - (ulong)elf32;
+	pkd->header_size = MAX(notes_size, load_size);
+	if (!pkd->header_size)
+		pkd->header_size = MAX_KCORE_ELF_HEADER_SIZE;
+
+	if ((pkd->elf_header = (char *)malloc(pkd->header_size)) == NULL) {
 		error(INFO, "/proc/kcore: cannot malloc ELF header buffer\n");
 		clean_exit(1);
 	}
 
-	BCOPY(&eheader[0], &pkd->elf_header[0], size);	
-	pkd->elf32 = (Elf32_Ehdr *)pkd->elf_header;
+	BCOPY(&eheader[0], &pkd->elf_header[0], pkd->header_size);	
+	pkd->notes32 = (Elf32_Phdr *)&pkd->elf_header[sizeof(Elf32_Ehdr)];
 	pkd->load32 = (Elf32_Phdr *)
 		&pkd->elf_header[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
 	pkd->flags |= KCORE_ELF32;
@@ -4284,13 +4292,12 @@ proc_kcore_init_64(FILE *fp)
 {
 	Elf64_Ehdr *elf64;
 	Elf64_Phdr *load64;
+	Elf64_Phdr *notes64;
 	char eheader[MAX_KCORE_ELF_HEADER_SIZE];
 	char buf[BUFSIZE];
-	size_t size;
+	size_t load_size, notes_size;
 
-	size = MAX_KCORE_ELF_HEADER_SIZE;
-
-	if (read(pc->mfd, eheader, size) != size) {
+	if (read(pc->mfd, eheader, MAX_KCORE_ELF_HEADER_SIZE) != MAX_KCORE_ELF_HEADER_SIZE) {
 		sprintf(buf, "/proc/kcore: read");
 		perror(buf);
 		goto bailout;
@@ -4303,18 +4310,28 @@ proc_kcore_init_64(FILE *fp)
 	}
 
 	elf64 = (Elf64_Ehdr *)&eheader[0];
+	notes64 = (Elf64_Phdr *)&eheader[sizeof(Elf64_Ehdr)];
 	load64 = (Elf64_Phdr *)&eheader[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
 
 	pkd->segments = elf64->e_phnum - 1;
 
-	size = (ulong)(load64+(elf64->e_phnum)) - (ulong)elf64;
-	if ((pkd->elf_header = (char *)malloc(size)) == NULL) {
+	notes_size = load_size = 0;
+	if (notes64->p_type == PT_NOTE)
+		notes_size = notes64->p_offset + notes64->p_filesz;
+	if (notes64->p_type == PT_LOAD)
+		load_size = (ulong)(load64+(elf64->e_phnum)) - (ulong)elf64;
+
+	pkd->header_size = MAX(notes_size, load_size);
+	if (!pkd->header_size)
+		pkd->header_size = MAX_KCORE_ELF_HEADER_SIZE;
+
+	if ((pkd->elf_header = (char *)malloc(pkd->header_size)) == NULL) {
 		error(INFO, "/proc/kcore: cannot malloc ELF header buffer\n");
 		clean_exit(1);
 	}
 
-	BCOPY(&eheader[0], &pkd->elf_header[0], size);	
-	pkd->elf64 = (Elf64_Ehdr *)pkd->elf_header;
+	BCOPY(&eheader[0], &pkd->elf_header[0], pkd->header_size);	
+	pkd->notes64 = (Elf64_Phdr *)&pkd->elf_header[sizeof(Elf64_Ehdr)];
 	pkd->load64 = (Elf64_Phdr *)
 		&pkd->elf_header[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
 	pkd->flags |= KCORE_ELF64;
@@ -4331,8 +4348,12 @@ int
 kcore_memory_dump(FILE *ofp)
 {
 	int i, others;
-	Elf32_Phdr *lp32;
-	Elf64_Phdr *lp64;
+	Elf32_Phdr *ph32;
+	Elf64_Phdr *ph64;
+	Elf32_Nhdr *note32;
+	Elf64_Nhdr *note64;
+	size_t tot, len;
+	char *name, *ptr, buf[BUFSIZE];
 
 	fprintf(ofp, "proc_kcore_data:\n");
 	fprintf(ofp, "       flags: %x (", pkd->flags);
@@ -4347,45 +4368,209 @@ kcore_memory_dump(FILE *ofp)
 	fprintf(ofp, "    segments: %d\n",
 		pkd->segments);
 	fprintf(ofp, "  elf_header: %lx\n", (ulong)pkd->elf_header);
-	fprintf(ofp, "       elf64: %lx\n", (ulong)pkd->elf64);
+	fprintf(ofp, " header_size: %ld\n", (ulong)pkd->header_size);
+	fprintf(ofp, "     notes64: %lx\n", (ulong)pkd->notes64);
 	fprintf(ofp, "      load64: %lx\n", (ulong)pkd->load64);
-	fprintf(ofp, "       elf32: %lx\n", (ulong)pkd->elf32);
-	fprintf(ofp, "      load32: %lx\n\n", (ulong)pkd->load32);
+	fprintf(ofp, "     notes32: %lx\n", (ulong)pkd->notes32);
+	fprintf(ofp, "      load32: %lx\n", (ulong)pkd->load32);
+	fprintf(ofp, "  vmcoreinfo: %lx\n\n", (ulong)pkd->vmcoreinfo);
 
-	for (i = 0; i < pkd->segments; i++) {
-		if (pkd->flags & KCORE_ELF32)
-			break;
-
-		lp64 = pkd->load64 + i;
-
-		fprintf(ofp, "  Elf64_Phdr:\n");
-		fprintf(ofp, "        p_type: %x\n", lp64->p_type);
-		fprintf(ofp, "       p_flags: %x\n", lp64->p_flags);
-		fprintf(ofp, "      p_offset: %llx\n", (ulonglong)lp64->p_offset);
-		fprintf(ofp, "       p_vaddr: %llx\n", (ulonglong)lp64->p_vaddr);
-		fprintf(ofp, "       p_paddr: %llx\n", (ulonglong)lp64->p_paddr);
-		fprintf(ofp, "      p_filesz: %llx\n", (ulonglong)lp64->p_filesz);
-		fprintf(ofp, "       p_memsz: %llx\n", (ulonglong)lp64->p_memsz);
-		fprintf(ofp, "       p_align: %lld\n", (ulonglong)lp64->p_align);
-		fprintf(ofp, "\n");
-	}
-
-	for (i = 0; i < pkd->segments; i++) {
-		if (pkd->flags & KCORE_ELF64)
-			break;
-
-		lp32 = pkd->load32 + i;
+	if (pkd->flags & KCORE_ELF32) {
+		ph32 = pkd->notes32;
 
 		fprintf(ofp, "  Elf32_Phdr:\n");
-		fprintf(ofp, "        p_type: %x\n", lp32->p_type);
-		fprintf(ofp, "       p_flags: %x\n", lp32->p_flags);
-		fprintf(ofp, "      p_offset: %x\n", lp32->p_offset);
-		fprintf(ofp, "       p_vaddr: %x\n", lp32->p_vaddr);
-		fprintf(ofp, "       p_paddr: %x\n", lp32->p_paddr);
-		fprintf(ofp, "      p_filesz: %x\n", lp32->p_filesz);
-		fprintf(ofp, "       p_memsz: %x\n", lp32->p_memsz);
-		fprintf(ofp, "       p_align: %d\n", lp32->p_align);
+		fprintf(ofp, "        p_type: %x ", ph32->p_type);
+		switch (ph32->p_type)
+		{
+		case PT_NOTE:
+			fprintf(ofp, "(PT_NOTE)\n");
+			break;
+		case PT_LOAD:
+			fprintf(ofp, "(PT_LOAD)\n");
+			break;
+		default:
+			fprintf(ofp, "(unknown)\n");
+			break;
+		}
+		fprintf(ofp, "       p_flags: %x\n", ph32->p_flags);
+		fprintf(ofp, "      p_offset: %x\n", ph32->p_offset);
+		fprintf(ofp, "       p_vaddr: %x\n", ph32->p_vaddr);
+		fprintf(ofp, "       p_paddr: %x\n", ph32->p_paddr);
+		fprintf(ofp, "      p_filesz: %d\n", ph32->p_filesz);
+		fprintf(ofp, "       p_memsz: %d\n", ph32->p_memsz);
+		fprintf(ofp, "       p_align: %d\n", ph32->p_align);
 		fprintf(ofp, "\n");
+
+		for (i = 0; i < pkd->segments; i++) {
+			ph32 = pkd->load32 + i;
+	
+			fprintf(ofp, "  Elf32_Phdr:\n");
+			fprintf(ofp, "        p_type: %x ", ph32->p_type);
+			switch (ph32->p_type)
+			{
+			case PT_NOTE:
+				fprintf(ofp, "(PT_NOTE)\n");
+				break;
+			case PT_LOAD:
+				fprintf(ofp, "(PT_LOAD)\n");
+				break;
+			default:
+				fprintf(ofp, "(unknown)\n");
+				break;
+			}
+			fprintf(ofp, "       p_flags: %x\n", ph32->p_flags);
+			fprintf(ofp, "      p_offset: %x\n", ph32->p_offset);
+			fprintf(ofp, "       p_vaddr: %x\n", ph32->p_vaddr);
+			fprintf(ofp, "       p_paddr: %x\n", ph32->p_paddr);
+			fprintf(ofp, "      p_filesz: %d\n", ph32->p_filesz);
+			fprintf(ofp, "       p_memsz: %d\n", ph32->p_memsz);
+			fprintf(ofp, "       p_align: %d\n", ph32->p_align);
+			fprintf(ofp, "\n");
+		}
+
+		note32 = (Elf32_Nhdr *)(pkd->elf_header + pkd->notes32->p_offset);
+
+                for (tot = 0; tot < pkd->notes32->p_filesz; tot += len) {
+			name = (char *)((ulong)note32 + sizeof(Elf32_Nhdr));
+			snprintf(buf, note32->n_namesz, "%s", name);
+
+			fprintf(ofp, "  Elf32_Nhdr:\n");
+			fprintf(ofp, "      n_namesz: %d (\"%s\")\n", note32->n_namesz, buf);
+			fprintf(ofp, "      n_descsz: %d\n", note32->n_descsz);
+			fprintf(ofp, "        n_type: %d ", note32->n_type);
+			switch (note32->n_type)
+			{
+			case NT_PRSTATUS:
+				fprintf(ofp, "(NT_PRSTATUS)\n");
+				break;
+			case NT_PRPSINFO:
+				fprintf(ofp, "(NT_PRPSINFO)\n");
+				break;
+			case NT_TASKSTRUCT:
+				fprintf(ofp, "(NT_TASKSTRUCT)\n");
+				break;
+			default:
+				fprintf(ofp, "(unknown)\n");
+				if (STRNEQ(name, "VMCOREINFO")) {
+					pkd->vmcoreinfo = (void *)note32;
+					ptr = (char *)pkd->vmcoreinfo +
+						sizeof(Elf32_Nhdr) +
+						note32->n_namesz + 1; 
+					fprintf(ofp, "\n      ");
+					for (i = 0; i < note32->n_descsz; i++, ptr++) {
+						fprintf(ofp, "%c%s", *ptr,
+							*ptr == '\n' ?  "      " : "");
+					}
+				}
+				break;
+			}
+
+			fprintf(ofp, "\n");
+
+			len = sizeof(Elf32_Nhdr);
+			len = roundup(len + note32->n_namesz, 4);
+			len = roundup(len + note32->n_descsz, 4);
+			note32 = (Elf32_Nhdr *)((ulong)note32 + len);
+		}
+	} 
+
+	if (pkd->flags & KCORE_ELF64) {
+		ph64 = pkd->notes64;
+
+		fprintf(ofp, "  Elf64_Phdr:\n");
+		fprintf(ofp, "        p_type: %x ", ph64->p_type);
+		switch (ph64->p_type)
+		{
+		case PT_NOTE:
+			fprintf(ofp, "(PT_NOTE)\n");
+			break;
+		case PT_LOAD:
+			fprintf(ofp, "(PT_LOAD)\n");
+			break;
+		default:
+			fprintf(ofp, "(unknown)\n");
+			break;
+		}
+		fprintf(ofp, "       p_flags: %x\n", ph64->p_flags);
+		fprintf(ofp, "      p_offset: %llx\n", (ulonglong)ph64->p_offset);
+		fprintf(ofp, "       p_vaddr: %llx\n", (ulonglong)ph64->p_vaddr);
+		fprintf(ofp, "       p_paddr: %llx\n", (ulonglong)ph64->p_paddr);
+		fprintf(ofp, "      p_filesz: %lld\n", (ulonglong)ph64->p_filesz);
+		fprintf(ofp, "       p_memsz: %lld\n", (ulonglong)ph64->p_memsz);
+		fprintf(ofp, "       p_align: %lld\n", (ulonglong)ph64->p_align);
+		fprintf(ofp, "\n");
+
+		for (i = 0; i < pkd->segments; i++) {
+			ph64 = pkd->load64 + i;
+	
+			fprintf(ofp, "  Elf64_Phdr:\n");
+			fprintf(ofp, "        p_type: %x ", ph64->p_type);
+			switch (ph64->p_type)
+			{
+			case PT_NOTE:
+				fprintf(ofp, "(PT_NOTE)\n");
+				break;
+			case PT_LOAD:
+				fprintf(ofp, "(PT_LOAD)\n");
+				break;
+			default:
+				fprintf(ofp, "(unknown)\n");
+				break;
+			}
+			fprintf(ofp, "       p_flags: %x\n", ph64->p_flags);
+			fprintf(ofp, "      p_offset: %llx\n", (ulonglong)ph64->p_offset);
+			fprintf(ofp, "       p_vaddr: %llx\n", (ulonglong)ph64->p_vaddr);
+			fprintf(ofp, "       p_paddr: %llx\n", (ulonglong)ph64->p_paddr);
+			fprintf(ofp, "      p_filesz: %lld\n", (ulonglong)ph64->p_filesz);
+			fprintf(ofp, "       p_memsz: %lld\n", (ulonglong)ph64->p_memsz);
+			fprintf(ofp, "       p_align: %lld\n", (ulonglong)ph64->p_align);
+			fprintf(ofp, "\n");
+		}
+
+		note64 = (Elf64_Nhdr *)(pkd->elf_header + pkd->notes64->p_offset);
+
+                for (tot = 0; tot < pkd->notes64->p_filesz; tot += len) {
+			name = (char *)((ulong)note64 + sizeof(Elf64_Nhdr));
+			snprintf(buf, note64->n_namesz, "%s", name);
+
+			fprintf(ofp, "  Elf64_Nhdr:\n");
+			fprintf(ofp, "      n_namesz: %d (\"%s\")\n", note64->n_namesz, buf);
+			fprintf(ofp, "      n_descsz: %d\n", note64->n_descsz);
+			fprintf(ofp, "        n_type: %d ", note64->n_type);
+			switch (note64->n_type)
+			{
+			case NT_PRSTATUS:
+				fprintf(ofp, "(NT_PRSTATUS)\n");
+				break;
+			case NT_PRPSINFO:
+				fprintf(ofp, "(NT_PRPSINFO)\n");
+				break;
+			case NT_TASKSTRUCT:
+				fprintf(ofp, "(NT_TASKSTRUCT)\n");
+				break;
+			default:
+				fprintf(ofp, "(unknown)\n");
+				if (STRNEQ(name, "VMCOREINFO")) {
+					pkd->vmcoreinfo = (void *)note64;
+					ptr = (char *)pkd->vmcoreinfo +
+						sizeof(Elf64_Nhdr) +
+						note64->n_namesz + 1; 
+					fprintf(ofp, "\n      ");
+					for (i = 0; i < note64->n_descsz; i++, ptr++) {
+						fprintf(ofp, "%c%s", *ptr,
+							*ptr == '\n' ?  "      " : "");
+					}
+				}
+				break;
+			}
+
+			fprintf(ofp, "\n");
+
+			len = sizeof(Elf64_Nhdr);
+			len = roundup(len + note64->n_namesz, 4);
+			len = roundup(len + note64->n_descsz, 4);
+			note64 = (Elf64_Nhdr *)((ulong)note64 + len);
+		}
 	}
 
 	return TRUE;

@@ -1,7 +1,7 @@
 /* netdump.h
  *
- * Copyright (C) 2002-2009, 2017 David Anderson
- * Copyright (C) 2002-2009, 2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2009, 2017-2018 David Anderson
+ * Copyright (C) 2002-2009, 2017-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -138,8 +138,10 @@ struct proc_kcore_data {
 	uint flags;
 	uint segments;
 	char *elf_header;
-        Elf64_Ehdr *elf64;
+	size_t header_size;
 	Elf64_Phdr *load64;
-        Elf32_Ehdr *elf32;
+	Elf64_Phdr *notes64;
 	Elf32_Phdr *load32;
+	Elf32_Phdr *notes32;
+	void *vmcoreinfo;
 };
