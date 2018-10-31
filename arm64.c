@@ -144,6 +144,12 @@ arm64_init(int when)
 		if (kernel_symbol_exists("kimage_voffset"))
 			machdep->flags |= NEW_VMEMMAP;
 
+		if (!machdep->pagesize && 
+		    (string = pc->read_vmcoreinfo("PAGESIZE"))) {
+			machdep->pagesize = atoi(string);
+			free(string);
+		}
+
 		if (!machdep->pagesize) {
 			/*
 			 * Kerneldoc Documentation/arm64/booting.txt describes
@@ -852,10 +858,16 @@ arm64_calc_phys_offset(void)
 		physaddr_t paddr;
 		ulong vaddr;
 		struct syment *sp;
+		char *string;
 
 		if ((machdep->flags & NEW_VMEMMAP) &&
 		    ms->kimage_voffset && (sp = kernel_symbol_search("memstart_addr"))) {
 			if (pc->flags & PROC_KCORE) {
+				if ((string = pc->read_vmcoreinfo("NUMBER(PHYS_OFFSET)"))) {
+					ms->phys_offset = htol(string, QUIET, NULL);
+					free(string);
+					return;
+				}
 				vaddr = symbol_value_from_proc_kallsyms("memstart_addr");
 				if (vaddr == BADVAL)
 					vaddr = sp->value;
@@ -3686,9 +3698,11 @@ arm64_calc_VA_BITS(void)
         if ((string = pc->read_vmcoreinfo("NUMBER(VA_BITS)"))) {
                 value = atol(string);
                 free(string);
-		if (machdep->machspec->VA_BITS != value)
+		if (machdep->machspec->VA_BITS != value) {
 			error(WARNING, "VA_BITS: calculated: %ld  vmcoreinfo: %ld\n",
 				machdep->machspec->VA_BITS, value);
+			machdep->machspec->VA_BITS = value;
+		}
         }
 
 

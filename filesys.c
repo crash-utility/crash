@@ -142,6 +142,9 @@ fd_init(void)
 
 	memory_source_init();
 
+	if (ACTIVE())
+		proc_kcore_init(fp, UNUSED);
+
 	if (CRASHDEBUG(1)) {
 		fprintf(fp, "readmem: %s() ", readmem_function_name());
 		if (ACTIVE()) {
@@ -196,7 +199,7 @@ memory_source_init(void)
 			if ((pc->mfd = open("/proc/kcore", O_RDONLY)) < 0)
 				error(FATAL, "/proc/kcore: %s\n", 
 					strerror(errno));
-			if (!proc_kcore_init(fp))
+			if (!proc_kcore_init(fp, pc->mfd))
 				error(FATAL, 
 				    "/proc/kcore: initialization failed\n");
 		} else {

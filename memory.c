@@ -2505,7 +2505,7 @@ switch_to_proc_kcore(void)
 		error(INFO, "/proc/kcore: %s\n", strerror(errno));
 		return FALSE;
 	}
-	if (!proc_kcore_init(fp)) {
+	if (!proc_kcore_init(fp, pc->mfd)) {
 		error(INFO, "/proc/kcore: initialization failed\n");
 		return FALSE;
 	}

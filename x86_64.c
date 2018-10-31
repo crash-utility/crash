@@ -6703,6 +6703,21 @@ x86_64_calc_phys_base(void)
 		}
 	}
 
+	/*
+	 * Linux 4.10 exports it in VMCOREINFO (finally).
+	 */
+	if ((p1 = pc->read_vmcoreinfo("NUMBER(phys_base)"))) {
+		if (*p1 == '-')
+			machdep->machspec->phys_base = dtol(p1+1, QUIET, NULL) * -1;
+		else
+			machdep->machspec->phys_base = dtol(p1, QUIET, NULL);
+		if (CRASHDEBUG(1))
+			fprintf(fp, "VMCOREINFO: NUMBER(phys_base): %s -> %lx\n", 
+				p1, machdep->machspec->phys_base);
+		free(p1);
+		return;
+	}
+
 	if (LOCAL_ACTIVE()) {
 	        if ((iomem = fopen("/proc/iomem", "r")) == NULL)
 	                return;
@@ -6740,21 +6755,6 @@ x86_64_calc_phys_base(void)
 				machdep->machspec->phys_base);
 		}
 
-		return;
-	}
-
-	/*
-	 * Linux 4.10 exports it in VMCOREINFO (finally).
-	 */
-	if ((p1 = pc->read_vmcoreinfo("NUMBER(phys_base)"))) {
-		if (*p1 == '-')
-			machdep->machspec->phys_base = dtol(p1+1, QUIET, NULL) * -1;
-		else
-			machdep->machspec->phys_base = dtol(p1, QUIET, NULL);
-		if (CRASHDEBUG(1))
-			fprintf(fp, "VMCOREINFO: NUMBER(phys_base): %s -> %lx\n", 
-				p1, machdep->machspec->phys_base);
-		free(p1);
 		return;
 	}
 

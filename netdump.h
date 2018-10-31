@@ -144,4 +144,5 @@ struct proc_kcore_data {
 	Elf32_Phdr *load32;
 	Elf32_Phdr *notes32;
 	void *vmcoreinfo;
+	uint size_vmcoreinfo;
 };

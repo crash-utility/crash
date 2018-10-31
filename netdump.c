@@ -42,8 +42,8 @@ static void get_netdump_regs_arm(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_arm64(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_mips(struct bt_info *, ulong *, ulong *);
 static void check_dumpfile_size(char *);
-static int proc_kcore_init_32(FILE *fp);
-static int proc_kcore_init_64(FILE *fp);
+static int proc_kcore_init_32(FILE *, int);
+static int proc_kcore_init_64(FILE *, int);
 static char *get_regs_from_note(char *, ulong *, ulong *);
 static void kdump_get_osrelease(void);
 static char *vmcoreinfo_read_string(const char *);
@@ -1774,7 +1774,8 @@ vmcoreinfo_read_string(const char *key)
 	int i, j, end;
 	size_t value_length;
 	size_t key_length = strlen(key);
-	char *vmcoreinfo = (char *)nd->vmcoreinfo;
+	char *vmcoreinfo;
+	uint size_vmcoreinfo;
 	char *value = NULL;
 
 	/*
@@ -1795,11 +1796,22 @@ vmcoreinfo_read_string(const char *key)
 		}
 	}
 
-	if (!nd->vmcoreinfo)
+	if (nd->vmcoreinfo) {
+		vmcoreinfo = (char *)nd->vmcoreinfo;
+		size_vmcoreinfo = nd->size_vmcoreinfo;
+	} else if (ACTIVE() && pkd->vmcoreinfo) {
+		vmcoreinfo = (char *)pkd->vmcoreinfo;
+		size_vmcoreinfo = pkd->size_vmcoreinfo;
+	} else {
+		vmcoreinfo = NULL;
+		size_vmcoreinfo = 0;
+	}
+
+	if (!vmcoreinfo)
 		return NULL;
 
 	/* the '+ 1' is the equal sign */
-	for (i = 0; i < (nd->size_vmcoreinfo - key_length + 1); i++) {
+	for (i = 0; i < (size_vmcoreinfo - key_length + 1); i++) {
 		/*
 		 * We must also check if we're at the beginning of VMCOREINFO
 		 * or the separating newline is there, and of course if we 
@@ -1813,7 +1825,7 @@ vmcoreinfo_read_string(const char *key)
 
 			/* Found -- search for the next newline. */
 			for (j = i + key_length + 1; 
-			     j < nd->size_vmcoreinfo; j++) {
+			     j < size_vmcoreinfo; j++) {
 				if (vmcoreinfo[j] == '\n') {
 					end = j;
 					break;
@@ -1826,7 +1838,7 @@ vmcoreinfo_read_string(const char *key)
 			 */
 			if (end == -1) {
 				/* Point after the end. */
-				end = nd->size_vmcoreinfo + 1;
+				end = size_vmcoreinfo + 1;
 			}
 
 			value_length = end - (1+ i + key_length);
@@ -4223,17 +4235,21 @@ is_proc_kcore(char *file, ulong source_query)
 }
 
 int
-proc_kcore_init(FILE *fp)
+proc_kcore_init(FILE *fp, int kcore_fd)
 {
+	if (pkd->flags & (KCORE_ELF32|KCORE_ELF64))
+		return TRUE;
+
 	if (BITS32())
-		return proc_kcore_init_32(fp);
+		return proc_kcore_init_32(fp, kcore_fd);
 	else 
-		return proc_kcore_init_64(fp);
+		return proc_kcore_init_64(fp, kcore_fd);
 }
 
 static int
-proc_kcore_init_32(FILE *fp)
+proc_kcore_init_32(FILE *fp, int kcore_fd)
 {
+	int fd;
 	Elf32_Ehdr *elf32;
 	Elf32_Phdr *load32;
 	Elf32_Phdr *notes32;
@@ -4241,17 +4257,28 @@ proc_kcore_init_32(FILE *fp)
 	char buf[BUFSIZE];
 	size_t load_size, notes_size;
 
-	if (read(pc->mfd, eheader, MAX_KCORE_ELF_HEADER_SIZE) != MAX_KCORE_ELF_HEADER_SIZE) {
+	if (kcore_fd == UNUSED) {
+		if ((fd = open("/proc/kcore", O_RDONLY)) < 0) {
+			error(INFO, "/proc/kcore: %s\n", strerror(errno));
+			return FALSE;
+		}
+	} else
+		fd = kcore_fd;
+
+	if (read(fd, eheader, MAX_KCORE_ELF_HEADER_SIZE) != MAX_KCORE_ELF_HEADER_SIZE) {
 		sprintf(buf, "/proc/kcore: read");
 		perror(buf);
 		goto bailout;
 	}
 
-	if (lseek(pc->mfd, 0, SEEK_SET) != 0) {
+	if (lseek(fd, 0, SEEK_SET) != 0) {
 		sprintf(buf, "/proc/kcore: lseek");
 		perror(buf);
 		goto bailout;
 	}
+
+	if (fd != kcore_fd)
+		close(fd);
 
 	elf32 = (Elf32_Ehdr *)&eheader[0];
 	notes32 = (Elf32_Phdr *)&eheader[sizeof(Elf32_Ehdr)];
@@ -4279,17 +4306,20 @@ proc_kcore_init_32(FILE *fp)
 		&pkd->elf_header[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
 	pkd->flags |= KCORE_ELF32;
 	
-	if (CRASHDEBUG(1))
-		kcore_memory_dump(fp);
+	kcore_memory_dump(CRASHDEBUG(1) ? fp : pc->nullfp);
 
 	return TRUE;
+
 bailout:
+	if (fd != kcore_fd)
+		close(fd);
 	return FALSE;
 }
 
 static int
-proc_kcore_init_64(FILE *fp)
+proc_kcore_init_64(FILE *fp, int kcore_fd)
 {
+	int fd;
 	Elf64_Ehdr *elf64;
 	Elf64_Phdr *load64;
 	Elf64_Phdr *notes64;
@@ -4297,17 +4327,28 @@ proc_kcore_init_64(FILE *fp)
 	char buf[BUFSIZE];
 	size_t load_size, notes_size;
 
-	if (read(pc->mfd, eheader, MAX_KCORE_ELF_HEADER_SIZE) != MAX_KCORE_ELF_HEADER_SIZE) {
+	if (kcore_fd == UNUSED) {
+		if ((fd = open("/proc/kcore", O_RDONLY)) < 0) {
+			error(INFO, "/proc/kcore: %s\n", strerror(errno));
+			return FALSE;
+		}
+	} else
+		fd = kcore_fd;
+
+	if (read(fd, eheader, MAX_KCORE_ELF_HEADER_SIZE) != MAX_KCORE_ELF_HEADER_SIZE) {
 		sprintf(buf, "/proc/kcore: read");
 		perror(buf);
 		goto bailout;
 	}
 
-	if (lseek(pc->mfd, 0, SEEK_SET) != 0) {
+	if (lseek(fd, 0, SEEK_SET) != 0) {
 		sprintf(buf, "/proc/kcore: lseek");
 		perror(buf);
 		goto bailout;
 	}
+
+	if (fd != kcore_fd)
+		close(fd);
 
 	elf64 = (Elf64_Ehdr *)&eheader[0];
 	notes64 = (Elf64_Phdr *)&eheader[sizeof(Elf64_Ehdr)];
@@ -4336,11 +4377,13 @@ proc_kcore_init_64(FILE *fp)
 		&pkd->elf_header[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
 	pkd->flags |= KCORE_ELF64;
 	
-	if (CRASHDEBUG(1))
-		kcore_memory_dump(fp);
+	kcore_memory_dump(CRASHDEBUG(1) ? fp : pc->nullfp);
 
 	return TRUE;
+
 bailout:
+	if (fd != kcore_fd)
+		close(fd);
 	return FALSE;
 }
 
@@ -4356,7 +4399,7 @@ kcore_memory_dump(FILE *ofp)
 	char *name, *ptr, buf[BUFSIZE];
 
 	fprintf(ofp, "proc_kcore_data:\n");
-	fprintf(ofp, "       flags: %x (", pkd->flags);
+	fprintf(ofp, "           flags: %x (", pkd->flags);
 	others = 0;
 	if (pkd->flags & KCORE_LOCAL)
 		fprintf(ofp, "%sKCORE_LOCAL", others++ ? "|" : "");
@@ -4365,15 +4408,16 @@ kcore_memory_dump(FILE *ofp)
 	if (pkd->flags & KCORE_ELF64)
 		fprintf(ofp, "%sKCORE_ELF64", others++ ? "|" : "");
 	fprintf(ofp, ")\n");
-	fprintf(ofp, "    segments: %d\n",
+	fprintf(ofp, "        segments: %d\n",
 		pkd->segments);
-	fprintf(ofp, "  elf_header: %lx\n", (ulong)pkd->elf_header);
-	fprintf(ofp, " header_size: %ld\n", (ulong)pkd->header_size);
-	fprintf(ofp, "     notes64: %lx\n", (ulong)pkd->notes64);
-	fprintf(ofp, "      load64: %lx\n", (ulong)pkd->load64);
-	fprintf(ofp, "     notes32: %lx\n", (ulong)pkd->notes32);
-	fprintf(ofp, "      load32: %lx\n", (ulong)pkd->load32);
-	fprintf(ofp, "  vmcoreinfo: %lx\n\n", (ulong)pkd->vmcoreinfo);
+	fprintf(ofp, "      elf_header: %lx\n", (ulong)pkd->elf_header);
+	fprintf(ofp, "     header_size: %ld\n", (ulong)pkd->header_size);
+	fprintf(ofp, "         notes64: %lx\n", (ulong)pkd->notes64);
+	fprintf(ofp, "          load64: %lx\n", (ulong)pkd->load64);
+	fprintf(ofp, "         notes32: %lx\n", (ulong)pkd->notes32);
+	fprintf(ofp, "          load32: %lx\n", (ulong)pkd->load32);
+	fprintf(ofp, "      vmcoreinfo: %lx\n", (ulong)pkd->vmcoreinfo);
+	fprintf(ofp, " size_vmcoreinfo: %d\n\n", pkd->size_vmcoreinfo); 
 
 	if (pkd->flags & KCORE_ELF32) {
 		ph32 = pkd->notes32;
@@ -4452,10 +4496,12 @@ kcore_memory_dump(FILE *ofp)
 			default:
 				fprintf(ofp, "(unknown)\n");
 				if (STRNEQ(name, "VMCOREINFO")) {
-					pkd->vmcoreinfo = (void *)note32;
-					ptr = (char *)pkd->vmcoreinfo +
+					ptr = (char *)note32 +
 						sizeof(Elf32_Nhdr) +
 						note32->n_namesz + 1; 
+					pkd->vmcoreinfo = (void *)ptr;
+					pkd->size_vmcoreinfo = note32->n_descsz;
+					pc->read_vmcoreinfo = vmcoreinfo_read_string;
 					fprintf(ofp, "\n      ");
 					for (i = 0; i < note32->n_descsz; i++, ptr++) {
 						fprintf(ofp, "%c%s", *ptr,
@@ -4551,10 +4597,12 @@ kcore_memory_dump(FILE *ofp)
 			default:
 				fprintf(ofp, "(unknown)\n");
 				if (STRNEQ(name, "VMCOREINFO")) {
-					pkd->vmcoreinfo = (void *)note64;
-					ptr = (char *)pkd->vmcoreinfo +
+					ptr = (char *)note64 +
 						sizeof(Elf64_Nhdr) +
 						note64->n_namesz + 1; 
+					pkd->vmcoreinfo = (void *)ptr;
+					pkd->size_vmcoreinfo = note64->n_descsz;
+					pc->read_vmcoreinfo = vmcoreinfo_read_string;
 					fprintf(ofp, "\n      ");
 					for (i = 0; i < note64->n_descsz; i++, ptr++) {
 						fprintf(ofp, "%c%s", *ptr,
