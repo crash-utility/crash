@@ -2392,3 +2392,28 @@ diff -up gdb-7.6/opcodes/configure.orig gdb-7.6/opcodes/configure
                  req->flags |= GNU_COMMAND_FAILED;
  }
  
+--- gdb-7.6/gdb/symtab.c.orig
++++ gdb-7.6/gdb/symtab.c
+@@ -5500,7 +5500,7 @@ get_member_data(struct gnu_request *req,
+ 	register short i;
+ 	struct field *nextfield;
+ 	short nfields;
+-	struct type *typedef_type;
++	struct type *typedef_type, *target_type;
+ 
+ 	req->member_offset = -1;
+ 
+@@ -5523,6 +5523,13 @@ get_member_data(struct gnu_request *req,
+ 			req->member_offset = offset + nextfield->loc.bitpos;
+ 			req->member_length = TYPE_LENGTH(nextfield->type);
+ 			req->member_typecode = TYPE_CODE(nextfield->type);
++			req->member_main_type_name = (char *)TYPE_NAME(nextfield->type);
++			req->member_main_type_tag_name = (char *)TYPE_TAG_NAME(nextfield->type);
++			target_type = TYPE_TARGET_TYPE(nextfield->type);
++			if (target_type) {
++				req->member_target_type_name = (char *)TYPE_NAME(target_type);
++				req->member_target_type_tag_name = (char *)TYPE_TAG_NAME(target_type);
++			}
+ 			if ((req->member_typecode == TYPE_CODE_TYPEDEF) &&
+ 			    (typedef_type = check_typedef(nextfield->type))) 
+         			req->member_length = TYPE_LENGTH(typedef_type);

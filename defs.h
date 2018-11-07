@@ -2259,6 +2259,7 @@ struct array_table {
 #define ANON_MEMBER_OFFSET_REQUEST ((struct datatype_member *)(-2))
 #define MEMBER_TYPE_REQUEST ((struct datatype_member *)(-3))
 #define STRUCT_SIZE_REQUEST ((struct datatype_member *)(-4))
+#define MEMBER_TYPE_NAME_REQUEST ((struct datatype_member *)(-5))
 
 #define STRUCT_SIZE(X)      datatype_info((X), NULL, STRUCT_SIZE_REQUEST)
 #define UNION_SIZE(X)       datatype_info((X), NULL, STRUCT_SIZE_REQUEST)
@@ -2268,6 +2269,7 @@ struct array_table {
 #define MEMBER_EXISTS(X,Y)  (datatype_info((X), (Y), NULL) >= 0)
 #define MEMBER_SIZE(X,Y)    datatype_info((X), (Y), MEMBER_SIZE_REQUEST)
 #define MEMBER_TYPE(X,Y)    datatype_info((X), (Y), MEMBER_TYPE_REQUEST)
+#define MEMBER_TYPE_NAME(X,Y)    ((char *)datatype_info((X), (Y), MEMBER_TYPE_NAME_REQUEST))
 #define ANON_MEMBER_OFFSET(X,Y)    datatype_info((X), (Y), ANON_MEMBER_OFFSET_REQUEST)
 
 /*
@@ -4575,6 +4577,10 @@ struct gnu_request {
     		struct objfile *obj;
   	} global_iterator;
 	struct load_module *lm;
+	char *member_main_type_name;
+	char *member_main_type_tag_name;
+	char *member_target_type_name;
+	char *member_target_type_tag_name;
 };
 
 /*

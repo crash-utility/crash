@@ -5494,6 +5494,7 @@ datatype_init(void)
  *   #define MEMBER_EXISTS(X,Y)  (datatype_info((X), (Y), NULL) >= 0)
  *   #define MEMBER_SIZE(X,Y)    datatype_info((X), (Y), MEMBER_SIZE_REQUEST)
  *   #define MEMBER_TYPE(X,Y)    datatype_info((X), (Y), MEMBER_TYPE_REQUEST)
+ *   #define MEMBER_TYPE_NAME(X,Y)      datatype_info((X), (Y), MEMBER_TYPE_NAME_REQUEST)
  *   #define ANON_MEMBER_OFFSET(X,Y)    datatype_info((X), (Y), ANON_MEMBER_OFFSET_REQUEST)
  *
  *  to determine structure or union sizes, or member offsets.
@@ -5520,9 +5521,9 @@ datatype_info(char *name, char *member, struct datatype_member *dm)
 	req->fp = pc->nullfp;
 
 	gdb_interface(req);
-        if (req->flags & GNU_COMMAND_FAILED) {
+	if (req->flags & GNU_COMMAND_FAILED) {
 		FREEBUF(req);
-		return -1;
+		return (dm == MEMBER_TYPE_NAME_REQUEST) ? 0 : -1;
 	}
 
 	if (!req->typecode) {
@@ -5638,7 +5639,7 @@ datatype_info(char *name, char *member, struct datatype_member *dm)
 	FREEBUF(req);
 
         if (dm && (dm != MEMBER_SIZE_REQUEST) && (dm != MEMBER_TYPE_REQUEST) &&
-	    (dm != STRUCT_SIZE_REQUEST)) {
+	    (dm != STRUCT_SIZE_REQUEST) && (dm != MEMBER_TYPE_NAME_REQUEST)) {
                 dm->type = type_found;
                 dm->size = size;
 		dm->member_size = member_size;
@@ -5653,14 +5654,25 @@ datatype_info(char *name, char *member, struct datatype_member *dm)
 		}
         }
 
-        if (!type_found) 
-        	return -1;
+	if (!type_found) 
+		return (dm == MEMBER_TYPE_NAME_REQUEST) ? 0 : -1;
 
 	if (dm == MEMBER_SIZE_REQUEST)
 		return member_size;
 	else if (dm == MEMBER_TYPE_REQUEST)
 		return member_typecode;
-	else if (dm == STRUCT_SIZE_REQUEST) {
+	else if (dm == MEMBER_TYPE_NAME_REQUEST) {
+		if (req->member_main_type_name)
+			return (ulong)req->member_main_type_name;
+		else if (req->member_main_type_tag_name)
+			return (ulong)req->member_main_type_tag_name;
+		else if (req->member_target_type_name)
+			return (ulong)req->member_target_type_name;
+		else if (req->member_target_type_tag_name)
+			return (ulong)req->member_target_type_tag_name;
+		else
+			return 0;
+	} else if (dm == STRUCT_SIZE_REQUEST) {
 		if ((req->typecode == TYPE_CODE_STRUCT) || 
 		    (req->typecode == TYPE_CODE_UNION) ||
 		     req->is_typedef)

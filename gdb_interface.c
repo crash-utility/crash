@@ -512,6 +512,10 @@ dump_gnu_request(struct gnu_request *req, int in_gdb)
 	console("member_offset: %ld\n", req->member_offset);
 	console("member_length: %ld\n", req->member_length);
         console("member_typecode: %d\n", req->member_typecode);
+	console("member_main_type_name: %s\n", req->member_main_type_name);
+	console("member_main_type_tag_name: %s\n", req->member_main_type_tag_name);
+	console("member_target_type_name: %s\n", req->member_target_type_name);
+	console("member_target_type_tag_name: %s\n", req->member_target_type_tag_name);
 	console("value: %lx ", req->value);
 	console("tagname: \"%s\" ", req->tagname);
 	console("pc: %lx  ", req->pc);
