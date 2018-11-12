@@ -1,8 +1,8 @@
 /* tools.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2017 David Anderson
- * Copyright (C) 2002-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2018 David Anderson
+ * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -4562,6 +4562,120 @@ error_height:
 	      "maximum radix tree height index %ld\n",
 	      height, max_height);
 	return -1;
+}
+
+static ulong XA_CHUNK_SHIFT = UNINITIALIZED;
+static ulong XA_CHUNK_SIZE = UNINITIALIZED;
+static ulong XA_CHUNK_MASK = UNINITIALIZED;
+
+static void 
+do_xarray_iter(ulong node, uint height, char *path,
+	       ulong index, struct xarray_ops *ops)
+{
+	uint off;
+
+	if (!hq_enter(node))
+		error(FATAL,
+			"\nduplicate tree node: %lx\n", node);
+
+	for (off = 0; off < XA_CHUNK_SIZE; off++) {
+		ulong slot;
+		ulong shift = (height - 1) * XA_CHUNK_SHIFT;
+
+		readmem(node + OFFSET(radix_tree_node_slots) +
+			sizeof(void *) * off, KVADDR, &slot, sizeof(void *),
+			"radix_tree_node.slot[off]", FAULT_ON_ERROR);
+		if (!slot)
+			continue;
+
+		if ((slot & XARRAY_TAG_MASK) == XARRAY_TAG_INTERNAL)
+			slot &= ~XARRAY_TAG_INTERNAL;
+
+		if (height == 1)
+			ops->entry(node, slot, path, index | off, ops->private);
+		else {
+			ulong child_index = index | (off << shift);
+			char child_path[BUFSIZE];
+			sprintf(child_path, "%s/%d", path, off);
+			do_xarray_iter(slot, height - 1,
+					   child_path, child_index, ops);
+		}
+	}
+}
+
+int 
+do_xarray_traverse(ulong ptr, int is_root, struct xarray_ops *ops)
+{
+	ulong node_p;
+	long nlen;
+	uint height, is_internal;
+	unsigned char shift;
+	char path[BUFSIZE];
+
+	if (!VALID_STRUCT(xarray) || !VALID_STRUCT(xa_node) ||
+	      !VALID_MEMBER(xarray_xa_head) ||
+	      !VALID_MEMBER(xa_node_slots) ||
+	      !VALID_MEMBER(xa_node_shift)) 
+		error(FATAL, 
+			"xarray facility does not exist or has changed its format\n");
+
+	if (XA_CHUNK_SHIFT == UNINITIALIZED) {
+		if ((nlen = MEMBER_SIZE("xa_node", "slots")) <= 0)
+			error(FATAL, "cannot determine length of xa_node.slots[] array\n");
+		nlen /= sizeof(void *);
+		XA_CHUNK_SHIFT = ffsl(nlen) - 1;
+		XA_CHUNK_SIZE = (1UL << XA_CHUNK_SHIFT);
+		XA_CHUNK_MASK = (XA_CHUNK_SIZE-1);
+	}
+
+	height = 0;
+	if (!is_root) {
+		node_p = ptr;
+
+		if ((node_p & XARRAY_TAG_MASK) == XARRAY_TAG_INTERNAL)
+			node_p &= ~XARRAY_TAG_MASK;
+
+		if (VALID_MEMBER(xa_node_shift)) {
+			readmem(node_p + OFFSET(xa_node_shift), KVADDR,
+				&shift, sizeof(shift), "xa_node shift",
+				FAULT_ON_ERROR);
+			height = (shift / XA_CHUNK_SHIFT) + 1;
+		} else
+			error(FATAL, "-N option is not supported or applicable"
+				" for xarrays on this architecture or kernel\n");
+	} else {
+		readmem(ptr + OFFSET(xarray_xa_head), KVADDR, &node_p,
+			sizeof(void *), "xarray xa_head", FAULT_ON_ERROR);
+		is_internal = ((node_p & XARRAY_TAG_MASK) == XARRAY_TAG_INTERNAL);
+		if (node_p & XARRAY_TAG_MASK)
+			node_p &= ~XARRAY_TAG_MASK;
+
+		if (is_internal && VALID_MEMBER(xa_node_shift)) {
+			readmem(node_p + OFFSET(xa_node_shift), KVADDR, &shift,
+				sizeof(shift), "xa_node shift", FAULT_ON_ERROR);
+			height = (shift / XA_CHUNK_SHIFT) + 1;
+		}
+	}
+
+	if (CRASHDEBUG(1)) {
+		fprintf(fp, "xa_node.slots[%ld]\n", XA_CHUNK_SIZE);
+		fprintf(fp, "pointer at %lx (is_root? %s):\n",
+			node_p, is_root ? "yes" : "no");
+		if (is_root)
+			dump_struct("xarray", ptr, RADIX(ops->radix));
+		else
+			dump_struct("xa_node", node_p, RADIX(ops->radix));
+	}
+
+	if (height == 0) {
+		strcpy(path, "direct");
+		ops->entry(node_p, node_p, path, 0, ops->private);
+	} else {
+		strcpy(path, "root");
+		do_xarray_iter(node_p, height, path, 0, ops);
+	}
+
+	return 0;
 }
 
 static void do_rdtree_entry(ulong node, ulong slot, const char *path,

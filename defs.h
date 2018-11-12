@@ -2058,6 +2058,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long bus_type_p;
 	long device_private_device;
 	long device_private_knode_bus;
+	long xarray_xa_head;
+	long xa_node_slots;
+	long xa_node_shift;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2213,6 +2216,8 @@ struct size_table {         /* stash of commonly-used sizes */
 	long bpf_prog_aux;
 	long bpf_map;
 	long bpf_insn;
+	long xarray;
+	long xa_node;
 };
 
 struct array_table {
@@ -4988,6 +4993,13 @@ struct radix_tree_ops {
 	void *private;
 };
 int do_radix_tree_traverse(ulong ptr, int is_root, struct radix_tree_ops *ops);
+struct xarray_ops {
+	void (*entry)(ulong node, ulong slot, const char *path,
+		      ulong index, void *private);
+	uint radix;
+	void *private;
+};
+int do_xarray_traverse(ulong ptr, int is_root, struct xarray_ops *ops);
 int do_rdtree(struct tree_data *);
 int do_rbtree(struct tree_data *);
 int retrieve_list(ulong *, int);
@@ -5284,6 +5296,19 @@ ulong do_radix_tree(ulong, int, struct radix_tree_pair *);
  */
 #define RADIX_TREE_ENTRY_MASK           3UL
 #define RADIX_TREE_EXCEPTIONAL_ENTRY    2
+
+#define XARRAY_COUNT   (1)
+#define XARRAY_SEARCH  (2)
+#define XARRAY_DUMP    (3)
+#define XARRAY_GATHER  (4)
+#define XARRAY_DUMP_CB (5)
+struct xarray_pair {
+        ulong index;
+        void *value;
+};
+ulong do_xarray(ulong, int, struct xarray_pair *);
+#define XARRAY_TAG_MASK      (3UL)
+#define XARRAY_TAG_INTERNAL  (2UL)
 
 int file_dump(ulong, ulong, ulong, int, int);
 #define DUMP_FULL_NAME      0x1

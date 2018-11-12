@@ -10374,6 +10374,13 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "               user_struct_uid: %ld\n",
 		OFFSET(user_struct_uid));
 
+	fprintf(fp, "                xarray_xa_head: %ld\n",
+		OFFSET(xarray_xa_head));
+	fprintf(fp, "                 xa_node_slots: %ld\n",
+		OFFSET(xa_node_slots));
+	fprintf(fp, "                 xa_node_shift: %ld\n",
+		OFFSET(xa_node_shift));
+
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
 	fprintf(fp, "                    page_flags: %ld\n", SIZE(page_flags));
@@ -10627,6 +10634,11 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(bpf_map));
 	fprintf(fp, "                      bpf_insn: %ld\n",
 		SIZE(bpf_insn));
+	fprintf(fp, "                        xarray: %ld\n",
+		SIZE(xarray));
+	fprintf(fp, "                       xa_node: %ld\n",
+		SIZE(xa_node));
+
 
         fprintf(fp, "\n                   array_table:\n");
 	/*
