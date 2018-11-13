@@ -4582,9 +4582,9 @@ do_xarray_iter(ulong node, uint height, char *path,
 		ulong slot;
 		ulong shift = (height - 1) * XA_CHUNK_SHIFT;
 
-		readmem(node + OFFSET(radix_tree_node_slots) +
+		readmem(node + OFFSET(xa_node_slots) +
 			sizeof(void *) * off, KVADDR, &slot, sizeof(void *),
-			"radix_tree_node.slot[off]", FAULT_ON_ERROR);
+			"xa_node.slots[off]", FAULT_ON_ERROR);
 		if (!slot)
 			continue;
 

@@ -853,6 +853,7 @@ struct task_table {                      /* kernel/local task table data */
 	ulong pid_radix_tree;
 	int callbacks;
 	struct task_context **context_by_task; /* task_context sorted by task addr */
+	ulong pid_xarray;
 };
 
 #define TASK_INIT_DONE       (0x1)
@@ -874,6 +875,7 @@ struct task_table {                      /* kernel/local task table data */
 #define THREAD_INFO_IN_TASK (0x10000)
 #define PID_RADIX_TREE   (0x20000)
 #define INDEXED_CONTEXTS (0x40000)
+#define PID_XARRAY       (0x80000)
 
 #define TASK_SLUSH (20)
 
