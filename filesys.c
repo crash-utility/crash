@@ -2185,7 +2185,7 @@ static void
 dump_inode_page_cache_info(ulong inode)
 {
 	char *inode_buf;
-	ulong i_mapping, nrpages, root_rnode, count;
+	ulong i_mapping, nrpages, root_rnode, xarray, count;
 	struct list_pair lp;
 	char header[BUFSIZE];
 	char buf1[BUFSIZE];
@@ -2215,14 +2215,24 @@ dump_inode_page_cache_info(ulong inode)
 	if (!nrpages)
 		return;
 
-	root_rnode = i_mapping + OFFSET(address_space_page_tree);
+	xarray = root_rnode = count = 0;
+	if (MEMBER_EXISTS("address_space", "i_pages") &&
+	    STREQ(MEMBER_TYPE_NAME("address_space", "i_pages"), "xarray"))
+		xarray = i_mapping + OFFSET(address_space_page_tree);
+	else 
+		root_rnode = i_mapping + OFFSET(address_space_page_tree);
+
 	lp.index = 0;
 	lp.value = (void *)&dump_inode_page;
 
-	count = do_radix_tree(root_rnode, RADIX_TREE_DUMP_CB, &lp);
+	if (root_rnode)
+		count = do_radix_tree(root_rnode, RADIX_TREE_DUMP_CB, &lp);
+	else if (xarray)
+		count = do_xarray(xarray, XARRAY_DUMP_CB, &lp);
 
 	if (count != nrpages)
-		error(INFO, "page_tree count: %ld  nrpages: %ld\n",
+		error(INFO, "%s page count: %ld  nrpages: %ld\n",
+			root_rnode ? "radix tree" : "xarray",
 			count, nrpages);
 
 	return;
