@@ -2283,7 +2283,7 @@ refresh_radix_tree_task_table(void)
 	ulong count, retries, next, curtask, curpid, upid_ns, pid_tasks_0, task;
 	ulong *tlp;
 	char *tp;
-	struct radix_tree_pair rtp;
+	struct list_pair rtp;
 	char *pidbuf;
 
 	if (DUMPFILE() && (tt->flags & TASK_INIT_DONE))   /* impossible */
@@ -2499,7 +2499,7 @@ refresh_xarray_task_table(void)
 	ulong count, retries, next, curtask, curpid, upid_ns, pid_tasks_0, task;
 	ulong *tlp;
 	char *tp;
-	struct xarray_pair xp;
+	struct list_pair xp;
 	char *pidbuf;
 
 	if (DUMPFILE() && (tt->flags & TASK_INIT_DONE))   /* impossible */

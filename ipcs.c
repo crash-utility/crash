@@ -72,7 +72,7 @@ struct ipcs_table {
 	int use_shm_f_op;
 	int seq_multiplier;
 	int rt_cnt;
-	struct radix_tree_pair *rtp;
+	struct list_pair *rtp;
 };
 
 /*
@@ -1112,8 +1112,8 @@ gather_radix_tree_entries(ulong ipcs_idr_p)
 	ipcs_table.rt_cnt = do_radix_tree(ipcs_idr_p, RADIX_TREE_COUNT, NULL);
 
 	if (ipcs_table.rt_cnt) {
-		len = sizeof(struct radix_tree_pair) * (ipcs_table.rt_cnt+1);
-		ipcs_table.rtp = (struct radix_tree_pair *)GETBUF(len);
+		len = sizeof(struct list_pair) * (ipcs_table.rt_cnt+1);
+		ipcs_table.rtp = (struct list_pair *)GETBUF(len);
 		ipcs_table.rtp[0].index = ipcs_table.rt_cnt;
 		ipcs_table.rt_cnt = do_radix_tree(ipcs_idr_p, RADIX_TREE_GATHER, ipcs_table.rtp);
 	} else

@@ -6327,7 +6327,7 @@ get_irq_desc_addr(int irq)
 	int c;
 	ulong cnt, addr, ptr;
 	long len;
-	struct radix_tree_pair *rtp;
+	struct list_pair *rtp;
 
 	addr = 0;
 	rtp = NULL;
@@ -6355,8 +6355,8 @@ get_irq_desc_addr(int irq)
 
 		cnt = do_radix_tree(symbol_value("irq_desc_tree"),
 				RADIX_TREE_COUNT, NULL);
-		len = sizeof(struct radix_tree_pair) * (cnt+1);
-		rtp = (struct radix_tree_pair *)GETBUF(len);
+		len = sizeof(struct list_pair) * (cnt+1);
+		rtp = (struct list_pair *)GETBUF(len);
 		rtp[0].index = cnt;
 		cnt = do_radix_tree(symbol_value("irq_desc_tree"),
 				RADIX_TREE_GATHER, rtp);

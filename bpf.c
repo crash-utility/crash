@@ -19,14 +19,18 @@
 struct bpf_info {
 	ulong status;
 	ulong progs, maps;
-	struct radix_tree_pair *proglist;
-	struct radix_tree_pair *maplist;
+	struct list_pair *proglist;
+	struct list_pair *maplist;
 	char *bpf_prog_buf;
 	char *bpf_prog_aux_buf;
 	char *bpf_map_buf;
 	char *bytecode_buf;
 	int bpf_prog_type_size;
 	int bpf_map_map_type_size;
+	int idr_type;
+#define IDR_ORIG   (1)
+#define IDR_RADIX  (2)
+#define IDR_XARRAY (3)
 	char prog_hdr1[81];
 	char map_hdr1[81];
 } bpf_info = { 
@@ -45,10 +49,10 @@ static void bpf_prog_gpl_compatible(char *, ulong);
 static void dump_xlated_plain(void *, unsigned int, int);
 static void print_boot_time(unsigned long long, char *, unsigned int);
 
-static int do_old_idr(int, ulong, struct radix_tree_pair *);
-#define OLD_IDR_INIT   (1)
-#define OLD_IDR_COUNT  (2)
-#define OLD_IDR_GATHER (3)
+static int do_old_idr(int, ulong, struct list_pair *);
+#define IDR_ORIG_INIT   (1)
+#define IDR_ORIG_COUNT  (2)
+#define IDR_ORIG_GATHER (3)
 
 #define PROG_ID        (0x1)
 #define MAP_ID         (0x2)
@@ -213,8 +217,15 @@ bpf_init(struct bpf_info *bpf)
 			mkstring(buf2, VADDR_PRLEN, CENTER|LJUST, "BPF_MAP"),
 			mkstring(buf3, bpf->bpf_map_map_type_size, CENTER|LJUST, "BPF_MAP_TYPE"));
 
-		if (INVALID_MEMBER(idr_idr_rt))
-			do_old_idr(OLD_IDR_INIT, 0, NULL);
+		if (INVALID_MEMBER(idr_idr_rt)) {
+			bpf->idr_type = IDR_ORIG;
+			do_old_idr(IDR_ORIG_INIT, 0, NULL);
+		} else if (STREQ(MEMBER_TYPE_NAME("idr", "idr_rt"), "radix_tree_root"))
+			bpf->idr_type = IDR_RADIX;
+		else if (STREQ(MEMBER_TYPE_NAME("idr", "idr_rt"), "xarray"))
+			bpf->idr_type = IDR_XARRAY;
+		else
+			error(FATAL, "cannot determine IDR list type\n");
 
 		bpf->status = TRUE;
 		break;
@@ -226,38 +237,76 @@ bpf_init(struct bpf_info *bpf)
 		command_not_supported();
 	}
 
-	if (VALID_MEMBER(idr_idr_rt))
+	switch (bpf->idr_type)
+	{
+	case IDR_ORIG:
+		bpf->progs = do_old_idr(IDR_ORIG_COUNT, symbol_value("prog_idr"), NULL);
+		break;
+	case IDR_RADIX:
 		bpf->progs = do_radix_tree(symbol_value("prog_idr") + OFFSET(idr_idr_rt),
 			RADIX_TREE_COUNT, NULL);
-	else 
-		bpf->progs = do_old_idr(OLD_IDR_COUNT, symbol_value("prog_idr"), NULL);
-
-	if (bpf->progs) {
-		len = sizeof(struct radix_tree_pair) * (bpf->progs+1);
-		bpf->proglist = (struct radix_tree_pair *)GETBUF(len);
-		bpf->proglist[0].index = bpf->progs;
-		if (VALID_MEMBER(idr_idr_rt))
-			bpf->progs = do_radix_tree(symbol_value("prog_idr") + OFFSET(idr_idr_rt),
-				RADIX_TREE_GATHER, bpf->proglist);
-		else
-			bpf->progs = do_old_idr(OLD_IDR_GATHER, symbol_value("prog_idr"), bpf->proglist);
+		break;
+	case IDR_XARRAY:
+		bpf->progs = do_xarray(symbol_value("prog_idr") + OFFSET(idr_idr_rt),
+			XARRAY_COUNT, NULL);
+		break;
 	}
 
-	if (VALID_MEMBER(idr_idr_rt))
+	if (bpf->progs) {
+		len = sizeof(struct list_pair) * (bpf->progs+1);
+		bpf->proglist = (struct list_pair *)GETBUF(len);
+		bpf->proglist[0].index = bpf->progs;
+
+		switch (bpf->idr_type)
+		{
+		case IDR_ORIG:
+			bpf->progs = do_old_idr(IDR_ORIG_GATHER, symbol_value("prog_idr"), bpf->proglist);
+			break;
+		case IDR_RADIX:
+			bpf->progs = do_radix_tree(symbol_value("prog_idr") + OFFSET(idr_idr_rt),
+				RADIX_TREE_GATHER, bpf->proglist);
+			break;
+		case IDR_XARRAY:
+			bpf->progs = do_xarray(symbol_value("prog_idr") + OFFSET(idr_idr_rt),
+				XARRAY_GATHER, bpf->proglist);
+			break;
+		}
+	}
+
+	switch (bpf->idr_type)
+	{
+	case IDR_ORIG:
+		bpf->maps = do_old_idr(IDR_ORIG_COUNT, symbol_value("map_idr"), NULL);
+		break;
+	case IDR_RADIX:
 		bpf->maps = do_radix_tree(symbol_value("map_idr") + OFFSET(idr_idr_rt), 
 			RADIX_TREE_COUNT, NULL);
-	else
-		bpf->maps = do_old_idr(OLD_IDR_COUNT, symbol_value("map_idr"), NULL);
+		break;
+	case IDR_XARRAY:
+		bpf->maps = do_xarray(symbol_value("map_idr") + OFFSET(idr_idr_rt), 
+			XARRAY_COUNT, NULL);
+		break;
+	}
 
 	if (bpf->maps) {
-		len = sizeof(struct radix_tree_pair) * (bpf->maps+1);
-		bpf->maplist = (struct radix_tree_pair *)GETBUF(len);
+		len = sizeof(struct list_pair) * (bpf->maps+1);
+		bpf->maplist = (struct list_pair *)GETBUF(len);
 		bpf->maplist[0].index = bpf->maps;
-		if (VALID_MEMBER(idr_idr_rt))
+
+		switch (bpf->idr_type)
+		{
+		case IDR_ORIG:
+			bpf->maps = do_old_idr(IDR_ORIG_GATHER, symbol_value("map_idr"), bpf->maplist);
+			break;
+		case IDR_RADIX:
 			bpf->maps = do_radix_tree(symbol_value("map_idr") + OFFSET(idr_idr_rt),
 				RADIX_TREE_GATHER, bpf->maplist);
-		else
-			bpf->maps = do_old_idr(OLD_IDR_GATHER, symbol_value("map_idr"), bpf->maplist);
+			break;
+		case IDR_XARRAY:
+			bpf->maps = do_xarray(symbol_value("map_idr") + OFFSET(idr_idr_rt),
+				XARRAY_GATHER, bpf->maplist);
+			break;
+		}
 	}
 
 	bpf->bpf_prog_buf = GETBUF(SIZE(bpf_prog));
@@ -285,7 +334,8 @@ do_bpf(ulong flags, ulong prog_id, ulong map_id, int radix)
 	char buf5[BUFSIZE/2];
 	
 	bpf = &bpf_info;
-	bpf->proglist = bpf->maplist = NULL;
+	bpf->proglist = NULL;
+	bpf->maplist = NULL;
 	bpf->bpf_prog_buf = bpf->bpf_prog_aux_buf = bpf->bpf_map_buf = NULL;
 	bpf->bytecode_buf = NULL;
 
@@ -1283,18 +1333,18 @@ print_boot_time(unsigned long long nsecs, char *buf, unsigned int size)
  *  the ipcs command.
  */
 static int
-do_old_idr(int cmd, ulong idr, struct radix_tree_pair *rtp)
+do_old_idr(int cmd, ulong idr, struct list_pair *lp)
 {
 	int i, max, cur, next_id, total = 0;
 	ulong entry;
 
 	switch (cmd)
 	{
-	case OLD_IDR_INIT:
+	case IDR_ORIG_INIT:
 		ipcs_init();
 		break;
 
-	case OLD_IDR_COUNT:
+	case IDR_ORIG_COUNT:
 		readmem(idr + OFFSET(idr_cur), KVADDR, &cur, 
 			sizeof(int), "idr.cur", FAULT_ON_ERROR);
 		for (total = next_id = 0; next_id < cur; next_id++) {
@@ -1305,8 +1355,8 @@ do_old_idr(int cmd, ulong idr, struct radix_tree_pair *rtp)
 		}
 		break;
 
-	case OLD_IDR_GATHER:
-		max = rtp[0].index;
+	case IDR_ORIG_GATHER:
+		max = lp[0].index;
 		readmem(idr + OFFSET(idr_cur), KVADDR, &cur, 
 			sizeof(int), "idr.cur", FAULT_ON_ERROR);
 		for (i = total = next_id = 0; next_id < cur; next_id++) {
@@ -1314,8 +1364,8 @@ do_old_idr(int cmd, ulong idr, struct radix_tree_pair *rtp)
 			if (entry == 0)
 				continue;
 			total++;
-			rtp[i].index = next_id;
-			rtp[i].value = (void *)entry;
+			lp[i].index = next_id;
+			lp[i].value = (void *)entry;
 			if (++i == max)
 				break;
 		}

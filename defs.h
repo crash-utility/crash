@@ -5283,32 +5283,29 @@ char *fill_inode_cache(ulong);
 void clear_inode_cache(void);
 int monitor_memory(long *, long *, long *, long *);
 int is_readable(char *);
+struct list_pair {
+	ulong index;
+	void *value;
+};
+#define radix_tree_pair list_pair
+ulong do_radix_tree(ulong, int, struct list_pair *);
 #define RADIX_TREE_COUNT   (1)
 #define RADIX_TREE_SEARCH  (2)
 #define RADIX_TREE_DUMP    (3)
 #define RADIX_TREE_GATHER  (4)
 #define RADIX_TREE_DUMP_CB (5)
-struct radix_tree_pair {
-	ulong index;
-	void *value;
-};
-ulong do_radix_tree(ulong, int, struct radix_tree_pair *);
 /*
  * from: "include/linux/radix-tree.h"
  */
 #define RADIX_TREE_ENTRY_MASK           3UL
 #define RADIX_TREE_EXCEPTIONAL_ENTRY    2
 
+ulong do_xarray(ulong, int, struct list_pair *);
 #define XARRAY_COUNT   (1)
 #define XARRAY_SEARCH  (2)
 #define XARRAY_DUMP    (3)
 #define XARRAY_GATHER  (4)
 #define XARRAY_DUMP_CB (5)
-struct xarray_pair {
-        ulong index;
-        void *value;
-};
-ulong do_xarray(ulong, int, struct xarray_pair *);
 #define XARRAY_TAG_MASK      (3UL)
 #define XARRAY_TAG_INTERNAL  (2UL)
 
