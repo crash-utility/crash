@@ -2417,3 +2417,14 @@ diff -up gdb-7.6/opcodes/configure.orig gdb-7.6/opcodes/configure
  			if ((req->member_typecode == TYPE_CODE_TYPEDEF) &&
  			    (typedef_type = check_typedef(nextfield->type))) 
          			req->member_length = TYPE_LENGTH(typedef_type);
+
+--- gdb-7.6/gdb/symtab.c.orig
++++ gdb-7.6/gdb/symtab.c
+@@ -5727,6 +5727,7 @@ gdb_get_symbol_type(struct gnu_request *
+ 	req->type_name = (char *)TYPE_MAIN_TYPE(type)->name;
+ 	req->typecode = TYPE_MAIN_TYPE(type)->code;
+ 	req->length = type->length;
++	req->type_tag_name = (char *)TYPE_TAG_NAME(type);
+ 	target_type = TYPE_MAIN_TYPE(type)->target_type;
+ 
+ 	if (target_type) {

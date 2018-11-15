@@ -638,7 +638,6 @@ struct new_utsname {
 #define ARCH_PVOPS          (0x10000000)
 #define PRE_KERNEL_INIT     (0x20000000)
 #define ARCH_PVOPS_XEN      (0x40000000)
-#define IRQ_DESC_TREE       (0x80000000)
 
 #define GCC_VERSION_DEPRECATED (GCC_3_2|GCC_3_2_3|GCC_2_96|GCC_3_3_2|GCC_3_3_3)
 
@@ -649,6 +648,8 @@ struct new_utsname {
 #define GET_TIMESTAMP               (0x8ULL)
 #define TVEC_BASES_V3              (0x10ULL)
 #define TIMER_BASES                (0x20ULL)
+#define IRQ_DESC_TREE_RADIX        (0x40ULL)
+#define IRQ_DESC_TREE_XARRAY       (0x80ULL)
 
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
@@ -4588,6 +4589,7 @@ struct gnu_request {
 	char *member_main_type_tag_name;
 	char *member_target_type_name;
 	char *member_target_type_tag_name;
+	char *type_tag_name;
 };
 
 /*
