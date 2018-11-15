@@ -20,7 +20,11 @@
 #define SPECIFIED_ID      0x1
 #define SPECIFIED_ADDR    0x2
 
-#define IPCS_INIT 0x1
+#define IPCS_INIT  0x1
+#define IDR_ORIG   0x2
+#define IDR_RADIX  0x4
+#define IDR_XARRAY 0x8
+
 #define MAX_ID_SHIFT (sizeof(int)*8 - 1)
 #define MAX_ID_BIT (1U << MAX_ID_SHIFT)
 #define MAX_ID_MASK (MAX_ID_BIT - 1)
@@ -71,8 +75,8 @@ struct ipcs_table {
 	ulong shm_f_op_huge_addr;
 	int use_shm_f_op;
 	int seq_multiplier;
-	int rt_cnt;
-	struct list_pair *rtp;
+	int cnt;
+	struct list_pair *lp;
 };
 
 /*
@@ -93,6 +97,7 @@ static void get_msg_info(struct msg_info *, ulong, int);
 static void add_rss_swap(ulong, int, ulong *, ulong *);
 static int is_file_hugepages(ulong);
 static void gather_radix_tree_entries(ulong);
+static void gather_xarray_entries(ulong);
 
 /*
  * global data
@@ -196,6 +201,14 @@ ipcs_init(void)
 		ipcs_table.idr_bits = 6;
 	else
 		error(FATAL, "machdep->bits is not 32 or 64");
+
+	if (VALID_MEMBER(idr_idr_rt)) {
+		if (STREQ(MEMBER_TYPE_NAME("idr", "idr_rt"), "xarray"))
+			ipcs_table.init_flags |= IDR_XARRAY;
+		else
+			ipcs_table.init_flags |= IDR_RADIX;
+	} else
+		ipcs_table.init_flags |= IDR_ORIG;
 
 	ipcs_table.seq_multiplier = 32768;
 }
@@ -597,10 +610,18 @@ ipc_search_idr(ulong ipc_ids_p, int specified, ulong specified_value, int (*fn)(
 	}
 
 	if (VALID_MEMBER(idr_idr_rt)) {
-		gather_radix_tree_entries(ipcs_idr_p);
+		switch (ipcs_table.init_flags & (IDR_RADIX|IDR_XARRAY))
+		{
+		case IDR_RADIX: 
+			gather_radix_tree_entries(ipcs_idr_p);
+			break;
+		case IDR_XARRAY:
+			gather_xarray_entries(ipcs_idr_p);
+			break;
+		}
 
-		for (i = 0; i < ipcs_table.rt_cnt; i++) {
-			ipc = (ulong)ipcs_table.rtp[i].value;
+		for (i = 0; i < ipcs_table.cnt; i++) {
+			ipc = (ulong)ipcs_table.lp[i].value;
 			if (fn(ipc, specified, specified_value, UNUSED, verbose)) {
 				found = 1;
 				if (specified != SPECIFIED_NOTHING)
@@ -608,8 +629,8 @@ ipc_search_idr(ulong ipc_ids_p, int specified, ulong specified_value, int (*fn)(
 			}
 		}
 
-		if (ipcs_table.rtp)
-			FREEBUF(ipcs_table.rtp);
+		if (ipcs_table.lp)
+			FREEBUF(ipcs_table.lp);
 	} else {
 		for (total = 0, next_id = 0; total < in_use; next_id++) {
 			ipc = idr_find(ipcs_idr_p, next_id);
@@ -1109,14 +1130,30 @@ gather_radix_tree_entries(ulong ipcs_idr_p)
 {
 	long len;
 
-	ipcs_table.rt_cnt = do_radix_tree(ipcs_idr_p, RADIX_TREE_COUNT, NULL);
+	ipcs_table.cnt = do_radix_tree(ipcs_idr_p, RADIX_TREE_COUNT, NULL);
 
-	if (ipcs_table.rt_cnt) {
-		len = sizeof(struct list_pair) * (ipcs_table.rt_cnt+1);
-		ipcs_table.rtp = (struct list_pair *)GETBUF(len);
-		ipcs_table.rtp[0].index = ipcs_table.rt_cnt;
-		ipcs_table.rt_cnt = do_radix_tree(ipcs_idr_p, RADIX_TREE_GATHER, ipcs_table.rtp);
+	if (ipcs_table.cnt) {
+		len = sizeof(struct list_pair) * (ipcs_table.cnt+1);
+		ipcs_table.lp = (struct list_pair *)GETBUF(len);
+		ipcs_table.lp[0].index = ipcs_table.cnt;
+		ipcs_table.cnt = do_radix_tree(ipcs_idr_p, RADIX_TREE_GATHER, ipcs_table.lp);
 	} else
-		ipcs_table.rtp = NULL;
+		ipcs_table.lp = NULL;
+}
+
+static void
+gather_xarray_entries(ulong ipcs_idr_p)
+{
+	long len;
+
+	ipcs_table.cnt = do_xarray(ipcs_idr_p, XARRAY_COUNT, NULL);
+
+	if (ipcs_table.cnt) {
+		len = sizeof(struct list_pair) * (ipcs_table.cnt+1);
+		ipcs_table.lp = (struct list_pair *)GETBUF(len);
+		ipcs_table.lp[0].index = ipcs_table.cnt;
+		ipcs_table.cnt = do_xarray(ipcs_idr_p, XARRAY_GATHER, ipcs_table.lp);
+	} else
+		ipcs_table.lp = NULL;
 }
 
