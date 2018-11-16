@@ -5006,6 +5006,7 @@ struct xarray_ops {
 int do_xarray_traverse(ulong ptr, int is_root, struct xarray_ops *ops);
 int do_rdtree(struct tree_data *);
 int do_rbtree(struct tree_data *);
+int do_xatree(struct tree_data *);
 int retrieve_list(ulong *, int);
 long power(long, int);
 long long ll_power(long long, long long);
