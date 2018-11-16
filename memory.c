@@ -6570,6 +6570,9 @@ dump_inode_page(ulong page)
 {
 	struct meminfo meminfo;
 
+	if (!is_page_ptr(page, NULL))
+		return 0;
+
 	BZERO(&meminfo, sizeof(struct meminfo));
 	meminfo.spec_addr = page;
 	meminfo.memtype = KVADDR;
