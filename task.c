@@ -4368,6 +4368,10 @@ task_pointer_string(struct task_context *tc, ulong do_kstackp, char *buf)
         		readmem(tc->task + OFFSET(task_struct_thread_ksp), 
 				KVADDR, &bt->stkptr, sizeof(void *),
                 		"thread_struct ksp", FAULT_ON_ERROR);
+		} else if (VALID_MEMBER(task_struct_thread_context_sp)) {
+			readmem(tc->task + OFFSET(task_struct_thread_context_sp), 
+				KVADDR, &bt->stkptr, sizeof(void *),
+				"cpu_context sp", FAULT_ON_ERROR);
 		} else {
 			if ((bt->stackbase = GET_STACKBASE(tc->task))) {
 				bt->stacktop = GET_STACKTOP(tc->task);
@@ -4375,6 +4379,8 @@ task_pointer_string(struct task_context *tc, ulong do_kstackp, char *buf)
 				bt->tc = tc;
 				bt->flags |= BT_KSTACKP;
 				back_trace(bt);
+				if (bt->stackbuf)
+					FREEBUF(bt->stackbuf);
 			} else
 				bt->stkptr = 0;
 		}
