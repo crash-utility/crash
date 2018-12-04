@@ -220,6 +220,31 @@ static int ppc64_is_vmaddr(ulong addr)
 	return (vt->vmalloc_start && addr >= vt->vmalloc_start);
 }
 
+static int set_ppc64_max_physmem_bits(void)
+{
+	int dimension;
+
+	get_array_length("mem_section", &dimension, 0);
+
+	if ((machdep->flags & VMEMMAP) &&
+	    (THIS_KERNEL_VERSION >= LINUX(4,20,0)) &&
+	    !dimension && (machdep->pagesize == 65536)) {
+		/*
+		 * SPARSEMEM_VMEMMAP & SPARSEMEM_EXTREME configurations with
+		 * 64K pagesize and v4.20 kernel or later.
+		 */
+		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_4_20;
+	} else if ((machdep->flags & VMEMMAP) &&
+		   (THIS_KERNEL_VERSION >= LINUX(4,19,0))) {
+		/* SPARSEMEM_VMEMMAP & v4.19 kernel or later */
+		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_4_19;
+	} else if (THIS_KERNEL_VERSION >= LINUX(3,7,0))
+		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_3_7;
+	else
+		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+
+	return 0;
+}
 
 struct machine_specific ppc64_machine_specific = { 
 	.hwintrstack = { 0 }, 
@@ -583,13 +608,7 @@ ppc64_init(int when)
 			ppc64_vmemmap_init();
 
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
-		if ((machdep->flags & VMEMMAP) &&
-		    (THIS_KERNEL_VERSION >= LINUX(4,19,0)))
-			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_4_19;
-		else if (THIS_KERNEL_VERSION >= LINUX(3,7,0))
-			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_3_7;
-		else
-			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+		set_ppc64_max_physmem_bits();
 
 		ppc64_init_cpu_info();
 		machdep->vmalloc_start = ppc64_vmalloc_start;
