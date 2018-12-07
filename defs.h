@@ -5192,6 +5192,7 @@ void parse_for_member_extended(struct datatype_member *, ulong);
 void add_to_downsized(char *);
 int is_downsized(char *);
 int is_string(char *, char *);
+struct syment *symbol_complete_match(const char *, struct syment *);
 
 /*  
  *  memory.c 

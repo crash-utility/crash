@@ -40,6 +40,8 @@ int shell_command(char *);
 static void modify_orig_line(char *, struct args_input_file *);
 static void modify_expression_arg(char *, char **, struct args_input_file *);
 static int verify_args_input_file(char *);
+static char *crash_readline_completion_generator(const char *, int);
+static char **crash_readline_completer(const char *, int, int);
 
 #define READLINE_LIBRARY
 
@@ -2074,6 +2076,9 @@ readline_init(void)
 	if (STREQ(pc->editing_mode, "emacs")) {
         	rl_editing_mode = emacs_mode;
 	}
+
+	rl_attempted_completion_function = crash_readline_completer;
+	rl_attempted_completion_over = 1;
 }
 
 /*
@@ -2611,3 +2616,27 @@ exec_args_input_file(struct command_table_entry *ct, struct args_input_file *aif
 	fclose(pc->args_ifile);
 	pc->args_ifile = NULL;
 }
+
+static char *
+crash_readline_completion_generator(const char *match, int state)
+{
+	static struct syment *sp_match;
+
+	if (state == 0)
+		sp_match = NULL;
+
+	sp_match = symbol_complete_match(match, sp_match);
+
+	if (sp_match)
+		return(strdup(sp_match->name));
+	else
+		return NULL;
+}
+
+static char **
+crash_readline_completer(const char *match, int start, int end)
+{
+	rl_attempted_completion_over = 1;
+	return rl_completion_matches(match, crash_readline_completion_generator);
+}
+

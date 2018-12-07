@@ -13198,3 +13198,73 @@ is_downsized(char *name)
 
 	return FALSE;
 }
+
+struct syment *
+symbol_complete_match(const char *match, struct syment *sp_last)
+{
+	int i;
+	struct syment *sp, *sp_end, *sp_start;
+	struct load_module *lm;
+	int search_init;
+
+	if (sp_last) {
+		sp_start = next_symbol(NULL, sp_last);
+		if (!sp_start)
+			return NULL;
+	} else	
+		sp_start = st->symtable;
+
+	if ((sp_start >= st->symtable) && (sp_start < st->symend)) {
+		for (sp = sp_start; sp < st->symend; sp++) {
+			if (STRNEQ(sp->name, match))
+				return sp;
+		}
+		sp_start = NULL;
+	}
+
+	search_init = FALSE;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+		if (lm->mod_flags & MOD_INIT)
+			search_init = TRUE;
+		sp_end = lm->mod_symend;
+		if (!sp_start)
+			sp_start = lm->mod_symtable;
+
+		if ((sp_start >= lm->mod_symtable) && (sp_start < sp_end)) {
+			for (sp = sp_start; sp < sp_end; sp++) {
+				if (MODULE_START(sp))
+					continue;
+	
+				if (STRNEQ(sp->name, match))
+					return sp;
+			}
+			sp_start = NULL;
+		}
+	}
+
+	if (!search_init)
+		return NULL;
+	
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+		if (!lm->mod_init_symtable)
+			continue;
+		sp_end = lm->mod_init_symend;
+		if (!sp_start)
+			sp_start = lm->mod_init_symtable;
+
+		if ((sp_start >= lm->mod_init_symtable) && (sp_start < sp_end)) {
+			for (sp = sp_start; sp < sp_end; sp++) {
+				if (MODULE_START(sp))
+					continue;
+	
+				if (STRNEQ(sp->name, match))
+					return sp;
+			}
+		}
+	}
+
+	return NULL;
+}
