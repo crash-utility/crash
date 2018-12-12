@@ -220,6 +220,8 @@ static int ppc64_is_vmaddr(ulong addr)
 	return (vt->vmalloc_start && addr >= vt->vmalloc_start);
 }
 
+#define is_RHEL8() (strstr(kt->proc_version, ".el8."))
+
 static int set_ppc64_max_physmem_bits(void)
 {
 	int dimension;
@@ -235,8 +237,8 @@ static int set_ppc64_max_physmem_bits(void)
 		 */
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_4_20;
 	} else if ((machdep->flags & VMEMMAP) &&
-		   (THIS_KERNEL_VERSION >= LINUX(4,19,0))) {
-		/* SPARSEMEM_VMEMMAP & v4.19 kernel or later */
+	    ((THIS_KERNEL_VERSION >= LINUX(4,19,0)) || is_RHEL8())) {
+		/* SPARSEMEM_VMEMMAP & v4.19 kernel or later, or RHEL8 */
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_4_19;
 	} else if (THIS_KERNEL_VERSION >= LINUX(3,7,0))
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_3_7;
