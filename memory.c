@@ -17411,6 +17411,8 @@ init_memory_block_offset(void)
 				"subsys_private", "klist_devices");
 	MEMBER_OFFSET_INIT(klist_k_list, "klist", "k_list");
 	MEMBER_OFFSET_INIT(klist_node_n_node, "klist_node", "n_node");
+	MEMBER_OFFSET_INIT(device_kobj, "device", "kobj");
+	MEMBER_OFFSET_INIT(kobject_name, "kobject", "name");
 	MEMBER_OFFSET_INIT(device_private_knode_bus,
 				"device_private", "knode_bus");
 	MEMBER_OFFSET_INIT(device_private_device, "device_private", "device");
