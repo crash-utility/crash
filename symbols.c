@@ -2805,7 +2805,7 @@ is_kernel_text(ulong value)
         if ((sp = value_search(value, NULL)) && is_symbol_text(sp))
 		return TRUE;
 
-        if (NO_MODULES())
+        if (NO_MODULES() || !(st->flags & MODULE_SYMS))
                 return FALSE;
 
         for (i = 0; i < st->mods_installed; i++) {
@@ -4611,7 +4611,7 @@ module_symbol(ulong value,
 	ulong offs, offset;
 	ulong base, end;
 
-	if (NO_MODULES())
+	if (NO_MODULES() || !(st->flags & MODULE_SYMS))
 		return FALSE;
 
         if (!radix)
