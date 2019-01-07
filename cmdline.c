@@ -1,8 +1,8 @@
 /* cmdline.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2015,2018 David Anderson
- * Copyright (C) 2002-2015,2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2015,2019 David Anderson
+ * Copyright (C) 2002-2015,2019 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -121,9 +121,11 @@ process_command_line(void)
 			args[0] = NULL;
 			fprintf(fp, "\n");
 			return;
-		} 
-
-		strcpy(pc->command_line, pc->readline);
+		}
+		if (strlen(pc->readline) >= BUFSIZE)
+			error(FATAL, "input line exceeds maximum of 1500 bytes\n");	
+		else	
+			strcpy(pc->command_line, pc->readline);
 		free(pc->readline); 
 
 		clean_line(pc->command_line);
