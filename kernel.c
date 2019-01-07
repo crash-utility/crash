@@ -1,8 +1,8 @@
 /* kernel.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2018 David Anderson
- * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2019 David Anderson
+ * Copyright (C) 2002-2019 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1305,7 +1305,8 @@ verify_namelist()
 		if (!strstr(buffer, "Linux version 2.") &&
 		    !strstr(buffer, "Linux version 3.") &&
 		    !strstr(buffer, "Linux version 4.") &&
-		    !strstr(buffer, "Linux version 5."))
+		    !strstr(buffer, "Linux version 5.") &&
+		    !strstr(buffer, "Linux version 6."))
 			continue;
 
                 if (strstr(buffer, kt->proc_version)) {
@@ -5510,7 +5511,8 @@ debug_kernel_version(char *namelist)
                 if (!strstr(buf, "Linux version 2.") &&
 		    !strstr(buf, "Linux version 3.") &&
 		    !strstr(buf, "Linux version 4.") &&
-		    !strstr(buf, "Linux version 5."))
+		    !strstr(buf, "Linux version 5.") &&
+		    !strstr(buf, "Linux version 6."))
                         continue;
 
 		argc = parse_line(buf, arglist); 
