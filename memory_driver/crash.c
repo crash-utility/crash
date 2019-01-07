@@ -3,6 +3,7 @@
  *
  *  Copyright (C) 2004, 2011, 2016  Dave Anderson <anderson@redhat.com>
  *  Copyright (C) 2004, 2011, 2016  Red Hat, Inc.
+ *  Copyright (C) 2019 Serapheim Dimitropoulos <serapheim delphix com>
  */
 
 /******************************************************************************
@@ -137,7 +138,7 @@ static inline void unmap_virtual(struct page *page)
 #endif
 
 
-#define CRASH_VERSION   "1.3"
+#define CRASH_VERSION   "1.4"
 
 /*
  *  These are the file operation functions that allow crash utility
@@ -157,6 +158,43 @@ crash_llseek(struct file * file, loff_t offset, int orig)
 	default:
 		return -EINVAL;
 	}
+}
+
+static ssize_t
+crash_write(struct file *file, const char *buf, size_t count, loff_t *poff)
+{
+       void *vaddr;
+       struct page *page;
+       u64 offset;
+       ssize_t written;
+       char *buffer = file->private_data;
+
+       offset = *poff;
+       if (offset >> PAGE_SHIFT != (offset+count-1) >> PAGE_SHIFT)
+               return -EINVAL;
+
+       vaddr = map_virtual(offset, &page);
+       if (!vaddr)
+               return -EFAULT;
+
+       /*
+        * Use bounce buffer to bypass the CONFIG_HARDENED_USERCOPY
+        * kernel text restriction.
+        */
+       if (copy_from_user(buffer, buf, count)) {
+               unmap_virtual(page);
+               return -EFAULT;
+       }
+
+       if (probe_kernel_write(vaddr, buffer, count)) {
+               unmap_virtual(page);
+               return -EFAULT;
+       }
+       unmap_virtual(page);
+
+       written = count;
+       *poff += written;
+       return written;
 }
 
 /*
@@ -256,6 +294,7 @@ static struct file_operations crash_fops = {
 	.owner = THIS_MODULE,
 	.llseek = crash_llseek,
 	.read = crash_read,
+	.write = crash_write,
 	.unlocked_ioctl = crash_ioctl,
 	.open = crash_open,
 	.release = crash_release,
