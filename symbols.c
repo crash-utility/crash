@@ -10101,6 +10101,10 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(gendisk_queue));
 	fprintf(fp, "                 hd_struct_dev: %ld\n",
 		OFFSET(hd_struct_dev));
+	fprintf(fp, "             hd_struct_dkstats: %ld\n",
+		OFFSET(hd_struct_dkstats));
+	fprintf(fp, "          disk_stats_in_flight: %ld\n",
+		OFFSET(disk_stats_in_flight));
 	fprintf(fp, "                  klist_k_list: %ld\n",
 		OFFSET(klist_k_list));
 	fprintf(fp, "            klist_node_n_klist: %ld\n",

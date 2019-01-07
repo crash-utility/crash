@@ -3218,7 +3218,7 @@ char *help_dev[] = {
 "         WRITE: I/O requests that are writes (older kernels)",
 "           DRV: I/O requests that are in-flight in the device driver.",
 "                If the device driver uses blk-mq interface, this field",
-"                shows N/A(MQ).",
+"                shows N/A(MQ).  If not available, this column is not shown.",
 "    -D  same as -d, but filter out disks with no in-progress I/O requests.",
 "\nEXAMPLES",
 "  Display character and block device data:\n",
