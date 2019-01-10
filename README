@@ -74,8 +74,8 @@
 
   To build the crash utility: 
 
-    $ tar -xf crash-7.2.4.tar.gz
-    $ cd crash-7.2.4
+    $ tar -xf crash-7.2.5.tar.gz
+    $ cd crash-7.2.5
     $ make
 
   The initial build will take several minutes  because the embedded gdb module
@@ -116,7 +116,7 @@
   If neither /dev/mem or /dev/crash are available, then /proc/kcore will be
   be used as the live memory source.  If /proc/kcore is also restricted, then
   the Red Hat /dev/crash driver may be compiled and installed; its source
-  is included in the crash-7.2.4/memory_driver subdirectory.
+  is included in the crash-7.2.5/memory_driver subdirectory.
 
   If the kernel file is stored in /boot, /, /boot/efi, or in any /usr/src
   or /usr/lib/debug/lib/modules subdirectory, then no command line arguments
@@ -127,8 +127,8 @@
 
     $ crash
     
-    crash 7.2.4
-    Copyright (C) 2002-2017  Red Hat, Inc.
+    crash 7.2.5
+    Copyright (C) 2002-2019  Red Hat, Inc.
     Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
     Copyright (C) 1999-2006  Hewlett-Packard Co
     Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited
@@ -152,7 +152,7 @@
           KERNEL: /boot/vmlinux
         DUMPFILE: /dev/mem
             CPUS: 1
-            DATE: Fri Sep 21 14:54:38 2018
+            DATE: Thu Jan 10 14:39:19 2019
           UPTIME: 10 days, 22:55:18
     LOAD AVERAGE: 0.08, 0.03, 0.01
            TASKS: 42
@@ -180,7 +180,7 @@
     eval           kmem           ptob           sym            wr             
     exit           list           ptov           sys            q              
     
-    crash version: 7.2.4    gdb version: 7.6
+    crash version: 7.2.5    gdb version: 7.6
     For help on any command above, enter "help <command>".
     For help on input options, enter "help input".
     For help on output options, enter "help output".
@@ -193,8 +193,8 @@
 
     $ crash vmlinux vmcore
  
-    crash 7.2.4
-    Copyright (C) 2002-2017  Red Hat, Inc.
+    crash 7.2.5
+    Copyright (C) 2002-2019  Red Hat, Inc.
     Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
     Copyright (C) 1999-2006  Hewlett-Packard Co
     Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited
