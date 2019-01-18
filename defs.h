@@ -1,8 +1,8 @@
 /* defs.h - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2018 David Anderson
- * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2019 David Anderson
+ * Copyright (C) 2002-2019 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -3430,6 +3430,9 @@ struct arm64_stackframe {
 #define VMEMMAP_VADDR_5LEVEL       0xffd4000000000000
 #define VMEMMAP_END_5LEVEL         0xffd5ffffffffffff
 
+#define PAGE_OFFSET_4LEVEL_4_20    0xffff888000000000
+#define PAGE_OFFSET_5LEVEL_4_20    0xff11000000000000
+
 #define VSYSCALL_START             0xffffffffff600000
 #define VSYSCALL_END               0xffffffffff601000
 
@@ -5920,6 +5923,7 @@ struct machine_specific {
 	ulong ptrs_per_pgd;
 	ulong cpu_entry_area_start;
 	ulong cpu_entry_area_end;
+	ulong page_offset_force;
 };
 
 #define KSYMS_START    (0x1)
