@@ -1060,8 +1060,8 @@ xen_hyper_get_domains(void)
 	long domain_next_in_list;
 	int i, j;
 
-	if (!try_get_symbol_data("dom0", sizeof(void *), &domain))
-		get_symbol_data("hardware_domain", sizeof(void *), &domain);
+	if (!try_get_symbol_data("hardware_domain", sizeof(void *), &domain))
+		get_symbol_data("dom0", sizeof(void *), &domain);
 
 	domain_next_in_list = MEMBER_OFFSET("domain", "next_in_list");
 	i = 0;
@@ -1103,8 +1103,8 @@ xen_hyper_get_domain_next(int mod, ulong *next)
 		if (xhdt->dom0) {
 			*next = xhdt->dom0->domain;
 		} else {
-			if (!try_get_symbol_data("dom0", sizeof(void *), next))
-				get_symbol_data("hardware_domain", sizeof(void *), next);
+			if (!try_get_symbol_data("hardware_domain", sizeof(void *), next))
+				get_symbol_data("dom0", sizeof(void *), next);
 		}
 		return xhdt->domain_struct;
 		break;
