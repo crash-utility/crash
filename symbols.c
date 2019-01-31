@@ -7201,7 +7201,7 @@ cmd_p(void)
 			*(cpuspec-1) = ':';
 	}
 
-	process_gdb_output(concat_args(buf1, 0, FALSE), radix,
+	process_gdb_output(concat_args(buf1, 0, TRUE), radix,
 			   sp ? sp->name : NULL, do_load_module_filter);
 }
 

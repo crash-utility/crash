@@ -1,8 +1,8 @@
 /* tools.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2018 David Anderson
- * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2019 David Anderson
+ * Copyright (C) 2002-2019 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -168,7 +168,8 @@ parse_line(char *str, char *argv[])
                 return(0);
 
         i = j = k = 0;
-        string = expression = FALSE;
+        string = FALSE;
+	expression = 0;
 
 	/*
 	 * Special handling for when the first character is a '"'.
@@ -220,11 +221,35 @@ next:
 	                i++;
 	            }
 
-                    if (!string && str[i] == '(') {     
-                        expression = TRUE;
-                    }
-	
-	
+		    /*
+		     *  Make an expression encompassed by a set of parentheses 
+		     *  a single argument.  Also account for embedded sets.
+		     */
+		    if (!string && str[i] == '(') {     
+			argv[j++] = &str[i];
+			expression = 1;
+			while (expression > 0) {
+				i++;
+				switch (str[i])
+				{
+				case '(':
+					expression++;
+					break;
+				case ')':
+					expression--;
+					break;
+				case NULLCHAR:
+				case '\n':
+					expression = -1;
+					break;
+				default:
+					break;
+				}
+			}
+			if (expression == 0)
+				i++;
+		    }
+
 	            if (str[i] != NULLCHAR && str[i] != '\n') {
 	                argv[j++] = &str[i];
 	                if (string) {
@@ -234,11 +259,6 @@ next:
 	                        if (str[i] == '"')
 	                                str[i] = ' ';
 	                }
-                        if (expression) {
-                                expression = FALSE;
-                                while (str[i] != ')' && str[i] != NULLCHAR)
-                                        i++;
-                        }
 	                break;
 	            }
 	                        /* else fall through */
