@@ -3076,7 +3076,7 @@ typedef signed int s32;
 #define PMD_SHIFT_L3_64K     (29)
 #define PMD_SIZE_L3_64K      (1UL << PMD_SHIFT_L3_64K)
 #define PMD_MASK_L3_64K      (~(PMD_SIZE_L3_64K-1))
-#define PGDIR_OFFSET_L3_64K(X) (((ulong)(X)) & ((PTRS_PER_PGD_L3_64K * 8) - 1))
+#define PGDIR_OFFSET_L3_64K(X) (((ulong)(X)) & ((machdep->ptrs_per_pgd * 8) - 1))
 
 /*
  * 2-levels / 64K pages
@@ -3163,6 +3163,7 @@ typedef signed int s32;
 #define _SECTION_SIZE_BITS      30
 #define _MAX_PHYSMEM_BITS       40
 #define _MAX_PHYSMEM_BITS_3_17  48
+#define _MAX_PHYSMEM_BITS_52    52
 
 typedef unsigned long long __u64;
 typedef unsigned long long u64;
@@ -3242,6 +3243,7 @@ struct machine_specific {
 	ulong kern_eframe_offset;
 	ulong machine_kexec_start;
 	ulong machine_kexec_end;
+	ulong vabits_user;
 };
 
 struct arm64_stackframe {

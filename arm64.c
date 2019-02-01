@@ -1,8 +1,8 @@
 /*
  * arm64.c - core analysis suite
  *
- * Copyright (C) 2012-2018 David Anderson
- * Copyright (C) 2012-2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2012-2019 David Anderson
+ * Copyright (C) 2012-2019 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -215,6 +215,8 @@ arm64_init(int when)
 		ms->page_offset = ARM64_PAGE_OFFSET;
 		machdep->identity_map_base = ARM64_PAGE_OFFSET;
 		machdep->kvbase = ARM64_VA_START;
+		machdep->is_kvaddr = generic_is_kvaddr;
+		machdep->kvtop = arm64_kvtop;
 		ms->userspace_top = ARM64_USERSPACE_TOP;
 		if (machdep->flags & NEW_VMEMMAP) {
 			struct syment *sp;
@@ -268,11 +270,17 @@ arm64_init(int when)
 			break;
 
 		case 65536:
+			if (kernel_symbol_exists("idmap_ptrs_per_pgd") &&
+			    readmem(symbol_value("idmap_ptrs_per_pgd"), KVADDR,
+			    &value, sizeof(ulong), "idmap_ptrs_per_pgd", RETURN_ON_ERROR))
+				machdep->ptrs_per_pgd = value;
+		
 			if (machdep->machspec->VA_BITS > PGDIR_SHIFT_L3_64K) {
 				machdep->flags |= VM_L3_64K;
-				machdep->ptrs_per_pgd = PTRS_PER_PGD_L3_64K;
+				if (!machdep->ptrs_per_pgd)
+					machdep->ptrs_per_pgd = PTRS_PER_PGD_L3_64K;
 				if ((machdep->pgd =
-				    (char *)malloc(PTRS_PER_PGD_L3_64K * 8)) == NULL)
+				    (char *)malloc(machdep->ptrs_per_pgd * 8)) == NULL)
 					error(FATAL, "cannot malloc pgd space.");
 				if ((machdep->pmd =
 				    (char *)malloc(PTRS_PER_PMD_L3_64K * 8)) == NULL)
@@ -282,9 +290,10 @@ arm64_init(int when)
 					error(FATAL, "cannot malloc ptbl space.");
 			} else {
 				machdep->flags |= VM_L2_64K;
-				machdep->ptrs_per_pgd = PTRS_PER_PGD_L2_64K;
+				if (!machdep->ptrs_per_pgd)
+					machdep->ptrs_per_pgd = PTRS_PER_PGD_L2_64K;
 				if ((machdep->pgd =
-				    (char *)malloc(PTRS_PER_PGD_L2_64K * 8)) == NULL)
+				    (char *)malloc(machdep->ptrs_per_pgd * 8)) == NULL)
 					error(FATAL, "cannot malloc pgd space.");
 				if ((machdep->ptbl =
 				    (char *)malloc(PTRS_PER_PTE_L2_64K * 8)) == NULL)
@@ -312,9 +321,11 @@ arm64_init(int when)
 		machdep->flags |= VMEMMAP;
 
 		machdep->uvtop = arm64_uvtop;
-		machdep->kvtop = arm64_kvtop;
-		machdep->is_kvaddr = generic_is_kvaddr;
 		machdep->is_uvaddr = arm64_is_uvaddr;
+		if (kernel_symbol_exists("vabits_user") && 
+		    readmem(symbol_value("vabits_user"), KVADDR,
+		    &value, sizeof(ulong), "vabits_user", RETURN_ON_ERROR))
+			machdep->machspec->vabits_user = value;
 		machdep->eframe_search = arm64_eframe_search;
 		machdep->back_trace = arm64_back_trace_cmd;
 		machdep->in_alternate_stack = arm64_in_alternate_stack;
@@ -356,10 +367,14 @@ arm64_init(int when)
 	case POST_GDB:
 		arm64_calc_virtual_memory_ranges();
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
-		if (THIS_KERNEL_VERSION >= LINUX(3,17,0))
-			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_3_17;
-		else
-			machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+		if (!machdep->max_physmem_bits) {
+			if (machdep->machspec->VA_BITS == 52)  /* guess */
+				machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_52;
+			else if (THIS_KERNEL_VERSION >= LINUX(3,17,0)) 
+				machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_3_17;
+			else
+				machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+		}
 		ms = machdep->machspec;
 
 		if (THIS_KERNEL_VERSION >= LINUX(4,0,0)) {
@@ -607,6 +622,11 @@ arm64_dump_machdep_table(ulong arg)
 
 	fprintf(fp, "            machspec: %lx\n", (ulong)ms);
 	fprintf(fp, "               VA_BITS: %ld\n", ms->VA_BITS);
+	fprintf(fp, "           vabits_user: ");
+	if (ms->vabits_user)
+		fprintf(fp, "%ld\n", ms->vabits_user);
+	else
+		fprintf(fp, "(unused)\n");
 	fprintf(fp, "         userspace_top: %016lx\n", ms->userspace_top);
 	fprintf(fp, "           page_offset: %016lx\n", ms->page_offset);
 	fprintf(fp, "    vmalloc_start_addr: %016lx\n", ms->vmalloc_start_addr);
@@ -697,6 +717,8 @@ arm64_parse_machdep_arg_l(char *argstring, char *param, ulong *value)
 			*value = dtol(p, flags, &err);
 			if (!err)
 				*value = MEGABYTES(*value);
+		} else if (STRNEQ(argstring, "max_physmem_bits")) {
+			*value = dtol(p, flags, &err);
 		} else {
 			*value = htol(p, flags, &err);
 		}
@@ -755,6 +777,12 @@ arm64_parse_cmdline_args(void)
 				error(NOTE,
 					"setting kimage_voffset to: 0x%lx\n\n",
 					machdep->machspec->kimage_voffset);
+				continue;
+			} else if (arm64_parse_machdep_arg_l(arglist[i], "max_physmem_bits",
+			        &machdep->max_physmem_bits)) {
+				error(NOTE,
+					"setting max_physmem_bits to: %ld\n\n",
+					machdep->max_physmem_bits);
 				continue;
 			}
 
@@ -1077,8 +1105,8 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
                 fprintf(fp, "PAGE DIRECTORY: %lx\n", pgd);
 
 	pgd_base = (ulong *)pgd;
-	FILL_PGD(pgd_base, KVADDR, PTRS_PER_PGD_L2_64K * sizeof(ulong));
-	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L2_64K) & (PTRS_PER_PGD_L2_64K - 1));
+	FILL_PGD(pgd_base, KVADDR, machdep->ptrs_per_pgd * sizeof(ulong));
+	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L2_64K) & (machdep->ptrs_per_pgd - 1));
         pgd_val = ULONG(machdep->pgd + PAGEOFFSET(pgd_ptr));
         if (verbose) 
                 fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
@@ -1141,8 +1169,8 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
                 fprintf(fp, "PAGE DIRECTORY: %lx\n", pgd);
 
 	pgd_base = (ulong *)pgd;
-	FILL_PGD(pgd_base, KVADDR, PTRS_PER_PGD_L3_64K * sizeof(ulong));
-	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L3_64K) & (PTRS_PER_PGD_L3_64K - 1));
+	FILL_PGD(pgd_base, KVADDR, machdep->ptrs_per_pgd * sizeof(ulong));
+	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L3_64K) & (machdep->ptrs_per_pgd - 1));
         pgd_val = ULONG(machdep->pgd + PGDIR_OFFSET_L3_64K(pgd_ptr));
         if (verbose)
                 fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
