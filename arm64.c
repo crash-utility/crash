@@ -368,7 +368,10 @@ arm64_init(int when)
 		arm64_calc_virtual_memory_ranges();
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		if (!machdep->max_physmem_bits) {
-			if (machdep->machspec->VA_BITS == 52)  /* guess */
+			if ((string = pc->read_vmcoreinfo("NUMBER(MAX_PHYSMEM_BITS)"))) {
+				machdep->max_physmem_bits = atol(string);
+				free(string);
+			} else if (machdep->machspec->VA_BITS == 52)  /* guess */
 				machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_52;
 			else if (THIS_KERNEL_VERSION >= LINUX(3,17,0)) 
 				machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_3_17;
