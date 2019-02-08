@@ -1,7 +1,7 @@
 /* netdump.c 
  *
- * Copyright (C) 2002-2018 David Anderson
- * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2019 David Anderson
+ * Copyright (C) 2002-2019 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1787,11 +1787,13 @@ vmcoreinfo_read_string(const char *key)
 		if (STREQ(key, "NUMBER(kimage_voffset)") && nd->arch_data) {
 			value = calloc(VADDR_PRLEN+1, sizeof(char));
 			sprintf(value, "%lx", nd->arch_data);
+			pc->read_vmcoreinfo = no_vmcoreinfo;
 			return value;
 		}
 		if (STREQ(key, "relocate") && nd->arch_data) {
 			value = calloc(VADDR_PRLEN+1, sizeof(char));
 			sprintf(value, "%lx", nd->arch_data);
+			pc->read_vmcoreinfo = no_vmcoreinfo;
 			return value;
 		}
 	}

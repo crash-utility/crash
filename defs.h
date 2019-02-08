@@ -4908,6 +4908,7 @@ int clean_exit(int);
 int untrusted_file(FILE *, char *);
 char *readmem_function_name(void);
 char *writemem_function_name(void);
+char *no_vmcoreinfo(const char *);
 
 /*
  *  cmdline.c

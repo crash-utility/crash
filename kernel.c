@@ -93,6 +93,8 @@ static void source_tree_init(void);
 static ulong dump_audit_skb_queue(ulong);
 static ulong __dump_audit(char *);
 static void dump_audit(void);
+static char *vmcoreinfo_read_string(const char *);
+static void check_vmcoreinfo(void);
 
 
 /*
@@ -128,6 +130,8 @@ kernel_init()
 	kt->end = highest_bss_symbol();
 	if ((sp1 = kernel_symbol_search("_end")) && (sp1->value > kt->end)) 
 		kt->end = sp1->value;
+
+	check_vmcoreinfo();
 	
 	/*
 	 *  For the traditional (non-pv_ops) Xen architecture, default to writable 
@@ -11161,4 +11165,85 @@ dump_audit(void)
 
 	if (!qlen)
 		error(INFO, "kernel audit log is empty\n");
+}
+
+/*
+ * Reads a string value from the VMCOREINFO data stored in (live) memory.
+ *
+ * Returns a string (that has to be freed by the caller) that contains the
+ * value for key or NULL if the key has not been found.
+ */
+static char *
+vmcoreinfo_read_string(const char *key)
+{
+	char *buf, *value_string, *p1, *p2;
+	size_t value_length;
+	size_t vmcoreinfo_size;
+	ulong vmcoreinfo_data;
+	char keybuf[BUFSIZE];
+
+	buf = value_string = NULL;
+
+	switch (get_symbol_type("vmcoreinfo_data", NULL, NULL))
+	{
+	case TYPE_CODE_PTR:
+		get_symbol_data("vmcoreinfo_data", sizeof(vmcoreinfo_data), &vmcoreinfo_data);
+		break;
+	case TYPE_CODE_ARRAY:
+		vmcoreinfo_data = symbol_value("vmcoreinfo_data");
+		break;
+	default:
+		return NULL;
+	}
+
+	get_symbol_data("vmcoreinfo_size", sizeof(vmcoreinfo_size), &vmcoreinfo_size);
+
+	sprintf(keybuf, "%s=", key);
+
+	if ((buf = malloc(vmcoreinfo_size+1)) == NULL) {
+		error(INFO, "cannot malloc vmcoreinfo buffer\n");
+		goto err;
+	}
+
+	if (!readmem(vmcoreinfo_data, KVADDR, buf, vmcoreinfo_size,
+            "vmcoreinfo_data", RETURN_ON_ERROR|QUIET)) {
+		error(INFO, "cannot read vmcoreinfo_data\n");
+		goto err;
+	}
+
+	buf[vmcoreinfo_size] = '\n';
+
+	if ((p1 = strstr(buf, keybuf))) {
+		p2 = p1 + strlen(keybuf);
+		p1 = strstr(p2, "\n");
+		value_length = p1-p2;
+		value_string = calloc(value_length+1, sizeof(char));
+		strncpy(value_string, p2, value_length);
+		value_string[value_length] = NULLCHAR;
+	}
+err:
+	if (buf)
+		free(buf);
+
+	return value_string;
+}
+
+static void
+check_vmcoreinfo(void)
+{
+	if (!kernel_symbol_exists("vmcoreinfo_data") ||
+	    !kernel_symbol_exists("vmcoreinfo_size"))
+		return;
+
+	if (pc->read_vmcoreinfo == no_vmcoreinfo) {
+		switch (get_symbol_type("vmcoreinfo_data", NULL, NULL))
+		{
+		case TYPE_CODE_PTR:
+			pc->read_vmcoreinfo = vmcoreinfo_read_string;
+			break;
+		case TYPE_CODE_ARRAY:
+			pc->read_vmcoreinfo = vmcoreinfo_read_string;
+			break;
+		}
+	}
 }
