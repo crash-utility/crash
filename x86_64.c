@@ -381,7 +381,10 @@ x86_64_init(int when)
 		break;
 
 	case POST_GDB:
-		if (THIS_KERNEL_VERSION >= LINUX(4,20,0) && !(machdep->flags & RANDOMIZED)) {
+		if (!(machdep->flags & RANDOMIZED) &&
+		    ((THIS_KERNEL_VERSION >= LINUX(4,20,0)) || 
+		    ((THIS_KERNEL_VERSION >= LINUX(4,14,84)) && 
+		     (THIS_KERNEL_VERSION < LINUX(4,15,0))))) {
 			machdep->machspec->page_offset = machdep->flags & VM_5LEVEL ?
 				PAGE_OFFSET_5LEVEL_4_20 : PAGE_OFFSET_4LEVEL_4_20;
 			machdep->kvbase = machdep->machspec->page_offset; 
