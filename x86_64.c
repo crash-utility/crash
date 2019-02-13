@@ -6971,7 +6971,7 @@ x86_64_virt_phys_base(void)
 	    QUIET|RETURN_ON_ERROR) && STRNEQ(buf, "Linux version"))
 		return TRUE;
 
-	for (phys = (ulong)(-MEGABYTES(16)); phys != MEGABYTES(16+1); 
+	for (phys = (ulong)(-MEGABYTES(32)); phys != 0xfffff00000; 
 	     phys += MEGABYTES(1)) {
 		if (readmem(linux_banner_phys + phys, PHYSADDR, buf,
 		    strlen("Linux version"), "linux_banner search", 
