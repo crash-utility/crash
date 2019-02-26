@@ -87,6 +87,7 @@ struct stackframe {
 };
 
 enum regs {
+	R7 = 7,
 	FP = 11,
 	SP = 13,
 	LR = 14,
@@ -615,12 +616,17 @@ unwind_frame(struct stackframe *frame, ulong stacktop)
 	struct unwind_ctrl_block ctrl;
 	struct unwind_idx *idx;
 	ulong low, high;
+	int fpindex = FP;
 
 	low = frame->sp;
 	high = stacktop;
 
 	if (!is_kernel_text(frame->pc))
 		return FALSE;
+
+	/* Thumb needs R7 instead of FP */
+	if (frame->pc & 1)
+		fpindex = R7;
 
 	tbl = search_table(frame->pc);
 	if (!tbl) {
@@ -630,13 +636,13 @@ unwind_frame(struct stackframe *frame, ulong stacktop)
 	}
 	idx = search_index(tbl, frame->pc);
 
-	ctrl.vrs[FP] = frame->fp;
+	ctrl.vrs[fpindex] = frame->fp;
 	ctrl.vrs[SP] = frame->sp;
 	ctrl.vrs[LR] = frame->lr;
 	ctrl.vrs[PC] = 0;
 
 	if (CRASHDEBUG(5)) {
-		fprintf(fp, "UNWIND: >frame: FP=%lx\n", ctrl.vrs[FP]);
+		fprintf(fp, "UNWIND: >frame: FP=%lx\n", ctrl.vrs[fpindex]);
 		fprintf(fp, "UNWIND: >frame: SP=%lx\n", ctrl.vrs[SP]);
 		fprintf(fp, "UNWIND: >frame: LR=%lx\n", ctrl.vrs[LR]);
 		fprintf(fp, "UNWIND: >frame: PC=%lx\n", ctrl.vrs[PC]);
@@ -706,13 +712,13 @@ unwind_frame(struct stackframe *frame, ulong stacktop)
 	if (frame->pc == ctrl.vrs[PC])
 		return FALSE;
 
-	frame->fp = ctrl.vrs[FP];
+	frame->fp = ctrl.vrs[fpindex];
 	frame->sp = ctrl.vrs[SP];
 	frame->lr = ctrl.vrs[LR];
 	frame->pc = ctrl.vrs[PC];
 
 	if (CRASHDEBUG(5)) {
-		fprintf(fp, "UNWIND: <frame: FP=%lx\n", ctrl.vrs[FP]);
+		fprintf(fp, "UNWIND: <frame: FP=%lx\n", ctrl.vrs[fpindex]);
 		fprintf(fp, "UNWIND: <frame: SP=%lx\n", ctrl.vrs[SP]);
 		fprintf(fp, "UNWIND: <frame: LR=%lx\n", ctrl.vrs[LR]);
 		fprintf(fp, "UNWIND: <frame: PC=%lx\n", ctrl.vrs[PC]);

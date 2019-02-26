@@ -301,6 +301,8 @@ arm_init(int when)
 		 * thread_info.cpu_context.
 		 */
 		STRUCT_SIZE_INIT(cpu_context_save, "cpu_context_save");
+		MEMBER_OFFSET_INIT(cpu_context_save_r7,
+			"cpu_context_save", "r7");
 		MEMBER_OFFSET_INIT(cpu_context_save_fp,
 			"cpu_context_save", "fp");
 		MEMBER_OFFSET_INIT(cpu_context_save_sp,
@@ -1313,12 +1315,17 @@ arm_get_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 	cpu_context = tt->thread_info + OFFSET(thread_info_cpu_context);
 
 #define GET_REG(ptr, cp, off) ((*ptr) = (*((ulong *)((cp) + OFFSET(off)))))
-	/*
-	 * Unwinding code needs FP value also so we pass it with bt.
-	 */
-	GET_REG(&bt->frameptr, cpu_context, cpu_context_save_fp);
 	GET_REG(spp, cpu_context, cpu_context_save_sp);
 	GET_REG(pcp, cpu_context, cpu_context_save_pc);
+
+	/*
+	 * Unwinding code needs FP (R7 for Thumb code) value also so we pass it
+	 * with bt.
+	 */
+	if (*pcp & 1)
+		GET_REG(&bt->frameptr, cpu_context, cpu_context_save_r7);
+	else
+		GET_REG(&bt->frameptr, cpu_context, cpu_context_save_fp);
 
 	return TRUE;
 }

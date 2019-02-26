@@ -10047,6 +10047,8 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "          s390_stack_frame_r14: %ld\n",
 		OFFSET(s390_stack_frame_r14));
 
+	fprintf(fp, "           cpu_context_save_r7: %ld\n",
+		OFFSET(cpu_context_save_r7));
 	fprintf(fp, "           cpu_context_save_fp: %ld\n",
 		OFFSET(cpu_context_save_fp));
 	fprintf(fp, "           cpu_context_save_sp: %ld\n",

@@ -2066,6 +2066,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long xa_node_shift;
 	long hd_struct_dkstats;
 	long disk_stats_in_flight;
+	long cpu_context_save_r7;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
