@@ -1095,6 +1095,9 @@ vm_init(void)
                                 "zone", "pages_high");
                         MEMBER_OFFSET_INIT(zone_watermark,
                                 "zone", "watermark");
+                        if (INVALID_MEMBER(zone_watermark))
+                                MEMBER_OFFSET_INIT(zone_watermark,
+                                        "zone", "_watermark");
                         MEMBER_OFFSET_INIT(zone_nr_active,
                                 "zone", "nr_active");
                         MEMBER_OFFSET_INIT(zone_nr_inactive,
