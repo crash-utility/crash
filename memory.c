@@ -910,26 +910,40 @@ vm_init(void)
 	if (IS_VMALLOC_ADDR(vt->mem_map))
 		vt->flags |= V_MEM_MAP;
 	vt->total_pages = BTOP(VTOP(vt->high_memory));
-	switch (get_syment_array("totalram_pages", sp_array, 2)) 
-	{
-	case 1:
-		get_symbol_data("totalram_pages", sizeof(ulong), 
-			&vt->totalram_pages);
-		break;
-	case 2:
-		if (!(readmem(sp_array[0]->value, KVADDR, 
-		    &value1, sizeof(ulong), 
-		    "totalram_pages #1", RETURN_ON_ERROR)))
+
+	if (symbol_exists("_totalram_pages")) {
+		readmem(symbol_value("_totalram_pages") +
+			OFFSET(atomic_t_counter), KVADDR,
+			&vt->totalram_pages, sizeof(ulong),
+			"_totalram_pages", FAULT_ON_ERROR);
+	} else {
+		switch (get_syment_array("totalram_pages", sp_array, 2))
+		{
+		case 1:
+			get_symbol_data("totalram_pages", sizeof(ulong),
+				&vt->totalram_pages);
 			break;
-                if (!(readmem(sp_array[1]->value, KVADDR,
-                    &value2, sizeof(ulong), 
-		    "totalram_pages #2", RETURN_ON_ERROR)))
-                        break;
-		vt->totalram_pages = MAX(value1, value2);
-		break;
+		case 2:
+			if (!(readmem(sp_array[0]->value, KVADDR,
+			    &value1, sizeof(ulong),
+			    "totalram_pages #1", RETURN_ON_ERROR)))
+				break;
+			if (!(readmem(sp_array[1]->value, KVADDR,
+			    &value2, sizeof(ulong),
+			    "totalram_pages #2", RETURN_ON_ERROR)))
+				break;
+			vt->totalram_pages = MAX(value1, value2);
+			break;
+		}
 	}
 
-	if (symbol_exists("totalhigh_pages")) {
+	if (symbol_exists("_totalhigh_pages")) {
+		readmem(symbol_value("_totalhigh_pages") +
+			OFFSET(atomic_t_counter), KVADDR,
+			&vt->totalhigh_pages, sizeof(ulong),
+			"_totalhigh_pages", FAULT_ON_ERROR);
+		vt->total_pages += vt->totalhigh_pages;
+	} else if (symbol_exists("totalhigh_pages")) {
 	        switch (get_syment_array("totalhigh_pages", sp_array, 2))
 	        {
 	        case 1:
@@ -8169,7 +8183,6 @@ dump_kmeminfo(void)
 	long nr_file_pages, nr_slab;
 	ulong swapper_space_nrpages;
 	ulong pct;
-	ulong value1, value2;
 	uint tmp;
 	struct meminfo meminfo;
 	struct gnu_request req;
@@ -8177,7 +8190,6 @@ dump_kmeminfo(void)
         ulong get_totalram;
         ulong get_buffers;
         ulong get_slabs;
-        struct syment *sp_array[2];
 	char buf[BUFSIZE];
 
 
@@ -8210,7 +8222,8 @@ dump_kmeminfo(void)
          *    Prior to 2.3.36, count all mem_map pages minus the reserved ones.
          *    From 2.3.36 onwards, use "totalram_pages" if set.
 	 */
-	if (symbol_exists("totalram_pages")) {  
+	if (symbol_exists("totalram_pages") ||
+	    symbol_exists("_totalram_pages")) {
 		totalram_pages = vt->totalram_pages ? 
 			vt->totalram_pages : get_totalram; 
 	} else 
@@ -8362,25 +8375,9 @@ dump_kmeminfo(void)
 	fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n",
 		"SLAB", get_slabs, pages_to_size(get_slabs, buf), pct);
 
-        if (symbol_exists("totalhigh_pages")) {
-	        switch (get_syment_array("totalhigh_pages", sp_array, 2))
-	        {
-	        case 1:
-	                get_symbol_data("totalhigh_pages", sizeof(ulong),
-	                        &totalhigh_pages);
-	                break;
-	        case 2:
-	                if (!(readmem(sp_array[0]->value, KVADDR,
-	                    &value1, sizeof(ulong),
-	                    "totalhigh_pages #1", RETURN_ON_ERROR)))
-	                        break;
-	                if (!(readmem(sp_array[1]->value, KVADDR,
-	                    &value2, sizeof(ulong),
-	                    "totalhigh_pages #2", RETURN_ON_ERROR)))
-	                        break;
-	                totalhigh_pages = MAX(value1, value2);
-	                break;
-	        }
+	if (symbol_exists("totalhigh_pages") ||
+	    symbol_exists("_totalhigh_pages")) {
+		totalhigh_pages = vt->totalhigh_pages;
 
 		pct = totalhigh_pages ?
 			(totalhigh_pages * 100)/totalram_pages : 0;
