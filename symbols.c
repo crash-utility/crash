@@ -2188,7 +2188,14 @@ Elf32_Sym_to_common(Elf32_Sym *e32, struct elf_common *ec)
 	ec->st_name = (ulong)e32->st_name;
 	ec->st_value = (ulong)e32->st_value;
 	ec->st_shndx = (ulong)e32->st_shndx;
-	ec->st_info = e32->st_info;
+	if ((e32->st_info >= ' ') && (e32->st_info < 0x7f))
+		ec->st_info = e32->st_info;
+	else if (e32->st_info == 0x02)
+		ec->st_info = 't';
+	else if (e32->st_info == 0x12)
+		ec->st_info = 'T';
+	else
+		ec->st_info = '?';
 	ec->st_size = (ulong)e32->st_size;
 }
 
@@ -2198,7 +2205,14 @@ Elf64_Sym_to_common(Elf64_Sym *e64, struct elf_common *ec)
 	ec->st_name = (ulong)e64->st_name;
 	ec->st_value = (ulong)e64->st_value;
 	ec->st_shndx = (ulong)e64->st_shndx;
-	ec->st_info = e64->st_info;
+	if ((e64->st_info >= ' ') && (e64->st_info < 0x7f))
+		ec->st_info = e64->st_info;
+	else if (e64->st_info == 0x02)
+		ec->st_info = 't';
+	else if (e64->st_info == 0x12)
+		ec->st_info = 'T';
+	else
+		ec->st_info = '?';
 	ec->st_size = (ulong)e64->st_size;
 }
 
