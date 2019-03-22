@@ -221,7 +221,12 @@ bpf_init(struct bpf_info *bpf)
 			bpf->idr_type = IDR_ORIG;
 			do_old_idr(IDR_ORIG_INIT, 0, NULL);
 		} else if (STREQ(MEMBER_TYPE_NAME("idr", "idr_rt"), "radix_tree_root"))
-			bpf->idr_type = IDR_RADIX;
+			if (MEMBER_EXISTS("radix_tree_root", "rnode"))
+				bpf->idr_type = IDR_RADIX;
+			else if (MEMBER_EXISTS("radix_tree_root", "xa_head"))
+				bpf->idr_type = IDR_XARRAY;
+			else
+				error(FATAL, "cannot determine IDR list type\n");
 		else if (STREQ(MEMBER_TYPE_NAME("idr", "idr_rt"), "xarray"))
 			bpf->idr_type = IDR_XARRAY;
 		else

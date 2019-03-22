@@ -534,9 +534,14 @@ kernel_init()
 
 	if (kernel_symbol_exists("irq_desc_tree")) {
 		get_symbol_type("irq_desc_tree", NULL, &req);
-		kt->flags2 |= STREQ(req.type_tag_name, "xarray") ?
-			IRQ_DESC_TREE_XARRAY : IRQ_DESC_TREE_RADIX;
-
+		if (STREQ(req.type_tag_name, "xarray")) {
+			kt->flags2 |= IRQ_DESC_TREE_XARRAY;
+		} else {
+			if (MEMBER_EXISTS("radix_tree_root", "xa_head"))
+				kt->flags2 |= IRQ_DESC_TREE_XARRAY;
+			else
+				kt->flags2 |= IRQ_DESC_TREE_RADIX;
+		}
 	}
 	STRUCT_SIZE_INIT(irq_data, "irq_data");
 	if (VALID_STRUCT(irq_data)) {

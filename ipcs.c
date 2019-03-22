@@ -205,8 +205,12 @@ ipcs_init(void)
 	if (VALID_MEMBER(idr_idr_rt)) {
 		if (STREQ(MEMBER_TYPE_NAME("idr", "idr_rt"), "xarray"))
 			ipcs_table.init_flags |= IDR_XARRAY;
-		else
-			ipcs_table.init_flags |= IDR_RADIX;
+		else {
+			if (MEMBER_EXISTS("radix_tree_root", "rnode"))
+				ipcs_table.init_flags |= IDR_RADIX;
+			else if (MEMBER_EXISTS("radix_tree_root", "xa_head"))
+				ipcs_table.init_flags |= IDR_XARRAY;
+		}
 	} else
 		ipcs_table.init_flags |= IDR_ORIG;
 

@@ -4241,7 +4241,10 @@ cmd_tree()
 			}
 
 			if (STRNEQ(optarg, "ra"))
-				type_flag = RADIXTREE_REQUEST;
+				if (MEMBER_EXISTS("radix_tree_root", "xa_head"))
+					type_flag = XARRAY_REQUEST;
+				else
+					type_flag = RADIXTREE_REQUEST;
 			else if (STRNEQ(optarg, "rb"))
 				type_flag = RBTREE_REQUEST;
 			else if (STRNEQ(optarg, "x"))

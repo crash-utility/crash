@@ -507,10 +507,17 @@ task_init(void)
 				OFFSET(pid_namespace_idr) + OFFSET(idr_idr_rt);
 			tt->flags |= PID_XARRAY;
 		} else if STREQ(MEMBER_TYPE_NAME("idr", "idr_rt"), "radix_tree_root") {
-			tt->refresh_task_table = refresh_radix_tree_task_table;
-			tt->pid_radix_tree = symbol_value("init_pid_ns") +
-				OFFSET(pid_namespace_idr) + OFFSET(idr_idr_rt);
-			tt->flags |= PID_RADIX_TREE;
+			if (MEMBER_EXISTS("radix_tree_root", "rnode")) {
+				tt->refresh_task_table = refresh_radix_tree_task_table;
+				tt->pid_radix_tree = symbol_value("init_pid_ns") +
+					OFFSET(pid_namespace_idr) + OFFSET(idr_idr_rt);
+				tt->flags |= PID_RADIX_TREE;
+			} else if (MEMBER_EXISTS("radix_tree_root", "xa_head")) {
+				tt->refresh_task_table = refresh_xarray_task_table;
+				tt->pid_xarray = symbol_value("init_pid_ns") +
+					OFFSET(pid_namespace_idr) + OFFSET(idr_idr_rt);
+				tt->flags |= PID_XARRAY;
+			}
 		} else 
 			error(FATAL, "unknown pid_namespace.idr type: %s\n",
 				MEMBER_TYPE_NAME("idr", "idr_rt"));

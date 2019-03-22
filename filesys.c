@@ -2217,7 +2217,9 @@ dump_inode_page_cache_info(ulong inode)
 
 	xarray = root_rnode = count = 0;
 	if (MEMBER_EXISTS("address_space", "i_pages") &&
-	    STREQ(MEMBER_TYPE_NAME("address_space", "i_pages"), "xarray"))
+	    (STREQ(MEMBER_TYPE_NAME("address_space", "i_pages"), "xarray") ||
+	    (STREQ(MEMBER_TYPE_NAME("address_space", "i_pages"), "radix_tree_root") &&
+	     MEMBER_EXISTS("radix_tree_root", "xa_head"))))
 		xarray = i_mapping + OFFSET(address_space_page_tree);
 	else 
 		root_rnode = i_mapping + OFFSET(address_space_page_tree);
