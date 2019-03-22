@@ -3139,9 +3139,17 @@ typedef signed int s32;
  */
 #define ARM64_VA_START       ((0xffffffffffffffffUL) \
 					<< machdep->machspec->VA_BITS)
+#define _VA_START(va)        ((0xffffffffffffffffUL) - \
+                             ((1UL) << ((va) - 1)) + 1)
+#define TEXT_OFFSET_MASK     (~((MEGABYTES(2UL))-1))
+
 #define ARM64_PAGE_OFFSET    ((0xffffffffffffffffUL) \
 					<< (machdep->machspec->VA_BITS - 1))
+#define ARM64_PAGE_OFFSET_ACTUAL ((0xffffffffffffffffUL) \
+					- ((1UL) << machdep->machspec->VA_BITS_ACTUAL) + 1)
+
 #define ARM64_USERSPACE_TOP  ((1UL) << machdep->machspec->VA_BITS)
+#define ARM64_USERSPACE_TOP_ACTUAL  ((1UL) << machdep->machspec->VA_BITS_ACTUAL)
 
 /* only used for v4.6 or later */
 #define ARM64_MODULES_VSIZE     MEGABYTES(128)
@@ -3244,7 +3252,9 @@ struct machine_specific {
 	ulong kern_eframe_offset;
 	ulong machine_kexec_start;
 	ulong machine_kexec_end;
-	ulong vabits_user;
+	ulong VA_BITS_ACTUAL;
+	ulong CONFIG_ARM64_VA_BITS;
+	ulong VA_START;
 };
 
 struct arm64_stackframe {
