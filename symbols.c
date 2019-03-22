@@ -2986,6 +2986,9 @@ kallsyms_module_function_size(struct syment *sp, struct load_module *lm, ulong *
 	if (!(lm->mod_flags & MOD_KALLSYMS) || !(kt->flags & KALLSYMS_V2))
 		return FALSE;
 
+	if (THIS_KERNEL_VERSION >= LINUX(5,0,0))  /* st_size not useable */
+		return FALSE;
+
 	module_buf = GETBUF(lm->mod_size);
 	modbuf = module_buf + (lm->module_struct - lm->mod_base);
 
