@@ -43,6 +43,11 @@ static int max_buffer_available;
  */
 static int multiple_instances_available;
 
+/*
+ * buffer_page has "real_end"
+ */
+static int buffer_page_real_end_available;
+
 #define koffset(struct, member) struct##_##member##_offset
 
 static int koffset(trace_array, current_trace);
@@ -70,6 +75,7 @@ static int koffset(ring_buffer_per_cpu, entries);
 static int koffset(buffer_page, read);
 static int koffset(buffer_page, list);
 static int koffset(buffer_page, page);
+static int koffset(buffer_page, real_end);
 
 static int koffset(list_head, next);
 
@@ -229,6 +235,7 @@ static int init_offsets(void)
 	init_offset(buffer_page, read);
 	init_offset(buffer_page, list);
 	init_offset(buffer_page, page);
+	init_offset(buffer_page, real_end);
 
 	init_offset(list_head, next);
 
@@ -281,6 +288,7 @@ static void print_offsets(void)
 	print_offset(buffer_page, read);
 	print_offset(buffer_page, list);
 	print_offset(buffer_page, page);
+	print_offset(buffer_page, real_end);
 
 	print_offset(list_head, next);
 
@@ -293,6 +301,20 @@ static void print_offsets(void)
 	print_offset(ftrace_event_field, size);
 	print_offset(ftrace_event_field, is_signed);
 #undef print_offset
+}
+
+static int buffer_page_has_data(ulong page)
+{
+	uint end;
+
+	if (!buffer_page_real_end_available)
+		return 1;
+
+	/* Only write pages with data in it */
+	read_value(end, page, buffer_page, real_end);
+	return end;
+out_fail:
+	return 0;
 }
 
 static int ftrace_init_pages(struct ring_buffer_per_cpu *cpu_buffer,
@@ -361,7 +383,8 @@ static int ftrace_init_pages(struct ring_buffer_per_cpu *cpu_buffer,
 
 	/* Setup linear pages */
 
-	cpu_buffer->linear_pages[count++] = cpu_buffer->reader_page;
+	if (buffer_page_has_data(cpu_buffer->reader_page))
+		cpu_buffer->linear_pages[count++] = cpu_buffer->reader_page;
 
 	if (cpu_buffer->reader_page == cpu_buffer->commit_page)
 		goto done;
@@ -647,6 +670,8 @@ static int ftrace_init(void)
 		ftrace_trace_arrays = sym_ftrace_trace_arrays->value;
 	}
 
+	if (MEMBER_EXISTS("buffer_page", "real_end"))
+		buffer_page_real_end_available = 1;
 
 	if (MEMBER_EXISTS("trace_array", "current_trace")) {
 		encapsulated_current_trace = 1;
@@ -1809,7 +1834,7 @@ static void cmd_ftrace(void)
 static char *help_ftrace[] = {
 "trace",
 "show or dump the tracing info",
-"[ <show [-c <cpulist>] [-f [no]<flagname>]> | <dump [-sm] <dest-dir>> ]",
+"[ <show [-c <cpulist>] [-f [no]<flagname>]> | <dump [-sm] <dest-dir>> ] | <dump -t <trace.dat> ]",
 "trace",
 "    shows the current tracer and other informations.",
 "",
@@ -2184,7 +2209,8 @@ static int save_proc_kallsyms(int fd)
 			if (!strncmp(sp->name, "_MODULE_", strlen("_MODULE_")))
 				continue;
 
-			tmp_fprintf("%lx %c %s\t[%s]\n", sp->value, sp->type,
+			/* Currently sp->type for modules is not trusted */
+			tmp_fprintf("%lx %c %s\t[%s]\n", sp->value, 'm',
 					sp->name, lm->mod_name);
 		}
 	}
