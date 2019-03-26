@@ -10067,6 +10067,7 @@ read_in_kernel_config(int command)
 	struct syment *sp;
 	int ii, jj, ret, end, found=0;
 	unsigned long size, bufsz;
+	uint64_t magic;
 	char *pos, *ln, *buf, *head, *tail, *val, *uncomp;
 	char line[512];
 	z_stream stream;
@@ -10108,8 +10109,17 @@ again:
 	if (strstr(buf, MAGIC_START))
 		head = buf + MAGIC_SIZE + 10; /* skip past MAGIC_START and gzip header */
 	else {
-		error(WARNING, "could not find MAGIC_START!\n");
-		goto out2;
+		/*
+		 *  Later versions put the magic number before the compressed data.
+		 */
+		if (readmem(sp->value - 8, KVADDR, &magic, 8,
+            	    "kernel_config_data MAGIC_START", RETURN_ON_ERROR) &&
+		    STRNEQ(&magic, MAGIC_START)) {
+			head = buf + 10;
+		} else {
+			error(WARNING, "could not find MAGIC_START!\n");
+			goto out2;
+		}
 	}
 
 	tail = head;
