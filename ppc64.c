@@ -717,7 +717,13 @@ ppc64_init(int when)
 static ulong 
 ppc64_task_to_stackbase(ulong task)
 {
-	if (tt->flags & THREAD_INFO)
+	ulong stackbase;
+
+	if (tt->flags & THREAD_INFO_IN_TASK) {
+		readmem(task + OFFSET(task_struct_stack), KVADDR, &stackbase,
+		    sizeof(void *), "task_struct.stack", FAULT_ON_ERROR);
+		return stackbase;
+	} else if (tt->flags & THREAD_INFO)
 		return task_to_thread_info(task);
 	else 
 		return task;
