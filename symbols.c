@@ -9294,6 +9294,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(dentry_d_iname));
         fprintf(fp, "               dentry_d_covers: %ld\n",
                 OFFSET(dentry_d_covers));
+        fprintf(fp, "                   dentry_d_sb: %ld\n",
+                OFFSET(dentry_d_sb));
         fprintf(fp, "                      qstr_len: %ld\n", OFFSET(qstr_len));
         fprintf(fp, "                     qstr_name: %ld\n", OFFSET(qstr_name));
         fprintf(fp, "                  inode_i_mode: %ld\n",
