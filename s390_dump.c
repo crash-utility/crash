@@ -30,6 +30,10 @@ is_s390_dump(char *file)
 	int rc;
 
 	fh = fopen(file,"r");
+	if (fh == NULL) {
+		error(INFO, "is_s390_dump: cannot open %s: %s\n", file);
+		return FALSE;
+	}
 	items = fread(&magic, sizeof(magic), 1,fh);
 	if(magic == 0xa8190173618f23fdLL)
 		rc = TRUE;
