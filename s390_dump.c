@@ -18,6 +18,7 @@
 #include "defs.h"
 //#include <asm/page.h>
 #include "ibm_common.h"
+#include <stdlib.h>
 
 static FILE * s390_file;
 
@@ -30,6 +31,10 @@ is_s390_dump(char *file)
 	int rc;
 
 	fh = fopen(file,"r");
+	if (fh == NULL) {
+		printf("read_file: Failed to open %s \n", file);
+		exit(1);
+	}
 	items = fread(&magic, sizeof(magic), 1,fh);
 	if(magic == 0xa8190173618f23fdLL)
 		rc = TRUE;
