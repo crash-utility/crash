@@ -1121,6 +1121,11 @@ arm64_uvtop(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, int verbos
 	}
 }
 
+#define PTE_ADDR_LOW   ((((1UL) << (48 - machdep->pageshift)) - 1) << machdep->pageshift)
+#define PTE_ADDR_HIGH  ((0xfUL) << 12)
+#define PTE_TO_PHYS(pteval)  (machdep->max_physmem_bits == 52 ? \
+	(((pteval & PTE_ADDR_LOW) | ((pteval & PTE_ADDR_HIGH) << 36))) : (pteval & PTE_ADDR_LOW))
+
 #define PMD_TYPE_MASK   3
 #define PMD_TYPE_SECT   1
 #define PMD_TYPE_TABLE  2
@@ -1213,7 +1218,7 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	 * #define __PAGETABLE_PUD_FOLDED
 	 */
 
-	pmd_base = (ulong *)PTOV(pgd_val & PHYS_MASK & (s32)machdep->pagemask);
+	pmd_base = (ulong *)PTOV(PTE_TO_PHYS(pgd_val));
 	FILL_PMD(pmd_base, KVADDR, PTRS_PER_PMD_L3_64K * sizeof(ulong));
 	pmd_ptr = pmd_base + (((vaddr) >> PMD_SHIFT_L3_64K) & (PTRS_PER_PMD_L3_64K - 1));
         pmd_val = ULONG(machdep->pmd + PAGEOFFSET(pmd_ptr));
@@ -1223,7 +1228,7 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		goto no_page;
 
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = (pmd_val & SECTION_PAGE_MASK_512MB) & PHYS_MASK;
+		ulong sectionbase = PTE_TO_PHYS(pmd_val) & SECTION_PAGE_MASK_512MB;
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (512MB)\n\n", sectionbase);
 			arm64_translate_pte(pmd_val, 0, 0);
@@ -1232,7 +1237,7 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		return TRUE;
 	}
 
-	pte_base = (ulong *)PTOV(pmd_val & PHYS_MASK & (s32)machdep->pagemask);
+	pte_base = (ulong *)PTOV(PTE_TO_PHYS(pmd_val));
 	FILL_PTBL(pte_base, KVADDR, PTRS_PER_PTE_L3_64K * sizeof(ulong));
 	pte_ptr = pte_base + (((vaddr) >> machdep->pageshift) & (PTRS_PER_PTE_L3_64K - 1));
         pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
@@ -1242,7 +1247,7 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		goto no_page;
 
 	if (pte_val & PTE_VALID) {
-		*paddr = (PAGEBASE(pte_val) & PHYS_MASK) + PAGEOFFSET(vaddr);
+		*paddr = PTE_TO_PHYS(pte_val) + PAGEOFFSET(vaddr);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx\n\n", PAGEBASE(*paddr));
 			arm64_translate_pte(pte_val, 0, 0);
@@ -3179,7 +3184,7 @@ arm64_translate_pte(ulong pte, void *physaddr, ulonglong unused)
         char *arglist[MAXARGS];
 	int page_present;
 
-	paddr = pte & PHYS_MASK & (s32)machdep->pagemask;
+	paddr = PTE_TO_PHYS(pte);
        	page_present = pte & (PTE_VALID | machdep->machspec->PTE_PROT_NONE);
 
         if (physaddr) {
