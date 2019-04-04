@@ -425,7 +425,8 @@ generate_elf_header(int type, int fd, char *filename)
 	struct node_table *nt;
 	struct SNAP_info {
 		ulonglong task_struct;
-		ulonglong arch_data;
+		ulonglong arch_data1;
+		ulonglong arch_data2;
 	} SNAP_info;
 
 	num_segments = vt->numnodes;
@@ -611,11 +612,15 @@ generate_elf_header(int type, int fd, char *filename)
   	/* NT_TASKSTRUCT note */
 	SNAP_info.task_struct = CURRENT_TASK();
 #ifdef X86_64
-	SNAP_info.arch_data = kt->relocate;
+	SNAP_info.arch_data1 = kt->relocate;
+	SNAP_info.arch_data2 = 0;
 #elif ARM64
-	SNAP_info.arch_data = machdep->machspec->kimage_voffset;
+	SNAP_info.arch_data1 = machdep->machspec->kimage_voffset;
+	SNAP_info.arch_data2 = (machdep->machspec->VA_BITS_ACTUAL << 32) | 
+				machdep->machspec->CONFIG_ARM64_VA_BITS;
 #else
-	SNAP_info.arch_data = 0;
+	SNAP_info.arch_data1 = 0;
+	SNAP_info.arch_data2 = 0;
 #endif
 	len = dump_elf_note (ptr, NT_TASKSTRUCT, "SNAP",
 		(char *)&SNAP_info, sizeof(struct SNAP_info));

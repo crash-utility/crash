@@ -1045,6 +1045,12 @@ ulong
 arm64_VTOP(ulong addr)
 {
 	if (machdep->flags & NEW_VMEMMAP) {
+		if (machdep->machspec->VA_START &&
+		    (addr >= machdep->machspec->kimage_text) &&
+		    (addr <= machdep->machspec->kimage_end)) {
+			return addr - machdep->machspec->kimage_voffset;
+		}
+
 		if (addr >= machdep->machspec->page_offset)
 			return machdep->machspec->phys_offset
 				+ (addr - machdep->machspec->page_offset);
@@ -3756,8 +3762,16 @@ arm64_calc_VA_BITS(void)
 				error(FATAL, "/proc/kcore: cannot read vabits_actual\n");
 		} else if (ACTIVE())
 			error(FATAL, "cannot determine VA_BITS_ACTUAL: please use /proc/kcore\n");
-		else
-			error(FATAL, "cannot determine VA_BITS_ACTUAL\n");
+		else {
+			if ((string = pc->read_vmcoreinfo("NUMBER(VA_BITS_ACTUAL)"))) {
+				value = atol(string);
+				free(string);
+				machdep->machspec->VA_BITS_ACTUAL = value;
+				machdep->machspec->VA_BITS = value;
+				machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
+			} else
+				error(FATAL, "cannot determine VA_BITS_ACTUAL\n");
+		}
 
 		return;
 	}

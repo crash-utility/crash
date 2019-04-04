@@ -1172,12 +1172,24 @@ netdump_memory_dump(FILE *fp)
 	netdump_print("            nt_prpsinfo: %lx\n", nd->nt_prpsinfo);
 	netdump_print("          nt_taskstruct: %lx\n", nd->nt_taskstruct);
 	netdump_print("            task_struct: %lx\n", nd->task_struct);
-	netdump_print("              arch_data: ");
-	if (nd->arch_data) {
+	netdump_print("             arch_data1: ");
+	if (nd->arch_data1) {
 		if (machine_type("X86_64"))
-			netdump_print("%lx (relocate)\n", nd->arch_data);
+			netdump_print("%lx (relocate)\n", nd->arch_data1);
 		else if (machine_type("ARM64"))
-			netdump_print("%lx (kimage_voffset)\n", nd->arch_data);
+			netdump_print("%lx (kimage_voffset)\n", nd->arch_data1);
+	} else
+		netdump_print("(unused)\n");
+	netdump_print("             arch_data2: ");
+	if (nd->arch_data2) {
+		if (machine_type("ARM64"))
+			netdump_print("%016lx\n"
+			    "                         CONFIG_ARM64_VA_BITS: %ld\n"
+			    "                         VA_BITS_ACTUAL: %ld\n", 
+				nd->arch_data2, nd->arch_data2 & 0xffffffff,
+				(nd->arch_data2 >> 32));
+		else
+			netdump_print("%016lx (?)\n", nd->arch_data2);
 	} else
 		netdump_print("(unused)\n");
 	netdump_print("           switch_stack: %lx\n", nd->switch_stack);
@@ -1784,18 +1796,31 @@ vmcoreinfo_read_string(const char *key)
 	 *  the NT_TASKSTRUCT note.
 	 */
 	if ((pc->flags2 & SNAP)) {
-		if (STREQ(key, "NUMBER(kimage_voffset)") && nd->arch_data) {
+		if (STREQ(key, "NUMBER(kimage_voffset)") && nd->arch_data1) {
 			value = calloc(VADDR_PRLEN+1, sizeof(char));
-			sprintf(value, "%lx", nd->arch_data);
+			sprintf(value, "%lx", nd->arch_data1);
+			if (nd->arch_data2 == 0)
+				pc->read_vmcoreinfo = no_vmcoreinfo;
+			return value;
+		}
+		if (STREQ(key, "NUMBER(VA_BITS)") && nd->arch_data2) {
+			value = calloc(VADDR_PRLEN+1, sizeof(char));
+			sprintf(value, "%ld", nd->arch_data2 & 0xffffffff);
+			return value;
+		}
+		if (STREQ(key, "NUMBER(VA_BITS_ACTUAL)") && nd->arch_data2) {
+			value = calloc(VADDR_PRLEN+1, sizeof(char));
+			sprintf(value, "%ld", (nd->arch_data2 >> 32) & 0xffffffff);
 			pc->read_vmcoreinfo = no_vmcoreinfo;
 			return value;
 		}
-		if (STREQ(key, "relocate") && nd->arch_data) {
+		if (STREQ(key, "relocate") && nd->arch_data1) {
 			value = calloc(VADDR_PRLEN+1, sizeof(char));
-			sprintf(value, "%lx", nd->arch_data);
+			sprintf(value, "%lx", nd->arch_data1);
 			pc->read_vmcoreinfo = no_vmcoreinfo;
 			return value;
 		}
+		return NULL;
 	}
 
 	if (nd->vmcoreinfo) {
@@ -2199,9 +2224,12 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 			nd->nt_taskstruct = (void *)note;
 			nd->task_struct = *((ulong *)(ptr + note->n_namesz));
 			if (pc->flags2 & SNAP) {
-				if (note->n_descsz == 16)
-					nd->arch_data = *((ulong *)
+				if (note->n_descsz >= 16)
+					nd->arch_data1 = *((ulong *)
 						(ptr + note->n_namesz + sizeof(ulong)));
+				if (note->n_descsz >= 24)
+					nd->arch_data2 = *((ulong *)
+						(ptr + note->n_namesz + sizeof(ulong) + sizeof(ulong)));
 			} else if (machine_type("IA64"))
 				nd->switch_stack = *((ulong *)
 					(ptr + note->n_namesz + sizeof(ulong)));
