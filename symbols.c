@@ -593,8 +593,8 @@ kaslr_init(void)
 {
 	char *string;
 
-	if ((!machine_type("X86_64") && !machine_type("ARM64") && !machine_type("X86")) ||
-	    (kt->flags & RELOC_SET))
+	if ((!machine_type("X86_64") && !machine_type("ARM64") && !machine_type("X86") &&
+	    !machine_type("S390X")) || (kt->flags & RELOC_SET))
 		return;
 
 	/*
@@ -751,7 +751,8 @@ store_symbols(bfd *abfd, int dynamic, void *minisyms, long symcount,
 					fromend, size, store);
 		} else if (!(kt->flags & RELOC_SET))
 			kt->flags |= RELOC_FORCE;
-	} else if (machine_type("X86_64") || machine_type("ARM64")) {
+	} else if (machine_type("X86_64") || machine_type("ARM64") ||
+		   machine_type("S390X")) {
 		if ((kt->flags2 & RELOC_AUTO) && !(kt->flags & RELOC_SET))
 			derive_kaslr_offset(abfd, dynamic, from,
 				fromend, size, store);
@@ -823,7 +824,7 @@ store_sysmap_symbols(void)
                         strerror(errno));
 
 	if (!machine_type("X86") && !machine_type("X86_64") &&
-	    !machine_type("ARM64"))
+	    !machine_type("ARM64") && !machine_type("S390X"))
 		kt->flags &= ~RELOC_SET;
 
 	first = 0;
