@@ -10113,6 +10113,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(device_private_device));
 	fprintf(fp, "      device_private_knode_bus: %ld\n",
 		OFFSET(device_private_knode_bus));
+	fprintf(fp, "    device_private_knode_class: %ld\n",
+		OFFSET(device_private_knode_class));
 	fprintf(fp, "                   gendisk_dev: %ld\n",
 		OFFSET(gendisk_dev));
 	fprintf(fp, "                  gendisk_kobj: %ld\n",

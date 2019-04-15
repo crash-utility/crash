@@ -4020,6 +4020,21 @@ get_gendisk_4(unsigned long entry)
 		OFFSET(gendisk_part0);
 }
 
+/* kernel version >= 5.1 */
+static unsigned long
+get_gendisk_5(unsigned long entry)
+{
+	unsigned long device_address;
+	unsigned long device_private_address;
+
+	device_private_address = entry - OFFSET(device_private_knode_class);
+	readmem(device_private_address + OFFSET(device_private_device),
+		KVADDR, &device_address, sizeof(device_address),
+		"device_private.device", FAULT_ON_ERROR);
+
+	return device_address - OFFSET(hd_struct_dev) - OFFSET(gendisk_part0);
+}
+
 /* 2.6.24 < kernel version <= 2.6.27 */
 static int 
 match_list(struct iter *i, unsigned long entry)
@@ -4042,8 +4057,18 @@ match_klist(struct iter *i, unsigned long entry)
 {
 	unsigned long device_address;
 	unsigned long device_type;
+	unsigned long device_private_address;
 
-	device_address = entry - OFFSET(device_knode_class);
+	if (VALID_MEMBER(device_knode_class))
+		device_address = entry - OFFSET(device_knode_class);
+	else {
+		/* kernel version >= 5.1 */
+		device_private_address = entry -
+			OFFSET(device_private_knode_class);
+		readmem(device_private_address + OFFSET(device_private_device),
+			KVADDR, &device_address, sizeof(device_address),
+			"device_private.device", FAULT_ON_ERROR);
+	}
 	readmem(device_address + OFFSET(device_type), KVADDR, &device_type,
 		sizeof(device_type), "device.type", FAULT_ON_ERROR);
 	if (device_type != i->type_address)
@@ -4348,8 +4373,10 @@ init_iter(struct iter *i)
 			i->match = match_klist;
 			if (VALID_MEMBER(gendisk_dev))
 				i->get_gendisk = get_gendisk_3;
-			else
+			else if (VALID_MEMBER(device_knode_class))
 				i->get_gendisk = get_gendisk_4;
+			else
+				i->get_gendisk = get_gendisk_5;
 		}
 	} else {
 		option_not_supported('d');
@@ -4470,6 +4497,9 @@ void diskio_init(void)
 	MEMBER_OFFSET_INIT(device_knode_class, "device", "knode_class");
 	MEMBER_OFFSET_INIT(device_node, "device", "node");
 	MEMBER_OFFSET_INIT(device_type, "device", "type");
+	MEMBER_OFFSET_INIT(device_private_device, "device_private", "device");
+	MEMBER_OFFSET_INIT(device_private_knode_class, "device_private",
+		"knode_class");
 	MEMBER_OFFSET_INIT(gendisk_dev, "gendisk", "dev");
 	if (INVALID_MEMBER(gendisk_dev))
 		MEMBER_OFFSET_INIT(gendisk_dev, "gendisk", "__dev");
