@@ -148,6 +148,8 @@
 #define NR_CPUS  (4096)
 #endif
 
+#define NR_DEVICE_DUMPS (64)
+
 /* Some architectures require memory accesses to be aligned.  */
 #if defined(SPARC64)
 #define NEED_ALIGNED_MEM_ACCESS
@@ -5276,6 +5278,7 @@ char *format_stack_entry(struct bt_info *bt, char *, ulong, ulong);
 int in_user_stack(ulong, ulong);
 int dump_inode_page(ulong);
 ulong valid_section_nr(ulong);
+void display_memory_from_file_offset(ulonglong, long, void *);
 
 
 /*
@@ -5685,6 +5688,8 @@ enum {
  */
 void dev_init(void);
 void dump_dev_table(void);
+void devdump_extract(void *, ulonglong, char *, FILE *);
+void devdump_info(void *, ulonglong, FILE *);
 
 /*
  *  ipcs.c
@@ -6397,7 +6402,10 @@ void display_regs_from_elf_notes(int, FILE *);
 void display_ELF_note(int, int, void *, FILE *);
 void *netdump_get_prstatus_percpu(int);
 int kdump_kaslr_check(void);
+void display_vmcoredd_note(void *ptr, FILE *ofp);
 QEMUCPUState *kdump_get_qemucpustate(int);
+void kdump_device_dump_info(FILE *);
+void kdump_device_dump_extract(int, char *, FILE *);
 #define PRSTATUS_NOTE (1)
 #define QEMU_NOTE     (2)
 
@@ -6443,6 +6451,8 @@ void process_elf64_notes(void *, ulong);
 void dump_registers_for_compressed_kdump(void);
 int diskdump_kaslr_check(void);
 QEMUCPUState *diskdump_get_qemucpustate(int);
+void diskdump_device_dump_info(FILE *);
+void diskdump_device_dump_extract(int, char *, FILE *);
 
 /*
  * makedumpfile.c

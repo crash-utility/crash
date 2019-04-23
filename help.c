@@ -3207,7 +3207,7 @@ NULL
 char *help_dev[] = {
 "dev",
 "device data",
-"[-i | -p | -d | -D]",
+"[-i | -p | -d | -D ] [-V | -v index [file]]",
 "  If no argument is entered, this command dumps character and block",
 "  device data.\n",
 "    -i  display I/O port usage; on 2.4 kernels, also display I/O memory usage.",
@@ -3222,6 +3222,16 @@ char *help_dev[] = {
 "                If the device driver uses blk-mq interface, this field",
 "                shows N/A(MQ).  If not available, this column is not shown.",
 "    -D  same as -d, but filter out disks with no in-progress I/O requests.",
+" ",
+"  If the dumpfile contains device dumps:",
+"        -V  display an indexed list of all device dumps present in the vmcore,",
+"            showing their file offset, size and name.", 
+"  -v index  select and display one device dump based upon an index value",
+"            shown by the -V option, shown in a default human-readable format;",
+"            alternatively, the \"rd -f\" option along with its various format",
+"            options may be used to further tailor the output.",
+"      file  only used with -v, copy the device dump data to a file.",
+
 "\nEXAMPLES",
 "  Display character and block device data:\n",
 "    %s> dev",
@@ -3352,6 +3362,33 @@ char *help_dev[] = {
 "        8 ffff81012dd71000   sda      ffff81012d8af040       6     0     6     6",
 "        8 ffff81012dc77000   sdb      ffff81012d8b5740       0     0     0     0",
 "        8 ffff81012d8d0c00   sdc      ffff81012d8ae9c0       0     0     0     0",
+
+"\n  Display the available device dumps:\n",
+"    %s> dev -V",
+"    INDEX  OFFSET             SIZE             NAME",
+"      0    0x240              33558464         cxgb4_0000:02:00.4",
+"      1    0x2001240          33558464         cxgb4_0000:03:00.4",
+
+"\n  Extract a specified device dump to file:\n",
+"    %s> dev -v 0 -r device_dump_0.bin",
+"    DEVICE: cxgb4_0000:02:00.4",
+"    33558464 bytes copied from 0x240 to device_dump_0.bin",
+
+"\n  Format and display a device's dump data to the screen using the \"rd\" command:\n",
+"    %s> rd -f 0x240 -32 8",
+"    240:  040b69e2 00000038 000e0001 00675fd4   .i..8........_g.",
+"    250:  00000000 21600047 00000000 00000000   ....G.`!........",
+
+"\n  Display a device's dump data to the screen using the default format:\n",
+"    %s> dev -v 1",
+"    DEVICE: cxgb4_0000:03:00.4",
+"             2001240:  00000038040b69e2 00af985c000e0001   .i..8.......\\...",
+"             2001250:  2150004700000000 0000000000000000   ....G.P!........",
+"             2001260:  0000000000000000 0000000000000000   ................",
+"             2001270:  0000000000000000 0002fccc00000001   ................",
+"             2001280:  00000000000027b0 0000000000000000   .'..............",
+"    ...",
+
 
 NULL               
 };

@@ -1185,9 +1185,9 @@ netdump_memory_dump(FILE *fp)
 		if (machine_type("ARM64"))
 			netdump_print("%016lx\n"
 			    "                         CONFIG_ARM64_VA_BITS: %ld\n"
-			    "                         VA_BITS_ACTUAL: %ld\n", 
+			    "                         VA_BITS_ACTUAL: %lld\n", 
 				nd->arch_data2, nd->arch_data2 & 0xffffffff,
-				(nd->arch_data2 >> 32));
+				((ulonglong)nd->arch_data2 >> 32));
 		else
 			netdump_print("%016lx (?)\n", nd->arch_data2);
 	} else
@@ -1810,7 +1810,7 @@ vmcoreinfo_read_string(const char *key)
 		}
 		if (STREQ(key, "NUMBER(VA_BITS_ACTUAL)") && nd->arch_data2) {
 			value = calloc(VADDR_PRLEN+1, sizeof(char));
-			sprintf(value, "%ld", (nd->arch_data2 >> 32) & 0xffffffff);
+			sprintf(value, "%lld", ((ulonglong)nd->arch_data2 >> 32) & 0xffffffff);
 			pc->read_vmcoreinfo = no_vmcoreinfo;
 			return value;
 		}
@@ -1896,6 +1896,21 @@ vmcoreinfo_read_integer(const char *key, long default_value)
 	}
 
 	return retval;
+}
+
+void
+display_vmcoredd_note(void *ptr, FILE *ofp)
+{
+	int sp;
+	unsigned int dump_size;
+	struct vmcoredd_header *vh;
+
+	sp = VMCORE_VALID() ? 25 : 22;
+	vh = (struct vmcoredd_header *)ptr;
+
+	dump_size = vh->n_descsz - VMCOREDD_MAX_NAME_BYTES;
+	fprintf(ofp, "%sname: \"%s\"\n", space(sp), vh->dump_name);
+	fprintf(ofp, "%ssize: %u\n", space(sp), dump_size);
 }
 
 /*
@@ -2002,6 +2017,18 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 		}
 		break;
 #endif
+	case NT_VMCOREDD:
+		netdump_print("(NT_VMCOREDD)\n");
+		if (store) {
+			for (i = 0; i < NR_DEVICE_DUMPS; i++) {
+				if (!nd->nt_vmcoredd_array[i]) {
+					nd->nt_vmcoredd_array[i] = (void *)note;
+					nd->num_vmcoredd_notes++;
+					break;
+				}
+			}
+		}
+		break;
 	default:
 		xen_core = STRNEQ(buf, "XEN CORE") || STRNEQ(buf, "Xen");
 		if (STRNEQ(buf, "VMCOREINFO_XEN"))
@@ -2092,6 +2119,9 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
                                 netdump_print("                         ");
                 }
                 lf = 0;
+	} else if (note->n_type == NT_VMCOREDD) {
+		if (nd->ofp)
+			display_vmcoredd_note(note, nd->ofp);
 	} else {
 		if (nd->ofp && !XEN_CORE_DUMPFILE() && !(pc->flags2 & LIVE_DUMP)) {
 			if (machine_type("X86")) {
@@ -2126,7 +2156,7 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 static size_t 
 dump_Elf64_Nhdr(Elf64_Off offset, int store)
 {
-	int i, lf;
+	int i = 0, lf = 0;
 	Elf64_Nhdr *note;
 	size_t len;
 	char buf[BUFSIZE];
@@ -2271,6 +2301,18 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 		}
                 break;
 #endif
+	case NT_VMCOREDD:
+		netdump_print("(NT_VMCOREDD)\n");
+		if (store) {
+			for (i = 0; i < NR_DEVICE_DUMPS; i++) {
+				if (!nd->nt_vmcoredd_array[i]) {
+					nd->nt_vmcoredd_array[i] = (void *)note;
+					nd->num_vmcoredd_notes++;
+					break;
+				}
+			}
+		}
+		break;
 	default:
 		xen_core = STRNEQ(buf, "XEN CORE") || STRNEQ(buf, "Xen");
 		if (STRNEQ(buf, "VMCOREINFO_XEN"))
@@ -2364,7 +2406,10 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 		}
 	}
 
-	if (BITS32() && (xen_core || (note->n_type == NT_PRSTATUS) || qemuinfo)) {
+	if (note->n_type == NT_VMCOREDD) {
+		if (nd->ofp)
+			display_vmcoredd_note(note, nd->ofp);
+	} else if (BITS32() && (xen_core || (note->n_type == NT_PRSTATUS) || qemuinfo)) {
 		if (nd->ofp && !XEN_CORE_DUMPFILE() && !(pc->flags2 & LIVE_DUMP)) {
 			if (machine_type("X86")) { 
 				if (note->n_type == NT_PRSTATUS)
@@ -5037,3 +5082,66 @@ kdump_get_qemucpustate(int cpu)
 	return (QEMUCPUState *)nd->nt_qemu_percpu[cpu];
 }
 #endif
+
+static void *
+get_kdump_device_dump_offset(void)
+{
+	void *elf_base = NULL;
+
+	if (DUMPFILE_FORMAT(nd->flags) == KDUMP_ELF64)
+		elf_base = (void *)nd->elf64;
+	else if (DUMPFILE_FORMAT(nd->flags) == KDUMP_ELF32)
+		elf_base = (void *)nd->elf32;
+	else
+		error(FATAL, "no device dumps found in this dumpfile\n");
+
+	return elf_base;
+}
+
+/*
+ * extract hardware specific device dumps from coredump.
+ */
+void
+kdump_device_dump_extract(int index, char *outfile, FILE *ofp)
+{
+	ulonglong offset;
+	void *elf_base;
+
+	if (!nd->num_vmcoredd_notes)
+		error(FATAL, "no device dumps found in this dumpfile\n");
+	else if (index >= nd->num_vmcoredd_notes)
+		error(FATAL, "no device dump found at index: %d", index);
+
+	elf_base = get_kdump_device_dump_offset();
+
+	offset = nd->nt_vmcoredd_array[index] - elf_base;
+
+	devdump_extract(nd->nt_vmcoredd_array[index], offset, outfile, ofp);
+}
+
+/*
+ * list all hardware specific device dumps present in coredump.
+ */
+void kdump_device_dump_info(FILE *ofp)
+{
+	ulonglong offset;
+	char buf[BUFSIZE];
+	void *elf_base;
+	ulong i;
+
+	if (!nd->num_vmcoredd_notes)
+		error(FATAL, "no device dumps found in this dumpfile\n");
+
+	fprintf(fp, "%s ", mkstring(buf, strlen("INDEX"), LJUST, "INDEX"));
+	fprintf(fp, " %s ", mkstring(buf, LONG_LONG_PRLEN, LJUST, "OFFSET"));
+	fprintf(fp, "  %s ", mkstring(buf, LONG_PRLEN, LJUST, "SIZE"));
+	fprintf(fp, "NAME\n");
+
+	elf_base = get_kdump_device_dump_offset();
+
+	for (i = 0; i < nd->num_vmcoredd_notes; i++) {
+		fprintf(fp, "%s  ", mkstring(buf, strlen("INDEX"), CENTER | INT_DEC, MKSTR(i)));
+		offset = nd->nt_vmcoredd_array[i] - elf_base;
+		devdump_info(nd->nt_vmcoredd_array[i], offset, ofp);
+	}
+}

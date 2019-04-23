@@ -1793,6 +1793,16 @@ display_memory(ulonglong addr, long count, ulong flag, int memtype, void *opt)
 		fprintf(fp,"\n");
 }
 
+void
+display_memory_from_file_offset(ulonglong addr, long count, void *file)
+{
+	if (file)
+		display_memory(addr, count, DISPLAY_RAW, FILEADDR, file);
+	else
+		display_memory(addr, count, DISPLAY_64|ASCII_ENDLINE|HEXADECIMAL,
+			FILEADDR, file);
+}
+
 /*
  *  cmd_wr() is the sister routine of cmd_rd(), used to modify the contents
  *  of memory.  Like the "rd" command, the starting address may be entered 

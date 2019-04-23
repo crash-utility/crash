@@ -49,7 +49,7 @@ LDFLAGS=
 
 GENERIC_HFILES=defs.h xen_hyper_defs.h xen_dom0.h
 MCORE_HFILES=va_server.h vas_crash.h
-REDHAT_HFILES=netdump.h diskdump.h makedumpfile.h xendump.h kvmdump.h qemu-load.h
+REDHAT_HFILES=netdump.h diskdump.h makedumpfile.h xendump.h kvmdump.h qemu-load.h vmcore.h
 LKCD_DUMP_HFILES=lkcd_vmdump_v1.h lkcd_vmdump_v2_v3.h lkcd_dump_v5.h \
         lkcd_dump_v7.h lkcd_dump_v8.h
 LKCD_OBSOLETE_HFILES=lkcd_fix_mem.h
@@ -392,7 +392,7 @@ lkcd_v8.o: ${GENERIC_HFILES} ${LKCD_DUMP_HFILES} lkcd_v8.c
 net.o: ${GENERIC_HFILES} net.c
 	${CC} -c ${CRASH_CFLAGS} net.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
-dev.o: ${GENERIC_HFILES} dev.c
+dev.o: ${GENERIC_HFILES} ${REDHAT_HFILES} dev.c
 	${CC} -c ${CRASH_CFLAGS} dev.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 # remote.c functionality has been deprecated
