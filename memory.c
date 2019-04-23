@@ -1,8 +1,8 @@
 /* memory.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2018 David Anderson
- * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2019 David Anderson
+ * Copyright (C) 2002-2019 Red Hat, Inc. All rights reserved.
  * Copyright (C) 2002 Silicon Graphics, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -8732,6 +8732,12 @@ dump_vmap_area(struct meminfo *vi)
 	ld->list_head_offset = OFFSET(vmap_area_list);
 	ld->end = symbol_value("vmap_area_list");
 	cnt = do_list(ld);
+	if (cnt < 0) {
+		FREEBUF(vmap_area_buf);
+		error(WARNING, "invalid/corrupt vmap_area_list\n"); 
+		vi->retval = 0;
+		return;
+	}
 
 	for (i = 0; i < cnt; i++) {
 		if (!(pc->curcmd_flags & HEADER_PRINTED) && (i == 0) && 
@@ -8829,6 +8835,7 @@ dump_vmap_area(struct meminfo *vi)
 		}
 	}
 
+	FREEBUF(vmap_area_buf);
 	FREEBUF(ld->list_ptr);
 
 	if (vi->flags & GET_HIGHEST)
