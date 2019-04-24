@@ -3370,7 +3370,7 @@ char *help_dev[] = {
 "      1    0x2001240          33558464         cxgb4_0000:03:00.4",
 
 "\n  Extract a specified device dump to file:\n",
-"    %s> dev -v 0 -r device_dump_0.bin",
+"    %s> dev -v 0 device_dump_0.bin",
 "    DEVICE: cxgb4_0000:02:00.4",
 "    33558464 bytes copied from 0x240 to device_dump_0.bin",
 
