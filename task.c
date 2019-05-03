@@ -486,13 +486,13 @@ task_init(void)
 			"radix_tree_node","height");
 		MEMBER_OFFSET_INIT(radix_tree_node_shift,
 			"radix_tree_node","shift");
-	} else {
-		STRUCT_SIZE_INIT(xarray, "xarray");
-		STRUCT_SIZE_INIT(xa_node, "xa_node");
-		MEMBER_OFFSET_INIT(xarray_xa_head, "xarray","xa_head");
-		MEMBER_OFFSET_INIT(xa_node_slots, "xa_node","slots");
-		MEMBER_OFFSET_INIT(xa_node_shift, "xa_node","shift");
 	}
+
+	STRUCT_SIZE_INIT(xarray, "xarray");
+	STRUCT_SIZE_INIT(xa_node, "xa_node");
+	MEMBER_OFFSET_INIT(xarray_xa_head, "xarray","xa_head");
+	MEMBER_OFFSET_INIT(xa_node_slots, "xa_node","slots");
+	MEMBER_OFFSET_INIT(xa_node_shift, "xa_node","shift");
 
 	if (symbol_exists("pidhash") && symbol_exists("pid_hash") &&
 	    !symbol_exists("pidhash_shift"))
