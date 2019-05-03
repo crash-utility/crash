@@ -74,8 +74,8 @@
 
   To build the crash utility: 
 
-    $ tar -xf crash-7.2.5.tar.gz
-    $ cd crash-7.2.5
+    $ tar -xf crash-7.2.6.tar.gz
+    $ cd crash-7.2.6
     $ make
 
   The initial build will take several minutes  because the embedded gdb module
@@ -96,6 +96,8 @@
      32-bit ppc dumpfiles may be built by typing "make target=PPC".
   o  On an x86_64 host, an x86_64 binary that can be used to analyze
      arm64 dumpfiles may be built by typing "make target=ARM64".
+  o  On an x86_64 host, an x86_64 binary that can be used to analyze
+     ppc64le dumpfiles may be built by typing "make target=PPC64".
 
   Traditionally when vmcores are compressed via the makedumpfile(8) facility
   the libz compression library is used, and by default the crash utility
@@ -116,7 +118,7 @@
   If neither /dev/mem or /dev/crash are available, then /proc/kcore will be
   be used as the live memory source.  If /proc/kcore is also restricted, then
   the Red Hat /dev/crash driver may be compiled and installed; its source
-  is included in the crash-7.2.5/memory_driver subdirectory.
+  is included in the crash-7.2.6/memory_driver subdirectory.
 
   If the kernel file is stored in /boot, /, /boot/efi, or in any /usr/src
   or /usr/lib/debug/lib/modules subdirectory, then no command line arguments
@@ -127,7 +129,7 @@
 
     $ crash
     
-    crash 7.2.5
+    crash 7.2.6
     Copyright (C) 2002-2019  Red Hat, Inc.
     Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
     Copyright (C) 1999-2006  Hewlett-Packard Co
@@ -152,7 +154,7 @@
           KERNEL: /boot/vmlinux
         DUMPFILE: /dev/mem
             CPUS: 1
-            DATE: Thu Jan 10 14:39:19 2019
+            DATE: Fri May  3 13:57:10 2019
           UPTIME: 10 days, 22:55:18
     LOAD AVERAGE: 0.08, 0.03, 0.01
            TASKS: 42
@@ -180,7 +182,7 @@
     eval           kmem           ptob           sym            wr             
     exit           list           ptov           sys            q              
     
-    crash version: 7.2.5    gdb version: 7.6
+    crash version: 7.2.6    gdb version: 7.6
     For help on any command above, enter "help <command>".
     For help on input options, enter "help input".
     For help on output options, enter "help output".
@@ -193,7 +195,7 @@
 
     $ crash vmlinux vmcore
  
-    crash 7.2.5
+    crash 7.2.6
     Copyright (C) 2002-2019  Red Hat, Inc.
     Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
     Copyright (C) 1999-2006  Hewlett-Packard Co
