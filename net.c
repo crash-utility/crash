@@ -1279,7 +1279,7 @@ dump_hw_addr(unsigned char *ha, int len)
 }
 
 /*
- *  help -n output
+ *  help -N output
  */
 void
 dump_net_table(void)

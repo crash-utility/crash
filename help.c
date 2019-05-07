@@ -647,6 +647,7 @@ cmd_help(void)
 			fprintf(fp, " -D - dumpfile contents/statistics\n");
 			fprintf(fp, " -e - extension table data\n");
 			fprintf(fp, " -f - filesys table\n");
+			fprintf(fp, " -g - gdb data\n");
 			fprintf(fp, " -h - hash_table data\n");
 			fprintf(fp, " -H - hash_table data (verbose)\n");
 			fprintf(fp, " -k - kernel_table\n");
@@ -654,6 +655,7 @@ cmd_help(void)
 			fprintf(fp, " -L - LKCD page cache environment\n");
 			fprintf(fp, " -M <num> machine specific\n");
 			fprintf(fp, " -m - machdep_table\n");
+			fprintf(fp, " -N - net_table\n");
 			fprintf(fp, " -n - dumpfile contents/statistics\n");
 			fprintf(fp, " -o - offset_table and size_table\n");
 			fprintf(fp, " -p - program_context\n");
@@ -664,6 +666,7 @@ cmd_help(void)
 			fprintf(fp, " -v - vm_table\n");
 			fprintf(fp, " -V - vm_table (verbose)\n");
 			fprintf(fp, " -x - text cache\n");
+			fprintf(fp, " -z - help options\n");
 			return;
 
 		case 'L':
@@ -1004,6 +1007,7 @@ char *help_help[] = {
 "    -D - dumpfile contents/statistics",
 "    -e - extension table data",
 "    -f - filesys table",
+"    -g - gdb data",
 "    -h - hash_table data",
 "    -H - hash_table data (verbose)",
 "    -k - kernel_table",
@@ -1011,6 +1015,7 @@ char *help_help[] = {
 "    -L - LKCD page cache environment",
 "    -M <num> machine specific",
 "    -m - machdep_table",
+"    -N - net_table",
 "    -n - dumpfile contents/statistics",
 "    -o - offset_table and size_table",
 "    -p - program_context",
@@ -1021,6 +1026,7 @@ char *help_help[] = {
 "    -v - vm_table",
 "    -V - vm_table (verbose)",
 "    -x - text cache",
+"    -z - help options",
 NULL               
 };
 
