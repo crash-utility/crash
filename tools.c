@@ -246,8 +246,10 @@ next:
 					break;
 				}
 			}
-			if (expression == 0)
+			if (expression == 0) {
 				i++;
+				continue;
+			}
 		    }
 
 	            if (str[i] != NULLCHAR && str[i] != '\n') {
