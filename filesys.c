@@ -37,7 +37,6 @@ static int mount_point(char *);
 static int open_file_reference(struct reference *);
 static void memory_source_init(void);
 static int get_pathname_component(ulong, ulong, int, char *, char *);
-static ulong *get_mount_list(int *, struct task_context *);
 char *inode_type(char *, char *);
 static void match_proc_version(void);
 static void get_live_memory_source(void);
@@ -1600,7 +1599,7 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
 /*
  *  Allocate and fill a list of the currently-mounted vfsmount pointers.
  */
-static ulong *
+ulong *
 get_mount_list(int *cntptr, struct task_context *namespace_context)
 {
 	struct list_data list_data, *ld;

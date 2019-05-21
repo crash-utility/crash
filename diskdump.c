@@ -80,7 +80,6 @@ struct diskdump_data {
 
 static struct diskdump_data diskdump_data = { 0 };
 static struct diskdump_data *dd = &diskdump_data;
-static int get_dump_level(void);
 
 ulong *diskdump_flags = &diskdump_data.flags;
 
@@ -2114,7 +2113,7 @@ get_diskdump_switch_stack(ulong task)
  *  Version 1 and later compressed kdump dumpfiles contain the dump level
  *  in an additional field of the sub_header_kdump structure.
  */
-static int 
+int
 get_dump_level(void)
 {
 	int dump_level;
