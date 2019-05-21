@@ -1,8 +1,8 @@
 /* filesys.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2018 David Anderson
- * Copyright (C) 2002-2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2019 David Anderson
+ * Copyright (C) 2002-2019 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -4195,7 +4195,7 @@ static void do_xarray_dump_cb(ulong node, ulong slot, const char *path,
 	/* Caller defined operation */
 	if (!cb(slot)) {
 		if (slot & XARRAY_TAG_MASK) {
-			if (CRASHDEBUG(0))
+			if (CRASHDEBUG(1))
 				error(INFO, "entry has XARRAY_TAG_MASK bits set: %lx\n", slot); 
 			return;
 		}
