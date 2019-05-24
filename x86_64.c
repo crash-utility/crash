@@ -1263,10 +1263,12 @@ x86_64_per_cpu_init(void)
 {
 	int i, cpus, cpunumber;
 	struct machine_specific *ms;
-	struct syment *irq_sp, *curr_sp, *cpu_sp;
+	struct syment *irq_sp, *curr_sp, *cpu_sp, *hardirq_stack_ptr_sp;
+	ulong hardirq_stack_ptr;
 
 	ms = machdep->machspec;
 
+	hardirq_stack_ptr_sp = per_cpu_symbol_search("hardirq_stack_ptr");
 	irq_sp = per_cpu_symbol_search("per_cpu__irq_stack_union");
 	cpu_sp = per_cpu_symbol_search("per_cpu__cpu_number");
 	curr_sp = per_cpu_symbol_search("per_cpu__current_task");
@@ -1294,8 +1296,15 @@ x86_64_per_cpu_init(void)
 		return;
 	}
 
-	if (!cpu_sp || !irq_sp) 
+	if (!cpu_sp || (!irq_sp && !hardirq_stack_ptr_sp))
 		return;
+
+	if (MEMBER_EXISTS("irq_stack_union", "irq_stack"))
+		ms->stkinfo.isize = MEMBER_SIZE("irq_stack_union", "irq_stack");
+	else if (MEMBER_EXISTS("irq_stack", "stack"))
+		ms->stkinfo.isize = MEMBER_SIZE("irq_stack", "stack");
+	else if (!ms->stkinfo.isize)
+		ms->stkinfo.isize = 16384;
 
 	for (i = cpus = 0; i < NR_CPUS; i++) {
 		if (!readmem(cpu_sp->value + kt->__per_cpu_offset[i],
@@ -1307,12 +1316,15 @@ x86_64_per_cpu_init(void)
 			break;
 		cpus++;
 
-		ms->stkinfo.ibase[i] = irq_sp->value + kt->__per_cpu_offset[i];
+		if (hardirq_stack_ptr_sp) {
+			if (!readmem(hardirq_stack_ptr_sp->value + kt->__per_cpu_offset[i],
+		    	    KVADDR, &hardirq_stack_ptr, sizeof(void *),
+		    	    "hardirq_stack_ptr (per_cpu)", QUIET|RETURN_ON_ERROR))
+				continue;
+			ms->stkinfo.ibase[i] = hardirq_stack_ptr - ms->stkinfo.isize;
+		} else if (irq_sp)
+			ms->stkinfo.ibase[i] = irq_sp->value + kt->__per_cpu_offset[i];
 	}
-
-	if ((ms->stkinfo.isize = 
-	    MEMBER_SIZE("irq_stack_union", "irq_stack")) <= 0)
-		ms->stkinfo.isize = 16384;
 
 	if (CRASHDEBUG(2))
 		fprintf(fp, "x86_64_per_cpu_init: "
