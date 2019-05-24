@@ -609,6 +609,12 @@ kaslr_init(void)
 		st->_stext_vmlinux = UNINITIALIZED;
 	}
 
+	if (machine_type("S390X") &&  /* Linux 5.2 */
+	    (symbol_value_from_proc_kallsyms("__kaslr_offset") != BADVAL)) {
+		kt->flags2 |= (RELOC_AUTO|KASLR);
+		st->_stext_vmlinux = UNINITIALIZED;
+	}
+
 	if (QEMU_MEM_DUMP_NO_VMCOREINFO()) {
 		if (KDUMP_DUMPFILE() && kdump_kaslr_check()) {
 			kt->flags2 |= KASLR_CHECK;
