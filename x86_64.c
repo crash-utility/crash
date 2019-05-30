@@ -1359,7 +1359,7 @@ x86_64_per_cpu_init(void)
 static void 
 x86_64_ist_init(void)
 {
-	int c, i, cnt, cpus, esize;
+	int c, i, cpus, esize;
 	ulong vaddr, offset;
 	ulong init_tss;
 	struct machine_specific *ms;
@@ -1439,7 +1439,31 @@ x86_64_ist_init(void)
 		return;
 	}
 
-	if (ms->stkinfo.ebase[0][0] && ms->stkinfo.ebase[0][1])
+	if (MEMBER_EXISTS("exception_stacks", "NMI_stack")) {
+                for (i = 0; i < MAX_EXCEPTION_STACKS; i++) {
+			if (STREQ(ms->stkinfo.exception_stacks[i], "DEBUG"))
+				ms->stkinfo.esize[i] = MEMBER_SIZE("exception_stacks", "DB_stack");
+			else if (STREQ(ms->stkinfo.exception_stacks[i], "NMI"))
+				ms->stkinfo.esize[i] = MEMBER_SIZE("exception_stacks", "NMI_stack");
+			else if (STREQ(ms->stkinfo.exception_stacks[i], "DOUBLEFAULT"))
+				ms->stkinfo.esize[i] = MEMBER_SIZE("exception_stacks", "DF_stack");
+			else if (STREQ(ms->stkinfo.exception_stacks[i], "MCE"))
+				ms->stkinfo.esize[i] = MEMBER_SIZE("exception_stacks", "MCE_stack");
+		}
+		/*
+	 	 *  Adjust the top-of-stack addresses down to the base stack address.
+		 */
+		for (c = 0; c < kt->cpus; c++) {
+			for (i = 0; i < MAX_EXCEPTION_STACKS; i++) {
+				if (ms->stkinfo.ebase[c][i] == 0) 
+					continue;
+				ms->stkinfo.ebase[c][i] -= ms->stkinfo.esize[i];
+			}
+		}
+
+		return;
+
+	} else if (ms->stkinfo.ebase[0][0] && ms->stkinfo.ebase[0][1])
 		esize = ms->stkinfo.ebase[0][1] - ms->stkinfo.ebase[0][0];
 	else
 		esize = 4096;
@@ -1449,10 +1473,9 @@ x86_64_ist_init(void)
 	 *  to the base stack address.
 	 */
         for (c = 0; c < kt->cpus; c++) {
-                for (i = cnt = 0; i < MAX_EXCEPTION_STACKS; i++) {
+                for (i = 0; i < MAX_EXCEPTION_STACKS; i++) {
                         if (ms->stkinfo.ebase[c][i] == 0) 
                                 break;
-			cnt++;
 			if ((THIS_KERNEL_VERSION >= LINUX(2,6,18)) &&
 			    STREQ(ms->stkinfo.exception_stacks[i], "DEBUG"))
 				ms->stkinfo.esize[i] = esize*2;
