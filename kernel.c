@@ -5679,6 +5679,7 @@ dump_sys_call_table(char *spec, int cnt)
 
 	fprintf(fp, "%s", sys_call_hdr);
 
+	get_build_directory(buf2);
         for (i = 0, sct = sys_call_table; i < NR_syscalls; i++, sct++) {
                 if (!(scp = value_symbol(*sct))) {
 			if (confirmed || CRASHDEBUG(1)) {
@@ -5710,7 +5711,6 @@ dump_sys_call_table(char *spec, int cnt)
 	  	 */
                 sp = value_search(*sct, NULL);
                 spn = next_symbol(NULL, sp);
-		get_build_directory(buf2);
 
 		for (addr = *sct; sp && spn && (addr < spn->value); addr++) {
 			BZERO(buf1, BUFSIZE);

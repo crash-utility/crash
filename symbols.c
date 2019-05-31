@@ -4296,7 +4296,7 @@ get_build_directory(char *buf)
 		get_line_number(symbol_value("do_schedule"), buf, FALSE); 
 	else
 		return NULL;
-	if ((p = strstr(buf, "/kernel/")))
+	if ((p = strstr(buf, "/kernel/")) || (p = strstr(buf, "/./arch/")))
 		*p = NULLCHAR;
 	else
 		return(NULL);
