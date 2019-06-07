@@ -4135,6 +4135,29 @@ int arm_kdump_phys_base(ulong *phys_base)
 	return FALSE;
 }
 
+/*
+ * physical memory size, calculated by given load segments
+ */
+int
+arm_kdump_phys_end(ulong *phys_end)
+{
+	struct pt_load_segment *pls;
+	ulong paddr = 0;
+	int i;
+
+	for (i = 0; i < nd->num_pt_load_segments; i++) {
+		pls = &nd->pt_load_segments[i];
+		if (pls->phys_end > paddr)
+			paddr = pls->phys_end;
+	}
+
+	if (paddr != 0) {
+		*phys_end = paddr;
+		return TRUE;
+	}
+	return FALSE;
+}
+
 static void *
 get_arm_regs_from_elf_notes(struct task_context *tc)
 {

@@ -27,6 +27,8 @@
 static struct machine_specific arm64_machine_specific = { 0 };
 static int arm64_verify_symbol(const char *, ulong, char);
 static void arm64_parse_cmdline_args(void);
+static int arm64_search_for_kimage_voffset(ulong);
+static int verify_kimage_voffset(void);
 static void arm64_calc_kimage_voffset(void);
 static void arm64_calc_phys_offset(void);
 static void arm64_calc_virtual_memory_ranges(void);
@@ -824,11 +826,60 @@ arm64_parse_cmdline_args(void)
 	}
 }
 
+#define	MIN_KIMG_ALIGN	(0x00200000)	/* kimage load address must be aligned 2M */
+/*
+ * Traverse the entire dumpfile to find/verify kimage_voffset.
+ */
+static int
+arm64_search_for_kimage_voffset(ulong phys_base)
+{
+	ulong kimage_load_addr;
+	ulong phys_end;
+	struct machine_specific *ms = machdep->machspec;
+
+	if (!arm_kdump_phys_end(&phys_end))
+		return FALSE;
+
+	for (kimage_load_addr = phys_base;
+	    kimage_load_addr <= phys_end; kimage_load_addr += MIN_KIMG_ALIGN) {
+		ms->kimage_voffset = ms->vmalloc_start_addr - kimage_load_addr;
+
+		if ((kt->flags2 & KASLR) && (kt->flags & RELOC_SET))
+			ms->kimage_voffset += (kt->relocate * - 1);
+
+		if (verify_kimage_voffset()) {
+			if (CRASHDEBUG(1))
+				error(INFO, 
+				    "dumpfile searched for kimage_voffset: %lx\n\n", 
+					ms->kimage_voffset);
+			break;
+		}
+	}
+
+	if (kimage_load_addr > phys_end)
+		return FALSE;
+
+	return TRUE;
+}
+
+static int
+verify_kimage_voffset(void)
+{
+	ulong kimage_voffset;
+
+	if (!readmem(symbol_value("kimage_voffset"), KVADDR, &kimage_voffset,
+	    sizeof(kimage_voffset), "verify kimage_voffset", QUIET|RETURN_ON_ERROR))
+		return FALSE;
+
+	return (machdep->machspec->kimage_voffset == kimage_voffset);
+}
+
 static void
 arm64_calc_kimage_voffset(void)
 {
 	struct machine_specific *ms = machdep->machspec;
-	ulong phys_addr;
+	ulong phys_addr = 0;
+	int errflag;
 
 	if (ms->kimage_voffset) /* vmcoreinfo, ioctl, or --machdep override */
 		return;
@@ -836,7 +887,6 @@ arm64_calc_kimage_voffset(void)
 	if (ACTIVE()) {
 		char buf[BUFSIZE];
 		char *p1;
-		int errflag;
 		FILE *iomem;
 		ulong kimage_voffset, vaddr;
 
@@ -877,9 +927,24 @@ arm64_calc_kimage_voffset(void)
 		if (errflag)
 			return;
 
-	} else if (KDUMP_DUMPFILE())
-		arm_kdump_phys_base(&phys_addr);  /* Get start address of first memory block */
-	else {
+	} else if (KDUMP_DUMPFILE()) {
+		errflag = 1;
+		if (arm_kdump_phys_base(&phys_addr)) {  /* Get start address of first memory block */
+			ms->kimage_voffset = ms->vmalloc_start_addr - phys_addr;
+			if ((kt->flags2 & KASLR) && (kt->flags & RELOC_SET))
+				ms->kimage_voffset += (kt->relocate * -1);
+	    		if (verify_kimage_voffset() || arm64_search_for_kimage_voffset(phys_addr))
+				errflag = 0;
+		}
+
+		if (errflag) {
+			error(WARNING,
+				"kimage_voffset cannot be determined from the dumpfile.\n");
+			error(CONT,
+				"Try using the command line option: --machdep kimage_voffset=<addr>\n");
+		}
+		return;
+	} else {
 		error(WARNING,
 			"kimage_voffset cannot be determined from the dumpfile.\n");
 		error(CONT,
