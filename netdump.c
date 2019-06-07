@@ -1838,7 +1838,7 @@ vmcoreinfo_read_string(const char *key)
 		return NULL;
 
 	/* the '+ 1' is the equal sign */
-	for (i = 0; i < (size_vmcoreinfo - key_length + 1); i++) {
+	for (i = 0; i < (int)(size_vmcoreinfo - key_length + 1); i++) {
 		/*
 		 * We must also check if we're at the beginning of VMCOREINFO
 		 * or the separating newline is there, and of course if we 
