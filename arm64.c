@@ -285,7 +285,7 @@ arm64_init(int when)
 		case 65536:
 			if (kernel_symbol_exists("idmap_ptrs_per_pgd") &&
 			    readmem(symbol_value("idmap_ptrs_per_pgd"), KVADDR,
-			    &value, sizeof(ulong), "idmap_ptrs_per_pgd", RETURN_ON_ERROR))
+			    &value, sizeof(ulong), "idmap_ptrs_per_pgd", QUIET|RETURN_ON_ERROR))
 				machdep->ptrs_per_pgd = value;
 		
 			if (machdep->machspec->VA_BITS > PGDIR_SHIFT_L3_64K) {
