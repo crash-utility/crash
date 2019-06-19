@@ -1789,13 +1789,15 @@ NULL
 char *help_bt[] = {
 "bt",
 "backtrace",
-"[-a|-c cpu(s)|-g|-r|-t|-T|-l|-e|-E|-f|-F|-o|-O|-v] [-R ref] [-s [-x|d]]"
+"[-a|-c cpu(s)|-g|-r|-t|-T|-l|-e|-E|-f|-F|-o|-O|-v|-p] [-R ref] [-s [-x|d]]"
 "\n     [-I ip] [-S sp] [pid | task]",
 "  Display a kernel stack backtrace.  If no arguments are given, the stack",
 "  trace of the current context will be displayed.\n",
 "       -a  displays the stack traces of the active task on each CPU.",
 "           (only applicable to crash dumps)",
 "       -A  same as -a, but also displays vector registers (S390X only).",
+"       -p  display the stack trace of the panic task only.",
+"           (only applicable to crash dumps)",
 "   -c cpu  display the stack trace of the active task on one or more CPUs,",
 "           which can be specified using the format \"3\", \"1,8,9\", \"1-23\",",
 "           or \"1,8,9-14\". (only applicable to crash dumps)",

@@ -2399,7 +2399,7 @@ cmd_bt(void)
 	int i, c;
 	ulong value, *cpus;
         struct task_context *tc;
-	int subsequent, active;
+	int subsequent, active, panic;
 	struct stack_hook hook;
 	struct bt_info bt_info, bt_setup, *bt;
 	struct reference reference;
@@ -2409,7 +2409,7 @@ cmd_bt(void)
 
 	tc = NULL;
 	cpus = NULL;
-	subsequent = active = 0;
+	subsequent = active = panic = 0;
 	hook.eip = hook.esp = 0;
 	refptr = 0;
 	bt = &bt_info;
@@ -2418,7 +2418,7 @@ cmd_bt(void)
 	if (kt->flags & USE_OPT_BT)
 		bt->flags |= BT_OPT_BACK_TRACE;
 
-	while ((c = getopt(argcnt, args, "D:fFI:S:c:aAloreEgstTdxR:Ov")) != EOF) {
+	while ((c = getopt(argcnt, args, "D:fFI:S:c:aAloreEgstTdxR:Ovp")) != EOF) {
                 switch (c)
 		{
 		case 'f':
@@ -2606,6 +2606,14 @@ cmd_bt(void)
 				option_not_supported(c);
 			check_stack_overflow();
 			return;
+		case 'p':
+			if (LIVE())
+				error(FATAL,
+				    "-p option not supported on a live system or live dump\n");
+			if (!tt->panic_task)
+				error(FATAL, "no panic task found!\n");
+			panic++;
+			break;
 
 		default:
 			argerrs++;
@@ -2745,7 +2753,10 @@ cmd_bt(void)
 			tgid = task_tgid(CURRENT_TASK());
 			DO_THREAD_GROUP_BACKTRACE();
 		} else {
-			tc = CURRENT_CONTEXT();
+			if (panic)
+				tc = task_to_context(tt->panic_task);
+			else
+				tc = CURRENT_CONTEXT();
 			DO_TASK_BACKTRACE();
 		}
 		return;
