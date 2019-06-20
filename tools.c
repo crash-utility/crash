@@ -2499,11 +2499,16 @@ cmd_set(void)
                                         tmp_fp = fp;
                                         strcpy(tmp_path, "fp");
                                 } else {
+                                        if (strlen(args[optind]) >= PATH_MAX) {
+                                                error(INFO, "path length %d is too long. (max=%d)\n",
+                                                        strlen(args[optind]), PATH_MAX);
+                                                return;
+                                        }
                                         tmp_fp = fopen(args[optind], "a");
                                         if (tmp_fp != NULL) {
                                                 strcpy(tmp_path, args[optind]);
                                         } else {
-                                                error(INFO,"invalid path: %s\n",
+                                                error(INFO, "invalid path: %s\n",
                                                       args[optind]);
                                                 return;
                                         }
