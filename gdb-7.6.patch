@@ -1,3 +1,19 @@
+
+# When this file is updated in an existing source tree, it gets re-applied
+# during the next build using "patch -N --fuzz=0", which ignores patches
+# that have already been applied.  However, if a gdb file has been modified
+# multiple times, the secondary patching may fail to recognize that a 
+# given patch has been previously applied, and will attempt to re-apply it.
+# To prevent any uninintended consequences, this file also acts as a 
+# shell script that restores any gdb file to its original state prior 
+# to all secondary patch applications: 
+ 
+tar xvzmf gdb-7.6.tar.gz \
+	gdb-7.6/gdb/symtab.c \
+	gdb-7.6/gdb/printcmd.c
+
+exit 0
+
 --- gdb-7.6/libiberty/Makefile.in.orig
 +++ gdb-7.6/libiberty/Makefile.in
 @@ -175,6 +175,7 @@ REQUIRED_OFILES =							\

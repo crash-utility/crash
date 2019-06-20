@@ -245,7 +245,7 @@ rebuild:
 	  touch ${GDB}/${GDB}.patch; fi
 	@if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ] && \
 	  [ "`sum ${GDB}.patch`" != "`sum ${GDB}/${GDB}.patch`" ]; then \
-	  (patch -N -p0 -r- --fuzz=0 < ${GDB}.patch; cp ${GDB}.patch ${GDB}; cd ${GDB}; \
+	  (sh -x ${GDB}.patch; patch -N -p0 -r- --fuzz=0 < ${GDB}.patch; cp ${GDB}.patch ${GDB}; cd ${GDB}; \
 	  make --no-print-directory CRASH_TARGET=${TARGET}) \
 	else (cd ${GDB}/gdb; make --no-print-directory CRASH_TARGET=${TARGET}); fi
 
