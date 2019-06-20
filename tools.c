@@ -58,6 +58,9 @@ __error(int type, char *fmt, ...)
         void *retaddr[NUMBER_STACKFRAMES] = { 0 };
 	va_list ap;
 
+        if (!strcmp(pc->stderr_path, "fp"))
+                pc->stderr = fp;
+
 	if (CRASHDEBUG(1) || (pc->flags & DROP_CORE)) {
 		SAVE_RETURN_ADDRESS(retaddr);
 		console("error() trace: %lx => %lx => %lx => %lx\n",
@@ -69,7 +72,7 @@ __error(int type, char *fmt, ...)
         va_end(ap);
 
 	if (!fmt && FATAL_ERROR(type)) {
-		fprintf(stdout, "\n");
+		fprintf(pc->stderr, "\n");
 		clean_exit(1);
 	}
 
@@ -95,14 +98,14 @@ __error(int type, char *fmt, ...)
 			buf);
 		fflush(pc->stdpipe);
 	} else { 
-		fprintf(stdout, "%s%s%s %s%s", 
+		fprintf(pc->stderr, "%s%s%s %s%s", 
 			new_line || end_of_line ? "\n" : "",
 			type == WARNING ? "WARNING" : 
 			type == NOTE ? "NOTE" : 
 			type == CONT ? spacebuf : pc->curcmd,
 			type == CONT ? " " : ":",
 			buf, end_of_line ? "\n" : "");
-		fflush(stdout);
+		fflush(pc->stderr);
 	}
 
         if ((fp != stdout) && (fp != pc->stdpipe) && (fp != pc->tmpfile)) {
@@ -2483,6 +2486,46 @@ cmd_set(void)
 			}
 			return;
 
+                } else if (STREQ(args[optind], "stderr")) {
+                        if (args[optind+1]) {
+                                FILE *tmp_fp = NULL;
+                                char tmp_path[PATH_MAX];
+
+                                optind++;
+                                if (STREQ(args[optind], "stdout")) {
+                                        tmp_fp = stdout;
+                                        strcpy(tmp_path, "stdout");
+                                } else if (STREQ(args[optind], "fp")) {
+                                        tmp_fp = fp;
+                                        strcpy(tmp_path, "fp");
+                                } else {
+                                        tmp_fp = fopen(args[optind], "a");
+                                        if (tmp_fp != NULL) {
+                                                strcpy(tmp_path, args[optind]);
+                                        } else {
+                                                error(INFO,"invalid path: %s\n",
+                                                      args[optind]);
+                                                return;
+                                        }
+
+                                }
+
+                                if (strcmp(pc->stderr_path, tmp_path)) {
+                                        if (strcmp(pc->stderr_path, "stdout")
+                                            && strcmp(pc->stderr_path, "fp")) {
+                                                fclose(pc->stderr);
+                                        }
+                                        pc->stderr = tmp_fp;
+                                        strcpy(pc->stderr_path, tmp_path);
+                                }
+                        }
+
+                        if (runtime) {
+                                fprintf(fp, "stderr: %s\n",
+                                        pc->stderr_path);
+                        }
+                        return;
+
 		} else if (XEN_HYPER_MODE()) {
 			error(FATAL, "invalid argument for the Xen hypervisor\n");
 		} else if (pc->flags & MINIMAL_MODE) {
@@ -2590,6 +2633,7 @@ show_options(void)
 		fprintf(fp, "(not set)\n");
 	fprintf(fp, "       offline: %s\n", pc->flags2 & OFFLINE_HIDE ? "hide" : "show");
 	fprintf(fp, "       redzone: %s\n", pc->flags2 & REDZONE ? "on" : "off");
+	fprintf(fp, "        stderr: %s\n", pc->stderr_path);
 }
 
 

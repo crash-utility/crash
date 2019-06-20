@@ -1085,6 +1085,8 @@ setup_environment(int argc, char **argv)
 	 *  to pipes or output files.
 	 */
 	fp = stdout;
+        pc->stderr = stdout;
+        strcpy(pc->stderr_path, "stdout");
 
 	/*
 	 *  Start populating the program_context structure.  It's used so

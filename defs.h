@@ -553,6 +553,8 @@ struct program_context {
 	ulong scope;			/* optional text context address */
 	ulong nr_hash_queues;		/* hash queue head count */
 	char *(*read_vmcoreinfo)(const char *);
+        FILE *stderr;                   /* error() message direction */
+        char stderr_path[PATH_MAX];     /* stderr path information */
 };
 
 #define READMEM  pc->readmem
