@@ -7771,7 +7771,7 @@ print_timer(const void *timer, ulonglong now)
 	fprintf(fp, "%s  ", mkstring(buf2, expires_len, CENTER|RJUST, buf1));
 
 	tte = expires - now;
-	fprintf(fp, "%s  ", mkstring(buf4, tte_len, SLONG_DEC|RJUST, MKSTR(tte)));
+	fprintf(fp, "%s  ", mkstring(buf4, tte_len, SLONG_DEC|RJUST, MKSTR((ulong)tte)));
 
 	fprintf(fp, "%lx  ", (ulong)timer);
 
