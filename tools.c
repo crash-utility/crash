@@ -1650,10 +1650,13 @@ mkstring(char *s, int size, ulong flags, const char *opt)
 	int left;
 	int right;
 
-	switch (flags & (LONG_DEC|LONG_HEX|INT_HEX|INT_DEC|LONGLONG_HEX|ZERO_FILL)) 
+	switch (flags & (LONG_DEC|SLONG_DEC|LONG_HEX|INT_HEX|INT_DEC|LONGLONG_HEX|ZERO_FILL))
 	{
 	case LONG_DEC:
 		sprintf(s, "%lu", (ulong)opt);
+		break;
+	case SLONG_DEC:
+		sprintf(s, "%ld", (ulong)opt);
 		break;
 	case LONG_HEX:
 		sprintf(s, "%lx", (ulong)opt);

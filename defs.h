@@ -4387,6 +4387,7 @@ struct machine_specific {
 #define INT_HEX      (0x40)
 #define LONGLONG_HEX (0x80)
 #define ZERO_FILL   (0x100)
+#define SLONG_DEC   (0x200)
 
 #define INIT_TIME (1)
 #define RUN_TIME  (2)
