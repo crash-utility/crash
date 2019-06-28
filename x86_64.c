@@ -5991,30 +5991,14 @@ parse_cmdline_args(void)
 					}
 				}
 			} else if (STRNEQ(arglist[i], "phys_base=")) {
-				megabytes = FALSE;
-				if ((LASTCHAR(arglist[i]) == 'm') || 
-				    (LASTCHAR(arglist[i]) == 'M')) {
-					LASTCHAR(arglist[i]) = NULLCHAR;
-					megabytes = TRUE;
-				}
 	                        p = arglist[i] + strlen("phys_base=");
 	                        if (strlen(p)) {
-					if (megabytes) {
-	                                	value = dtol(p, RETURN_ON_ERROR|QUIET,
-	                                        	&errflag);
-					} else
-	                                	value = htol(p, RETURN_ON_ERROR|QUIET,
-	                                        	&errflag);
-	                                if (!errflag) {
-						if (megabytes)
-							value = MEGABYTES(value);
-	                                        machdep->machspec->phys_base = value;
-	                                        error(NOTE,
-	                                            "setting phys_base to: 0x%lx\n\n",
+					value = strtoull(p, NULL, 0);
+					machdep->machspec->phys_base = value;
+	                                error(NOTE, "setting phys_base to: 0x%lx\n\n",
 	                                                machdep->machspec->phys_base);
-						machdep->flags |= PHYS_BASE;
-	                                        continue;
-	                                }
+					machdep->flags |= PHYS_BASE;
+	                                continue;
 	                        }
 			} else if (STRNEQ(arglist[i], "kernel_image_size=")) {
 				megabytes = gigabytes = FALSE;
