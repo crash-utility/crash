@@ -5999,13 +5999,12 @@ parse_cmdline_args(void)
 				}
 	                        p = arglist[i] + strlen("phys_base=");
 	                        if (strlen(p)) {
-					if (megabytes) {
-	                                	value = dtol(p, RETURN_ON_ERROR|QUIET,
-	                                        	&errflag);
-					} else
-	                                	value = htol(p, RETURN_ON_ERROR|QUIET,
-	                                        	&errflag);
-	                                if (!errflag) {
+					if (hexadecimal(p, 0) && !decimal(p, 0) &&
+					    !STRNEQ(p, "0x") && !STRNEQ(p, "0X"))
+						string_insert("0x", p);
+					errno = 0;
+					value = strtoull(p, NULL, 0);
+	                                if (!errno) {
 						if (megabytes)
 							value = MEGABYTES(value);
 	                                        machdep->machspec->phys_base = value;
