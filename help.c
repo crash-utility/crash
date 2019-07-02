@@ -1642,7 +1642,7 @@ NULL
 char *help_rd[] = {
 "rd",
 "read memory",
-"[-adDsSupxmfN][-8|-16|-32|-64][-o offs][-e addr][-r file][address|symbol]\n"
+"[-adDsSupxmfNR][-8|-16|-32|-64][-o offs][-e addr][-r file][address|symbol]\n"
 "     [count]",
 "  This command displays the contents of memory, with the output formatted",
 "  in several different manners.  The starting address may be entered either",
@@ -1676,6 +1676,10 @@ char *help_rd[] = {
 "           non-printable character.",
 "       -N  display output in network byte order (only valid for 16- and 32-bit",
 "           values)",
+"       -R  display memory in reverse order; memory will be displayed up to and",
+"           including the address argument, requiring the count argument to be",
+"           greater than 1 in order to display memory before the specified",
+"           address.",
 "  -o offs  offset the starting address by offs.",
 "  -e addr  display memory until reaching specified ending hexadecimal address.",
 "  -r file  dumps raw data to the specified output file; the number of bytes that",

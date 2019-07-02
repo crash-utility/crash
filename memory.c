@@ -1208,9 +1208,9 @@ vm_init(void)
 void
 cmd_rd(void)
 {
-	int c, memtype;
+	int c, memtype, reverse;
 	ulong flag;
-	long count;
+	long bcnt, adjust, count;
 	ulonglong addr, endaddr;
 	ulong offset;
 	struct syment *sp;
@@ -1224,10 +1224,16 @@ cmd_rd(void)
 	tmpfp = NULL;
 	outputfile = NULL;
 	count = -1;
+	adjust = bcnt = 0;
+	reverse = FALSE;
 
-        while ((c = getopt(argcnt, args, "axme:r:pfudDusSNo:81:3:6:")) != EOF) {
+        while ((c = getopt(argcnt, args, "Raxme:r:pfudDusSNo:81:3:6:")) != EOF) {
                 switch(c)
 		{
+		case 'R':
+			reverse = TRUE;
+			break;
+
 		case 'a':
 			flag &= ~DISPLAY_TYPES;
                         flag |= DISPLAY_ASCII;
@@ -1383,8 +1389,6 @@ cmd_rd(void)
 
 	if (count == -1) {
 		if (endaddr) {
-			long bcnt;
-
 			if (endaddr <= addr)
 				error(FATAL, "invalid ending address: %llx\n",
 					endaddr);
@@ -1428,6 +1432,34 @@ cmd_rd(void)
 	if (memtype == KVADDR) {
 		if (!COMMON_VADDR_SPACE() && !IS_KVADDR(addr))
 			memtype = UVADDR;
+	}
+
+	if (reverse) {
+		if (!count)
+			count = 1;
+
+		switch (flag & (DISPLAY_TYPES))
+		{
+		case DISPLAY_64:
+			bcnt = (count * 8);
+			adjust = bcnt - 8;
+			break;
+		case DISPLAY_32:
+			bcnt = (count * 4);
+			adjust = bcnt - 4;
+			break;
+		case DISPLAY_16:
+			bcnt = (count * 2);
+			adjust = bcnt - 2;
+			break;
+		case DISPLAY_8:
+		case DISPLAY_ASCII:
+		case DISPLAY_RAW:
+			bcnt = count;
+			adjust = bcnt - 1;
+			break;
+		}
+		addr = (count > 1) ? addr - adjust : addr;
 	}
 
 	display_memory(addr, count, flag, memtype, outputfile);
