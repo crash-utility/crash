@@ -1741,6 +1741,45 @@ duplicates:
 	return FALSE;
 }
 
+static int
+set_reverse_tmpfile_offset(struct gnu_request *req, ulong target)
+{
+	long index, *tmpfile_offsets;
+	ulong curaddr;
+	char buf[BUFSIZE];
+
+	if ((tmpfile_offsets = (long *)calloc(sizeof(long), req->count)) == NULL)
+		return FALSE;
+
+	rewind(pc->tmpfile);
+	index = 0;
+        tmpfile_offsets[index] = ftell(pc->tmpfile);
+
+	while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+		strip_beginning_whitespace(buf);
+		if (STRNEQ(buf, "0x")) {
+			extract_hex(buf, &curaddr, ':', TRUE);
+			if (curaddr >= target)
+				break;
+		}
+		index = (index+1) % req->count;
+               	tmpfile_offsets[index] = ftell(pc->tmpfile);
+	}
+
+	if (((index+1) < req->count) && tmpfile_offsets[index+1]) 
+		index++;
+	else
+		index = 0;
+
+	if (fseek(pc->tmpfile, tmpfile_offsets[index], SEEK_SET) < 0) {
+		rewind(pc->tmpfile);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+
 /*
  *  This routine disassembles text in one of four manners.  A starting
  *  address, an expression, or symbol must be entered.  Then:
@@ -1931,16 +1970,13 @@ cmd_dis(void)
                 }
 
                 if (args[++optind]) {
-			if (reverse || forward) {
-				error(INFO, 
-			            "count argument ignored with -%s option\n",
-				    	reverse ? "r" : "f");
-			} else {
-                        	req->count = stol(args[optind], 
-					FAULT_ON_ERROR, NULL);
-				req->flags &= ~GNU_FUNCTION_ONLY;
-				count_entered++;
-			}
+			if (forward)
+				forward = FALSE;
+			req->count = stol(args[optind], FAULT_ON_ERROR, NULL);
+			req->flags &= ~GNU_FUNCTION_ONLY;
+			if (!req->count)
+				error(FATAL, "invalid count argument: 0\n"); 
+			count_entered++;
 		}
 
 		if (sources) {
@@ -2023,7 +2059,12 @@ cmd_dis(void)
 			error(FATAL, dis_err, req->addr);
 		}
 
-		rewind(pc->tmpfile);
+		if (reverse && count_entered &&
+		    set_reverse_tmpfile_offset(req, target))
+			count_entered = FALSE;
+		else
+			rewind(pc->tmpfile);
+
 		while (fgets(buf2, BUFSIZE, pc->tmpfile)) {
 			strip_beginning_whitespace(buf2);
 
