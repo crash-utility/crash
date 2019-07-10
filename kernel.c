@@ -1748,8 +1748,7 @@ set_reverse_tmpfile_offset(struct gnu_request *req, ulong target)
 	ulong curaddr;
 	char buf[BUFSIZE];
 
-	if ((tmpfile_offsets = (long *)calloc(sizeof(long), req->count)) == NULL)
-		return FALSE;
+	tmpfile_offsets = (long *)GETBUF(sizeof(long) * req->count);
 
 	rewind(pc->tmpfile);
 	index = 0;
@@ -1772,9 +1771,12 @@ set_reverse_tmpfile_offset(struct gnu_request *req, ulong target)
 		index = 0;
 
 	if (fseek(pc->tmpfile, tmpfile_offsets[index], SEEK_SET) < 0) {
+		FREEBUF(tmpfile_offsets);
 		rewind(pc->tmpfile);
 		return FALSE;
 	}
+
+	FREEBUF(tmpfile_offsets);
 
 	return TRUE;
 }
