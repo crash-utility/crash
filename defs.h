@@ -553,6 +553,8 @@ struct program_context {
 	ulong scope;			/* optional text context address */
 	ulong nr_hash_queues;		/* hash queue head count */
 	char *(*read_vmcoreinfo)(const char *);
+	FILE *error_fp;			/* error() message direction */
+	char *error_path;		/* stderr path information */
 };
 
 #define READMEM  pc->readmem
@@ -4955,6 +4957,7 @@ void exec_args_input_file(struct command_table_entry *, struct args_input_file *
 /*
  *  tools.c
  */
+FILE *set_error(char *);
 int __error(int, char *, ...);
 #define error __error               /* avoid conflict with gdb error() */
 int console(char *, ...);

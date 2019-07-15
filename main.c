@@ -1086,6 +1086,11 @@ setup_environment(int argc, char **argv)
 	 */
 	fp = stdout;
 
+	if (!set_error("default")) {
+		fprintf(stderr, "crash: cannot malloc error() path string\n");
+		clean_exit(1);
+	}
+
 	/*
 	 *  Start populating the program_context structure.  It's used so
 	 *  frequently that "pc" has been declared globally to point to the
@@ -1725,6 +1730,8 @@ dump_program_context(void)
 		pc->scope ? "" : "(not set)");
 	fprintf(fp, "   nr_hash_queues: %ld\n", pc->nr_hash_queues);
 	fprintf(fp, "  read_vmcoreinfo: %lx\n", (ulong)pc->read_vmcoreinfo);
+	fprintf(fp, "         error_fp: %lx\n", (ulong)pc->error_fp);
+	fprintf(fp, "       error_path: %s\n", pc->error_path);
 }
 
 char *

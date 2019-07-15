@@ -38,6 +38,44 @@ static void print_value(struct req_entry *, unsigned int, ulong, unsigned int);
 static struct req_entry *fill_member_offsets(char *);
 static void dump_struct_members_fast(struct req_entry *, int, ulong);
 
+FILE *
+set_error(char *target)
+{
+	FILE *tmp_fp = NULL;
+	char *tmp_str = NULL;
+
+	if (STREQ(target, pc->error_path))
+		return pc->error_fp;
+
+	tmp_str = malloc(strlen(target) + 1);
+	if (tmp_str == NULL)
+		return NULL;
+	strcpy(tmp_str, target);
+
+	if (STREQ(target, "default"))
+		tmp_fp = stdout;
+	else if (STREQ(target, "redirect"))
+		tmp_fp = fp;
+	else {
+		tmp_fp = fopen(target, "a");
+		if (tmp_fp == NULL) {
+			error(INFO, "invalid path: %s\n", target);
+			return NULL;
+		}
+	}
+
+	if (pc->error_fp != NULL && pc->error_fp != stdout && pc->error_fp != fp)
+		fclose(pc->error_fp);
+	if (pc->error_path)
+		free(pc->error_path);
+
+	pc->error_fp = tmp_fp;
+	pc->error_path = tmp_str;
+
+	return pc->error_fp;
+}
+
+
 /*
  *  General purpose error reporting routine.  Type INFO prints the message
  *  and returns.  Type FATAL aborts the command in progress, and longjmps
@@ -58,6 +96,9 @@ __error(int type, char *fmt, ...)
         void *retaddr[NUMBER_STACKFRAMES] = { 0 };
 	va_list ap;
 
+	if (STREQ(pc->error_path, "redirect"))
+		pc->error_fp = fp;
+
 	if (CRASHDEBUG(1) || (pc->flags & DROP_CORE)) {
 		SAVE_RETURN_ADDRESS(retaddr);
 		console("error() trace: %lx => %lx => %lx => %lx\n",
@@ -69,7 +110,7 @@ __error(int type, char *fmt, ...)
         va_end(ap);
 
 	if (!fmt && FATAL_ERROR(type)) {
-		fprintf(stdout, "\n");
+		fprintf(pc->error_fp, "\n");
 		clean_exit(1);
 	}
 
@@ -85,7 +126,8 @@ __error(int type, char *fmt, ...)
 	else
 		spacebuf = NULL;
 
-	if (pc->stdpipe) {
+	if (pc->stdpipe && 
+	    (STREQ(pc->error_path, "default") || STREQ(pc->error_path, "redirect"))) {
 		fprintf(pc->stdpipe, "%s%s%s %s%s", 
 			new_line ? "\n" : "", 
 			type == CONT ? spacebuf : pc->curcmd, 
@@ -95,21 +137,22 @@ __error(int type, char *fmt, ...)
 			buf);
 		fflush(pc->stdpipe);
 	} else { 
-		fprintf(stdout, "%s%s%s %s%s", 
+		fprintf(pc->error_fp, "%s%s%s %s%s",
 			new_line || end_of_line ? "\n" : "",
 			type == WARNING ? "WARNING" : 
 			type == NOTE ? "NOTE" : 
 			type == CONT ? spacebuf : pc->curcmd,
 			type == CONT ? " " : ":",
 			buf, end_of_line ? "\n" : "");
-		fflush(stdout);
+		fflush(pc->error_fp);
 	}
 
-        if ((fp != stdout) && (fp != pc->stdpipe) && (fp != pc->tmpfile)) {
-                fprintf(fp, "%s%s%s %s", new_line ? "\n" : "",
-			type == WARNING ? "WARNING" : 
-			type == NOTE ? "NOTE" : 
-			type == CONT ? spacebuf : pc->curcmd, 
+	if ((STREQ(pc->error_path, "default")) &&
+	    (fp != stdout) && (fp != pc->stdpipe) && (fp != pc->tmpfile)) {
+		fprintf(fp, "%s%s%s %s", new_line ? "\n" : "",
+			type == WARNING ? "WARNING" :
+			type == NOTE ? "NOTE" :
+			type == CONT ? spacebuf : pc->curcmd,
 			type == CONT ? " " : ":",
 			buf);
 		fflush(fp);
@@ -2486,6 +2529,19 @@ cmd_set(void)
 			}
 			return;
 
+                } else if (STREQ(args[optind], "error")) {
+                        if (args[optind+1]) {
+                                optind++;
+                                if (!set_error(args[optind]))
+                                        return;
+                        }
+
+                        if (runtime) {
+                                fprintf(fp, "error: %s\n",
+                                        pc->error_path);
+                        }
+                        return;
+
 		} else if (XEN_HYPER_MODE()) {
 			error(FATAL, "invalid argument for the Xen hypervisor\n");
 		} else if (pc->flags & MINIMAL_MODE) {
@@ -2593,6 +2649,7 @@ show_options(void)
 		fprintf(fp, "(not set)\n");
 	fprintf(fp, "       offline: %s\n", pc->flags2 & OFFLINE_HIDE ? "hide" : "show");
 	fprintf(fp, "       redzone: %s\n", pc->flags2 & REDZONE ? "on" : "off");
+	fprintf(fp, "         error: %s\n", pc->error_path);
 }
 
 
