@@ -53,7 +53,7 @@ static void dump_timer_data_timer_bases(const ulong *cpus);
 struct tv_range;
 static void init_tv_ranges(struct tv_range *, int, int, int);
 static int do_timer_list(ulong,int, ulong *, void *,ulong *, ulong *, struct tv_range *, ulong);
-static int do_timer_list_v3(ulong, int, ulong *, void *,ulong *, ulong *, ulong);
+static int do_timer_list_v3(ulong, int, ulong *, void *,ulong *, ulong *, ulong, long);
 struct timer_bases_data;
 static int do_timer_list_v4(struct timer_bases_data *, ulong);
 static int compare_timer_data(const void *, const void *);
@@ -8376,7 +8376,12 @@ dump_timer_data_tvec_bases_v3(const ulong *cpus)
 	char buf4[BUFSIZE];
 
 	vec_root_size = vec_size = 0;
-	head_size = SIZE(hlist_head);
+
+	if (STREQ(MEMBER_TYPE_NAME("tvec_root", "vec"), "list_head"))
+		/* for RHEL7.6 or later */
+		head_size = SIZE(list_head);
+	else
+		head_size = SIZE(hlist_head);
 
 	if ((i = get_array_length("tvec_root.vec", NULL, head_size)))
 		vec_root_size = i;
@@ -8414,15 +8419,15 @@ next_cpu:
 	init_tv_ranges(tv, vec_root_size, vec_size, cpu);
 
 	count += do_timer_list_v3(tv[1].base + OFFSET(tvec_root_s_vec),
-		vec_root_size, vec, NULL, NULL, NULL, 0);
+		vec_root_size, vec, NULL, NULL, NULL, 0, head_size);
 	count += do_timer_list_v3(tv[2].base + OFFSET(tvec_s_vec),
-		vec_size, vec, NULL, NULL, NULL, 0);
+		vec_size, vec, NULL, NULL, NULL, 0, head_size);
 	count += do_timer_list_v3(tv[3].base + OFFSET(tvec_s_vec),
-		vec_size, vec, NULL, NULL, NULL, 0);
+		vec_size, vec, NULL, NULL, NULL, 0, head_size);
 	count += do_timer_list_v3(tv[4].base + OFFSET(tvec_s_vec),
-		vec_size, vec, NULL, NULL, NULL, 0);
+		vec_size, vec, NULL, NULL, NULL, 0, head_size);
 	count += do_timer_list_v3(tv[5].base + OFFSET(tvec_s_vec),
-		vec_size, vec, NULL, NULL, NULL, 0);
+		vec_size, vec, NULL, NULL, NULL, 0, head_size);
 
 	if (count)
 		td = (struct timer_data *)
@@ -8433,16 +8438,16 @@ next_cpu:
 
 	get_symbol_data("jiffies", sizeof(ulong), &jiffies);
 
-	do_timer_list_v3(tv[1].base + OFFSET(tvec_root_s_vec),
-		vec_root_size, vec, (void *)td, &highest, &highest_tte, jiffies);
-	do_timer_list_v3(tv[2].base + OFFSET(tvec_s_vec),
-		vec_size, vec, (void *)td, &highest, &highest_tte, jiffies);
-	do_timer_list_v3(tv[3].base + OFFSET(tvec_s_vec),
-		vec_size, vec, (void *)td, &highest, &highest_tte, jiffies);
-	do_timer_list_v3(tv[4].base + OFFSET(tvec_s_vec),
-		vec_size, vec, (void *)td, &highest, &highest_tte, jiffies);
-	tdx = do_timer_list_v3(tv[5].base + OFFSET(tvec_s_vec),
-		vec_size, vec, (void *)td, &highest, &highest_tte, jiffies);
+	do_timer_list_v3(tv[1].base + OFFSET(tvec_root_s_vec), vec_root_size,
+		vec, (void *)td, &highest, &highest_tte, jiffies, head_size);
+	do_timer_list_v3(tv[2].base + OFFSET(tvec_s_vec), vec_size,
+		vec, (void *)td, &highest, &highest_tte, jiffies, head_size);
+	do_timer_list_v3(tv[3].base + OFFSET(tvec_s_vec), vec_size,
+		vec, (void *)td, &highest, &highest_tte, jiffies, head_size);
+	do_timer_list_v3(tv[4].base + OFFSET(tvec_s_vec), vec_size,
+		vec, (void *)td, &highest, &highest_tte, jiffies, head_size);
+	tdx = do_timer_list_v3(tv[5].base + OFFSET(tvec_s_vec), vec_size,
+		vec, (void *)td, &highest, &highest_tte, jiffies, head_size);
 
 	qsort(td, tdx, sizeof(struct timer_data), compare_timer_data);
 
@@ -8786,7 +8791,8 @@ do_timer_list_v3(ulong vec_kvaddr,
 	      void *option, 
 	      ulong *highest,
 	      ulong *highest_tte,
-	      ulong jiffies)
+	      ulong jiffies,
+	      long head_size)
 {
 	int i, t; 
 	int count, tdx;
@@ -8804,19 +8810,24 @@ do_timer_list_v3(ulong vec_kvaddr,
 			tdx++;
 	}
 
-	readmem(vec_kvaddr, KVADDR, vec, SIZE(hlist_head) * size, 
+	readmem(vec_kvaddr, KVADDR, vec, head_size * size,
 		"timer_list vec array", FAULT_ON_ERROR);
 
 	ld = &list_data;
 	timer_list_buf = GETBUF(SIZE(timer_list));
 
-	for (i = count = 0; i < size; i++, vec_kvaddr += SIZE(hlist_head)) {
+	for (i = count = 0; i < size; i++, vec_kvaddr += head_size) {
 
-		if (vec[i] == 0)
-			continue;
+		if (head_size == SIZE(list_head)) {
+			if (vec[i*2] == vec_kvaddr)
+				continue;
+		} else {
+			if (vec[i] == 0)
+				continue;
+		}
 
 		BZERO(ld, sizeof(struct list_data));
-		ld->start = vec[i];
+		ld->start = (head_size == SIZE(list_head)) ? vec[i*2] : vec[i];
 		ld->list_head_offset = OFFSET(timer_list_entry);
 		ld->end = vec_kvaddr;
 		ld->flags = RETURN_ON_LIST_ERROR;
