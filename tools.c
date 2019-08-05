@@ -4146,7 +4146,7 @@ do_list_no_hash(struct list_data *ld)
 			return -1;
 
 		if (!brent_loop_detect) {
-			if (brent_x == brent_y) {
+			if (count > 1 && brent_x == brent_y) {
 				brent_loop_detect = 1;
 				error(INFO, "loop detected, loop length: %ld\n", brent_lambda);
 				/* reset x and y to start; advance y loop length */
