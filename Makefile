@@ -23,7 +23,7 @@ PROGRAM=crash
 # Supported targets: X86 ALPHA PPC IA64 PPC64 SPARC64
 # TARGET and GDB_CONF_FLAGS will be configured automatically by configure
 #
-TARGET=
+TARGET=X86_64
 GDB_CONF_FLAGS=
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -32,12 +32,12 @@ CONF_FLAGS = -m64
 endif
 
 #
-# GDB, GDB_FILES, GDB_OFILES and GDB_PATCH_FILES will be configured automatically by configure 
+# GDB, GDB_FILES, GDB_OFILES and GDB_PATCH_FILES will be configured automatically by configure
 #
-GDB=
-GDB_FILES=
-GDB_OFILES=
-GDB_PATCH_FILES=
+GDB=gdb-7.6
+GDB_FILES=${GDB_7.6_FILES}
+GDB_OFILES=${GDB_7.6_OFILES}
+GDB_PATCH_FILES=gdb-7.6.patch gdb-7.6-ppc64le-support.patch gdb-7.6-proc_service.h.patch
 
 #
 # Default installation directory
@@ -138,7 +138,7 @@ GDB_5.2.1_FILES=${GDB}/gdb/Makefile.in \
 GDB_5.2.1_OFILES=${GDB}/gdb/main.o ${GDB}/gdb/symtab.o ${GDB}/gdb/target.o \
           ${GDB}/gdb/blockframe.o ${GDB}/gdb/alpha-tdep.o \
           ${GDB}/gdb/symfile.o ${GDB}/gdb/elfread.o \
-          ${GDB}/gdb/ui-file.o ${GDB}/gdb/utils.o 
+          ${GDB}/gdb/ui-file.o ${GDB}/gdb/utils.o
 
 GDB_5.3post-0.20021129.36rh_FILES=${GDB}/gdb/Makefile.in \
           ${GDB}/gdb/main.c ${GDB}/gdb/symtab.c ${GDB}/gdb/target.c \
@@ -180,15 +180,15 @@ GDB_7.3.1_OFILES=${GDB}/gdb/symtab.o
 GDB_7.6_FILES=
 GDB_7.6_OFILES=${GDB}/gdb/symtab.o
 
-# 
+#
 # GDB_FLAGS is passed up from the gdb Makefile.
 #
-GDB_FLAGS=
+GDB_FLAGS=-DGDB_7_6
 
 #
-# WARNING_OPTIONS and WARNING_ERROR are both applied on a per-file basis. 
-# WARNING_ERROR is NOT used on files including "dirty" gdb headers so that 
-# successful compilations can be achieved with acceptable warnings; its 
+# WARNING_OPTIONS and WARNING_ERROR are both applied on a per-file basis.
+# WARNING_ERROR is NOT used on files including "dirty" gdb headers so that
+# successful compilations can be achieved with acceptable warnings; its
 # usefulness is also dependent upon the processor's compiler -- your mileage
 # may vary.
 #
@@ -200,7 +200,7 @@ TARGET_CFLAGS=
 
 CRASH_CFLAGS=-g -D${TARGET} ${TARGET_CFLAGS} ${GDB_FLAGS} ${CFLAGS}
 
-GPL_FILES=
+GPL_FILES=COPYING3
 TAR_FILES=${SOURCE_FILES} Makefile ${GPL_FILES} README .rh_rpm_package crash.8 \
 	${EXTENSION_SOURCE_FILES} ${MEMORY_DRIVER_FILES}
 CSCOPE_FILES=${SOURCE_FILES}
@@ -284,7 +284,7 @@ gdb: force
 	@make --no-print-directory all
 
 force:
-	
+
 
 make_configure: force
 	@rm -f configure
@@ -330,7 +330,7 @@ snappy: make_configure
 	@make --no-print-directory gdb_merge
 
 main.o: ${GENERIC_HFILES} main.c
-	${CC} -c ${CRASH_CFLAGS} main.c ${WARNING_OPTIONS} ${WARNING_ERROR} 
+	${CC} -c ${CRASH_CFLAGS} main.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 cmdline.o: ${GENERIC_HFILES} cmdline.c
 	${CC} -c ${CRASH_CFLAGS} cmdline.c -I${READLINE_DIRECTORY} ${WARNING_OPTIONS} ${WARNING_ERROR}
@@ -475,7 +475,7 @@ ipcs.o: ${GENERIC_HFILES} ipcs.c
 extensions.o: ${GENERIC_HFILES} extensions.c
 	${CC} -c ${CRASH_CFLAGS} extensions.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
-lkcd_x86_trace.o: ${GENERIC_HFILES} ${LKCD_TRACE_HFILES} lkcd_x86_trace.c 
+lkcd_x86_trace.o: ${GENERIC_HFILES} ${LKCD_TRACE_HFILES} lkcd_x86_trace.c
 	${CC} -c ${CRASH_CFLAGS} lkcd_x86_trace.c -DREDHAT ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 unwind_x86_32_64.o: ${GENERIC_HFILES} ${UNWIND_HFILES} unwind_x86_32_64.c
@@ -529,15 +529,15 @@ ${PROGRAM}: force
 # Remote daemon functionality has been deprecated.
 daemon_deprecated: force
 	@echo "WARNING: remote daemon functionality has been deprecated"
-	@echo 
+	@echo
 
 ${PROGRAM}d: daemon_deprecated make_configure
 	@./configure -d
 	@make --no-print-directory make_build_data
-	@make --no-print-directory daemon 
+	@make --no-print-directory daemon
 
 daemon: ${DAEMON_OBJECT_FILES}
-	${CC} ${LDFLAGS} -o ${PROGRAM}d ${DAEMON_OBJECT_FILES} build_data.o -lz 
+	${CC} ${LDFLAGS} -o ${PROGRAM}d ${DAEMON_OBJECT_FILES} build_data.o -lz
 
 files: make_configure
 	@./configure -q -b
@@ -574,12 +574,12 @@ release: make_configure
 		echo "make release: must be super-user"; exit 1; fi
 	@./configure -P "RPMPKG=${RPMPKG}" -u -g
 	@make --no-print-directory release_configure
-	@echo 
+	@echo
 	@echo "cvs tag this release if necessary"
 
 release_configure: make_configure
 	@if [ "${GDB}" = "" ] ; then \
-		echo "make release: GDB not defined: append GDB=gdb-x.x to make command line"; echo; exit 1; fi 
+		echo "make release: GDB not defined: append GDB=gdb-x.x to make command line"; echo; exit 1; fi
 	@./configure -r ${GDB}
 	@make --no-print-directory do_release
 
@@ -589,7 +589,7 @@ do_release:
 		echo "no .rh_rpm_package exists!"; exit 1; fi
 	@chmod 666 .rh_rpm_package
 	@rm -rf ./RELDIR; mkdir ./RELDIR; mkdir ./RELDIR/${PROGRAM}-${VERSION}
-	@rm -f ${PROGRAM}-${VERSION}.tar.gz 
+	@rm -f ${PROGRAM}-${VERSION}.tar.gz
 	@rm -f ${PROGRAM}-${VERSION}-${RELEASE}.src.rpm
 	@chown root ./RELDIR/${PROGRAM}-${VERSION}
 	@tar cf - ${SOURCE_FILES} Makefile ${GDB_FILES} ${GDB_PATCH_FILES} ${GPL_FILES} \
@@ -650,5 +650,5 @@ extensions: make_configure
 do_extensions:
 	@(cd extensions; make -i TARGET=$(TARGET) TARGET_CFLAGS="$(TARGET_CFLAGS)" GDB=$(GDB) GDB_FLAGS=$(GDB_FLAGS))
 
-memory_driver: make_configure 
+memory_driver: make_configure
 	@(cd memory_driver; make --no-print-directory -i)
