@@ -303,6 +303,7 @@ make_build_data: force
 	${CC} -c ${CRASH_CFLAGS} build_data.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 install:
+	/usr/bin/install -d ${INSTALLDIR}
 	/usr/bin/install ${PROGRAM} ${INSTALLDIR}
 #	/usr/bin/install ${PROGRAM}d ${INSTALLDIR}
 
