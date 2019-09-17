@@ -6348,13 +6348,13 @@ fill_mem_map_cache(ulong pp, ulong ppend, char *page_cache)
                 if (cnt > size)
                         cnt = size;
 
-		if (!readmem(addr, KVADDR, bufptr, size,
+		if (!readmem(addr, KVADDR, bufptr, cnt,
                     "virtual page struct cache", RETURN_ON_ERROR|QUIET)) {
-			BZERO(bufptr, size);
-			if (!(vt->flags & V_MEM_MAP) && ((addr+size) < ppend)) 
+			BZERO(bufptr, cnt);
+			if (!((vt->flags & V_MEM_MAP) || (machdep->flags & VMEMMAP)) && ((addr+cnt) < ppend))
 				error(WARNING, 
 		                   "mem_map[] from %lx to %lx not accessible\n",
-					addr, addr+size);
+					addr, addr+cnt);
 		}
 
 		addr += cnt;
