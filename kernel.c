@@ -10144,7 +10144,7 @@ static int setup_ikconfig(char *config)
 		while (whitespace(*ent))
 			ent++;
 
-		if (ent[0] != '#') {
+		if (STRNEQ(ent, "CONFIG_")) {
 			add_ikconfig_entry(ent,
 					 &ikconfig_all[kt->ikconfig_ents++]);
 			if (kt->ikconfig_ents == IKCONFIG_MAX) {
