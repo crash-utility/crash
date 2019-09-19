@@ -32,6 +32,7 @@ static int verify_kimage_voffset(void);
 static void arm64_calc_kimage_voffset(void);
 static void arm64_calc_phys_offset(void);
 static void arm64_calc_virtual_memory_ranges(void);
+static void arm64_get_section_size_bits(void);
 static int arm64_kdump_phys_base(ulong *);
 static ulong arm64_processor_speed(void);
 static void arm64_init_kernel_pgd(void);
@@ -375,7 +376,8 @@ arm64_init(int when)
 
 	case POST_GDB:
 		arm64_calc_virtual_memory_ranges();
-		machdep->section_size_bits = _SECTION_SIZE_BITS;
+		arm64_get_section_size_bits();
+
 		if (!machdep->max_physmem_bits) {
 			if ((string = pc->read_vmcoreinfo("NUMBER(MAX_PHYSMEM_BITS)"))) {
 				machdep->max_physmem_bits = atol(string);
@@ -1055,6 +1057,33 @@ arm64_calc_phys_offset(void)
 		fprintf(fp, "using %lx as phys_offset\n", ms->phys_offset);
 }
 
+/*
+ *  Determine SECTION_SIZE_BITS either by reading VMCOREINFO or the kernel
+ *  config, otherwise use the 64-bit ARM default definiton.
+ */
+static void
+arm64_get_section_size_bits(void)
+{
+	int ret;
+	char *string;
+
+	machdep->section_size_bits = _SECTION_SIZE_BITS;
+
+	if ((string = pc->read_vmcoreinfo("NUMBER(SECTION_SIZE_BITS)"))) {
+		machdep->section_size_bits = atol(string);
+		free(string);
+	} else if (kt->ikconfig_flags & IKCONFIG_AVAIL) {
+		if ((ret = get_kernel_config("CONFIG_MEMORY_HOTPLUG", NULL)) == IKCONFIG_Y) {
+			if ((ret = get_kernel_config("CONFIG_HOTPLUG_SIZE_BITS", &string)) == IKCONFIG_STR) {
+				machdep->section_size_bits = atol(string);
+				free(string);
+			}
+		} 
+	}
+
+	if (CRASHDEBUG(1))
+		fprintf(fp, "SECTION_SIZE_BITS: %ld\n", machdep->section_size_bits);
+}
 
 /*
  *  Determine PHYS_OFFSET either by reading VMCOREINFO or the kernel
