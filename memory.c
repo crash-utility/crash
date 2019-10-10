@@ -401,9 +401,10 @@ vm_init(void)
 	STRUCT_SIZE_INIT(vmap_area, "vmap_area");
 	if (VALID_MEMBER(vmap_area_va_start) &&
 	    VALID_MEMBER(vmap_area_va_end) &&
-	    VALID_MEMBER(vmap_area_flags) &&
 	    VALID_MEMBER(vmap_area_list) &&
 	    VALID_MEMBER(vmap_area_vm) &&
+	    (VALID_MEMBER(vmap_area_flags) || 
+		(OFFSET(vmap_area_vm) == MEMBER_OFFSET("vmap_area", "purge_list"))) &&
 	    kernel_symbol_exists("vmap_area_list"))
 		vt->flags |= USE_VMAP_AREA;
 
@@ -8742,7 +8743,7 @@ static void
 dump_vmap_area(struct meminfo *vi)
 {
 	int i, cnt;
-	ulong start, end, vm_struct, flags;
+	ulong start, end, vm_struct, flags, vm;
 	struct list_data list_data, *ld;
 	char *vmap_area_buf; 
 	ulong size, pcheck, count, verified; 
@@ -8790,9 +8791,15 @@ dump_vmap_area(struct meminfo *vi)
 		readmem(ld->list_ptr[i], KVADDR, vmap_area_buf,
                         SIZE(vmap_area), "vmap_area struct", FAULT_ON_ERROR); 
 
-		flags = ULONG(vmap_area_buf + OFFSET(vmap_area_flags));
-		if (flags != VM_VM_AREA)
-			continue;
+		if (VALID_MEMBER(vmap_area_flags)) {
+			flags = ULONG(vmap_area_buf + OFFSET(vmap_area_flags));
+			if (flags != VM_VM_AREA)
+				continue;
+		} else {
+			vm = ULONG(vmap_area_buf + OFFSET(vmap_area_vm));
+			if (!vm)
+				continue;
+		}
 		start = ULONG(vmap_area_buf + OFFSET(vmap_area_va_start));
 		end = ULONG(vmap_area_buf + OFFSET(vmap_area_va_end));
 		vm_struct = ULONG(vmap_area_buf + OFFSET(vmap_area_vm));
