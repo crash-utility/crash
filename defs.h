@@ -2694,6 +2694,7 @@ struct symbol_table_data {
 	ulong saved_command_line_vmlinux;
 	ulong pti_init_vmlinux;
 	ulong kaiser_init_vmlinux;
+	int kernel_symbol_type;
 };
 
 /* flags for st */

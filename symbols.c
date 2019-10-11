@@ -1607,39 +1607,100 @@ union kernel_symbol {
 		unsigned long value;
 		const char *name;
 	} v1;
-	/* kernel 4.19 introduced relative symbol positionning */
+	/* kernel 4.19 introduced relative symbol positioning */
 	struct kernel_symbol_v2 {
 		int value_offset;
 		int name_offset;
 	} v2;
+	/* kernel 5.4 introduced symbol namespaces */
+	struct kernel_symbol_v3 {
+		int value_offset;
+		int name_offset;
+		int namespace_offset;
+	} v3;
+	struct kernel_symbol_v4 {
+		unsigned long value;
+		const char *name;
+		const char *namespace;
+	} v4;
 };
+
+static size_t
+kernel_symbol_type_init(void)
+{
+	if (MEMBER_EXISTS("kernel_symbol", "value") &&
+	    MEMBER_EXISTS("kernel_symbol", "name")) {
+		if (MEMBER_EXISTS("kernel_symbol", "namespace")) {
+			st->kernel_symbol_type = 4;
+			return (sizeof(struct kernel_symbol_v4));
+		} else {
+			st->kernel_symbol_type = 1;
+			return (sizeof(struct kernel_symbol_v1));
+		}
+	}
+	if (MEMBER_EXISTS("kernel_symbol", "value_offset") &&
+	    MEMBER_EXISTS("kernel_symbol", "name_offset")) {
+		if (MEMBER_EXISTS("kernel_symbol", "namespace_offset")) {
+			st->kernel_symbol_type = 3;
+			return (sizeof(struct kernel_symbol_v3));
+		} else {
+			st->kernel_symbol_type = 2;
+			return (sizeof(struct kernel_symbol_v2));
+		}
+	}
+
+	error(FATAL, "kernel_symbol data structure has changed\n");
+
+	return 0;
+}
 
 static ulong
 modsym_name(ulong syms, union kernel_symbol *modsym, int i)
 {
-	if (VALID_MEMBER(kernel_symbol_value))
+	switch (st->kernel_symbol_type)
+	{
+	case 1:
 		return (ulong)modsym->v1.name;
+	case 2:
+		return (syms + i * sizeof(struct kernel_symbol_v2) +
+			offsetof(struct kernel_symbol_v2, name_offset) +
+			modsym->v2.name_offset);
+	case 3:
+		return (syms + i * sizeof(struct kernel_symbol_v3) +
+			offsetof(struct kernel_symbol_v3, name_offset) +
+			modsym->v3.name_offset);
+	case 4:
+		return (ulong)modsym->v4.name;
+	}
 
-	return syms + i * sizeof(struct kernel_symbol_v2) +
-		offsetof(struct kernel_symbol_v2, name_offset) +
-		modsym->v2.name_offset;
+	return 0;
 }
 
 static ulong
 modsym_value(ulong syms, union kernel_symbol *modsym, int i)
 {
-	if (VALID_MEMBER(kernel_symbol_value))
+	switch (st->kernel_symbol_type)
+	{
+	case 1:
 		return (ulong)modsym->v1.value;
+	case 2:
+		return (syms + i * sizeof(struct kernel_symbol_v2) +
+			offsetof(struct kernel_symbol_v2, value_offset) +
+			modsym->v2.value_offset);
+	case 3:
+		return (syms + i * sizeof(struct kernel_symbol_v3) +
+			offsetof(struct kernel_symbol_v3, value_offset) +
+			modsym->v3.value_offset);
+	case 4:
+		return (ulong)modsym->v4.value;
+	}
 
-	return syms + i * sizeof(struct kernel_symbol_v2) +
-		offsetof(struct kernel_symbol_v2, value_offset) +
-		modsym->v2.value_offset;
+	return 0;
 }
 
 void
 store_module_symbols_v2(ulong total, int mods_installed)
 {
-
         int i, m;
         ulong mod, mod_next; 
 	char *mod_name;
@@ -1675,12 +1736,7 @@ store_module_symbols_v2(ulong total, int mods_installed)
 		  "re-initialization of module symbols not implemented yet!\n");
 	}
 
-	MEMBER_OFFSET_INIT(kernel_symbol_value, "kernel_symbol", "value");
-	if (VALID_MEMBER(kernel_symbol_value)) {
-		kernel_symbol_size = sizeof(struct kernel_symbol_v1);
-	} else {
-		kernel_symbol_size = sizeof(struct kernel_symbol_v2);
-	}
+	kernel_symbol_size = kernel_symbol_type_init();
 
         if ((st->ext_module_symtable = (struct syment *)
              calloc(total, sizeof(struct syment))) == NULL)
@@ -3418,6 +3474,8 @@ dump_symbol_table(void)
 		fprintf(fp, "\n");
 	} else
 		fprintf(fp, "(none)\n");
+
+	fprintf(fp, "  kernel_symbol_type: v%d\n", st->kernel_symbol_type);
 }
 
 
