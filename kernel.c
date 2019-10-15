@@ -783,7 +783,13 @@ kernel_init()
 		MEMBER_OFFSET_INIT(timerqueue_node_expires, 
 			"timerqueue_node", "expires");
 		MEMBER_OFFSET_INIT(timerqueue_node_node, 
-			"timerqueue_node_node", "node");
+			"timerqueue_node", "node");
+		if (INVALID_MEMBER(timerqueue_head_next)) {
+			MEMBER_OFFSET_INIT(timerqueue_head_rb_root,
+				"timerqueue_head", "rb_root");
+			MEMBER_OFFSET_INIT(rb_root_cached_rb_leftmost,
+				"rb_root_cached", "rb_leftmost");
+		}
 	}
 	MEMBER_OFFSET_INIT(hrtimer_softexpires, "hrtimer", "_softexpires");
 	MEMBER_OFFSET_INIT(hrtimer_function, "hrtimer", "function");
@@ -7647,11 +7653,17 @@ next_one:
 		readmem((ulong)(base + OFFSET(hrtimer_clock_base_first)),
 			KVADDR,	&curr, sizeof(curr), "hrtimer_clock_base first",
 			FAULT_ON_ERROR);
-	else
+	else if (VALID_MEMBER(timerqueue_head_next))
 		readmem((ulong)(base + OFFSET(hrtimer_clock_base_active) +
 				OFFSET(timerqueue_head_next)),
 			KVADDR, &curr, sizeof(curr), "hrtimer_clock base",
 			FAULT_ON_ERROR);
+	else
+		readmem((ulong)(base + OFFSET(hrtimer_clock_base_active) +
+				OFFSET(timerqueue_head_rb_root) +
+				OFFSET(rb_root_cached_rb_leftmost)),
+			KVADDR, &curr, sizeof(curr),
+			"hrtimer_clock_base active", FAULT_ON_ERROR);
 
 	while (curr && i < next) {
 		curr = rb_next(curr);

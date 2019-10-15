@@ -10032,6 +10032,8 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(rb_node_rb_left));
         fprintf(fp, "              rb_node_rb_right: %ld\n",
                 OFFSET(rb_node_rb_right));
+        fprintf(fp, "    rb_root_cached_rb_leftmost: %ld\n",
+                OFFSET(rb_root_cached_rb_leftmost));
 
 	fprintf(fp, "            x8664_pda_pcurrent: %ld\n",
 		OFFSET(x8664_pda_pcurrent));
@@ -10388,6 +10390,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(hrtimer_function));
 	fprintf(fp, "          timerqueue_head_next: %ld\n",
 		OFFSET(timerqueue_head_next));
+	fprintf(fp, "       timerqueue_head_rb_root: %ld\n",
+		OFFSET(timerqueue_head_rb_root));
 	fprintf(fp, "       timerqueue_node_expires: %ld\n",
 		OFFSET(timerqueue_node_expires));
 	fprintf(fp, "          timerqueue_node_node: %ld\n",

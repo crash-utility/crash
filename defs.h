@@ -2073,6 +2073,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long cpu_context_save_r7;
 	long dentry_d_sb;
 	long device_private_knode_class;
+	long timerqueue_head_rb_root;
+	long rb_root_cached_rb_leftmost;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
