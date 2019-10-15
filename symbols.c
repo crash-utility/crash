@@ -8174,8 +8174,10 @@ parse_for_member_extended(struct datatype_member *dm,
 		 */
 
 		if (current && p && (p - p1 < BUFSIZE)) {
-			strncpy(current->field_name, p1, p - p1);
+//			strncpy(current->field_name, p1, p - p1);  (NOTE: gcc-9.0.1 emits [-Wstringop-truncation] warning)
 			current->field_len = p - p1;
+			memcpy(current->field_name, p1, current->field_len);
+			current->field_name[current->field_len] = '\0';
 		}
 
 		if ( p && (*s_e != '{' || (*s_e == '{' && buf[len] == '}') )) {
