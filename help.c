@@ -7177,7 +7177,7 @@ char *help_kmem[] = {
 "     6  ffff88003d4d90c0  ffffea0000000000  ffffea0000c00000   PM   196608",
 "     7  ffff88003d4d90e0  ffffea0000000000  ffffea0000e00000   PM   229376",
 "    ",
-"       MEM_BLOCK        NAME     PHYSICAL RANGE      STATE          SECTIONS",
+"       MEM_BLOCK        NAME     PHYSICAL RANGE      STATE          START_SECTION_NO",
 "     ffff88003a707c00  memory0          0 - 7ffffff  ONLINE         0",
 "     ffff88003a6e0000  memory1    8000000 - fffffff  ONLINE         1",
 "     ffff88003a6e1000  memory2   10000000 - 17ffffff ONLINE         2",

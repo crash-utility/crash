@@ -17402,20 +17402,18 @@ fill_memory_block_name(ulong memblock, char *name)
 }
 
 static void
-fill_memory_block_srange(ulong start_sec, ulong end_sec, char *srange)
+fill_memory_block_srange(ulong start_sec, char *srange)
 {
 	memset(srange, 0, sizeof(*srange) * BUFSIZE);
 
-	if (start_sec == end_sec)
-		sprintf(srange, "%lu", start_sec);
-	else
-		sprintf(srange, "%lu-%lu", start_sec, end_sec);
+	sprintf(srange, "%lu", start_sec);
 }
 
 static void
 print_memory_block(ulong memory_block)
 {
-	ulong start_sec, end_sec, start_pfn, end_pfn, nid;
+	ulong start_sec, end_sec, nid;
+	ulong memblock_size, mbs, start_addr, end_addr;
 	char statebuf[BUFSIZE];
 	char srangebuf[BUFSIZE];
 	char name[BUFSIZE];
@@ -17430,15 +17428,25 @@ print_memory_block(ulong memory_block)
 	readmem(memory_block + OFFSET(memory_block_start_section_nr), KVADDR,
 		&start_sec, sizeof(void *), "memory_block start_section_nr",
 		FAULT_ON_ERROR);
-	readmem(memory_block + OFFSET(memory_block_end_section_nr), KVADDR,
-		&end_sec, sizeof(void *), "memory_block end_section_nr",
-		FAULT_ON_ERROR);
 
-	start_pfn = section_nr_to_pfn(start_sec);
-	end_pfn = section_nr_to_pfn(end_sec + 1);
+	start_addr = pfn_to_phys(section_nr_to_pfn(start_sec));
+
+	if (symbol_exists("memory_block_size_probed")) {
+		memblock_size = symbol_value("memory_block_size_probed");
+		readmem(memblock_size, KVADDR,
+			&mbs, sizeof(ulong), "memory_block_size_probed",
+			FAULT_ON_ERROR);
+		end_addr = start_addr + mbs - 1;
+	} else {
+	        readmem(memory_block + OFFSET(memory_block_end_section_nr), KVADDR,
+			&end_sec, sizeof(void *), "memory_block end_section_nr",
+			FAULT_ON_ERROR);
+		end_addr = pfn_to_phys(section_nr_to_pfn(end_sec + 1)) - 1;
+	}
+
 	fill_memory_block_state(memory_block, statebuf);
 	fill_memory_block_name(memory_block, name);
-	fill_memory_block_srange(start_sec, end_sec, srangebuf);
+	fill_memory_block_srange(start_sec, srangebuf);
 
 	if (MEMBER_EXISTS("memory_block", "nid")) {
 		readmem(memory_block + OFFSET(memory_block_nid), KVADDR, &nid,
@@ -17448,9 +17456,9 @@ print_memory_block(ulong memory_block)
 			MKSTR(memory_block)),
 			mkstring(buf2, 12, CENTER, name),
 			mkstring(buf3, PADDR_PRLEN, RJUST|LONG_HEX,
-			MKSTR(pfn_to_phys(start_pfn))),
+			MKSTR(start_addr)),
 			mkstring(buf4, PADDR_PRLEN, LJUST|LONG_HEX,
-			MKSTR(pfn_to_phys(end_pfn) - 1)),
+			MKSTR(end_addr)),
 			mkstring(buf5, strlen("NODE"), CENTER|LONG_DEC,
 			MKSTR(nid)),
 			mkstring(buf6, strlen("CANCEL_OFFLINE"), LJUST,
@@ -17462,9 +17470,9 @@ print_memory_block(ulong memory_block)
 			MKSTR(memory_block)),
 			mkstring(buf2, 10, CENTER, name),
 			mkstring(buf3, PADDR_PRLEN, RJUST|LONG_HEX,
-			MKSTR(pfn_to_phys(start_pfn))),
+			MKSTR(start_addr)),
 			mkstring(buf4, PADDR_PRLEN, LJUST|LONG_HEX,
-			MKSTR(pfn_to_phys(end_pfn) - 1)),
+			MKSTR(end_addr)),
 			mkstring(buf5, strlen("CANCEL_OFFLINE"), LJUST,
 			statebuf),
 			mkstring(buf6, 12, LJUST, srangebuf));
@@ -17552,14 +17560,14 @@ dump_memory_blocks(int initialize)
 			mkstring(buf3, PADDR_PRLEN*2 + 2, CENTER, "PHYSICAL RANGE"),
 			mkstring(buf4, strlen("NODE"), CENTER, "NODE"),
 			mkstring(buf5, strlen("CANCEL_OFFLINE"), LJUST, "STATE"),
-			mkstring(buf6, 12, LJUST, "SECTIONS"));
+			mkstring(buf6, 12, LJUST, "START_SECTION_NO"));
 	else
 		sprintf(mb_hdr, "\n%s %s %s     %s %s\n",
 			mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "MEM_BLOCK"),
 			mkstring(buf2, 10, CENTER, "NAME"),
 			mkstring(buf3, PADDR_PRLEN*2, CENTER, "PHYSICAL RANGE"),
 			mkstring(buf4, strlen("CANCEL_OFFLINE"), LJUST, "STATE"),
-			mkstring(buf5, 12, LJUST, "SECTIONS"));
+			mkstring(buf5, 12, LJUST, "START_SECTION_NO"));
 	fprintf(fp, "%s", mb_hdr);
 
 	for (i = 0; i < klistcnt; i++) {
