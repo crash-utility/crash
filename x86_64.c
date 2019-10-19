@@ -382,7 +382,7 @@ x86_64_init(int when)
 
 	case POST_GDB:
 		if (!(machdep->flags & RANDOMIZED) &&
-		    ((THIS_KERNEL_VERSION >= LINUX(4,20,0)) || 
+		    ((THIS_KERNEL_VERSION >= LINUX(4,19,5)) || 
 		    ((THIS_KERNEL_VERSION >= LINUX(4,14,84)) && 
 		     (THIS_KERNEL_VERSION < LINUX(4,15,0))))) {
 			machdep->machspec->page_offset = machdep->flags & VM_5LEVEL ?
