@@ -17402,6 +17402,23 @@ fill_memory_block_name(ulong memblock, char *name)
 }
 
 static void
+fill_memory_block_parange(ulong saddr, ulong eaddr, char *parange)
+{
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+
+	memset(parange, 0, sizeof(*parange) * BUFSIZE);
+
+	if (eaddr == ULLONG_MAX)
+		sprintf(parange, "%s",
+			mkstring(buf1, PADDR_PRLEN*2 + 3, CENTER|LONG_HEX, MKSTR(saddr)));
+	else
+		sprintf(parange, "%s - %s",
+			mkstring(buf1, PADDR_PRLEN, RJUST|LONG_HEX, MKSTR(saddr)),
+			mkstring(buf2, PADDR_PRLEN, RJUST|LONG_HEX, MKSTR(eaddr)));
+}
+
+static void
 fill_memory_block_srange(ulong start_sec, char *srange)
 {
 	memset(srange, 0, sizeof(*srange) * BUFSIZE);
@@ -17413,14 +17430,13 @@ static void
 print_memory_block(ulong memory_block)
 {
 	ulong start_sec, end_sec, nid;
-	ulong memblock_size, mbs, start_addr, end_addr;
+	ulong memblock_size, mbs, start_addr, end_addr = ULLONG_MAX;
 	char statebuf[BUFSIZE];
 	char srangebuf[BUFSIZE];
+	char parangebuf[BUFSIZE];
 	char name[BUFSIZE];
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
-	char buf3[BUFSIZE];
-	char buf4[BUFSIZE];
 	char buf5[BUFSIZE];
 	char buf6[BUFSIZE];
 	char buf7[BUFSIZE];
@@ -17437,7 +17453,7 @@ print_memory_block(ulong memory_block)
 			&mbs, sizeof(ulong), "memory_block_size_probed",
 			FAULT_ON_ERROR);
 		end_addr = start_addr + mbs - 1;
-	} else {
+	} else if (MEMBER_EXISTS("memory_block", "end_section_nr")) {
 	        readmem(memory_block + OFFSET(memory_block_end_section_nr), KVADDR,
 			&end_sec, sizeof(void *), "memory_block end_section_nr",
 			FAULT_ON_ERROR);
@@ -17446,34 +17462,29 @@ print_memory_block(ulong memory_block)
 
 	fill_memory_block_state(memory_block, statebuf);
 	fill_memory_block_name(memory_block, name);
+	fill_memory_block_parange(start_addr, end_addr, parangebuf);
 	fill_memory_block_srange(start_sec, srangebuf);
 
 	if (MEMBER_EXISTS("memory_block", "nid")) {
 		readmem(memory_block + OFFSET(memory_block_nid), KVADDR, &nid,
 			sizeof(void *), "memory_block nid", FAULT_ON_ERROR);
-		fprintf(fp, " %s %s %s - %s %s %s %s\n",
+		fprintf(fp, " %s %s %s %s  %s %s\n",
 			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX,
 			MKSTR(memory_block)),
 			mkstring(buf2, 12, CENTER, name),
-			mkstring(buf3, PADDR_PRLEN, RJUST|LONG_HEX,
-			MKSTR(start_addr)),
-			mkstring(buf4, PADDR_PRLEN, LJUST|LONG_HEX,
-			MKSTR(end_addr)),
+			parangebuf,
 			mkstring(buf5, strlen("NODE"), CENTER|LONG_DEC,
 			MKSTR(nid)),
-			mkstring(buf6, strlen("CANCEL_OFFLINE"), LJUST,
+			mkstring(buf6, strlen("OFFLINE"), LJUST,
 			statebuf),
 			mkstring(buf7, 12, LJUST, srangebuf));
 	} else
-		fprintf(fp, " %s %s %s - %s %s %s\n",
+		fprintf(fp, " %s %s %s  %s %s\n",
 			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX,
 			MKSTR(memory_block)),
 			mkstring(buf2, 10, CENTER, name),
-			mkstring(buf3, PADDR_PRLEN, RJUST|LONG_HEX,
-			MKSTR(start_addr)),
-			mkstring(buf4, PADDR_PRLEN, LJUST|LONG_HEX,
-			MKSTR(end_addr)),
-			mkstring(buf5, strlen("CANCEL_OFFLINE"), LJUST,
+			parangebuf,
+			mkstring(buf5, strlen("OFFLINE"), LJUST,
 			statebuf),
 			mkstring(buf6, 12, LJUST, srangebuf));
 }
@@ -17537,6 +17548,7 @@ dump_memory_blocks(int initialize)
 	int klistcnt, i;
 	struct list_data list_data;
 	char mb_hdr[BUFSIZE];
+	char paddr_hdr[BUFSIZE];
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
@@ -17553,20 +17565,26 @@ dump_memory_blocks(int initialize)
 
 	init_memory_block(&list_data, &klistcnt, &klistbuf);
 
+	if ((symbol_exists("memory_block_size_probed")) ||
+	    (MEMBER_EXISTS("memory_block", "end_section_nr")))
+		sprintf(paddr_hdr, "%s", "PHYSICAL RANGE");
+	else
+		sprintf(paddr_hdr, "%s", "PHYSICAL START");
+
 	if (MEMBER_EXISTS("memory_block", "nid"))
-		sprintf(mb_hdr, "\n%s %s %s     %s %s %s\n",
+		sprintf(mb_hdr, "\n%s %s   %s   %s  %s %s\n",
 			mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "MEM_BLOCK"),
 			mkstring(buf2, 10, CENTER, "NAME"),
-			mkstring(buf3, PADDR_PRLEN*2 + 2, CENTER, "PHYSICAL RANGE"),
+			mkstring(buf3, PADDR_PRLEN*2 + 2, CENTER, paddr_hdr),
 			mkstring(buf4, strlen("NODE"), CENTER, "NODE"),
-			mkstring(buf5, strlen("CANCEL_OFFLINE"), LJUST, "STATE"),
+			mkstring(buf5, strlen("OFFLINE"), LJUST, "STATE"),
 			mkstring(buf6, 12, LJUST, "START_SECTION_NO"));
 	else
-		sprintf(mb_hdr, "\n%s %s %s     %s %s\n",
+		sprintf(mb_hdr, "\n%s %s   %s    %s %s\n",
 			mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "MEM_BLOCK"),
 			mkstring(buf2, 10, CENTER, "NAME"),
-			mkstring(buf3, PADDR_PRLEN*2, CENTER, "PHYSICAL RANGE"),
-			mkstring(buf4, strlen("CANCEL_OFFLINE"), LJUST, "STATE"),
+			mkstring(buf3, PADDR_PRLEN*2, CENTER, paddr_hdr),
+			mkstring(buf4, strlen("OFFLINE"), LJUST, "STATE"),
 			mkstring(buf5, 12, LJUST, "START_SECTION_NO"));
 	fprintf(fp, "%s", mb_hdr);
 
