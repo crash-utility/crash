@@ -48,6 +48,9 @@ static void show_tgid_list(ulong);
 static int compare_start_time(const void *, const void *);
 static int start_time_timespec(void);
 static ulonglong convert_start_time(ulonglong, ulonglong);
+static ulong search_panic_task_by_cpu(char *);
+static ulong search_panic_task_by_keywords(char *, int *);
+static ulong get_log_panic_task(void);
 static ulong get_dumpfile_panic_task(void);
 static ulong get_active_set_panic_task(void);
 static void populate_panic_threads(void);
@@ -130,6 +133,23 @@ static struct sched_policy_info {
 	{ SCHED_IDLE,		"IDLE" },
 	{ SCHED_DEADLINE,	"DEADLINE" },
 	{ ULONG_MAX,		NULL }
+};
+
+enum PANIC_TASK_FOUND_RESULT {
+	FOUND_NO_PANIC_KEYWORD,
+	FOUND_PANIC_KEYWORD,
+	FOUND_PANIC_TASK
+};
+
+const char *panic_keywords[] = {
+	"Unable to handle kernel",
+	"BUG: unable to handle kernel",
+	"Kernel BUG at",
+	"kernel BUG at",
+	"Bad mode in",
+	"Oops",
+	"Kernel panic",
+	NULL,
 };
 
 /*
@@ -6116,8 +6136,8 @@ get_panic_ksp(struct bt_info *bt, ulong *ksp)
 
 /*
  *  Look for kcore's storage information for the system's panic state.
- *  If it's not there (somebody else's dump format?), look through all the
- *  stack traces for evidence of panic. 
+ *  If it's not there (somebody else's dump format?), look through all
+ *  the stack traces or the log buffer for evidence of panic.
  */
 static ulong
 get_panic_context(void)
@@ -6317,6 +6337,13 @@ get_panicmsg(char *buf)
 	rewind(pc->tmpfile);
 	while (!msg_found && fgets(buf, BUFSIZE, pc->tmpfile)) {
 		if (strstr(buf, "[Hardware Error]: ")) {
+			msg_found = TRUE;
+			break;
+		}
+	}
+	rewind(pc->tmpfile);
+	while (!msg_found && fgets(buf, BUFSIZE, pc->tmpfile)) {
+		if (strstr(buf, "Bad mode in ")) {
 			msg_found = TRUE;
 			break;
 		}
@@ -7401,6 +7428,8 @@ panic_search(void)
 
 	close_tmpfile();
 
+	pc->curcmd = pc->program_name;
+
 	if (!found && (dietask > (NO_TASK+1)) && task_has_cpu(dietask, NULL)) {
 		lasttask = dietask;
 		found = TRUE;
@@ -7410,8 +7439,15 @@ panic_search(void)
 		error(WARNING, "multiple active tasks have called die\n\n");
 
 	if (CRASHDEBUG(1) && found)
-		error(INFO, "panic_search: %lx (via foreach bt)\n", 
+		error(INFO, "panic_search: %lx (via foreach bt)\n",
 			lasttask);
+
+	if (!found) {
+		if (CRASHDEBUG(1))
+			error(INFO, "panic_search: failed (via foreach bt)\n");
+		if ((lasttask = get_log_panic_task()))
+			found = TRUE;
+	}
 
 found_panic_task:
 	populate_panic_threads();
@@ -7430,9 +7466,112 @@ found_panic_task:
 	} 
 
 	if (CRASHDEBUG(1))
-		error(INFO, "panic_search: failed (via foreach bt)\n");
+		error(INFO, "panic_search: failed\n");
 
 	return NULL;
+}
+
+static ulong
+search_panic_task_by_cpu(char *buf)
+{
+	int crashing_cpu;
+	char *p1, *p2;
+	ulong task = NO_TASK;
+
+	p1 = NULL;
+
+	if ((p1 = strstr(buf, "CPU: ")))
+		p1 += strlen("CPU: ");
+	else if (STRNEQ(buf, "CPU "))
+		p1 = buf + strlen("CPU ");
+
+	if (p1) {
+		p2 = p1;
+		while (!whitespace(*p2) && (*p2 != '\n'))
+			p2++;
+		*p2 = NULLCHAR;
+		crashing_cpu = dtol(p1, RETURN_ON_ERROR, NULL);
+		if ((crashing_cpu >= 0) && in_cpu_map(ONLINE_MAP, crashing_cpu)) {
+			task = tt->active_set[crashing_cpu];
+			if (CRASHDEBUG(1))
+				error(WARNING,
+					"get_log_panic_task: active_set[%d]: %lx\n",
+					crashing_cpu, tt->active_set[crashing_cpu]);
+		}
+	}
+	return task;
+}
+
+static ulong
+search_panic_task_by_keywords(char *buf, int *found_flag)
+{
+	char *p;
+	int i = 0;
+	ulong task;
+
+	while (panic_keywords[i]) {
+		if ((p = strstr(buf, panic_keywords[i]))) {
+			if ((task = search_panic_task_by_cpu(p))) {
+				*found_flag = FOUND_PANIC_TASK;
+				return task;
+			} else {
+				*found_flag = FOUND_PANIC_KEYWORD;
+				return NO_TASK;
+			}
+		}
+		i++;
+	}
+	*found_flag = FOUND_NO_PANIC_KEYWORD;
+	return NO_TASK;
+}
+
+/*
+ *   Search for the panic task by seeking panic keywords from kernel log buffer.
+ *   The panic keyword is generally followed by printing out the stack trace info
+ *   of the panicking task.  We can determine the panic task by finding the first
+ *   instance of "CPU: " or "CPU " following the panic keywords.
+ */
+static ulong
+get_log_panic_task(void)
+{
+	int found_flag = FOUND_NO_PANIC_KEYWORD;
+	int found_panic_keyword = FALSE;
+	ulong task = NO_TASK;
+	char buf[BUFSIZE];
+
+	if (!get_active_set())
+		goto fail;
+
+	BZERO(buf, BUFSIZE);
+	open_tmpfile();
+	dump_log(SHOW_LOG_TEXT);
+	rewind(pc->tmpfile);
+	while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+		if (!found_panic_keyword) {
+			task = search_panic_task_by_keywords(buf, &found_flag);
+			switch (found_flag) {
+				case FOUND_PANIC_TASK:
+					goto found_panic_task;
+				case FOUND_PANIC_KEYWORD:
+					found_panic_keyword = TRUE;
+					continue;
+				default:
+					continue;
+			}
+		} else {
+			task = search_panic_task_by_cpu(buf);
+			if (task)
+				goto found_panic_task;
+		}
+	}
+
+found_panic_task:
+	close_tmpfile();
+fail:
+	if (CRASHDEBUG(1) && !task)
+		 error(WARNING, "cannot determine the panic task from kernel log buffer\n");
+
+	return task;
 }
 
 /*
