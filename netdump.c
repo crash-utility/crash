@@ -4269,7 +4269,8 @@ read_proc_kcore(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 		 *  If KASLR, the PAGE_OFFSET may be unknown early on, so try
 		 *  the (hopefully) mapped kernel address first.
 		 */
-		if ((pc->curcmd_flags & MEMTYPE_KVADDR) && (kvaddr != addr)) {
+		if (!(pc->flags & RUNTIME) &&
+		    (pc->curcmd_flags & MEMTYPE_KVADDR) && (kvaddr != addr)) {
 			pc->curcmd_flags &= ~MEMTYPE_KVADDR;
 			for (i = 0; i < pkd->segments; i++) {
 				lp64 = pkd->load64 + i;
