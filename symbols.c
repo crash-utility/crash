@@ -3655,6 +3655,7 @@ is_compressed_kernel(char *file, char **tmp)
 
 #define GZIP  (1)
 #define BZIP2 (2)
+#define XZ    (3)
 
 #define FNAME (1 << 3)
 
@@ -3704,6 +3705,19 @@ is_compressed_kernel(char *file, char **tmp)
 		type = BZIP2;
 	}
 
+	if (!memcmp(header, "\xfd""7zXZ", 6)) {
+		if (!STRNEQ(basename(file), "vmlinux") &&
+		    !(st->flags & FORCE_DEBUGINFO)) {
+			error(INFO, "%s: compressed file name does not start "
+			    "with \"vmlinux\"\n", file);
+			error(CONT, 
+			    "Use \"-f %s\" on command line to override.\n\n",
+				file);
+			return FALSE;
+		}
+		type = XZ;
+	}
+
 	if (!type)
 		return FALSE;
 
@@ -3737,6 +3751,12 @@ is_compressed_kernel(char *file, char **tmp)
 		sprintf(command, "%s -c %s > %s", 
 			file_exists("/bin/bunzip2", NULL) ?
 			"/bin/bunzip2" : "/usr/bin/bunzip2",
+			file, tempname);
+		break;
+	case XZ:
+		sprintf(command, "%s -c %s > %s", 
+			file_exists("/bin/unxz", NULL) ?
+			"/bin/unxz" : "/usr/bin/unxz",
 			file, tempname);
 		break;
 	}
