@@ -28,12 +28,13 @@ static struct vmcore_data *nd = &vmcore_data;
 static struct proc_kcore_data proc_kcore_data = { 0 };
 static struct proc_kcore_data *pkd = &proc_kcore_data;
 static void netdump_print(char *, ...);
-static size_t resize_elf_header(int, char *, char **, ulong);
+static size_t resize_elf_header(int, char *, char **, char **, ulong);
 static void dump_Elf32_Ehdr(Elf32_Ehdr *);
 static void dump_Elf32_Phdr(Elf32_Phdr *, int);
 static size_t dump_Elf32_Nhdr(Elf32_Off offset, int);
 static void dump_Elf64_Ehdr(Elf64_Ehdr *);
 static void dump_Elf64_Phdr(Elf64_Phdr *, int);
+static void dump_Elf64_Shdr(Elf64_Shdr *shdr);
 static size_t dump_Elf64_Nhdr(Elf64_Off offset, int);
 static void get_netdump_regs_32(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_ppc(struct bt_info *, ulong *, ulong *);
@@ -116,7 +117,7 @@ is_netdump(char *file, ulong source_query)
 	Elf32_Phdr *load32;
 	Elf64_Ehdr *elf64;
 	Elf64_Phdr *load64;
-	char *eheader;
+	char *eheader, *sect0;
 	char buf[BUFSIZE];
 	size_t size, len, tot;
         Elf32_Off offset32;
@@ -330,7 +331,8 @@ is_netdump(char *file, ulong source_query)
 			goto bailout;
 	}
 
-	if (!(size = resize_elf_header(fd, file, &eheader, format)))
+	sect0 = NULL;
+	if (!(size = resize_elf_header(fd, file, &eheader, &sect0, format)))
 		goto bailout;
 
 	nd->ndfd = fd;
@@ -372,7 +374,17 @@ is_netdump(char *file, ulong source_query)
 	case KDUMP_ELF64:
                 nd->header_size = size;
                 nd->elf64 = (Elf64_Ehdr *)&nd->elf_header[0];
-		nd->num_pt_load_segments = nd->elf64->e_phnum - 1;
+
+		/*
+		 * Extended Numbering support
+		 * See include/uapi/linux/elf.h and elf(5) for more information
+		 */
+		if (nd->elf64->e_phnum == PN_XNUM) {
+			nd->sect0_64 = (Elf64_Shdr *)sect0;
+			nd->num_pt_load_segments = nd->sect0_64->sh_info - 1;
+		} else
+			nd->num_pt_load_segments = nd->elf64->e_phnum - 1;
+
                 if ((nd->pt_load_segments = (struct pt_load_segment *)
                     malloc(sizeof(struct pt_load_segment) *
                     nd->num_pt_load_segments)) == NULL) {
@@ -432,7 +444,8 @@ bailout:
  */
 
 static size_t
-resize_elf_header(int fd, char *file, char **eheader_ptr, ulong format)
+resize_elf_header(int fd, char *file, char **eheader_ptr, char **sect0_ptr,
+		ulong format)
 {
 	int i;
 	char buf[BUFSIZE];
@@ -462,7 +475,44 @@ resize_elf_header(int fd, char *file, char **eheader_ptr, ulong format)
 
 	case NETDUMP_ELF64:
 	case KDUMP_ELF64:
-		num_pt_load_segments = elf64->e_phnum - 1;
+		/*
+		 * Extended Numbering support
+		 * See include/uapi/linux/elf.h and elf(5) for more information
+		 */
+		if (elf64->e_phnum == PN_XNUM) {
+			Elf64_Shdr *shdr64;
+
+			shdr64 = (Elf64_Shdr *)malloc(sizeof(*shdr64));
+			if (!shdr64) {
+				fprintf(stderr,
+				    "cannot malloc a section header buffer\n");
+				return 0;
+			}
+			if (FLAT_FORMAT()) {
+				if (!read_flattened_format(fd, elf64->e_shoff,
+				    shdr64, elf64->e_shentsize))
+					return 0;
+			} else {
+				if (lseek(fd, elf64->e_shoff, SEEK_SET) !=
+				    elf64->e_shoff) {
+					sprintf(buf, "%s: section header lseek",
+						file);
+					perror(buf);
+					return 0;
+				}
+				if (read(fd, shdr64, elf64->e_shentsize) !=
+				    elf64->e_shentsize) {
+					sprintf(buf, "%s: section header read",
+						file);
+					perror(buf);
+					return 0;
+				}
+			}
+			num_pt_load_segments = shdr64->sh_info - 1;
+			*sect0_ptr = (char *)shdr64;
+		} else
+			num_pt_load_segments = elf64->e_phnum - 1;
+
 		header_size = sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr) +
 			(sizeof(Elf64_Phdr) * num_pt_load_segments);
 		break;
@@ -1168,6 +1218,7 @@ netdump_memory_dump(FILE *fp)
 	netdump_print("                  elf64: %lx\n", nd->elf64);
 	netdump_print("                notes64: %lx\n", nd->notes64);
 	netdump_print("                 load64: %lx\n", nd->load64);
+	netdump_print("               sect0_64: %lx\n", nd->sect0_64);
 	netdump_print("            nt_prstatus: %lx\n", nd->nt_prstatus);
 	netdump_print("            nt_prpsinfo: %lx\n", nd->nt_prpsinfo);
 	netdump_print("          nt_taskstruct: %lx\n", nd->nt_taskstruct);
@@ -1252,6 +1303,8 @@ netdump_memory_dump(FILE *fp)
 		dump_Elf64_Phdr(nd->notes64, ELFREAD);
                 for (i = 0; i < nd->num_pt_load_segments; i++)
 			dump_Elf64_Phdr(nd->load64 + i, ELFREAD);
+		if (nd->sect0_64)
+			dump_Elf64_Shdr(nd->sect0_64);
         	offset64 = nd->notes64->p_offset;
         	for (tot = 0; tot < nd->notes64->p_filesz; tot += len) {
                 	if (!(len = dump_Elf64_Nhdr(offset64, ELFREAD)))
@@ -1761,6 +1814,32 @@ dump_Elf64_Phdr(Elf64_Phdr *prog, int store_pt_load_data)
 		netdump_print("%sPF_R", others++ ? "|" : "");
 	netdump_print(")\n");
 	netdump_print("                p_align: %lld\n", prog->p_align);
+}
+
+static void
+dump_Elf64_Shdr(Elf64_Shdr *shdr)
+{
+	netdump_print("Elf64_Shdr:\n");
+	netdump_print("                sh_name: %x\n", shdr->sh_name);
+	netdump_print("                sh_type: %x ", shdr->sh_type);
+	switch (shdr->sh_type)
+	{
+	case SHT_NULL:
+		netdump_print("(SHT_NULL)\n");
+		break;
+	default:
+		netdump_print("\n");
+		break;
+	}
+	netdump_print("               sh_flags: %lx\n", shdr->sh_flags);
+	netdump_print("                sh_addr: %lx\n", shdr->sh_addr);
+	netdump_print("              sh_offset: %lx\n", shdr->sh_offset);
+	netdump_print("                sh_size: %lx\n", shdr->sh_size);
+	netdump_print("                sh_link: %x\n", shdr->sh_link);
+	netdump_print("                sh_info: %x (%u)\n", shdr->sh_info,
+		shdr->sh_info);
+	netdump_print("           sh_addralign: %lx\n", shdr->sh_addralign);
+	netdump_print("             sh_entsize: %lx\n", shdr->sh_entsize);
 }
 
 /*

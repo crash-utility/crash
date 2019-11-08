@@ -61,6 +61,7 @@ struct vmcore_data {
         Elf64_Ehdr *elf64;
         Elf64_Phdr *notes64;
         Elf64_Phdr *load64;
+        Elf64_Shdr *sect0_64;
         void *nt_prstatus;
         void *nt_prpsinfo;
         void *nt_taskstruct;
