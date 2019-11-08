@@ -17430,7 +17430,7 @@ static void
 print_memory_block(ulong memory_block)
 {
 	ulong start_sec, end_sec, nid;
-	ulong memblock_size, mbs, start_addr, end_addr = ULLONG_MAX;
+	ulong memblock_size, mbs, start_addr, end_addr = (ulong)ULLONG_MAX;
 	char statebuf[BUFSIZE];
 	char srangebuf[BUFSIZE];
 	char parangebuf[BUFSIZE];
