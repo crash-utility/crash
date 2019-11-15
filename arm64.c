@@ -179,17 +179,16 @@ arm64_init(int when)
 
 		}
 
+		/*
+		 * This code section will only be executed if the kernel is
+		 * earlier than Linux 4.4 (if there is no vmcoreinfo)
+		 */
 		if (!machdep->pagesize &&
 		    kernel_symbol_exists("swapper_pg_dir") &&
 		    kernel_symbol_exists("idmap_pg_dir")) {
-			if (kernel_symbol_exists("tramp_pg_dir"))
-				value = symbol_value("tramp_pg_dir");
-			else if (kernel_symbol_exists("reserved_ttbr0"))
-				value = symbol_value("reserved_ttbr0");
-			else
-				value = symbol_value("swapper_pg_dir");
+			value = symbol_value("swapper_pg_dir") -
+				symbol_value("idmap_pg_dir");
 
-			value -= symbol_value("idmap_pg_dir");
 			/*
 			 * idmap_pg_dir is 2 pages prior to 4.1,
 			 * and 3 pages thereafter.  Only 4K and 64K 
