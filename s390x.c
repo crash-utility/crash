@@ -240,6 +240,13 @@ static int
 set_s390x_max_physmem_bits(void)
 {
 	int array_len, dimension;
+	char *string;
+
+	if ((string = pc->read_vmcoreinfo("NUMBER(MAX_PHYSMEM_BITS)"))) {
+		machdep->max_physmem_bits = atol(string);
+		free(string);
+		return TRUE;
+	}
 
 	machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_OLD;
 

@@ -665,7 +665,10 @@ x86_64_init(int when)
 		}
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		if (!machdep->max_physmem_bits) {
-			if (machdep->flags & VM_5LEVEL)
+			if ((string = pc->read_vmcoreinfo("NUMBER(MAX_PHYSMEM_BITS)"))) {
+				machdep->max_physmem_bits = atol(string);
+				free(string);
+			} else if (machdep->flags & VM_5LEVEL)
 				machdep->max_physmem_bits = 
 					_MAX_PHYSMEM_BITS_5LEVEL;
 			else if (THIS_KERNEL_VERSION >= LINUX(2,6,31))

@@ -225,6 +225,13 @@ static int ppc64_is_vmaddr(ulong addr)
 static int set_ppc64_max_physmem_bits(void)
 {
 	int dimension;
+	char *string;
+
+	if ((string = pc->read_vmcoreinfo("NUMBER(MAX_PHYSMEM_BITS)"))) {
+		machdep->max_physmem_bits = atol(string);
+		free(string);
+		return 0;
+	}
 
 	get_array_length("mem_section", &dimension, 0);
 
