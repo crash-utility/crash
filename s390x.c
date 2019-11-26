@@ -46,6 +46,8 @@
 
 #define S390X_PSW_MASK_PSTATE	0x0001000000000000UL
 
+#define S390X_LC_VMCORE_INFO	0xe0c
+
 /*
  * Flags for Region and Segment table entries.
  */
@@ -460,6 +462,8 @@ static void s390x_check_live(void)
 void
 s390x_init(int when)
 {
+	ulong s390x_lc_kaslr;
+
 	switch (when)
 	{
 	case SETUP_ENV:
@@ -486,6 +490,24 @@ s390x_init(int when)
 		machdep->verify_paddr = generic_verify_paddr;
 		machdep->get_kvaddr_ranges = s390x_get_kvaddr_ranges;
 		machdep->ptrs_per_pgd = PTRS_PER_PGD;
+		if (DUMPFILE() && !(kt->flags & RELOC_SET)) {
+			/* Read the value from well-known lowcore location*/
+			if (readmem(S390X_LC_VMCORE_INFO, PHYSADDR, &s390x_lc_kaslr,
+			    sizeof(s390x_lc_kaslr), "s390x_lc_kaslr",
+			    QUIET|RETURN_ON_ERROR)) {
+				/* Check for explicit kaslr offset flag */
+				if (s390x_lc_kaslr & 0x1UL) {
+					/* Drop the last bit to get an offset value */
+					s390x_lc_kaslr &= ~(0x1UL);
+					/* Make sure the offset is aligned by 0x1000 */
+					if (s390x_lc_kaslr && !(s390x_lc_kaslr & 0xfff)) {
+						kt->relocate = s390x_lc_kaslr * (-1);
+						kt->flags |= RELOC_SET;
+						kt->flags2 |= KASLR;
+					}
+				}
+			}
+		}
 		break;
 
 	case PRE_GDB:
