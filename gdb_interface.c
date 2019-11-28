@@ -831,6 +831,8 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 	if (write)
 		return FALSE;
 
+  if (!pc->cur_req)
+    return TRUE;
 	if (pc->cur_req->flags & GNU_NO_READMEM)
 		return TRUE;
 
