@@ -198,7 +198,7 @@ GDB_FLAGS=
 # TARGET_CFLAGS will be configured automatically by configure
 TARGET_CFLAGS=
 
-CRASH_CFLAGS=-g -D${TARGET} ${TARGET_CFLAGS} ${GDB_FLAGS} ${CFLAGS}
+CRASH_CFLAGS=-g -O0 -D${TARGET} ${TARGET_CFLAGS} ${GDB_FLAGS} ${CFLAGS} -fsanitize=address
 
 GPL_FILES=
 TAR_FILES=${SOURCE_FILES} Makefile ${GPL_FILES} README .rh_rpm_package crash.8 \
@@ -228,7 +228,7 @@ all: make_configure
 gdb_merge: force
 	@if [ ! -f ${GDB}/README ]; then \
 	  make --no-print-directory gdb_unzip; fi
-	@echo "${LDFLAGS} -lz -ldl -rdynamic" > ${GDB}/gdb/mergelibs
+	@echo "${LDFLAGS} -lz -ldl -rdynamic -fsanitize=address" > ${GDB}/gdb/mergelibs
 	@echo "../../${PROGRAM} ../../${PROGRAM}lib.a" > ${GDB}/gdb/mergeobj
 	@rm -f ${PROGRAM}
 	@if [ ! -f ${GDB}/config.status ]; then \
@@ -538,7 +538,7 @@ ${PROGRAM}d: daemon_deprecated make_configure
 	@make --no-print-directory daemon 
 
 daemon: ${DAEMON_OBJECT_FILES}
-	${CC} ${LDFLAGS} -o ${PROGRAM}d ${DAEMON_OBJECT_FILES} build_data.o -lz 
+	${CC} ${LDFLAGS} -o ${PROGRAM}d ${DAEMON_OBJECT_FILES} build_data.o -lz -fsanitize=address
 
 files: make_configure
 	@./configure -q -b
