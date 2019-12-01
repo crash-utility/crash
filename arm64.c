@@ -1073,10 +1073,8 @@ arm64_get_section_size_bits(void)
 		free(string);
 	} else if (kt->ikconfig_flags & IKCONFIG_AVAIL) {
 		if ((ret = get_kernel_config("CONFIG_MEMORY_HOTPLUG", NULL)) == IKCONFIG_Y) {
-			if ((ret = get_kernel_config("CONFIG_HOTPLUG_SIZE_BITS", &string)) == IKCONFIG_STR) {
+			if ((ret = get_kernel_config("CONFIG_HOTPLUG_SIZE_BITS", &string)) == IKCONFIG_STR)
 				machdep->section_size_bits = atol(string);
-				free(string);
-			}
 		} 
 	}
 
