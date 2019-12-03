@@ -1459,11 +1459,19 @@ list_source_code(struct gnu_request *req, int count_entered)
         char *argv[MAXARGS];
 	struct syment *sp;
 	ulong remaining, offset;
+	struct load_module *lm;
 	char *p1;
 
 	sp = value_search(req->addr, &offset);
 	if (!sp || !is_symbol_text(sp))
 		error(FATAL, "%lx: not a kernel text address\n", req->addr);
+
+	if (module_symbol(req->addr, NULL, &lm, NULL, 0)) {
+		if (!(lm->mod_flags & MOD_LOAD_SYMS))
+			error(FATAL, "%s: module source code is not available\n", lm->mod_name);
+		get_line_number(req->addr, buf1, FALSE);
+	} else if (kt->flags2 & KASLR)
+		req->addr -= (kt->relocate * -1);
 
 	sprintf(buf1, "list *0x%lx", req->addr);
 	open_tmpfile();
