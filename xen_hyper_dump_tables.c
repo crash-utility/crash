@@ -636,8 +636,8 @@ xen_hyper_dump_xen_hyper_size_table(char *spec, ulong makestruct)
 		(buf, "%ld\n", xen_hyper_size_table.shared_info));
 	XEN_HYPER_PRI(fp, len, "timer: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_size_table.timer));
-	XEN_HYPER_PRI(fp, len, "tss_struct: ", buf, flag,
-		(buf, "%ld\n", xen_hyper_size_table.tss_struct));
+	XEN_HYPER_PRI(fp, len, "tss: ", buf, flag,
+		(buf, "%ld\n", xen_hyper_size_table.tss));
 	XEN_HYPER_PRI(fp, len, "vcpu: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_size_table.vcpu));
 	XEN_HYPER_PRI(fp, len, "vcpu_runstate_info: ", buf, flag,
@@ -868,9 +868,9 @@ xen_hyper_dump_xen_hyper_offset_table(char *spec, ulong makestruct)
 		(buf, "%ld\n", xen_hyper_offset_table.timer_killed));
 
 	XEN_HYPER_PRI(fp, len, "tss_struct_rsp0: ", buf, flag,
-		(buf, "%ld\n", xen_hyper_offset_table.tss_struct_rsp0));
+		(buf, "%ld\n", xen_hyper_offset_table.tss_rsp0));
 	XEN_HYPER_PRI(fp, len, "tss_struct_esp0: ", buf, flag,
-		(buf, "%ld\n", xen_hyper_offset_table.tss_struct_esp0));
+		(buf, "%ld\n", xen_hyper_offset_table.tss_esp0));
 
 	XEN_HYPER_PRI(fp, len, "vcpu_vcpu_id: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_offset_table.vcpu_vcpu_id));

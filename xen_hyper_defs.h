@@ -598,7 +598,7 @@ struct xen_hyper_size_table {
 	long scheduler;
 	long shared_info;
 	long timer;
-	long tss_struct;
+	long tss;
 	long vcpu;
 	long vcpu_runstate_info;
 	long xen_crash_xen_regs_t;		/* elf note v2 */
@@ -727,9 +727,9 @@ struct xen_hyper_offset_table {
 	long timer_heap_offset;
 	long timer_killed;
 	/* tss */
-	long tss_struct_rsp0;
-	long tss_struct_esp0;
-	long tss_struct_ist;
+	long tss_rsp0;
+	long tss_esp0;
+	long tss_ist;
 	/* vcpu */
 	long vcpu_vcpu_id;
 	long vcpu_processor;

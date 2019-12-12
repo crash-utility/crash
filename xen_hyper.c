@@ -338,33 +338,35 @@ xen_hyper_x86_pcpu_init(void)
 	if((xhpct->pcpu_struct = malloc(XEN_HYPER_SIZE(cpu_info))) == NULL) {
 		error(FATAL, "cannot malloc pcpu struct space.\n");
 	}
-
 	/* get physical cpu context */
 	xen_hyper_alloc_pcpu_context_space(XEN_HYPER_MAX_CPUS());
 	if (symbol_exists("per_cpu__init_tss")) {
 		init_tss_base = symbol_value("per_cpu__init_tss");
 		flag = TRUE;
+	} else if (symbol_exists("per_cpu__tss_page")) {
+			init_tss_base = symbol_value("per_cpu__tss_page");
+			flag = TRUE;
 	} else {
 		init_tss_base = symbol_value("init_tss");
 		flag = FALSE;
 	}
-	buf = GETBUF(XEN_HYPER_SIZE(tss_struct));	
+	buf = GETBUF(XEN_HYPER_SIZE(tss));
 	for_cpu_indexes(i, cpuid)
 	{
 		if (flag)
 			init_tss = xen_hyper_per_cpu(init_tss_base, cpuid);
 		else
 			init_tss = init_tss_base +
-				XEN_HYPER_SIZE(tss_struct) * cpuid;
+				XEN_HYPER_SIZE(tss) * cpuid;
 		if (!readmem(init_tss, KVADDR, buf,
-			XEN_HYPER_SIZE(tss_struct), "init_tss", RETURN_ON_ERROR)) {
+			XEN_HYPER_SIZE(tss), "init_tss", RETURN_ON_ERROR)) {
 			error(FATAL, "cannot read init_tss.\n");
 		}
 		if (machine_type("X86")) {
-			sp = ULONG(buf + XEN_HYPER_OFFSET(tss_struct_esp0));
+			sp = ULONG(buf + XEN_HYPER_OFFSET(tss_esp0));
 		} else if (machine_type("X86_64")) {
-			sp = ULONG(buf + XEN_HYPER_OFFSET(tss_struct_rsp0));
-		} else 
+			sp = ULONG(buf + XEN_HYPER_OFFSET(tss_rsp0));
+		} else
 			sp = 0;
 		cpu_info = XEN_HYPER_GET_CPU_INFO(sp);
 		if (CRASHDEBUG(1)) {
@@ -1777,10 +1779,10 @@ xen_hyper_store_pcpu_context_tss(struct xen_hyper_pcpu_context *pcc,
 
 	pcc->init_tss = init_tss;
 	if (machine_type("X86")) {
-		pcc->sp.esp0 = ULONG(tss + XEN_HYPER_OFFSET(tss_struct_esp0));
+		pcc->sp.esp0 = ULONG(tss + XEN_HYPER_OFFSET(tss_esp0));
 	} else if (machine_type("X86_64")) {
-		pcc->sp.rsp0 = ULONG(tss + XEN_HYPER_OFFSET(tss_struct_rsp0));
-		ist_p = (uint64_t *)(tss + XEN_HYPER_OFFSET(tss_struct_ist));
+		pcc->sp.rsp0 = ULONG(tss + XEN_HYPER_OFFSET(tss_rsp0));
+		ist_p = (uint64_t *)(tss + XEN_HYPER_OFFSET(tss_ist));
 		for (i = 0; i < XEN_HYPER_TSS_IST_MAX; i++, ist_p++) {
 			pcc->ist[i] = ULONG(ist_p);
 		}

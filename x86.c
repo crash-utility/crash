@@ -5600,18 +5600,18 @@ x86_get_stackbase_hyper(ulong task)
 
 	if (symbol_exists("init_tss")) {
 		init_tss = symbol_value("init_tss");
-		init_tss += XEN_HYPER_SIZE(tss_struct) * pcpu;
+		init_tss += XEN_HYPER_SIZE(tss) * pcpu;
 	} else {
 		init_tss = symbol_value("per_cpu__init_tss");
 		init_tss = xen_hyper_per_cpu(init_tss, pcpu);
 	}
 	
-	buf = GETBUF(XEN_HYPER_SIZE(tss_struct));
+	buf = GETBUF(XEN_HYPER_SIZE(tss));
 	if (!readmem(init_tss, KVADDR, buf,
-			XEN_HYPER_SIZE(tss_struct), "init_tss", RETURN_ON_ERROR)) {
+			XEN_HYPER_SIZE(tss), "init_tss", RETURN_ON_ERROR)) {
 		error(FATAL, "cannot read init_tss.\n");
 	}
-	esp = ULONG(buf + XEN_HYPER_OFFSET(tss_struct_esp0));
+	esp = ULONG(buf + XEN_HYPER_OFFSET(tss_esp0));
 	FREEBUF(buf);
 	base = esp & (~(STACKSIZE() - 1));
 
@@ -5745,8 +5745,8 @@ x86_init_hyper(int when)
 #endif
 		XEN_HYPER_STRUCT_SIZE_INIT(cpu_time, "cpu_time");
 		XEN_HYPER_STRUCT_SIZE_INIT(cpuinfo_x86, "cpuinfo_x86");
-		XEN_HYPER_STRUCT_SIZE_INIT(tss_struct, "tss_struct");
-		XEN_HYPER_MEMBER_OFFSET_INIT(tss_struct_esp0, "tss_struct", "esp0");
+		XEN_HYPER_STRUCT_SIZE_INIT(tss, "tss_struct");
+		XEN_HYPER_MEMBER_OFFSET_INIT(tss_esp0, "tss_struct", "esp0");
 		XEN_HYPER_MEMBER_OFFSET_INIT(cpu_time_local_tsc_stamp, "cpu_time", "local_tsc_stamp");
 		XEN_HYPER_MEMBER_OFFSET_INIT(cpu_time_stime_local_stamp, "cpu_time", "stime_local_stamp");
 		XEN_HYPER_MEMBER_OFFSET_INIT(cpu_time_stime_master_stamp, "cpu_time", "stime_master_stamp");

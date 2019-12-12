@@ -7973,13 +7973,23 @@ x86_64_init_hyper(int when)
 
 	case POST_GDB:
 		XEN_HYPER_STRUCT_SIZE_INIT(cpuinfo_x86, "cpuinfo_x86");
-		XEN_HYPER_STRUCT_SIZE_INIT(tss_struct, "tss_struct");
-		if (MEMBER_EXISTS("tss_struct", "__blh")) {
-			XEN_HYPER_ASSIGN_OFFSET(tss_struct_rsp0) = MEMBER_OFFSET("tss_struct", "__blh") + sizeof(short unsigned int);
+		if (symbol_exists("per_cpu__tss_page")) {
+			XEN_HYPER_STRUCT_SIZE_INIT(tss, "tss64");
+			XEN_HYPER_ASSIGN_OFFSET(tss_rsp0) =
+							MEMBER_OFFSET("tss64", "rsp0");
+			XEN_HYPER_MEMBER_OFFSET_INIT(tss_ist, "tss64", "ist");
 		} else {
-			XEN_HYPER_ASSIGN_OFFSET(tss_struct_rsp0) = MEMBER_OFFSET("tss_struct", "rsp0");
+			XEN_HYPER_STRUCT_SIZE_INIT(tss, "tss_struct");
+			XEN_HYPER_MEMBER_OFFSET_INIT(tss_ist, "tss_struct", "ist");
+			if (MEMBER_EXISTS("tss_struct", "__blh")) {
+				XEN_HYPER_ASSIGN_OFFSET(tss_rsp0) =
+					MEMBER_OFFSET("tss_struct", "__blh") +
+								sizeof(short unsigned int);
+			} else	{
+				XEN_HYPER_ASSIGN_OFFSET(tss_rsp0) =
+							MEMBER_OFFSET("tss_struct", "rsp0");
+			}
 		}
-		XEN_HYPER_MEMBER_OFFSET_INIT(tss_struct_ist, "tss_struct", "ist");
 		if (symbol_exists("cpu_data")) {
 			xht->cpu_data_address = symbol_value("cpu_data");
 		}
