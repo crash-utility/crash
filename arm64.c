@@ -81,7 +81,7 @@ static int arm64_on_irq_stack(int, ulong);
 static void arm64_set_irq_stack(struct bt_info *);
 static void arm64_set_process_stack(struct bt_info *);
 static int arm64_get_kvaddr_ranges(struct vaddr_range *);
-static int arm64_get_crash_notes(void);
+static void arm64_get_crash_notes(void);
 static void arm64_calc_VA_BITS(void);
 static int arm64_is_uvaddr(ulong, struct task_context *);
 
@@ -465,11 +465,8 @@ arm64_init(int when)
 		 * of the crash. We need this information to extract correct
 		 * backtraces from the panic task.
 		 */
-		if (!LIVE() && !arm64_get_crash_notes())
-			error(WARNING, 
-			    "cannot retrieve registers for active task%s\n\n",
-				kt->cpus > 1 ? "s" : "");
-
+		if (!LIVE()) 
+			arm64_get_crash_notes();
 		break;
 
 	case LOG_ONLY:
@@ -3578,7 +3575,7 @@ arm64_get_smp_cpus(void)
 /*
  * Retrieve task registers for the time of the crash.
  */
-static int
+static void
 arm64_get_crash_notes(void)
 {
 	struct machine_specific *ms = machdep->machspec;
@@ -3587,10 +3584,10 @@ arm64_get_crash_notes(void)
 	ulong offset;
 	char *buf, *p;
 	ulong *notes_ptrs;
-	ulong i;
+	ulong i, found;
 
 	if (!symbol_exists("crash_notes"))
-		return FALSE;
+		return;
 
 	crash_notes = symbol_value("crash_notes");
 
@@ -3602,9 +3599,9 @@ arm64_get_crash_notes(void)
 	 */
 	if (!readmem(crash_notes, KVADDR, &notes_ptrs[kt->cpus-1], 
 	    sizeof(notes_ptrs[kt->cpus-1]), "crash_notes", RETURN_ON_ERROR)) {
-		error(WARNING, "cannot read crash_notes\n");
+		error(WARNING, "cannot read \"crash_notes\"\n");
 		FREEBUF(notes_ptrs);
-		return FALSE;
+		return;
 	}
 
 	if (symbol_exists("__per_cpu_offset")) {
@@ -3620,12 +3617,11 @@ arm64_get_crash_notes(void)
 	if (!(ms->panic_task_regs = calloc((size_t)kt->cpus, sizeof(struct arm64_pt_regs))))
 		error(FATAL, "cannot calloc panic_task_regs space\n");
 	
-	for  (i = 0; i < kt->cpus; i++) {
-
+	for  (i = found = 0; i < kt->cpus; i++) {
 		if (!readmem(notes_ptrs[i], KVADDR, buf, SIZE(note_buf), 
 		    "note_buf_t", RETURN_ON_ERROR)) {
-			error(WARNING, "failed to read note_buf_t\n");
-			goto fail;
+			error(WARNING, "cpu %d: cannot read NT_PRSTATUS note\n", i);
+			continue;
 		}
 
 		/*
@@ -3655,19 +3651,24 @@ arm64_get_crash_notes(void)
 				    note->n_descsz == notesz)
 					BCOPY((char *)note, buf, notesz);
 			} else {
-				error(WARNING,
-					"cannot find NT_PRSTATUS note for cpu: %d\n", i);
+				error(WARNING, "cpu %d: cannot find NT_PRSTATUS note\n", i);
 				continue;
 			}
 		}
 
+		/*
+		 * Check the sanity of NT_PRSTATUS note only for each online cpu.
+		 * If this cpu has invalid note, continue to find the crash notes
+		 * for other online cpus.
+		 */
 		if (note->n_type != NT_PRSTATUS) {
-			error(WARNING, "invalid note (n_type != NT_PRSTATUS)\n");
-			goto fail;
+			error(WARNING, "cpu %d: invalid NT_PRSTATUS note (n_type != NT_PRSTATUS)\n", i);
+			continue;
 		}
-		if (p[0] != 'C' || p[1] != 'O' || p[2] != 'R' || p[3] != 'E') {
-			error(WARNING, "invalid note (name != \"CORE\"\n");
-			goto fail;
+
+		if (!STRNEQ(p, "CORE")) {
+			error(WARNING, "cpu %d: invalid NT_PRSTATUS note (name != \"CORE\")\n", i);
+			continue;
 		}
 
 		/*
@@ -3680,18 +3681,17 @@ arm64_get_crash_notes(void)
 
 		BCOPY(p + OFFSET(elf_prstatus_pr_reg), &ms->panic_task_regs[i],
 		      sizeof(struct arm64_pt_regs));
+
+		found++;
 	}
 
 	FREEBUF(buf);
 	FREEBUF(notes_ptrs);
-	return TRUE;
 
-fail:
-	FREEBUF(buf);
-	FREEBUF(notes_ptrs);
-	free(ms->panic_task_regs);
-	ms->panic_task_regs = NULL;
-	return FALSE;
+	if (!found) {
+		free(ms->panic_task_regs);
+		ms->panic_task_regs = NULL;
+	}
 }
 
 static void
