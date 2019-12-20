@@ -11284,7 +11284,8 @@ dump_audit_skb_queue(ulong audit_skb_queue)
 
 	p = skb_buff_head_next;
 	do {
-		ulong data, len, data_len;
+		ulong data, data_len;
+		uint len;
 		uint16_t nlmsg_type;
 		char *buf = NULL;
 
@@ -11295,7 +11296,7 @@ dump_audit_skb_queue(ulong audit_skb_queue)
 			KVADDR,
 			&len,
 			SIZE(sk_buff_len),
-			"sk_buff.data",
+			"sk_buff.len",
 			FAULT_ON_ERROR);
 
 		data_len = len - roundup(SIZE(nlmsghdr), NLMSG_ALIGNTO);
