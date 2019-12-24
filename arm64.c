@@ -3864,7 +3864,8 @@ arm64_calc_VA_BITS(void)
 				 * vabits_actual = 64 - T1SZ;
 				 */
 				value = 64 - strtoll(string, NULL, 0);
-				fprintf(fp,  "vmcoreinfo : vabits_actual: %ld\n", value);
+				if (CRASHDEBUG(1))
+					fprintf(fp,  "vmcoreinfo : vabits_actual: %ld\n", value);
 				free(string);
 				machdep->machspec->VA_BITS_ACTUAL = value;
 				machdep->machspec->VA_BITS = value;
