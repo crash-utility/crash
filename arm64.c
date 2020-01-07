@@ -1,8 +1,8 @@
 /*
  * arm64.c - core analysis suite
  *
- * Copyright (C) 2012-2019 David Anderson
- * Copyright (C) 2012-2019 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2012-2020 David Anderson
+ * Copyright (C) 2012-2020 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1644,10 +1644,11 @@ arm64_stackframe_init(void)
 		machdep->machspec->kern_eframe_offset = SIZE(pt_regs);
 	}
 
-	machdep->machspec->__exception_text_start = 
-		symbol_value("__exception_text_start");
-	machdep->machspec->__exception_text_end = 
-		symbol_value("__exception_text_end");
+	if ((sp1 = kernel_symbol_search("__exception_text_start")) &&
+	    (sp2 = kernel_symbol_search("__exception_text_end"))) {
+		machdep->machspec->__exception_text_start = sp1->value;
+		machdep->machspec->__exception_text_end = sp2->value;
+	}
 	if ((sp1 = kernel_symbol_search("__irqentry_text_start")) &&
 	    (sp2 = kernel_symbol_search("__irqentry_text_end"))) {
 		machdep->machspec->__irqentry_text_start = sp1->value; 
@@ -1856,19 +1857,37 @@ arm64_eframe_search(struct bt_info *bt)
 	return count;
 }
 
+static char *arm64_exception_functions[] = {
+        "do_undefinstr",
+        "do_sysinstr",
+        "do_debug_exception",
+        "do_mem_abort",
+        "do_el0_irq_bp_hardening",
+        "do_sp_pc_abort",
+        NULL
+};
+
 static int
 arm64_in_exception_text(ulong ptr)
 {
 	struct machine_specific *ms = machdep->machspec;
-
-	if ((ptr >= ms->__exception_text_start) &&
-	    (ptr < ms->__exception_text_end))
-		return TRUE;
+	char *name, **func;
 
 	if (ms->__irqentry_text_start && ms->__irqentry_text_end &&
 	    ((ptr >= ms->__irqentry_text_start) && 
 	    (ptr < ms->__irqentry_text_end)))
 		return TRUE;
+
+	if (ms->__exception_text_start && ms->__exception_text_end) {
+		if ((ptr >= ms->__exception_text_start) &&
+		    (ptr < ms->__exception_text_end))
+			return TRUE;
+	} else if ((name = closest_symbol(ptr))) {  /* Linux 5.5 and later */
+		for (func = &arm64_exception_functions[0]; *func; func++) {
+			if (STREQ(name, *func))
+				return TRUE;
+		}
+	}
 
 	return FALSE;
 }
