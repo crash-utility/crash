@@ -1,8 +1,8 @@
 /* help.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2019 David Anderson
- * Copyright (C) 2002-2019 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2020 David Anderson
+ * Copyright (C) 2002-2020 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -8269,7 +8269,7 @@ display_version(void)
 static 
 char *version_info[] = {
 
-"Copyright (C) 2002-2019  Red Hat, Inc.",
+"Copyright (C) 2002-2020  Red Hat, Inc.",
 "Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation", 
 "Copyright (C) 1999-2006  Hewlett-Packard Co",
 "Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited",
