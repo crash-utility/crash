@@ -1,8 +1,8 @@
 /* symbols.c - core analysis suite
  *
  * Copyright (C) 1999, 2000, 2001, 2002 Mission Critical Linux, Inc.
- * Copyright (C) 2002-2019 David Anderson
- * Copyright (C) 2002-2019 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2002-2020 David Anderson
+ * Copyright (C) 2002-2020 Red Hat, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -597,6 +597,11 @@ kaslr_init(void)
 	    !machine_type("S390X")) || (kt->flags & RELOC_SET))
 		return;
 
+	if ((string = pc->read_vmcoreinfo("SYMBOL(_stext)"))) {
+		kt->vmcoreinfo._stext_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
+		free(string);
+	}
+
 	/*
 	 *  --kaslr=auto
 	 */
@@ -609,8 +614,7 @@ kaslr_init(void)
 		st->_stext_vmlinux = UNINITIALIZED;
 	}
 
-	if (machine_type("S390X") &&  /* Linux 5.2 */
-	    (symbol_value_from_proc_kallsyms("__kaslr_offset") != BADVAL)) {
+	if (machine_type("S390X")) { 
 		kt->flags2 |= (RELOC_AUTO|KASLR);
 		st->_stext_vmlinux = UNINITIALIZED;
 	}
@@ -622,12 +626,6 @@ kaslr_init(void)
 			kt->flags2 |= KASLR_CHECK;
 		}
 	} else if (KDUMP_DUMPFILE() || DISKDUMP_DUMPFILE()) {
-		if ((string = pc->read_vmcoreinfo("SYMBOL(_stext)"))) {
-			kt->vmcoreinfo._stext_SYMBOL =
-				htol(string, RETURN_ON_ERROR, NULL);
-			free(string);
-		}
-
 		/* Linux 3.14 */
 		if ((string = pc->read_vmcoreinfo("KERNELOFFSET"))) {
 			free(string);
