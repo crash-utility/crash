@@ -6267,6 +6267,8 @@ void get_s390_panicmsg(char *);
 /*
  *  s390x.c
  */
+ulong get_stext_relocated_s390x(void);
+
 #ifdef S390X
 void s390x_init(int);
 void s390x_dump_machdep_table(ulong);

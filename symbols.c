@@ -614,7 +614,9 @@ kaslr_init(void)
 		st->_stext_vmlinux = UNINITIALIZED;
 	}
 
-	if (machine_type("S390X")) { 
+	if (machine_type("S390X")) {
+		if (!kt->vmcoreinfo._stext_SYMBOL)
+			kt->vmcoreinfo._stext_SYMBOL = get_stext_relocated_s390x();
 		kt->flags2 |= (RELOC_AUTO|KASLR);
 		st->_stext_vmlinux = UNINITIALIZED;
 	}

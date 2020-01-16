@@ -455,6 +455,78 @@ static void s390x_check_live(void)
 		pc->flags2 |= LIVE_DUMP;
 }
 
+static char *
+vmcoreinfo_read_string_s390x(const char *vmcoreinfo, const char *key)
+{
+	char *value_string = NULL;
+	size_t value_length;
+	char keybuf[128];
+	char *p1, *p2;
+
+	sprintf(keybuf, "%s=", key);
+
+	if ((p1 = strstr(vmcoreinfo, keybuf))) {
+		p2 = p1 + strlen(keybuf);
+		p1 = strstr(p2, "\n");
+		value_length = p1-p2;
+		value_string = calloc(value_length + 1, sizeof(char));
+		strncpy(value_string, p2, value_length);
+		value_string[value_length] = NULLCHAR;
+	}
+
+	return value_string;
+}
+
+/*
+ * Read _stext symbol from vmcoreinfo when lowcore vmcoreinfo pointer is present
+ * in the dump (can be relevant for s390 and lkcd dump formats).
+ */
+ulong get_stext_relocated_s390x(void)
+{
+	char *_stext_string, *vmcoreinfo;
+	Elf64_Nhdr note;
+	char str[128];
+	ulong val = 0;
+	ulong addr;
+
+	if (!readmem(S390X_LC_VMCORE_INFO, PHYSADDR, &addr,
+		    sizeof(addr), "s390x vmcoreinfo ptr",
+		    QUIET|RETURN_ON_ERROR))
+		return 0;
+	if (addr == 0 ||  addr & 0x1)
+		return 0;
+	if (!readmem(addr, PHYSADDR, &note,
+		     sizeof(note), "Elf64_Nhdr vmcoreinfo",
+		     QUIET|RETURN_ON_ERROR))
+		return 0;
+	memset(str, 0, sizeof(str));
+	if (!readmem(addr + sizeof(note), PHYSADDR, str,
+		     note.n_namesz, "VMCOREINFO",
+		     QUIET|RETURN_ON_ERROR))
+		return 0;
+	if (memcmp(str, "VMCOREINFO", sizeof("VMCOREINFO")) != 0)
+		return 0;
+	if ((vmcoreinfo = malloc(note.n_descsz + 1)) == NULL) {
+		error(INFO, "s390x: cannot malloc vmcoreinfo buffer\n");
+		return 0;
+	}
+	addr = addr + sizeof(note) + note.n_namesz + 1;
+	if (!readmem(addr, PHYSADDR, vmcoreinfo,
+		     note.n_descsz, "s390x vmcoreinfo",
+		     QUIET|RETURN_ON_ERROR)) {
+		free(vmcoreinfo);
+		return 0;
+	}
+	vmcoreinfo[note.n_descsz] = 0;
+	if ((_stext_string = vmcoreinfo_read_string_s390x(vmcoreinfo,
+							  "SYMBOL(_stext)"))) {
+		val = htol(_stext_string, RETURN_ON_ERROR, NULL);
+		free(_stext_string);
+	}
+	free(vmcoreinfo);
+	return val;
+}
+
 /*
  *  Do all necessary machine-specific setup here.  This is called several
  *  times during initialization.
@@ -1948,4 +2020,10 @@ s390x_get_kvaddr_ranges(struct vaddr_range *vrp)
 
 	return cnt;
 }
-#endif 
+#else
+#include "defs.h"
+ulong get_stext_relocated_s390x(void)
+{
+	return 0;
+}
+#endif  /* S390X */
