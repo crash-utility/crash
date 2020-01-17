@@ -597,7 +597,8 @@ kaslr_init(void)
 	    !machine_type("S390X")) || (kt->flags & RELOC_SET))
 		return;
 
-	if ((string = pc->read_vmcoreinfo("SYMBOL(_stext)"))) {
+	if (!kt->vmcoreinfo._stext_SYMBOL &&
+	    (string = pc->read_vmcoreinfo("SYMBOL(_stext)"))) {
 		kt->vmcoreinfo._stext_SYMBOL = htol(string, RETURN_ON_ERROR, NULL);
 		free(string);
 	}
@@ -615,8 +616,6 @@ kaslr_init(void)
 	}
 
 	if (machine_type("S390X")) {
-		if (!kt->vmcoreinfo._stext_SYMBOL)
-			kt->vmcoreinfo._stext_SYMBOL = get_stext_relocated_s390x();
 		kt->flags2 |= (RELOC_AUTO|KASLR);
 		st->_stext_vmlinux = UNINITIALIZED;
 	}

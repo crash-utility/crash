@@ -478,53 +478,72 @@ vmcoreinfo_read_string_s390x(const char *vmcoreinfo, const char *key)
 }
 
 /*
- * Read _stext symbol from vmcoreinfo when lowcore vmcoreinfo pointer is present
- * in the dump (can be relevant for s390 and lkcd dump formats).
+ * Check the value in well-known lowcore location and process it as either
+ * an explicit KASLR offset (early dump case) or as vmcoreinfo pointer to
+ * read the relocated _stext symbol value (important for s390 and lkcd dump
+ * formats).
  */
-ulong get_stext_relocated_s390x(void)
+static void s390x_check_kaslr(void)
 {
 	char *_stext_string, *vmcoreinfo;
 	Elf64_Nhdr note;
 	char str[128];
-	ulong val = 0;
 	ulong addr;
 
+	/* Read the value from well-known lowcore location*/
 	if (!readmem(S390X_LC_VMCORE_INFO, PHYSADDR, &addr,
 		    sizeof(addr), "s390x vmcoreinfo ptr",
 		    QUIET|RETURN_ON_ERROR))
-		return 0;
-	if (addr == 0 ||  addr & 0x1)
-		return 0;
+		return;
+	if (addr == 0)
+		return;
+	/* Check for explicit kaslr offset flag */
+	if (addr & 0x1UL) {
+		/* Drop the last bit to get an offset value */
+		addr &= ~(0x1UL);
+		/* Make sure the offset is aligned by 0x1000 */
+		if (addr && !(addr & 0xfff)) {
+					kt->relocate = addr * (-1);
+					kt->flags |= RELOC_SET;
+					kt->flags2 |= KASLR;
+		}
+		return;
+	}
+	/* Use the addr value as vmcoreinfo pointer */
 	if (!readmem(addr, PHYSADDR, &note,
 		     sizeof(note), "Elf64_Nhdr vmcoreinfo",
 		     QUIET|RETURN_ON_ERROR))
-		return 0;
+		return;
 	memset(str, 0, sizeof(str));
 	if (!readmem(addr + sizeof(note), PHYSADDR, str,
 		     note.n_namesz, "VMCOREINFO",
 		     QUIET|RETURN_ON_ERROR))
-		return 0;
+		return;
 	if (memcmp(str, "VMCOREINFO", sizeof("VMCOREINFO")) != 0)
-		return 0;
+		return;
 	if ((vmcoreinfo = malloc(note.n_descsz + 1)) == NULL) {
-		error(INFO, "s390x: cannot malloc vmcoreinfo buffer\n");
-		return 0;
+		error(INFO, "s390x_check_kaslr: cannot malloc vmcoreinfo buffer\n");
+		return;
 	}
 	addr = addr + sizeof(note) + note.n_namesz + 1;
 	if (!readmem(addr, PHYSADDR, vmcoreinfo,
 		     note.n_descsz, "s390x vmcoreinfo",
 		     QUIET|RETURN_ON_ERROR)) {
 		free(vmcoreinfo);
-		return 0;
+		return;
 	}
-	vmcoreinfo[note.n_descsz] = 0;
+	vmcoreinfo[note.n_descsz] = NULLCHAR;
+	/*
+	 * Read relocated _stext symbol value and store it in the kernel_table
+	 * for further processing within derive_kaslr_offset().
+	 */
 	if ((_stext_string = vmcoreinfo_read_string_s390x(vmcoreinfo,
 							  "SYMBOL(_stext)"))) {
-		val = htol(_stext_string, RETURN_ON_ERROR, NULL);
+		kt->vmcoreinfo._stext_SYMBOL = htol(_stext_string,
+						    RETURN_ON_ERROR, NULL);
 		free(_stext_string);
 	}
 	free(vmcoreinfo);
-	return val;
 }
 
 /*
@@ -534,8 +553,6 @@ ulong get_stext_relocated_s390x(void)
 void
 s390x_init(int when)
 {
-	ulong s390x_lc_kaslr;
-
 	switch (when)
 	{
 	case SETUP_ENV:
@@ -562,24 +579,8 @@ s390x_init(int when)
 		machdep->verify_paddr = generic_verify_paddr;
 		machdep->get_kvaddr_ranges = s390x_get_kvaddr_ranges;
 		machdep->ptrs_per_pgd = PTRS_PER_PGD;
-		if (DUMPFILE() && !(kt->flags & RELOC_SET)) {
-			/* Read the value from well-known lowcore location*/
-			if (readmem(S390X_LC_VMCORE_INFO, PHYSADDR, &s390x_lc_kaslr,
-			    sizeof(s390x_lc_kaslr), "s390x_lc_kaslr",
-			    QUIET|RETURN_ON_ERROR)) {
-				/* Check for explicit kaslr offset flag */
-				if (s390x_lc_kaslr & 0x1UL) {
-					/* Drop the last bit to get an offset value */
-					s390x_lc_kaslr &= ~(0x1UL);
-					/* Make sure the offset is aligned by 0x1000 */
-					if (s390x_lc_kaslr && !(s390x_lc_kaslr & 0xfff)) {
-						kt->relocate = s390x_lc_kaslr * (-1);
-						kt->flags |= RELOC_SET;
-						kt->flags2 |= KASLR;
-					}
-				}
-			}
-		}
+		if (DUMPFILE() && !(kt->flags & RELOC_SET))
+			s390x_check_kaslr();
 		break;
 
 	case PRE_GDB:
@@ -2019,11 +2020,5 @@ s390x_get_kvaddr_ranges(struct vaddr_range *vrp)
 	}
 
 	return cnt;
-}
-#else
-#include "defs.h"
-ulong get_stext_relocated_s390x(void)
-{
-	return 0;
 }
 #endif  /* S390X */
