@@ -2471,3 +2471,33 @@ diff -up gdb-7.6/opcodes/configure.orig gdb-7.6/opcodes/configure
  #else
  # error "!__i386__ && !__x86_64__"
  #endif
+--- gdb-7.6/gdb/features/aarch64.c.orig
++++ gdb-7.6/gdb/features/aarch64.c
+@@ -5,7 +5,6 @@
+ #include "osabi.h"
+ #include "target-descriptions.h"
+ 
+-struct target_desc *tdesc_aarch64;
+ static void
+ initialize_tdesc_aarch64 (void)
+ {
+--- gdb-7.6/gdb/aarch64-linux-nat.c.orig
++++ gdb-7.6/gdb/aarch64-linux-nat.c
+@@ -37,6 +37,7 @@
+ 
+ #include "gregset.h"
+ 
++extern struct target_desc *tdesc_aarch64;
+ #include "features/aarch64.c"
+ 
+ /* Defines ps_err_e, struct ps_prochandle.  */
+--- gdb-7.6/gdb/aarch64-tdep.c.orig
++++ gdb-7.6/gdb/aarch64-tdep.c
+@@ -52,6 +52,7 @@
+ #include "gdb_assert.h"
+ #include "vec.h"
+ 
++struct target_desc *tdesc_aarch64;
+ #include "features/aarch64.c"
+ #include "features/aarch64-without-fpu.c"
+ 
