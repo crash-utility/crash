@@ -5278,8 +5278,12 @@ dump_variable_length_record_log(int msg_flags)
 		idx = log_next(idx, logbuf);
 
 		if (idx >= log_buf_len) {
-			error(INFO, "\ninvalid log_buf entry encountered\n");
-			break;
+			if (log_first_idx > log_next_idx)
+				idx = 0;
+			else {
+				error(INFO, "\ninvalid log_buf entry encountered\n");
+				break;
+			}
 		}
 
 		if (CRASHDEBUG(1) && (idx == log_next_idx))
