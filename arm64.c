@@ -3839,7 +3839,8 @@ arm64_IS_VMALLOC_ADDR(ulong vaddr)
 
         return ((vaddr >= ms->vmalloc_start_addr && vaddr <= ms->vmalloc_end) ||
                 ((machdep->flags & VMEMMAP) &&
-                 (vaddr >= ms->vmemmap_vaddr && vaddr <= ms->vmemmap_end)) ||
+                ((vaddr >= ms->vmemmap_vaddr && vaddr <= ms->vmemmap_end) ||
+                (vaddr >= ms->vmalloc_end && vaddr <= ms->vmemmap_vaddr))) ||
                 (vaddr >= ms->modules_vaddr && vaddr <= ms->modules_end));
 }
 
