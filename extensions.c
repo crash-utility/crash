@@ -20,10 +20,13 @@
 
 static int in_extensions_library(char *, char *);
 static char *get_extensions_directory(char *);
+static void show_all_extensions(void);
+static void show_extensions(char *);
 
-#define DUMP_EXTENSIONS   (0)
-#define LOAD_EXTENSION    (1)
-#define UNLOAD_EXTENSION  (2)
+#define DUMP_EXTENSIONS        (0)
+#define LOAD_EXTENSION         (1)
+#define UNLOAD_EXTENSION       (2)
+#define SHOW_ALL_EXTENSIONS    (4)
 
 /*
  *  Load, unload, or list the extension libaries.
@@ -36,13 +39,29 @@ cmd_extend(void)
 
 	flag = DUMP_EXTENSIONS;
 
-        while ((c = getopt(argcnt, args, "lu")) != EOF) {
+        while ((c = getopt(argcnt, args, "lus")) != EOF) {
                 switch(c)
                 {
+		case 's':
+			if (flag & UNLOAD_EXTENSION) {
+				error(INFO,
+					"-s and -u are mutually exclusive\n");
+				argerrs++;
+			}else if (flag & LOAD_EXTENSION) {
+				error(INFO,
+					"-s and -l are mutually exclusive\n");
+				argerrs++;
+			} else
+				flag |= SHOW_ALL_EXTENSIONS;
+			break;
 		case 'l':
 			if (flag & UNLOAD_EXTENSION) {
 				error(INFO, 
 					"-l and -u are mutually exclusive\n");
+				argerrs++;
+			} else if (flag & SHOW_ALL_EXTENSIONS) {
+				error(INFO, 
+					"-l and -s are mutually exclusive\n");
 				argerrs++;
 			} else
 				flag |= LOAD_EXTENSION;
@@ -53,6 +72,10 @@ cmd_extend(void)
                                 error(INFO, 
                                         "-u and -l are mutually exclusive\n");
                                 argerrs++;
+			} else if (flag & SHOW_ALL_EXTENSIONS) {
+				error(INFO, 
+					"-u and -s are mutually exclusive\n");
+				argerrs++;
                         } else
                                 flag |= UNLOAD_EXTENSION;
 			break;
@@ -100,6 +123,11 @@ cmd_extend(void)
 			optind++;
 		}
 		break;
+
+	case SHOW_ALL_EXTENSIONS:
+		show_all_extensions();
+		break;
+
 	}
 }
 
@@ -182,6 +210,45 @@ dump_extension_table(int verbose)
 	} while ((ext = ext->prev));
 }
 
+static void
+show_extensions(char *dir) {
+	DIR *dirp;
+	struct dirent *dp;
+	char filename[BUFSIZE*2];
+
+        dirp = opendir(dir);
+	if (!dirp)
+		return;
+
+        for (dp = readdir(dirp); dp != NULL; dp = readdir(dirp)) {
+		sprintf(filename, "%s%s%s", dir,
+			LASTCHAR(dir) == '/' ? "" : "/",
+			dp->d_name);
+
+		if (!is_shared_object(filename))
+			continue;
+		fprintf(fp, "%s\n", filename);
+	}
+
+	closedir(dirp);
+}
+
+static void
+show_all_extensions(void)
+{
+	char *dir;
+
+	show_extensions("./");
+
+	if ((dir = getenv("CRASH_EXTENSIONS")))
+		show_extensions(dir);
+
+	if (BITS64())
+		show_extensions("/usr/lib64/crash/extensions/");
+
+	show_extensions("/usr/lib/crash/extensions/");
+	show_extensions("./extensions/");
+}
 
 /*
  *  Load an extension library.
