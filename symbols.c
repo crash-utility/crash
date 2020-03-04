@@ -10479,6 +10479,12 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(bpf_map_name));
 	fprintf(fp, "                  bpf_map_user: %ld\n",
 		OFFSET(bpf_map_user));
+	fprintf(fp, "                bpf_map_memory: %ld\n",
+		OFFSET(bpf_map_memory));
+	fprintf(fp, "          bpf_map_memory_pages: %ld\n",
+		OFFSET(bpf_map_memory_pages));
+	fprintf(fp, "           bpf_map_memory_user: %ld\n",
+		OFFSET(bpf_map_memory_user));
 
 	fprintf(fp, "     bpf_prog_aux_used_map_cnt: %ld\n",
 		OFFSET(bpf_prog_aux_used_map_cnt));

@@ -202,6 +202,13 @@ bpf_init(struct bpf_info *bpf)
 		MEMBER_OFFSET_INIT(bpf_map_user, "bpf_map", "user");
 		MEMBER_OFFSET_INIT(user_struct_uid, "user_struct", "uid");
 
+		/* Linux 5.3 */
+		MEMBER_OFFSET_INIT(bpf_map_memory, "bpf_map", "memory");
+		if (VALID_MEMBER(bpf_map_memory)) {
+			MEMBER_OFFSET_INIT(bpf_map_memory_pages, "bpf_map_memory", "pages");
+			MEMBER_OFFSET_INIT(bpf_map_memory_user, "bpf_map_memory", "user");
+		}
+
 		if (!bpf_type_size_init()) {
 			bpf->status = FALSE;
 			command_not_supported();
@@ -576,7 +583,11 @@ do_map_only:
 				fprintf(fp, "(unknown)");
 
 			fprintf(fp, "  MEMLOCK: ");
-			if (VALID_MEMBER(bpf_map_pages)) {
+			if (VALID_MEMBER(bpf_map_memory) && VALID_MEMBER(bpf_map_memory_pages)) {
+				map_pages = UINT(bpf->bpf_map_buf + OFFSET(bpf_map_memory)
+						+ OFFSET(bpf_map_memory_pages));
+				fprintf(fp, "%d\n", map_pages * PAGESIZE());
+			} else if (VALID_MEMBER(bpf_map_pages)) {
 				map_pages = UINT(bpf->bpf_map_buf + OFFSET(bpf_map_pages));
 				fprintf(fp, "%d\n", map_pages * PAGESIZE());
 			} else
@@ -594,8 +605,15 @@ do_map_only:
 				fprintf(fp, "(unknown)\n");
 
 			fprintf(fp, "  UID: ");
-			if (VALID_MEMBER(bpf_map_user) && VALID_MEMBER(user_struct_uid)) {
+			if (VALID_MEMBER(bpf_map_memory) && VALID_MEMBER(bpf_map_memory_user))
+				user = ULONG(bpf->bpf_map_buf + OFFSET(bpf_map_memory)
+						+ OFFSET(bpf_map_memory_user));
+			else if (VALID_MEMBER(bpf_map_user))
 				user = ULONG(bpf->bpf_map_buf + OFFSET(bpf_map_user));
+			else
+				user = 0;
+
+			if (user && VALID_MEMBER(user_struct_uid)) {
 				if (readmem(user + OFFSET(user_struct_uid), KVADDR, &uid, sizeof(uint), 
 				    "user_struct.uid", QUIET|RETURN_ON_ERROR))
 					fprintf(fp, "%d\n", uid);

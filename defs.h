@@ -2075,6 +2075,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long device_private_knode_class;
 	long timerqueue_head_rb_root;
 	long rb_root_cached_rb_leftmost;
+	long bpf_map_memory;
+	long bpf_map_memory_pages;
+	long bpf_map_memory_user;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
