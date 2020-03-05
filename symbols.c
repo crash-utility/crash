@@ -10494,6 +10494,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(bpf_prog_aux_load_time));
 	fprintf(fp, "             bpf_prog_aux_user: %ld\n",
 		OFFSET(bpf_prog_aux_user));
+	fprintf(fp, "             bpf_prog_aux_name: %ld\n",
+		OFFSET(bpf_prog_aux_name));
 	fprintf(fp, "               user_struct_uid: %ld\n",
 		OFFSET(user_struct_uid));
 

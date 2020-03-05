@@ -194,6 +194,7 @@ bpf_init(struct bpf_info *bpf)
 		MEMBER_OFFSET_INIT(bpf_prog_pages, "bpf_prog", "pages");
 		MEMBER_OFFSET_INIT(bpf_prog_aux_load_time, "bpf_prog_aux", "load_time");
 		MEMBER_OFFSET_INIT(bpf_prog_aux_user, "bpf_prog_aux", "user");
+		MEMBER_OFFSET_INIT(bpf_prog_aux_name, "bpf_prog_aux", "name");
 		MEMBER_OFFSET_INIT(bpf_map_key_size, "bpf_map", "key_size");
 		MEMBER_OFFSET_INIT(bpf_map_value_size, "bpf_map", "value_size");
 		MEMBER_OFFSET_INIT(bpf_map_max_entries, "bpf_map", "max_entries");
@@ -451,6 +452,17 @@ do_bpf(ulong flags, ulong prog_id, ulong map_id, int radix)
 
 			bpf_prog_gpl_compatible(buf1, (ulong)bpf->proglist[i].value);
 			fprintf(fp, "     GPL_COMPATIBLE: %s", buf1);
+
+			fprintf(fp, "  NAME: ");
+			if (VALID_MEMBER(bpf_prog_aux_name)) {
+				BCOPY(&bpf->bpf_prog_aux_buf[OFFSET(bpf_prog_aux_name)], buf1, 16);
+				buf1[16] = NULLCHAR;
+				if (strlen(buf1))
+					fprintf(fp, "\"%s\"", buf1);
+				else
+					fprintf(fp, "(unused)");
+			} else
+				fprintf(fp, "(unknown)");
 
 			fprintf(fp, "  UID: ");
 			if (VALID_MEMBER(bpf_prog_aux_user) && VALID_MEMBER(user_struct_uid)) {

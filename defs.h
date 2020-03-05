@@ -2078,6 +2078,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long bpf_map_memory;
 	long bpf_map_memory_pages;
 	long bpf_map_memory_user;
+	long bpf_prog_aux_name;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
