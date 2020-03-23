@@ -233,7 +233,7 @@ clean_diskdump_data(void)
 }
 
 static inline int 
-get_bit(char *map, int byte, int bit)
+get_bit(char *map, unsigned long byte, int bit)
 {
 	return map[byte] & (1<<bit);
 }
@@ -694,7 +694,7 @@ restart:
 		dd->max_mapnr = header->max_mapnr;
 
 	/* read memory bitmap */
-	bitmap_len = block_size * header->bitmap_blocks;
+	bitmap_len = (off_t)block_size * header->bitmap_blocks;
 	dd->bitmap_len = bitmap_len;
 
 	offset = (off_t)block_size * (1 + header->sub_hdr_size);
@@ -744,7 +744,7 @@ restart:
 		memcpy(dd->dumpable_bitmap, dd->bitmap, bitmap_len);
 
 	dd->data_offset
-		= (1 + header->sub_hdr_size + header->bitmap_blocks)
+		= (1UL + header->sub_hdr_size + header->bitmap_blocks)
 		* header->block_size;
 
 	dd->header = header;
