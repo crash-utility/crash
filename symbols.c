@@ -145,6 +145,7 @@ static void print_union(char *, ulong);
 static void dump_datatype_member(FILE *, struct datatype_member *);
 static void dump_datatype_flags(ulong, FILE *);
 static long anon_member_offset(char *, char *);
+static long anon_member_size(char *, char *);
 static int gdb_whatis(char *);
 static void do_datatype_declaration(struct datatype_member *, ulong);
 static int member_to_datatype(char *, struct datatype_member *, ulong);
@@ -5604,13 +5605,16 @@ long
 datatype_info(char *name, char *member, struct datatype_member *dm)
 {
 	struct gnu_request *req;
-        long offset, size, member_size;
+	long offset, size, member_size;
 	int member_typecode;
-        ulong type_found;
+	ulong type_found;
 	char buf[BUFSIZE];
 
-        if (dm == ANON_MEMBER_OFFSET_REQUEST)
+	if (dm == ANON_MEMBER_OFFSET_REQUEST)
 		return anon_member_offset(name, member);
+
+	if (dm == ANON_MEMBER_SIZE_REQUEST)
+		return anon_member_size(name, member);
 
 	strcpy(buf, name);
 
@@ -5819,6 +5823,46 @@ retry:
 	if ((value == -1) && (type == STRUCT_REQUEST)) {
 		type = UNION_REQUEST;
 		sprintf(buf, "printf \"%%p\", &((union %s *)0x0)->%s", name, member);
+		rewind(pc->tmpfile2);
+		goto retry;
+	}
+
+	close_tmpfile2();
+
+	return value;
+}
+
+/*
+ *  Determine the size of a member in an anonymous union
+ *  in a structure or union.
+ */
+static long
+anon_member_size(char *name, char *member)
+{
+	char buf[BUFSIZE];
+	ulong value;
+	int type;
+
+	value = -1;
+	type = STRUCT_REQUEST;
+	sprintf(buf, "printf \"%%ld\", (u64)(&((struct %s*)0)->%s + 1) - (u64)&((struct %s*)0)->%s",
+		name, member, name, member);
+	open_tmpfile2();
+retry:
+	if (gdb_pass_through(buf, pc->tmpfile2, GNU_RETURN_ON_ERROR)) {
+		rewind(pc->tmpfile2);
+		if (fgets(buf, BUFSIZE, pc->tmpfile2)) {
+			if (hexadecimal(buf, 0))
+				value = htol(buf, RETURN_ON_ERROR|QUIET, NULL);
+			else if (STRNEQ(buf, "(nil)"))
+				value = 0;
+		}
+	}
+
+	if ((value == -1) && (type == STRUCT_REQUEST)) {
+		type = UNION_REQUEST;
+		sprintf(buf, "printf \"%%ld\", (u64)(&((union %s*)0)->%s + 1) - (u64)&((union %s*)0)->%s",
+			name, member, name, member);
 		rewind(pc->tmpfile2);
 		goto retry;
 	}
@@ -6617,6 +6661,8 @@ do_datatype_addr(struct datatype_member *dm, ulong addr, int count,
 		i = 0;
         	do {
                 	if (argc_members) {
+				if (argc_members > 1 && flags & SHOW_RAW_DATA)
+					error(FATAL, "only one structure member allowed with -r\n");
 				/* This call works fine with fields
 				 * of the second, third, ... levels.
 				 * There is no need to fix it
@@ -6625,9 +6671,6 @@ do_datatype_addr(struct datatype_member *dm, ulong addr, int count,
 							ANON_MEMBER_QUERY))
 					error(FATAL, "invalid data structure reference: %s.%s\n",
 					      dm->name, memberlist[i]);
-				if (flags & SHOW_RAW_DATA)
-        				error(FATAL, 
-					      "member-specific output not allowed with -r\n");
 			}
 
 			/*
@@ -6636,9 +6679,18 @@ do_datatype_addr(struct datatype_member *dm, ulong addr, int count,
 			if (flags & SHOW_OFFSET) {
 				dm->vaddr = addr;
 				do_datatype_declaration(dm, flags | (dm->flags & TYPEDEF));
-			} else if (flags & SHOW_RAW_DATA)
+			} else if (flags & SHOW_RAW_DATA) {
+				if (dm->member) {
+					addr += dm->member_offset;
+					len = MEMBER_SIZE(dm->name, dm->member);
+					if (len < 0)
+						len = ANON_MEMBER_SIZE(dm->name, dm->member);
+					if (len < 0)
+						error(FATAL, "invalid data structure reference: %s.%s\n",
+						      dm->name, dm->member);
+				}
 				raw_data_dump(addr, len, flags & STRUCT_VERBOSE);
-			else if ((flags & DEREF_POINTERS) && !dm->member) {
+			} else if ((flags & DEREF_POINTERS) && !dm->member) {
 				print_struct_with_dereference(addr, dm, flags);
                 	} else {
 	                        if (dm->member)
