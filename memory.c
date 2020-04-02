@@ -2113,6 +2113,7 @@ raw_data_dump(ulong addr, long count, int symbolic)
 	long wordcnt;
 	ulonglong address;
 	int memtype;
+	ulong flags = HEXADECIMAL;
 
 	switch (sizeof(long))
 	{
@@ -2132,6 +2133,22 @@ raw_data_dump(ulong addr, long count, int symbolic)
 		break;
 	}
 
+	switch (count)
+	{
+	case SIZEOF_8BIT:
+		flags |= DISPLAY_8;
+		break;
+	case SIZEOF_16BIT:
+		flags |= DISPLAY_16;
+		break;
+	case SIZEOF_32BIT:
+		flags |= DISPLAY_32;
+		break;
+	default:
+		flags |= DISPLAY_DEFAULT;
+		break;
+	}
+
 	if (pc->curcmd_flags & MEMTYPE_FILEADDR) {
 		address = pc->curcmd_private;
 		memtype = FILEADDR;
@@ -2144,7 +2161,7 @@ raw_data_dump(ulong addr, long count, int symbolic)
 	}
 
 	display_memory(address, wordcnt, 
- 	    HEXADECIMAL|DISPLAY_DEFAULT|(symbolic ? SYMBOLIC : ASCII_ENDLINE),
+		flags|(symbolic ? SYMBOLIC : ASCII_ENDLINE),
 		memtype, NULL);
 }
 
