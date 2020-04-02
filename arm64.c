@@ -747,6 +747,8 @@ arm64_parse_machdep_arg_l(char *argstring, char *param, ulong *value)
 
 		if (STRNEQ(argstring, "max_physmem_bits")) {
 			*value = dtol(p, flags, &err);
+		} else if (STRNEQ(argstring, "vabits_actual")) {
+			*value = dtol(p, flags, &err);
 		} else if (megabytes) {
 			*value = dtol(p, flags, &err);
 			if (!err)
@@ -815,6 +817,12 @@ arm64_parse_cmdline_args(void)
 				error(NOTE,
 					"setting max_physmem_bits to: %ld\n\n",
 					machdep->max_physmem_bits);
+				continue;
+			} else if (arm64_parse_machdep_arg_l(arglist[i], "vabits_actual",
+			        &machdep->machspec->VA_BITS_ACTUAL)) {
+				error(NOTE,
+					"setting vabits_actual to: %ld\n\n",
+					machdep->machspec->VA_BITS_ACTUAL);
 				continue;
 			}
 
@@ -3889,6 +3897,9 @@ arm64_calc_VA_BITS(void)
 				free(string);
 				machdep->machspec->VA_BITS_ACTUAL = value;
 				machdep->machspec->VA_BITS = value;
+				machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
+			} else if (machdep->machspec->VA_BITS_ACTUAL) {
+				machdep->machspec->VA_BITS = machdep->machspec->VA_BITS_ACTUAL;
 				machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
 			} else
 				error(FATAL, "cannot determine VA_BITS_ACTUAL\n");

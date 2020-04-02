@@ -181,6 +181,7 @@ char *program_usage_info[] = {
     "      phys_offset=<physical-address>",
     "      kimage_voffset=<kimage_voffset-value>",
     "      max_physmem_bits=<value>",
+    "      vabits_actual=<value>",
     "    X86:",
     "      page_offset=<CONFIG_PAGE_OFFSET-value>",
     "",
