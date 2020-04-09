@@ -19244,7 +19244,7 @@ count_free_objects(struct meminfo *si, ulong freelist)
 static ulong
 freelist_ptr(struct meminfo *si, ulong ptr, ulong ptr_addr)
 {
-	if (si->random)
+	if (VALID_MEMBER(kmem_cache_random))
 		/* CONFIG_SLAB_FREELIST_HARDENED */
 		return (ptr ^ si->random ^ ptr_addr);
 	else
