@@ -2079,6 +2079,15 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long bpf_map_memory_pages;
 	long bpf_map_memory_user;
 	long bpf_prog_aux_name;
+	long page_private;
+	long swap_info_struct_bdev;
+	long zram_mempoll;
+	long zram_compressor;
+	long zram_table_flag;
+	long zspoll_size_class;
+	long size_class_size;
+	long gendisk_private_data;
+	long zram_table_entry;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2236,6 +2245,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long bpf_insn;
 	long xarray;
 	long xa_node;
+	long zram_table_entry;
 };
 
 struct array_table {
@@ -5292,7 +5302,7 @@ int in_user_stack(ulong, ulong);
 int dump_inode_page(ulong);
 ulong valid_section_nr(ulong);
 void display_memory_from_file_offset(ulonglong, long, void *);
-
+void swap_info_init(void);
 
 /*
  *  filesys.c 
@@ -6469,6 +6479,32 @@ int diskdump_kaslr_check(void);
 QEMUCPUState *diskdump_get_qemucpustate(int);
 void diskdump_device_dump_info(FILE *);
 void diskdump_device_dump_extract(int, char *, FILE *);
+/*support for zram*/
+ulong try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong vaddr);
+#ifdef LZO
+#define OBJ_TAG_BITS     1
+#define _PFN_BITS        (MAX_PHYSMEM_BITS() - PAGESHIFT())
+#define OBJ_INDEX_BITS   (BITS_PER_LONG - _PFN_BITS - OBJ_TAG_BITS)
+#define OBJ_INDEX_MASK   ((1 << OBJ_INDEX_BITS) - 1)
+#define ZS_HANDLE_SIZE   (sizeof(unsigned long))
+#define ZSPAGE_MAGIC     0x58
+#define SWAP_ADDRESS_SPACE_SHIFT	14
+#define SECTOR_SHIFT     9
+#define SECTORS_PER_PAGE_SHIFT  (PAGESHIFT() - SECTOR_SHIFT)
+#define SECTORS_PER_PAGE        (1 << SECTORS_PER_PAGE_SHIFT)
+#define ZRAM_FLAG_SHIFT         (1<<24)
+#define ZRAM_FLAG_SAME_BIT      (1<<25)
+struct zspage {
+    struct {
+        unsigned int fullness : 2;
+        unsigned int class : 9;
+        unsigned int isolated : 3;
+        unsigned int magic : 8;
+    };
+    unsigned int inuse;
+    unsigned int freeobj;
+};
+#endif
 
 /*
  * makedumpfile.c

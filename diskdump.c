@@ -2584,3 +2584,236 @@ diskdump_device_dump_info(FILE *ofp)
 		devdump_info(dd->nt_vmcoredd_array[i], offset, ofp);
 	}
 }
+
+#ifdef LZO
+static unsigned char *
+zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
+{
+	ulong obj, off, class, page, zspage;
+	struct zspage zspage_s;
+	physaddr_t paddr;
+	unsigned int obj_idx, class_idx, size;
+	ulong pages[2], sizes[2];
+
+	readmem(handle, KVADDR, &obj, sizeof(void *), "zram entry", FAULT_ON_ERROR);
+	obj >>= OBJ_TAG_BITS;
+	phys_to_page(PTOB(obj >> OBJ_INDEX_BITS), &page);
+	obj_idx = (obj & OBJ_INDEX_MASK);
+
+	readmem(page + OFFSET(page_private), KVADDR, &zspage,
+			sizeof(void *), "page_private", FAULT_ON_ERROR);
+	readmem(zspage, KVADDR, &zspage_s, sizeof(struct zspage), "zspage", FAULT_ON_ERROR);
+
+	class_idx = zspage_s.class;
+	if (zspage_s.magic != ZSPAGE_MAGIC)
+		error(FATAL, "zspage magic incorrect: %x\n", zspage_s.magic);
+
+	class = pool + OFFSET(zspoll_size_class);
+	class += (class_idx * sizeof(void *));
+	readmem(class, KVADDR, &class, sizeof(void *), "size_class", FAULT_ON_ERROR);
+	readmem(class + OFFSET(size_class_size), KVADDR,
+			&size, sizeof(unsigned int), "size of class_size", FAULT_ON_ERROR);
+	off = (size * obj_idx) & (~machdep->pagemask);
+	if (off + size <= PAGESIZE()) {
+		if (!is_page_ptr(page, &paddr)) {
+			error(WARNING, "zspage: %lx: not a page pointer\n", page);
+			return NULL;
+		}
+		readmem(paddr + off, PHYSADDR, zram_buf, size, "zram buffer", FAULT_ON_ERROR);
+		goto out;
+	}
+
+	pages[0] = page;
+	readmem(page + OFFSET(page_freelist), KVADDR, &pages[1],
+			sizeof(void *), "page_freelist", FAULT_ON_ERROR);
+	sizes[0] = PAGESIZE() - off;
+	sizes[1] = size - sizes[0];
+	if (!is_page_ptr(pages[0], &paddr)) {
+		error(WARNING, "pages[0]: %lx: not a page pointer\n", pages[0]);
+		return NULL;
+	}
+
+	readmem(paddr + off, PHYSADDR, zram_buf, sizes[0], "zram buffer[0]", FAULT_ON_ERROR);
+	if (!is_page_ptr(pages[1], &paddr)) {
+		error(WARNING, "pages[1]: %lx: not a page pointer\n", pages[1]);
+		return NULL;
+	}
+
+	readmem(paddr, PHYSADDR, zram_buf + sizes[0], sizes[1], "zram buffer[1]", FAULT_ON_ERROR);
+
+out:
+	readmem(page, KVADDR, &obj, sizeof(void *), "page flags", FAULT_ON_ERROR);
+	if (!(obj & (1<<10))) { //PG_OwnerPriv1 flag
+		return (zram_buf + ZS_HANDLE_SIZE);
+	}
+
+	return zram_buf;
+}
+
+static unsigned char *
+lookup_swap_cache(ulonglong pte_val, unsigned char *zram_buf)
+{
+	ulonglong swp_offset;
+	ulong swp_type, swp_space, page;
+	struct list_pair lp;
+	physaddr_t paddr;
+
+	swp_type = __swp_type(pte_val);
+	if (THIS_KERNEL_VERSION >= LINUX(2,6,0)) {
+		swp_offset = (ulonglong)__swp_offset(pte_val);
+	} else {
+		swp_offset = (ulonglong)SWP_OFFSET(pte_val);
+	}
+
+	if (!symbol_exists("swapper_spaces"))
+		return NULL;
+	swp_space = symbol_value("swapper_spaces");
+	swp_space += swp_type * sizeof(void *);
+
+	readmem(swp_space, KVADDR, &swp_space, sizeof(void *),
+			"swp_spaces", FAULT_ON_ERROR);
+	swp_space += (swp_offset >> SWAP_ADDRESS_SPACE_SHIFT) * SIZE(address_space);
+
+	lp.index = swp_offset;
+	if (do_radix_tree(swp_space, RADIX_TREE_SEARCH, &lp)){
+		readmem((ulong)lp.value, KVADDR, &page, sizeof(void *),
+				"swap_cache page", FAULT_ON_ERROR);
+		if (!is_page_ptr(page, &paddr)) {
+			error(WARNING, "radix page: %lx: not a page pointer\n", lp.value);
+			return NULL;
+		}
+		readmem(paddr, PHYSADDR, zram_buf, PAGESIZE(), "zram buffer", FAULT_ON_ERROR);
+		return zram_buf;
+	}
+	return NULL;
+}
+
+ulong (*decompressor)(unsigned char *in_addr, ulong in_size, unsigned char *out_addr, ulong *out_size, void *other/* NOT USED */);
+/*
+ * If userspace address was swapped out to zram, this function is called to decompress the object.
+ * try_zram_decompress returns decompressed page data and data length
+ */
+ulong 
+try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong vaddr)
+{
+	char name[32] = {0};
+	ulonglong swp_offset;
+	ulong swap_info, bdev, bd_disk, zram, zram_table_entry, sector, index, entry, flags, size, outsize, off;
+	unsigned char *obj_addr = NULL;
+	unsigned char *zram_buf = NULL;
+	unsigned char *outbuf = NULL;
+
+	off = PAGEOFFSET(vaddr);
+	if (!symbol_exists("swap_info"))
+		return 0;
+
+	swap_info = symbol_value("swap_info");
+
+	swap_info_init();
+	if (vt->flags & SWAPINFO_V2) {
+		swap_info += (__swp_type(pte_val) * sizeof(void *));
+		readmem(swap_info, KVADDR, &swap_info,
+				sizeof(void *), "swap_info", FAULT_ON_ERROR);
+	} else {
+		swap_info += (SIZE(swap_info_struct) * __swp_type(pte_val));
+	}
+
+	readmem(swap_info + OFFSET(swap_info_struct_bdev), KVADDR, &bdev,
+			sizeof(void *), "swap_info_struct_bdev", FAULT_ON_ERROR);
+	readmem(bdev + OFFSET(block_device_bd_disk), KVADDR, &bd_disk,
+			sizeof(void *), "block_device_bd_disk", FAULT_ON_ERROR);
+	readmem(bd_disk + OFFSET(gendisk_disk_name), KVADDR, name,
+			strlen("zram"), "gendisk_disk_name", FAULT_ON_ERROR);
+	if (!strncmp(name, "zram", strlen("zram"))) {
+		if (CRASHDEBUG(2))
+			error(WARNING, "this page has swapped to zram\n");
+
+		readmem(bd_disk + OFFSET(gendisk_private_data), KVADDR, &zram,
+				sizeof(void *), "gendisk_private_data", FAULT_ON_ERROR);
+
+		readmem(zram + OFFSET(zram_compressor), KVADDR, name,
+			sizeof(name), "zram compressor", FAULT_ON_ERROR);
+		if (!strncmp(name, "lzo", strlen("lzo"))) {
+			if (!(dd->flags & LZO_SUPPORTED)) {
+				if (lzo_init() == LZO_E_OK)
+					dd->flags |= LZO_SUPPORTED;
+				else
+					return 0;
+			}
+			decompressor = (void *)lzo1x_decompress_safe;
+		} else {//todo,support more compressor
+			error(WARNING, "only the lzo compressor is supported\n");
+			return 0;
+		}
+
+		if (THIS_KERNEL_VERSION >= LINUX(2, 6, 0)) {
+			swp_offset = (ulonglong)__swp_offset(pte_val);
+		} else {
+			swp_offset = (ulonglong)SWP_OFFSET(pte_val);
+		}
+
+		zram_buf = (unsigned char *)GETBUF(PAGESIZE());
+		/*lookup page from swap cache*/
+		obj_addr = lookup_swap_cache(pte_val, zram_buf);
+		if (obj_addr != NULL) {
+			memcpy(buf, obj_addr + off, len);
+			goto out;
+		}
+
+		sector = swp_offset << (PAGESHIFT() - 9);
+		index = sector >> SECTORS_PER_PAGE_SHIFT;
+		readmem(zram, KVADDR, &zram_table_entry,
+				sizeof(void *), "zram_table_entry", FAULT_ON_ERROR);
+		zram_table_entry += (index * SIZE(zram_table_entry));
+		readmem(zram_table_entry, KVADDR, &entry,
+				sizeof(void *), "entry of table", FAULT_ON_ERROR);
+		readmem(zram_table_entry + OFFSET(zram_table_flag), KVADDR, &flags,
+				sizeof(void *), "zram_table_flag", FAULT_ON_ERROR);
+		if (!entry || (flags & ZRAM_FLAG_SAME_BIT)) {
+			memset(buf, entry, len);
+			goto out;
+		}
+		size = flags & (ZRAM_FLAG_SHIFT -1);
+		if (size == 0) {
+			len = 0;
+			goto out;
+		}
+
+		readmem(zram + OFFSET(zram_mempoll), KVADDR, &zram,
+				sizeof(void *), "zram_mempoll", FAULT_ON_ERROR);
+
+		obj_addr = zram_object_addr(zram, entry, zram_buf);
+		if (obj_addr == NULL) {
+			len = 0;
+			goto out;
+		}
+
+		if (size == PAGESIZE()) {
+			memcpy(buf, obj_addr + off, len);
+		} else {
+			outbuf = (unsigned char *)GETBUF(PAGESIZE());
+			outsize = PAGESIZE();
+			if (!decompressor(obj_addr, size, outbuf, &outsize, NULL))
+				memcpy(buf, outbuf + off, len);
+			else {
+				error(WARNING, "zram decompress error\n");
+				len = 0;
+			}
+			FREEBUF(outbuf);
+		}
+	} else {
+		return 0;
+	}
+
+out:
+	if (len && CRASHDEBUG(2))
+		error(INFO, "%lx: zram decompress success\n", vaddr);
+	FREEBUF(zram_buf);
+	return len;
+}
+#else
+ulong try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong vaddr)
+{
+	return 0;
+}
+#endif

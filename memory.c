@@ -237,7 +237,6 @@ static int vm_area_page_dump(ulong, ulong, ulong, ulong, ulong,
 static void rss_page_types_init(void);
 static int dump_swap_info(ulong, ulong *, ulong *);
 static int get_hugetlb_total_pages(ulong *, ulong *);
-static void swap_info_init(void);
 static char *get_swapdev(ulong, char *);
 static void fill_swap_info(ulong);
 static char *vma_file_offset(ulong, ulong, char *);
@@ -464,6 +463,8 @@ vm_init(void)
         MEMBER_OFFSET_INIT(page_compound_head, "page", "compound_head");
 	if (INVALID_MEMBER(page_compound_head))
 		ANON_MEMBER_OFFSET_INIT(page_compound_head, "page", "compound_head");
+	MEMBER_OFFSET_INIT(page_private, "page", "private");
+	MEMBER_OFFSET_INIT(page_freelist, "page", "freelist");
 
 	MEMBER_OFFSET_INIT(mm_struct_pgd, "mm_struct", "pgd");
 
@@ -484,6 +485,15 @@ vm_init(void)
 		"inuse_pages");
 	MEMBER_OFFSET_INIT(swap_info_struct_old_block_size, 
         	"swap_info_struct", "old_block_size");
+	MEMBER_OFFSET_INIT(swap_info_struct_bdev, "swap_info_struct", "bdev");
+
+	MEMBER_OFFSET_INIT(zram_mempoll, "zram", "mem_pool");
+	MEMBER_OFFSET_INIT(zram_compressor, "zram", "compressor");
+	MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "flags");
+	STRUCT_SIZE_INIT(zram_table_entry, "zram_table_entry");
+	MEMBER_OFFSET_INIT(zspoll_size_class, "zs_pool", "size_class");
+	MEMBER_OFFSET_INIT(size_class_size, "size_class", "size");
+
 	MEMBER_OFFSET_INIT(block_device_bd_inode, "block_device", "bd_inode");
 	MEMBER_OFFSET_INIT(block_device_bd_list, "block_device", "bd_list");
 	MEMBER_OFFSET_INIT(block_device_bd_disk, "block_device", "bd_disk");
@@ -498,6 +508,7 @@ vm_init(void)
 	MEMBER_OFFSET_INIT(gendisk_major, "gendisk", "major");
 	MEMBER_OFFSET_INIT(gendisk_fops, "gendisk", "fops");
 	MEMBER_OFFSET_INIT(gendisk_disk_name, "gendisk", "disk_name");
+	MEMBER_OFFSET_INIT(gendisk_private_data, "gendisk", "private_data");
 
 	STRUCT_SIZE_INIT(block_device, "block_device");
 	STRUCT_SIZE_INIT(address_space, "address_space");
@@ -2279,11 +2290,24 @@ readmem(ulonglong addr, int memtype, void *buffer, long size,
 		switch (memtype)
 		{
 		case UVADDR:
-                	if (!uvtop(CURRENT_CONTEXT(), addr, &paddr, 0)) {
-                        	if (PRINT_ERROR_MESSAGE)
-                                	error(INFO, INVALID_UVADDR, addr, type);
-                        	goto readmem_error;
-                	}
+			if (!uvtop(CURRENT_CONTEXT(), addr, &paddr, 0)) {
+				if (paddr != 0) {
+					cnt = PAGESIZE() - PAGEOFFSET(addr);
+					if (cnt > size)
+						cnt = size;
+
+					cnt = try_zram_decompress(paddr, (unsigned char *)bufptr, cnt, addr);
+					if (cnt) {
+						bufptr += cnt;
+						addr += cnt;
+						size -= cnt;
+						continue;
+					}
+				}
+				if (PRINT_ERROR_MESSAGE)
+					error(INFO, INVALID_UVADDR, addr, type);
+				goto readmem_error;
+			}
 			break;
 
 		case KVADDR:
@@ -15756,7 +15780,7 @@ dump_swap_info(ulong swapflags, ulong *totalswap_pages, ulong *totalused_pages)
 /*
  *  Determine the swap_info_struct usage.
  */
-static void
+void
 swap_info_init(void)
 {
 	struct gnu_request *req;
