@@ -93,7 +93,7 @@ struct command_table_entry linux_command_table[] = {
 	{"mach",    cmd_mach,    help_mach,    0},
 	{"map",     cmd_map,     help_map,     HIDDEN_COMMAND},
 	{"mod",     cmd_mod,     help_mod,     0},
-	{"mount",   cmd_mount,   help_mount,   0},
+	{"mount",   cmd_mount,   help_mount,   REFRESH_TASK_TABLE},
 	{"net",	    cmd_net,	help_net,      REFRESH_TASK_TABLE},
 	{"p",       cmd_p,       help_p,       0},
 	{"ps",      cmd_ps,      help_ps,      REFRESH_TASK_TABLE},
