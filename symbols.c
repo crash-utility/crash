@@ -540,30 +540,28 @@ get_text_init_space(void)
 static char *
 strip_symbol_end(const char *name, char *buf)
 {
+	int i;
 	char *p;
+	char *strip[] = {
+		".isra.",
+		".part.",
+		".llvm.",
+		NULL
+	};
 
 	if (st->flags & NO_STRIP)
 		return (char *)name;
 
-	if ((p = strstr(name, ".isra."))) {
-		if (buf) {
-			strcpy(buf, name);
-			buf[p-name] = NULLCHAR;
-			return buf;
-		} else {
-			*p = NULLCHAR;
-			return (char *)name;
-		}
-	}
-
-	if ((p = strstr(name, ".part."))) {
-		if (buf) {
-			strcpy(buf, name);
-			buf[p-name] = NULLCHAR;
-			return buf;
-		} else {
-			*p = NULLCHAR;
-			return (char *)name;
+	for (i = 0; strip[i]; i++) {
+		if ((p = strstr(name, strip[i]))) {
+			if (buf) {
+				strcpy(buf, name);
+				buf[p-name] = NULLCHAR;
+				return buf;
+			} else {
+				*p = NULLCHAR;
+				return (char *)name;
+			}
 		}
 	}
 
