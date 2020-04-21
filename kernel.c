@@ -4912,9 +4912,12 @@ cmd_log(void)
 
 	msg_flags = 0;
 
-        while ((c = getopt(argcnt, args, "tdma")) != EOF) {
+        while ((c = getopt(argcnt, args, "Ttdma")) != EOF) {
                 switch(c)
                 {
+		case 'T':
+			msg_flags |= SHOW_LOG_CTIME;
+			break;
 		case 't':
 			msg_flags |= SHOW_LOG_TEXT;
 			break;
@@ -4935,6 +4938,15 @@ cmd_log(void)
 
         if (argerrs)
                 cmd_usage(pc->curcmd, SYNOPSIS);
+
+	if (kt->boot_date.tv_sec == 0) {
+		ulonglong uptime_jiffies;
+		ulong  uptime_sec;
+		get_uptime(NULL, &uptime_jiffies);
+		uptime_sec = (uptime_jiffies)/(ulonglong)machdep->hz;
+		kt->boot_date.tv_sec = kt->date.tv_sec - uptime_sec;
+		kt->boot_date.tv_nsec = 0;
+	}
 
 	if (msg_flags & SHOW_LOG_AUDIT) {
 		dump_audit();
@@ -4962,6 +4974,8 @@ dump_log(int msg_flags)
 		return;
 	}
 
+	if (msg_flags & SHOW_LOG_CTIME)
+		option_not_supported('T');
 	if (msg_flags & SHOW_LOG_DICT)
 		option_not_supported('d');
 	if ((msg_flags & SHOW_LOG_TEXT) && STREQ(pc->curcmd, "log"))
@@ -5154,7 +5168,12 @@ dump_log_entry(char *logptr, int msg_flags)
 	if ((msg_flags & SHOW_LOG_TEXT) == 0) {
 		nanos = (ulonglong)ts_nsec / (ulonglong)1000000000;
 		rem = (ulonglong)ts_nsec % (ulonglong)1000000000;
-		sprintf(buf, "[%5lld.%06ld] ", nanos, rem/1000);
+		if (msg_flags & SHOW_LOG_CTIME) {
+			time_t t = kt->boot_date.tv_sec + nanos;
+			sprintf(buf, "[%s] ", strip_linefeeds(ctime(&t)));
+		}
+		else
+			sprintf(buf, "[%5lld.%06ld] ", nanos, rem/1000);
 		ilen = strlen(buf);
 		fprintf(fp, "%s", buf);
 	}
@@ -6018,6 +6037,8 @@ dump_kernel_table(int verbose)
 		get_xtime(&kt->date);
         fprintf(fp, "          date: %s\n",
                 strip_linefeeds(ctime(&kt->date.tv_sec)));
+        fprintf(fp, "    boot_ date: %s\n",
+                strip_linefeeds(ctime(&kt->boot_date.tv_sec)));
         fprintf(fp, "  proc_version: %s\n", strip_linefeeds(kt->proc_version));
         fprintf(fp, "   new_utsname: \n");
         fprintf(fp, "      .sysname: %s\n", uts->sysname);

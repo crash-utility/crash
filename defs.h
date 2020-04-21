@@ -763,6 +763,7 @@ struct kernel_table {                   /* kernel data */
 	} vmcoreinfo;
 	ulonglong flags2;
 	char *source_tree;
+	struct timespec boot_date;
 };
 
 /*
@@ -5577,6 +5578,7 @@ void dump_log(int);
 #define SHOW_LOG_DICT  (0x2)
 #define SHOW_LOG_TEXT  (0x4)
 #define SHOW_LOG_AUDIT (0x8)
+#define SHOW_LOG_CTIME (0x10)
 void set_cpu(int);
 void clear_machdep_cache(void);
 struct stack_hook *gather_text_list(struct bt_info *);
