@@ -244,6 +244,7 @@ main(int argc, char **argv)
 					kt->relocate *= -1;
 					kt->flags |= RELOC_SET;
 					kt->flags2 |= KASLR;
+					st->_stext_vmlinux = UNINITIALIZED;
 				}
 
 			} else if (STREQ(long_options[option_index].name, "reloc")) {

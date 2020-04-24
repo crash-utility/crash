@@ -3031,7 +3031,7 @@ typedef u64 pte_t;
 #define MACHINE_TYPE       "ARM64"    
 
 #define PTOV(X) \
-	((unsigned long)(X)-(machdep->machspec->phys_offset)+(machdep->machspec->page_offset))
+	((unsigned long)(X) - (machdep->machspec->physvirt_offset))
 
 #define VTOP(X)               arm64_VTOP((ulong)(X))
 
@@ -3282,6 +3282,7 @@ struct machine_specific {
 	ulong CONFIG_ARM64_VA_BITS;
 	ulong VA_START;
 	ulong CONFIG_ARM64_KERNELPACMASK;
+	ulong physvirt_offset;
 };
 
 struct arm64_stackframe {

@@ -31,6 +31,7 @@ static int arm64_search_for_kimage_voffset(ulong);
 static int verify_kimage_voffset(void);
 static void arm64_calc_kimage_voffset(void);
 static void arm64_calc_phys_offset(void);
+static void arm64_calc_physvirt_offset(void);
 static void arm64_calc_virtual_memory_ranges(void);
 static void arm64_get_section_size_bits(void);
 static int arm64_kdump_phys_base(ulong *);
@@ -364,6 +365,7 @@ arm64_init(int when)
 
 		/* use machdep parameters */
 		arm64_calc_phys_offset();
+		arm64_calc_physvirt_offset();
 	
 		if (CRASHDEBUG(1)) {
 			if (machdep->flags & NEW_VMEMMAP)
@@ -371,6 +373,7 @@ arm64_init(int when)
 					machdep->machspec->kimage_voffset);
 			fprintf(fp, "phys_offset: %lx\n", 
 				machdep->machspec->phys_offset);
+			fprintf(fp, "physvirt_offset: %lx\n", machdep->machspec->physvirt_offset);
 		}
 
 		break;
@@ -477,6 +480,7 @@ arm64_init(int when)
 		arm64_calc_KERNELPACMASK();
 		arm64_calc_phys_offset();
 		machdep->machspec->page_offset = ARM64_PAGE_OFFSET;
+		arm64_calc_physvirt_offset();
 		break;
 	}
 }
@@ -975,6 +979,25 @@ arm64_calc_kimage_voffset(void)
 }
 
 static void
+arm64_calc_physvirt_offset(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong physvirt_offset;
+	struct syment *sp;
+
+	ms->physvirt_offset = ms->phys_offset - ms->page_offset;
+
+	if ((sp = kernel_symbol_search("physvirt_offset")) &&
+			machdep->machspec->kimage_voffset) {
+		if (READMEM(pc->mfd, &physvirt_offset, sizeof(physvirt_offset),
+			sp->value, sp->value -
+			machdep->machspec->kimage_voffset) > 0) {
+				ms->physvirt_offset = physvirt_offset;
+		}
+	}
+}
+
+static void
 arm64_calc_phys_offset(void)
 {
 	struct machine_specific *ms = machdep->machspec;
@@ -1156,8 +1179,7 @@ arm64_VTOP(ulong addr)
 		}
 
 		if (addr >= machdep->machspec->page_offset)
-			return machdep->machspec->phys_offset
-				+ (addr - machdep->machspec->page_offset);
+			return addr + machdep->machspec->physvirt_offset;
 		else if (machdep->machspec->kimage_voffset)
 			return addr - machdep->machspec->kimage_voffset;
 		else /* no randomness */
@@ -3999,6 +4021,7 @@ arm64_calc_virtual_memory_ranges(void)
 	struct machine_specific *ms = machdep->machspec;
 	ulong value, vmemmap_start, vmemmap_end, vmemmap_size, vmalloc_end;
 	char *string;
+	int ret;
 	ulong PUD_SIZE = UNINITIALIZED;
 
 	if (!machdep->machspec->CONFIG_ARM64_VA_BITS) {
@@ -4006,6 +4029,10 @@ arm64_calc_virtual_memory_ranges(void)
 			value = atol(string);
 			free(string);
 			machdep->machspec->CONFIG_ARM64_VA_BITS = value;
+		} else if (kt->ikconfig_flags & IKCONFIG_AVAIL) {
+			if ((ret = get_kernel_config("CONFIG_ARM64_VA_BITS",
+					&string)) == IKCONFIG_STR)
+				machdep->machspec->CONFIG_ARM64_VA_BITS = atol(string);
 		}
 	}
 
@@ -4030,9 +4057,14 @@ arm64_calc_virtual_memory_ranges(void)
 #define STRUCT_PAGE_MAX_SHIFT   6
 
 	if (ms->VA_BITS_ACTUAL) {
-		vmemmap_size = (1UL) << (ms->CONFIG_ARM64_VA_BITS - machdep->pageshift - 1 + STRUCT_PAGE_MAX_SHIFT);
+		ulong va_bits_min = 48;
+
+		if (machdep->machspec->CONFIG_ARM64_VA_BITS < 48)
+			va_bits_min = ms->CONFIG_ARM64_VA_BITS;
+
+		vmemmap_size = (1UL) << (va_bits_min - machdep->pageshift - 1 + STRUCT_PAGE_MAX_SHIFT);
 		vmalloc_end = (- PUD_SIZE - vmemmap_size - KILOBYTES(64));
-		vmemmap_start = (-vmemmap_size);
+		vmemmap_start = (-vmemmap_size - MEGABYTES(2));
 		ms->vmalloc_end = vmalloc_end - 1;
 		ms->vmemmap_vaddr = vmemmap_start;
 		ms->vmemmap_end = -1;
