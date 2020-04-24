@@ -3281,6 +3281,7 @@ struct machine_specific {
 	ulong VA_BITS_ACTUAL;
 	ulong CONFIG_ARM64_VA_BITS;
 	ulong VA_START;
+	ulong CONFIG_ARM64_KERNELPACMASK;
 };
 
 struct arm64_stackframe {
