@@ -9357,7 +9357,7 @@ char *README[] = {
 "  A whitepaper with complete documentation concerning the use of this utility",
 "  can be found here:",
 " ",
-"         http://people.redhat.com/anderson/crash_whitepaper",
+"         https://crash-utility.github.io/crash_whitepaper.html",
 " ",
 "  These are the current prerequisites: ",
 "",

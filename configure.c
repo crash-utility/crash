@@ -1339,7 +1339,7 @@ make_spec_file(struct supported_gdb_version *sp)
 	printf("License: %s\n", sp->GPL);
 	printf("Group: Development/Debuggers\n");
 	printf("Source: %%{name}-%%{version}.tar.gz\n");
-	printf("URL: http://people.redhat.com/anderson\n");
+	printf("URL: https://github.com/crash-utility\n");
 	printf("Distribution: Linux 2.2 or greater\n");
 	printf("Vendor: Red Hat, Inc.\n");
 	printf("Packager: Dave Anderson <anderson@redhat.com>\n");
