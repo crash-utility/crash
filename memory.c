@@ -487,10 +487,6 @@ vm_init(void)
         	"swap_info_struct", "old_block_size");
 	MEMBER_OFFSET_INIT(swap_info_struct_bdev, "swap_info_struct", "bdev");
 
-	MEMBER_OFFSET_INIT(zram_mempoll, "zram", "mem_pool");
-	MEMBER_OFFSET_INIT(zram_compressor, "zram", "compressor");
-	MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "flags");
-	STRUCT_SIZE_INIT(zram_table_entry, "zram_table_entry");
 	MEMBER_OFFSET_INIT(zspoll_size_class, "zs_pool", "size_class");
 	MEMBER_OFFSET_INIT(size_class_size, "size_class", "size");
 

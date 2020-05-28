@@ -3531,6 +3531,8 @@ struct arm64_stackframe {
 	    machdep->machspec->last_p4d_read = (ulong)(P4D);                  \
     }
 
+#define MAX_POSSIBLE_PHYSMEM_BITS     52
+
 /* 
  *  PHYSICAL_PAGE_MASK changed (enlarged) between 2.4 and 2.6, so
  *  for safety, use the 2.6 values to generate it.
@@ -6487,7 +6489,10 @@ void diskdump_device_dump_extract(int, char *, FILE *);
 ulong try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong vaddr);
 #ifdef LZO
 #define OBJ_TAG_BITS     1
-#define _PFN_BITS        (MAX_PHYSMEM_BITS() - PAGESHIFT())
+#ifndef MAX_POSSIBLE_PHYSMEM_BITS
+#define MAX_POSSIBLE_PHYSMEM_BITS (MAX_PHYSMEM_BITS())
+#endif
+#define _PFN_BITS        (MAX_POSSIBLE_PHYSMEM_BITS - PAGESHIFT())
 #define OBJ_INDEX_BITS   (BITS_PER_LONG - _PFN_BITS - OBJ_TAG_BITS)
 #define OBJ_INDEX_MASK   ((1 << OBJ_INDEX_BITS) - 1)
 #define ZS_HANDLE_SIZE   (sizeof(unsigned long))

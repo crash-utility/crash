@@ -2586,6 +2586,17 @@ diskdump_device_dump_info(FILE *ofp)
 }
 
 #ifdef LZO
+static void
+zram_init(void)
+{
+	MEMBER_OFFSET_INIT(zram_mempoll, "zram", "mem_pool");
+	MEMBER_OFFSET_INIT(zram_compressor, "zram", "compressor");
+	MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "flags");
+	if (INVALID_MEMBER(zram_table_flag))
+		MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "value");
+	STRUCT_SIZE_INIT(zram_table_entry, "zram_table_entry");
+}
+
 static unsigned char *
 zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
 {
@@ -2657,6 +2668,11 @@ lookup_swap_cache(ulonglong pte_val, unsigned char *zram_buf)
 	ulong swp_type, swp_space, page;
 	struct list_pair lp;
 	physaddr_t paddr;
+	static int is_xarray = -1;
+
+	if (is_xarray < 0) {
+		is_xarray = STREQ(MEMBER_TYPE_NAME("address_space", "i_pages"), "xarray");
+	}
 
 	swp_type = __swp_type(pte_val);
 	if (THIS_KERNEL_VERSION >= LINUX(2,6,0)) {
@@ -2675,7 +2691,7 @@ lookup_swap_cache(ulonglong pte_val, unsigned char *zram_buf)
 	swp_space += (swp_offset >> SWAP_ADDRESS_SPACE_SHIFT) * SIZE(address_space);
 
 	lp.index = swp_offset;
-	if (do_radix_tree(swp_space, RADIX_TREE_SEARCH, &lp)){
+	if ((is_xarray ? do_xarray : do_radix_tree)(swp_space, RADIX_TREE_SEARCH, &lp)) {
 		readmem((ulong)lp.value, KVADDR, &page, sizeof(void *),
 				"swap_cache page", FAULT_ON_ERROR);
 		if (!is_page_ptr(page, &paddr)) {
@@ -2702,6 +2718,9 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 	unsigned char *obj_addr = NULL;
 	unsigned char *zram_buf = NULL;
 	unsigned char *outbuf = NULL;
+
+	if (INVALID_MEMBER(zram_compressor))
+		zram_init();
 
 	off = PAGEOFFSET(vaddr);
 	if (!symbol_exists("swap_info"))
@@ -2733,7 +2752,7 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 
 		readmem(zram + OFFSET(zram_compressor), KVADDR, name,
 			sizeof(name), "zram compressor", FAULT_ON_ERROR);
-		if (!strncmp(name, "lzo", strlen("lzo"))) {
+		if (STREQ(name, "lzo")) {
 			if (!(dd->flags & LZO_SUPPORTED)) {
 				if (lzo_init() == LZO_E_OK)
 					dd->flags |= LZO_SUPPORTED;
