@@ -5998,6 +5998,7 @@ struct machine_specific {
 #define VM_FLAGS (VM_ORIG|VM_2_6_11|VM_XEN|VM_XEN_RHEL4|VM_5LEVEL)
 
 #define _2MB_PAGE_MASK (~((MEGABYTES(2))-1))
+#define _1GB_PAGE_MASK (~((GIGABYTES(1))-1))
 
 #endif
 

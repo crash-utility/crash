@@ -2020,6 +2020,19 @@ x86_64_uvtop_level4(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, in
 	if (!(pud_pte & _PAGE_PRESENT))
 		goto no_upage;
 
+	if (pud_pte & _PAGE_PSE) {
+		if (verbose) {
+			fprintf(fp, "  PAGE: %lx  (1GB)\n\n",
+			       PAGEBASE(pud_pte) & PHYSICAL_PAGE_MASK);
+			x86_64_translate_pte(pud_pte, 0, 0);
+		}
+
+		physpage = (PAGEBASE(pud_pte) & PHYSICAL_PAGE_MASK) +
+			       (uvaddr & ~_1GB_PAGE_MASK);
+		*paddr = physpage;
+		return TRUE;
+	}
+
 	/*
          *  pmd = pmd_offset(pud, address);
 	 */
@@ -2428,6 +2441,19 @@ start_vtop_with_pagetable:
 
 	if (!(pud_pte & _PAGE_PRESENT))
 		goto no_kpage;
+
+	if (pud_pte & _PAGE_PSE) {
+		if (verbose) {
+			fprintf(fp, "  PAGE: %lx  (1GB)\n\n",
+			       PAGEBASE(pud_pte) & PHYSICAL_PAGE_MASK);
+			x86_64_translate_pte(pud_pte, 0, 0);
+		}
+
+		physpage = (PAGEBASE(pud_pte) & PHYSICAL_PAGE_MASK) +
+			       (kvaddr & ~_1GB_PAGE_MASK);
+		*paddr = physpage;
+		return TRUE;
+	}
 
 	/*
          *  pmd = pmd_offset(pud, address);
