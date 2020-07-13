@@ -1887,7 +1887,7 @@ vmcoreinfo_read_string(const char *key)
 			sprintf(value, "%ld", nd->arch_data2 & 0xffffffff);
 			return value;
 		}
-		if (STREQ(key, "NUMBER(tcr_el1_t1sz)") && nd->arch_data2) {
+		if (STREQ(key, "NUMBER(TCR_EL1_T1SZ)") && nd->arch_data2) {
 			value = calloc(VADDR_PRLEN+1, sizeof(char));
 			sprintf(value, "%lld", ((ulonglong)nd->arch_data2 >> 32) & 0xffffffff);
 			pc->read_vmcoreinfo = no_vmcoreinfo;

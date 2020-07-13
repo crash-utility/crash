@@ -3922,7 +3922,7 @@ arm64_calc_VA_BITS(void)
 		} else if (ACTIVE())
 			error(FATAL, "cannot determine VA_BITS_ACTUAL: please use /proc/kcore\n");
 		else {
-			if ((string = pc->read_vmcoreinfo("NUMBER(tcr_el1_t1sz)"))) {
+			if ((string = pc->read_vmcoreinfo("NUMBER(TCR_EL1_T1SZ)"))) {
 				/* See ARMv8 ARM for the description of
 				 * TCR_EL1.T1SZ and how it can be used
 				 * to calculate the vabits_actual
