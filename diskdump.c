@@ -1506,11 +1506,9 @@ get_diskdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 
 	case EM_MIPS:
 		return get_diskdump_regs_32(bt, eip, esp);
-		break;
 
 	case EM_386:
 		return get_netdump_regs_x86(bt, eip, esp);
-		break;
 
 	case EM_IA_64:
 	       /* For normal backtraces, this information will be obtained
@@ -1523,19 +1521,15 @@ get_diskdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 
 	case EM_PPC:
 		return get_diskdump_regs_ppc(bt, eip, esp);
-		break;
 
 	case EM_PPC64:
 		return get_diskdump_regs_ppc64(bt, eip, esp);
-		break;
 
 	case EM_X86_64:
 		return get_netdump_regs_x86_64(bt, eip, esp);
-		break;
 
 	case EM_S390:
 		return machdep->get_stack_frame(bt, eip, esp);
-		break;
 
 	case EM_AARCH64:
 		get_diskdump_regs_arm64(bt, eip, esp);

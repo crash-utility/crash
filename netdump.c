@@ -2596,7 +2596,6 @@ get_netdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 	{
 	case EM_386:
 		return get_netdump_regs_x86(bt, eip, esp);
-		break;
 
 	case EM_IA_64:
 	       /* For normal backtraces, this information will be obtained
@@ -2609,15 +2608,12 @@ get_netdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 
 	case EM_PPC:
 		return get_netdump_regs_ppc(bt, eip, esp);
-		break;
 
 	case EM_PPC64:
 		return get_netdump_regs_ppc64(bt, eip, esp);
-		break;
 
 	case EM_X86_64:
 		return get_netdump_regs_x86_64(bt, eip, esp);
-		break;
 
 	case EM_S390:
 		machdep->get_stack_frame(bt, eip, esp);
@@ -2625,15 +2621,12 @@ get_netdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 
 	case EM_ARM:
 		return get_netdump_regs_arm(bt, eip, esp);
-		break;
 
 	case EM_AARCH64:
 		return get_netdump_regs_arm64(bt, eip, esp);
-		break;
 
 	case EM_MIPS:
 		return get_netdump_regs_mips(bt, eip, esp);
-		break;
 
 	default:
 		error(FATAL, 

@@ -1109,7 +1109,6 @@ xen_hyper_get_domain_next(int mod, ulong *next)
 				get_symbol_data("dom0", sizeof(void *), next);
 		}
 		return xhdt->domain_struct;
-		break;
 	case XEN_HYPER_DOMAIN_READ_INIT:
 		/* Case of search from context_array. */
 		if (xhdt->context_array && xhdt->context_array->domain) {
@@ -1121,7 +1120,6 @@ xen_hyper_get_domain_next(int mod, ulong *next)
 			return NULL;
 		}
 		return xhdt->domain_struct;
-		break;
 	case XEN_HYPER_DOMAIN_READ_NEXT:
 		break;
 	default :
