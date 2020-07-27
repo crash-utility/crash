@@ -3226,6 +3226,11 @@ dump_symbol_table(void)
 		fprintf(fp, " kaiser_init_vmlinux: (unused)\n");
 	}
 
+	if (SADUMP_DUMPFILE())
+		fprintf(fp, "linux_banner_vmlinux: %lx\n", st->linux_banner_vmlinux);
+	else
+		fprintf(fp, "linux_banner_vmlinux: (unused)\n");
+
         fprintf(fp, "    symval_hash[%d]: %lx\n", SYMVAL_HASH,
                 (ulong)&st->symval_hash[0]);
 
@@ -12686,6 +12691,11 @@ numeric_forward(const void *P_x, const void *P_y)
 			st->idt_table_vmlinux = valueof(x);
 		else if (STREQ(y->name, "idt_table"))
 			st->idt_table_vmlinux = valueof(y);
+
+		if (STREQ(x->name, "linux_banner"))
+			st->linux_banner_vmlinux = valueof(x);
+		else if (STREQ(y->name, "linux_banner"))
+			st->linux_banner_vmlinux = valueof(y);
 
 		if (STREQ(x->name, "saved_command_line"))
 			st->saved_command_line_vmlinux = valueof(x);
