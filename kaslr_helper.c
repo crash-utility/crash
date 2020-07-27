@@ -406,6 +406,7 @@ calc_kaslr_offset(ulong *ko, ulong *pb)
 	if (!machine_type("X86_64"))
 		return FALSE;
 
+retry:
 	if (SADUMP_DUMPFILE()) {
 		if (!sadump_get_cr3_idtr(&cr3, &idtr))
 			return FALSE;
@@ -437,18 +438,48 @@ calc_kaslr_offset(ulong *ko, ulong *pb)
 	machdep->machspec->pgdir_shift = PGDIR_SHIFT;
 	machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD;
 	if (!readmem(pgd, PHYSADDR, machdep->pgd, PAGESIZE(),
-			"pgd", RETURN_ON_ERROR))
-		goto quit;
+			"pgd", RETURN_ON_ERROR)) {
+		if (SADUMP_DUMPFILE())
+			goto retry;
+		else
+			goto quit;
+	}
 
 	/* Convert virtual address of IDT table to physical address */
-	if (!kvtop(NULL, idtr, &idtr_paddr, verbose))
-		goto quit;
+	if (!kvtop(NULL, idtr, &idtr_paddr, verbose)) {
+		if (SADUMP_DUMPFILE())
+			goto retry;
+		else
+			goto quit;
+	}
 
 	/* Now we can calculate kaslr_offset and phys_base */
 	divide_error_vmcore = get_vec0_addr(idtr_paddr);
 	kaslr_offset = divide_error_vmcore - st->divide_error_vmlinux;
 	phys_base = idtr_paddr -
 		(st->idt_table_vmlinux + kaslr_offset - __START_KERNEL_map);
+
+	if (SADUMP_DUMPFILE()) {
+		char buf[sizeof("Linux version")];
+		ulong linux_banner_paddr;
+
+		if (!kvtop(NULL,
+			   st->linux_banner_vmlinux + kaslr_offset,
+			   &linux_banner_paddr,
+			   verbose))
+			goto retry;
+
+		if (!readmem(linux_banner_paddr,
+			     PHYSADDR,
+			     buf,
+			     sizeof(buf),
+			     "linux_banner",
+			     RETURN_ON_ERROR))
+			goto retry;
+
+		if (!STRNEQ(buf, "Linux version"))
+			goto retry;
+	}
 
 	if (CRASHDEBUG(1)) {
 		fprintf(fp, "calc_kaslr_offset: idtr=%lx\n", idtr);

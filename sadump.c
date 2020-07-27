@@ -1664,29 +1664,32 @@ get_sadump_data(void)
 static int
 get_sadump_smram_cpu_state_any(struct sadump_smram_cpu_state *smram)
 {
-        ulong offset;
-        struct sadump_header *sh = sd->dump_header;
-        int apicid;
-        struct sadump_smram_cpu_state scs, zero;
+	ulong offset;
+	struct sadump_header *sh = sd->dump_header;
+	static int apicid;
+	struct sadump_smram_cpu_state scs;
 
-        offset = sd->sub_hdr_offset + sizeof(uint32_t) +
-                 sd->dump_header->nr_cpus * sizeof(struct sadump_apic_state);
+	if (apicid >= sh->nr_cpus)
+		return FALSE;
 
-        memset(&zero, 0, sizeof(zero));
+	offset = sd->sub_hdr_offset + sizeof(uint32_t) +
+		 sd->dump_header->nr_cpus * sizeof(struct sadump_apic_state) +
+		 apicid * sizeof(scs);
 
-        for (apicid = 0; apicid < sh->nr_cpus; ++apicid) {
-                if (!read_device(&scs, sizeof(scs), &offset)) {
-                        error(INFO, "sadump: cannot read sub header "
-                              "cpu_state\n");
-                        return FALSE;
-                }
-                if (memcmp(&scs, &zero, sizeof(scs)) != 0) {
-                        *smram = scs;
-                        return TRUE;
-                }
-        }
+	while (apicid < sh->nr_cpus) {
+		apicid++;
+		if (!read_device(&scs, sizeof(scs), &offset)) {
+			error(INFO, "sadump: cannot read sub header "
+				"cpu_state\n");
+			return FALSE;
+		}
+		if (scs.Cr3 && (scs.IdtUpper || scs.IdtLower)) {
+			*smram = scs;
+			return TRUE;
+		}
+	}
 
-        return FALSE;
+	return FALSE;
 }
 
 int
@@ -1695,7 +1698,8 @@ sadump_get_cr3_idtr(ulong *cr3, ulong *idtr)
 	struct sadump_smram_cpu_state scs;
 
 	memset(&scs, 0, sizeof(scs));
-	get_sadump_smram_cpu_state_any(&scs);
+	if (!get_sadump_smram_cpu_state_any(&scs))
+		return FALSE;
 
 	*cr3 = scs.Cr3;
 	*idtr = ((uint64_t)scs.IdtUpper)<<32 | (uint64_t)scs.IdtLower;
