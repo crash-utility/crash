@@ -12692,20 +12692,25 @@ numeric_forward(const void *P_x, const void *P_y)
 		else if (STREQ(y->name, "idt_table"))
 			st->idt_table_vmlinux = valueof(y);
 
+		if (STREQ(x->name, "kaiser_init"))
+			st->kaiser_init_vmlinux = valueof(x);
+		else if (STREQ(y->name, "kaiser_init"))
+			st->kaiser_init_vmlinux = valueof(y);
+
 		if (STREQ(x->name, "linux_banner"))
 			st->linux_banner_vmlinux = valueof(x);
 		else if (STREQ(y->name, "linux_banner"))
 			st->linux_banner_vmlinux = valueof(y);
 
+		if (STREQ(x->name, "pti_init"))
+			st->pti_init_vmlinux = valueof(x);
+		else if (STREQ(y->name, "pti_init"))
+			st->pti_init_vmlinux = valueof(y);
+
 		if (STREQ(x->name, "saved_command_line"))
 			st->saved_command_line_vmlinux = valueof(x);
 		else if (STREQ(y->name, "saved_command_line"))
 			st->saved_command_line_vmlinux = valueof(y);
-
-		if (STREQ(x->name, "pti_init"))
-			st->pti_init_vmlinux = valueof(x);
-		else if (STREQ(y->name, "kaiser_init"))
-			st->kaiser_init_vmlinux = valueof(y);
 	}
 
   	xs = bfd_get_section(x);
