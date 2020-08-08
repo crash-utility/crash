@@ -498,12 +498,14 @@ read_vmware_vmss(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 	        int i;
 
 		for (i = 0; i < vmss.regionscount; i++) {
+			uint32_t hole;
+
 			if (ppn < vmss.regions[i].startppn)
 				break;
 
 			/* skip holes. */
-			pos -= ((vmss.regions[i].startppn - vmss.regions[i].startpagenum)
-				<< VMW_PAGE_SHIFT);
+			hole = vmss.regions[i].startppn - vmss.regions[i].startpagenum;
+			pos -= (uint64_t)hole << VMW_PAGE_SHIFT;
 		}
 	}
 
