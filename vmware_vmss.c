@@ -175,8 +175,10 @@ vmware_vmss_init(char *filename, FILE *ofp)
 				}
 				DEBUG_PARSE_PRINT((ofp, "[%d]", idx[j]));
 			}
-		       if (nextgroup)
+			if (nextgroup) {
+				DEBUG_PARSE_PRINT((ofp, "\n"));
 				break;
+			}
 
 			if (IS_BLOCK_TAG(tag)) {
 				uint64_t nbytes;
@@ -232,16 +234,22 @@ vmware_vmss_init(char *filename, FILE *ofp)
 						      filename, errno, strerror(errno));
 						break;
 					}
+					DEBUG_PARSE_PRINT((ofp, "\n"));
 					vmss.vcpu_regs[cpu] |= REGS_PRESENT_GPREGS;
 				} else if (strcmp(name, "CR64") == 0 &&
 					   nbytes == VMW_CR64_SIZE &&
 					   idx[0] < vmss.num_vcpus) {
 					int cpu = idx[0];
+					DEBUG_PARSE_PRINT((ofp, "\t=> "));
 					if (fread(&vmss.regs64[cpu]->cr[0], VMW_CR64_SIZE, 1, fp) != 1) {
 						error(INFO, LOGPRX"Failed to read '%s': [Error %d] %s\n",
 						      filename, errno, strerror(errno));
 						break;
 					}
+					for (j = 0; j < VMW_CR64_SIZE / 8; j++)
+						DEBUG_PARSE_PRINT((ofp, "%s%016llX", j ? " " : "",
+								(ulonglong)vmss.regs64[cpu]->cr[j]));
+					DEBUG_PARSE_PRINT((ofp, "\n"));
 					vmss.vcpu_regs[cpu] |= REGS_PRESENT_CRS;
 				} else if (strcmp(name, "IDTR") == 0 &&
 					   nbytes == VMW_IDTR_SIZE &&
@@ -258,6 +266,7 @@ vmware_vmss_init(char *filename, FILE *ofp)
 						      filename, errno, strerror(errno));
 						break;
 					}
+					DEBUG_PARSE_PRINT((ofp, "\n"));
 					vmss.regs64[cpu]->idtr = idtr;
 					vmss.vcpu_regs[cpu] |= REGS_PRESENT_IDTR;
 				} else {
@@ -266,6 +275,7 @@ vmware_vmss_init(char *filename, FILE *ofp)
 						      (ulonglong)(blockpos + nbytes));
 						break;
 					}
+					DEBUG_PARSE_PRINT((ofp, "\n"));
 				}
 			} else {
 				union {
