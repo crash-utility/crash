@@ -132,7 +132,7 @@ is_netdump(char *file, ulong source_query)
 		}
 	}
 
-	size = MIN_NETDUMP_ELF_HEADER_SIZE;
+	size = SAFE_NETDUMP_ELF_HEADER_SIZE;
         if ((eheader = (char *)malloc(size)) == NULL) {
                 fprintf(stderr, "cannot malloc minimum ELF header buffer\n");
                 clean_exit(1);
@@ -219,8 +219,22 @@ is_netdump(char *file, ulong source_query)
 		    source_query))
 			goto bailout;
 
-                load32 = (Elf32_Phdr *)
-                        &eheader[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
+		if (elf32->e_phoff != sizeof(Elf32_Ehdr)) {
+			if (CRASHDEBUG(1))
+				error(WARNING, "%s: first PHdr not following "
+					"EHdr (PHdr offset = %u)\n", file,
+					elf32->e_phoff);
+			/* it's okay as long as we've read enough data */
+			if (elf32->e_phoff > size - 2 * sizeof(Elf32_Phdr)) {
+				error(WARNING, "%s: PHdr to far into file!\n",
+					file);
+				goto bailout;
+			}
+		}
+
+		/* skip the NOTE program header */
+		load32 = (Elf32_Phdr *)
+			&eheader[elf32->e_phoff+sizeof(Elf32_Phdr)];
 
 		if ((load32->p_offset & (MIN_PAGE_SIZE-1)) ||
 		    (load32->p_align == 0))
@@ -291,8 +305,22 @@ is_netdump(char *file, ulong source_query)
 		    source_query))
 			goto bailout;
 
-                load64 = (Elf64_Phdr *)
-                        &eheader[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
+		if (elf64->e_phoff != sizeof(Elf64_Ehdr)) {
+			if (CRASHDEBUG(1))
+				error(WARNING, "%s: first PHdr not following "
+					"EHdr (PHdr offset = %u)\n", file,
+					elf64->e_phoff);
+			/* it's okay as long as we've read enough data */
+			if (elf64->e_phoff > size - 2 * sizeof(Elf64_Phdr)) {
+				error(WARNING, "%s: PHdr to far into file!\n",
+					file);
+				goto bailout;
+			}
+		}
+
+		/* skip the NOTE program header */
+		load64 = (Elf64_Phdr *)
+			&eheader[elf64->e_phoff+sizeof(Elf64_Phdr)];
 
 		if ((load64->p_offset & (MIN_PAGE_SIZE-1)) ||
 		    (load64->p_align == 0))
@@ -352,10 +380,9 @@ is_netdump(char *file, ulong source_query)
 			fprintf(stderr, "cannot malloc PT_LOAD segment buffers\n");
 			clean_exit(1);
 		}
-        	nd->notes32 = (Elf32_Phdr *)
-		    &nd->elf_header[sizeof(Elf32_Ehdr)];
-        	nd->load32 = (Elf32_Phdr *)
-		    &nd->elf_header[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
+		nd->notes32 = (Elf32_Phdr *)
+		    &nd->elf_header[nd->elf32->e_phoff];
+		nd->load32 = nd->notes32 + 1;
 		if (format == NETDUMP_ELF32)
 			nd->page_size = (uint)nd->load32->p_align;
                 dump_Elf32_Ehdr(nd->elf32);
@@ -391,10 +418,9 @@ is_netdump(char *file, ulong source_query)
                         fprintf(stderr, "cannot malloc PT_LOAD segment buffers\n");
                         clean_exit(1);
                 }
-                nd->notes64 = (Elf64_Phdr *)
-                    &nd->elf_header[sizeof(Elf64_Ehdr)];
-                nd->load64 = (Elf64_Phdr *)
-                    &nd->elf_header[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
+		nd->notes64 = (Elf64_Phdr *)
+		    &nd->elf_header[nd->elf64->e_phoff];
+		nd->load64 = nd->notes64 + 1;
 		if (format == NETDUMP_ELF64)
 			nd->page_size = (uint)nd->load64->p_align;
                 dump_Elf64_Ehdr(nd->elf64);
@@ -469,8 +495,8 @@ resize_elf_header(int fd, char *file, char **eheader_ptr, char **sect0_ptr,
 	case NETDUMP_ELF32:
 	case KDUMP_ELF32:
 		num_pt_load_segments = elf32->e_phnum - 1;
-		header_size = sizeof(Elf32_Ehdr) + sizeof(Elf32_Phdr) +
-			(sizeof(Elf32_Phdr) * num_pt_load_segments);
+		header_size = MAX(sizeof(Elf32_Ehdr), elf32->e_phoff) +
+			(sizeof(Elf32_Phdr) * (num_pt_load_segments + 1));
 		break;
 
 	case NETDUMP_ELF64:
@@ -513,8 +539,8 @@ resize_elf_header(int fd, char *file, char **eheader_ptr, char **sect0_ptr,
 		} else
 			num_pt_load_segments = elf64->e_phnum - 1;
 
-		header_size = sizeof(Elf64_Ehdr) + sizeof(Elf64_Phdr) +
-			(sizeof(Elf64_Phdr) * num_pt_load_segments);
+		header_size = MAX(sizeof(Elf64_Ehdr), elf64->e_phoff) +
+			(sizeof(Elf64_Phdr) * (num_pt_load_segments + 1));
 		break;
 	}
 
@@ -544,7 +570,7 @@ resize_elf_header(int fd, char *file, char **eheader_ptr, char **sect0_ptr,
 	{
 	case NETDUMP_ELF32:
 	case KDUMP_ELF32:
-		load32 = (Elf32_Phdr *)&eheader[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
+		load32 = (Elf32_Phdr *)&eheader[elf32->e_phoff+sizeof(Elf32_Phdr)];
 		p_offset32 = load32->p_offset;
 		for (i = 0; i < num_pt_load_segments; i++, load32 += 1) {
 			if (load32->p_offset && 
@@ -556,7 +582,7 @@ resize_elf_header(int fd, char *file, char **eheader_ptr, char **sect0_ptr,
 
 	case NETDUMP_ELF64:
 	case KDUMP_ELF64:
-		load64 = (Elf64_Phdr *)&eheader[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
+		load64 = (Elf64_Phdr *)&eheader[elf64->e_phoff+sizeof(Elf64_Phdr)];
 		p_offset64 = load64->p_offset;
 		for (i = 0; i < num_pt_load_segments; i++, load64 += 1) {
 			if (load64->p_offset &&
@@ -4459,8 +4485,12 @@ proc_kcore_init_32(FILE *fp, int kcore_fd)
 		close(fd);
 
 	elf32 = (Elf32_Ehdr *)&eheader[0];
-	notes32 = (Elf32_Phdr *)&eheader[sizeof(Elf32_Ehdr)];
-	load32 = (Elf32_Phdr *)&eheader[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
+	if (elf32->e_phoff > sizeof(eheader) - 2 * sizeof(Elf32_Phdr)) {
+		error(INFO, "/proc/kcore: ELF program header offset too big!\n");
+		return FALSE;
+	}
+	notes32 = (Elf32_Phdr *)&eheader[elf32->e_phoff];
+	load32 = notes32 + 1;
 
 	pkd->segments = elf32->e_phnum - 1;
 
@@ -4479,9 +4509,8 @@ proc_kcore_init_32(FILE *fp, int kcore_fd)
 	}
 
 	BCOPY(&eheader[0], &pkd->elf_header[0], pkd->header_size);	
-	pkd->notes32 = (Elf32_Phdr *)&pkd->elf_header[sizeof(Elf32_Ehdr)];
-	pkd->load32 = (Elf32_Phdr *)
-		&pkd->elf_header[sizeof(Elf32_Ehdr)+sizeof(Elf32_Phdr)];
+	pkd->notes32 = (Elf32_Phdr *)&pkd->elf_header[elf32->e_phoff];
+	pkd->load32 = pkd->notes32 + 1;
 	pkd->flags |= KCORE_ELF32;
 	
 	kcore_memory_dump(CRASHDEBUG(1) ? fp : pc->nullfp);
@@ -4529,8 +4558,12 @@ proc_kcore_init_64(FILE *fp, int kcore_fd)
 		close(fd);
 
 	elf64 = (Elf64_Ehdr *)&eheader[0];
-	notes64 = (Elf64_Phdr *)&eheader[sizeof(Elf64_Ehdr)];
-	load64 = (Elf64_Phdr *)&eheader[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
+	if (elf64->e_phoff > sizeof(eheader) - 2 * sizeof(Elf64_Phdr)) {
+		error(INFO, "/proc/kcore: ELF program header offset too big!\n");
+		return FALSE;
+	}
+	notes64 = (Elf64_Phdr *)&eheader[elf64->e_phoff];
+	load64 = notes64 + 1;
 
 	pkd->segments = elf64->e_phnum - 1;
 
@@ -4550,9 +4583,8 @@ proc_kcore_init_64(FILE *fp, int kcore_fd)
 	}
 
 	BCOPY(&eheader[0], &pkd->elf_header[0], pkd->header_size);	
-	pkd->notes64 = (Elf64_Phdr *)&pkd->elf_header[sizeof(Elf64_Ehdr)];
-	pkd->load64 = (Elf64_Phdr *)
-		&pkd->elf_header[sizeof(Elf64_Ehdr)+sizeof(Elf64_Phdr)];
+	pkd->notes64 = (Elf64_Phdr *)&pkd->elf_header[elf64->e_phoff];
+	pkd->load64 = pkd->notes64 + 1;
 	pkd->flags |= KCORE_ELF64;
 	
 	kcore_memory_dump(CRASHDEBUG(1) ? fp : pc->nullfp);

@@ -26,6 +26,14 @@
 #define MIN_NETDUMP_ELF_HEADER_SIZE \
         MAX(MIN_NETDUMP_ELF32_HEADER_SIZE, MIN_NETDUMP_ELF64_HEADER_SIZE)
 
+#define NETDUMP_ELF_HEADER_SPARE_SIZE 128
+/*
+ * "Safe" size, as in covering the ELF header and the first two program headers
+ * plus any "padding" in-between, like section headers.
+ */
+#define SAFE_NETDUMP_ELF_HEADER_SIZE \
+	(MIN_NETDUMP_ELF_HEADER_SIZE+NETDUMP_ELF_HEADER_SPARE_SIZE)
+
 #define NT_TASKSTRUCT 4
 #define NT_DISKDUMP   0x70000001
 
