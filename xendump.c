@@ -2055,6 +2055,16 @@ xc_core_elf_verify(char *file, char *buf)
 				goto bailout;
 			break;
 
+		case EM_ARM:
+			if (machine_type_mismatch(file, "ARM", NULL, 0))
+				goto bailout;
+			break;
+
+		case EM_AARCH64:
+			if (machine_type_mismatch(file, "ARM64", NULL, 0))
+				goto bailout;
+			break;
+
 		default:
 			if (machine_type_mismatch(file, "(unknown)", NULL, 0))
 				goto bailout;
