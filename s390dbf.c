@@ -379,40 +379,6 @@ dflt_header_fn(debug_info_t * id, debug_view_t *view,
 }
 
 /*
- * prints debug header in raw format
- */
-static int
-raw_header_fn(debug_info_t * id, debug_view_t *view,
-	      int area, debug_entry_t * entry, char *out_buf)
-{
-	int rc;
-
-	rc = sizeof(debug_entry_t);
-	if (out_buf == NULL)
-		goto out;
-	memcpy(out_buf,entry,sizeof(debug_entry_t));
-      out:
-	return rc;
-}
-
-/*
- * prints debug data in raw format
- */
-static int
-raw_format_fn(debug_info_t * id, debug_view_t *view,
-	      char *out_buf, const char *in_buf)
-{
-	int rc;
-
-	rc = id->buf_size;
-	if (out_buf == NULL || in_buf == NULL)
-		goto out;
-	memcpy(out_buf, in_buf, id->buf_size);
-      out:
-	return rc;
-}
-
-/*
  * prints debug data in hex/ascii format
  */
 static int
@@ -682,13 +648,6 @@ debug_view_t pages_view = {
 	NULL,
 };
 
-debug_view_t raw_view = {
-	"raw",
-	NULL,
-	&raw_header_fn,
-	&raw_format_fn,
-};
-
 debug_view_t hex_ascii_view = {
 	"hex_ascii",
 	&prolog_fn,
@@ -899,7 +858,6 @@ dbf_init(void)
 		add_lcrash_debug_view(&hex_view);
 		add_lcrash_debug_view(&hex_ascii_view);
 		add_lcrash_debug_view(&sprintf_view);
-		add_lcrash_debug_view(&raw_view);
 		ebcdic_ascii_conv = iconv_open("ISO-8859-1", "EBCDIC-US");
 		initialized = 1;
 	}
