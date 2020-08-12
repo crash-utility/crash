@@ -165,6 +165,7 @@ static inline int set_cmd_flags(command_t *cmd, int flags, char *extraops)
 	return 0;
 }
 
+#define USEC_PER_SEC 1000000L
 /* Time of day clock value for 1970/01/01 */
 #define TOD_UNIX_EPOCH (0x8126d60e46000000LL - (0x3c26700LL * 1000000 * 4096))
 /* Time of day clock value for 1970/01/01 in usecs */
@@ -180,8 +181,8 @@ static inline void kl_s390tod_to_timeval(uint64_t todval, struct timeval *xtime)
 	todval_us += tod_clock_base_us;
 	/* Subtract EPOCH that we get time in usec since 1970 */
 	todval_us -= TOD_UNIX_EPOCH_US;
-	xtime->tv_sec  = todval_us / 1000000;
-	xtime->tv_usec = todval_us % 1000000;
+	xtime->tv_sec  = todval_us / USEC_PER_SEC;
+	xtime->tv_usec = todval_us % USEC_PER_SEC;
 }
 
 static inline int kl_struct_len(char* struct_name)
@@ -227,6 +228,7 @@ static inline kaddr_t kl_funcaddr(kaddr_t addr)
 
 #define DBF_VERSION_V1 1
 #define DBF_VERSION_V2 2
+#define DBF_VERSION_V3 3
 #define PAGE_SIZE 4096
 #define DEBUG_MAX_VIEWS	    10 /* max number of views in proc fs */
 #define DEBUG_MAX_PROCF_LEN	64 /* max length for a proc file name */
@@ -237,9 +239,11 @@ static inline kaddr_t kl_funcaddr(kaddr_t addr)
 
 typedef struct debug_view_s debug_view_t;
 
-/* struct to hold contents of struct __debug_entry from dump
+/*
+ * struct to hold contents of struct __debug_entry from dump
+ * for DBF_VERSION_V1 and DBF_VERSION_V2
  */
-typedef struct debug_entry_s{
+typedef struct debug_entry_v1_s {
 	union {
 		struct {
 			unsigned long long clock:52;
@@ -251,9 +255,16 @@ typedef struct debug_entry_s{
 		unsigned long long stck;
 	} id;
 	kaddr_t caller; /* changed from void* to kaddr_t */
-} __attribute__((packed)) debug_entry_t;
-/* typedef struct __debug_entry debug_entry_t; */
+} __attribute__((packed)) debug_entry_v1_t;
 
+/* for DBF_VERSION_V3 */
+typedef struct debug_entry_v3_s {
+	unsigned long long clock:60;
+	unsigned long long exception:1;
+	unsigned long long level:3;
+	kaddr_t caller; /* changed from void* to kaddr_t */
+	unsigned short cpuid;
+} __attribute__((packed)) debug_entry_v3_t;
 
 static unsigned int dbf_version;
 
@@ -284,7 +295,7 @@ typedef struct debug_info_s {
 /* functions to generate dbf output
  */
 typedef int (debug_header_proc_t) (debug_info_t* id, debug_view_t* view,
-				   int area, debug_entry_t* entry,
+				   int area, void* entry,
 				   char* out_buf);
 typedef int (debug_format_proc_t) (debug_info_t* id, debug_view_t* view,
 				   char* out_buf, const char* in_buf);
@@ -322,37 +333,47 @@ EBCASC(char *inout, size_t len)
  */
 static int
 dflt_header_fn(debug_info_t * id, debug_view_t *view,
-	       int area, debug_entry_t * entry, char *out_buf)
+	       int area, void *entry, char *out_buf)
 {
-	struct timeval time_val;
-	unsigned long long time;
-	char *except_str;
-	kaddr_t caller;
+	struct timeval time_val = { 0, 0 };
 	int rc = 0;
+	unsigned long long time;
+	unsigned short level = 0, cpuid = 0;
+	char *except_str = "-";
+	kaddr_t caller = 0;
 	char *caller_name;
+	int name_width = 26;
 	int offset;
 	char caller_buf[30];
-	unsigned int level;
 	syment_t *caller_sym;
-	debug_entry_t lentry; /* store byte swapped values of entry */
 
-	lentry.id.stck = KL_GET_UINT64(&entry->id);
-	lentry.caller = KL_GET_PTR(&entry->caller);
-	level = lentry.id.fields.level;
-	time = lentry.id.stck;
-
-	kl_s390tod_to_timeval(time, &time_val);
-
-	if (lentry.id.fields.exception)
-		except_str = "*";
-	else
-		except_str = "-";
-	caller = lentry.caller;
-	if(KL_ARCH == KL_ARCH_S390){
-		caller &= 0x7fffffff;
+	switch (dbf_version) {
+	case DBF_VERSION_V1:
+	case DBF_VERSION_V2:
+		level = ((debug_entry_v1_t *) entry)->id.fields.level;
+		cpuid = ((debug_entry_v1_t *) entry)->id.fields.cpuid;
+		time = ((debug_entry_v1_t *) entry)->id.stck;
+		if (((debug_entry_v1_t *) entry)->id.fields.exception)
+			except_str = "*";
+		caller = ((debug_entry_v1_t *) entry)->caller;
+		kl_s390tod_to_timeval(time, &time_val);
+		break;
+	case DBF_VERSION_V3:
+		level = ((debug_entry_v3_t *) entry)->level;
+		cpuid = ((debug_entry_v3_t *) entry)->cpuid;
+		time = ((debug_entry_v3_t *) entry)->clock;
+		if (((debug_entry_v3_t *) entry)->exception)
+			except_str = "*";
+		caller = ((debug_entry_v3_t *) entry)->caller;
+		time_val.tv_sec  = time / USEC_PER_SEC;
+		time_val.tv_usec = time % USEC_PER_SEC;
+		break;
 	}
+
+	if (KL_ARCH == KL_ARCH_S390)
+		caller &= 0x7fffffff;
 	caller_sym = kl_lkup_symaddr(caller);
-	if(caller_sym){
+	if (caller_sym) {
 		caller_name = caller_sym->s_name;
 		offset = caller - kl_funcaddr(caller);
 	}
@@ -361,20 +382,12 @@ dflt_header_fn(debug_info_t * id, debug_view_t *view,
 		caller_name = caller_buf;
 		offset = 0;
 	}
+	rc += sprintf(out_buf,
+	      "%02i %011lu:%06lu %1u %1s %04i <%-*s+%04i>  ",
+	      area, time_val.tv_sec, time_val.tv_usec, level,
+	      except_str, cpuid,
+	      name_width, caller_name, offset);
 
-	if(KL_ARCH == KL_ARCH_S390X){
-		rc += sprintf(out_buf, 
-			      "%02i %011lu:%06lu %1u %1s %02i <%20s+%04i>  ",
-			      area, time_val.tv_sec, time_val.tv_usec, level,
-			      except_str, entry->id.fields.cpuid, caller_name,
-			      offset);
-	} else {
-		rc += sprintf(out_buf,
-			      "%02i %011lu:%06lu %1u %1s %02i <%-20s+%04i>  ",
-			      area, time_val.tv_sec, time_val.tv_usec, level,
-			      except_str, lentry.id.fields.cpuid, caller_name,
-			      offset);
-	}
 	return rc;
 }
 
@@ -539,9 +552,9 @@ prolog_fn(debug_info_t * id,
 {
 	int rc = 0;
 
-	rc = sprintf(out_buf, "AREA TIME LEVEL EXCEPTION CP CALLING FUNCTION"
-		     "   + OFFSET  DATA\n==================================="
-		     "=======================================\n");
+	rc = sprintf(out_buf, "AREA TIME LEVEL EXCEPTION CP   CALLING FUNCTION"
+		     " + OFFSET          DATA\n==============================="
+		     "===========================================\n");
 	return rc;
 }
 
@@ -663,10 +676,10 @@ debug_view_t sprintf_view = {
 };
 
 
-static debug_entry_t *
-debug_find_oldest_entry(debug_entry_t *entries, int num, int entry_size)
+static debug_entry_v1_t *
+debug_find_oldest_entry(debug_entry_v1_t *entries, int num, int entry_size)
 {
-	debug_entry_t *result, *current;
+	debug_entry_v1_t *result, *current;
 	int i;
 	uint64_t clock1, clock2;
 
@@ -681,7 +694,7 @@ debug_find_oldest_entry(debug_entry_t *entries, int num, int entry_size)
 		clock2 = KL_GET_UINT64(&clock2);
 		if (clock1 < clock2)
 			result = current;
-		current = (debug_entry_t *) ((char *) current + entry_size);
+		current = (debug_entry_v1_t *) ((char *) current + entry_size);
 	}
 	return result;
 }
@@ -697,7 +710,7 @@ debug_format_output_v1(debug_info_t * debug_area, debug_view_t *view,
 {
 	int i, j, len;
 	int nr_of_entries;
-	debug_entry_t *act_entry, *last_entry;
+	debug_entry_v1_t *act_entry, *last_entry;
 	char *act_entry_data;
 	char buf[2048];
 	size_t items ATTRIBUTE_UNUSED;
@@ -720,7 +733,7 @@ debug_format_output_v1(debug_info_t * debug_area, debug_view_t *view,
 		act_entry = debug_find_oldest_entry(debug_area->areas[i],
 						    nr_of_entries,
 						    debug_area->entry_size);
-		last_entry = (debug_entry_t *) ((char *) debug_area->areas[i] +
+		last_entry = (debug_entry_v1_t *) ((char *) debug_area->areas[i] +
 			     (PAGE_SIZE << debug_area->page_order) -
 			     debug_area->entry_size);
 		for (j = 0; j < nr_of_entries; j++) {
@@ -740,7 +753,7 @@ debug_format_output_v1(debug_info_t * debug_area, debug_view_t *view,
 				memset(buf, 0, 2048); 
 			}
 			act_entry =
-			    (debug_entry_t *) (((char *) act_entry) +
+			    (debug_entry_v1_t *) (((char *) act_entry) +
 					       debug_area->entry_size);
 			if (act_entry > last_entry)
 				act_entry = debug_area->areas[i];
@@ -759,7 +772,7 @@ debug_format_output_v2(debug_info_t * debug_area,
 		    debug_view_t *view, FILE * ofp)
 {
 	int i, j, k, len;
-	debug_entry_t *act_entry;
+	void *act_entry;
 	char *act_entry_data;
 	char buf[2048];
 	size_t items ATTRIBUTE_UNUSED;
@@ -783,7 +796,11 @@ debug_format_output_v2(debug_info_t * debug_area,
 			act_entry = debug_area->areas_v2[i][j];
 			for (k = 0; k < nr_entries_per_page; k++) {
 				act_entry_data = (char*)act_entry + dbe_size;
-				if (act_entry->id.stck == 0)
+				if (dbf_version == DBF_VERSION_V3 &&
+				    ((debug_entry_v3_t *) act_entry)->clock == 0)
+					break;	/* empty entry */
+				else if (dbf_version < DBF_VERSION_V3 &&
+				    ((debug_entry_v1_t *) act_entry)->id.stck == 0)
 					break;	/* empty entry */
 				if (view->header_proc) {
 					len = view->header_proc(debug_area, 
@@ -797,8 +814,8 @@ debug_format_output_v2(debug_info_t * debug_area,
 					items = fwrite(buf,len, 1, ofp);
 					memset(buf, 0, 2048); 
 				}
-				act_entry = (debug_entry_t *) (((char *) 
-					act_entry) + debug_area->entry_size);
+				act_entry = ((char *) act_entry) +
+					debug_area->entry_size;
 			}
 		}
 	}
@@ -905,7 +922,7 @@ debug_get_areas_v1(debug_info_t* db_info, void* k_dbi)
        	mem_pos = KL_ULONG(k_dbi,"debug_info","areas");
        	for (i = 0; i < db_info->nr_areas; i++) {
 		dbe_addr = KL_VREAD_PTR(mem_pos);
-	       	db_info->areas[i] = (debug_entry_t *) malloc(area_size);
+		db_info->areas[i] = (debug_entry_v1_t *) malloc(area_size);
 		/* read raw data for debug area */
 	       	GET_BLOCK(dbe_addr, area_size, db_info->areas[i]);
 		mem_pos += KL_NBPW;
@@ -1328,11 +1345,13 @@ s390dbf_cmd(command_t * cmd)
 
 	dbf_version = KL_VREAD_UINT32(dbf_version_sym->s_addr);
 
-	if ((dbf_version != DBF_VERSION_V1) && (dbf_version != DBF_VERSION_V2)){
-		fprintf(cmd->efp,"lcrash does not support the"
+	if ((dbf_version != DBF_VERSION_V1) &&
+	    (dbf_version != DBF_VERSION_V2) &&
+	    (dbf_version != DBF_VERSION_V3)) {
+		fprintf(cmd->efp, "lcrash does not support the"
 			" debug feature version of the dump kernel:\n");
-		fprintf(cmd->efp,"DUMP: %i SUPPORTED: %i and %i\n",
-			dbf_version, DBF_VERSION_V1, DBF_VERSION_V2);
+		fprintf(cmd->efp, "DUMP: %i SUPPORTED: %i, %i and %i\n",
+			dbf_version, DBF_VERSION_V1, DBF_VERSION_V2, DBF_VERSION_V3);
 		return -1;
 	}
 
