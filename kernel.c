@@ -4939,13 +4939,21 @@ cmd_log(void)
         if (argerrs)
                 cmd_usage(pc->curcmd, SYNOPSIS);
 
-	if (kt->boot_date.tv_sec == 0) {
-		ulonglong uptime_jiffies;
-		ulong  uptime_sec;
-		get_uptime(NULL, &uptime_jiffies);
-		uptime_sec = (uptime_jiffies)/(ulonglong)machdep->hz;
-		kt->boot_date.tv_sec = kt->date.tv_sec - uptime_sec;
-		kt->boot_date.tv_nsec = 0;
+	if (msg_flags & SHOW_LOG_CTIME) {
+		if (pc->flags & MINIMAL_MODE) {
+			error(WARNING, "the option '-T' is not available in minimal mode\n");
+			return;
+		}
+
+		if (kt->boot_date.tv_sec == 0) {
+			ulonglong uptime_jiffies;
+			ulong  uptime_sec;
+
+			get_uptime(NULL, &uptime_jiffies);
+			uptime_sec = (uptime_jiffies)/(ulonglong)machdep->hz;
+			kt->boot_date.tv_sec = kt->date.tv_sec - uptime_sec;
+			kt->boot_date.tv_nsec = 0;
+		}
 	}
 
 	if (msg_flags & SHOW_LOG_AUDIT) {
