@@ -2100,6 +2100,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long module_module_core_rx;
 	long module_module_init_rw;
 	long module_module_init_rx;
+	long super_block_s_inodes;
+	long inode_i_sb_list;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

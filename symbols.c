@@ -9468,6 +9468,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(inode_i_fop)); 
 	fprintf(fp, "               inode_i_mapping: %ld\n",
 		OFFSET(inode_i_mapping));
+	fprintf(fp, "               inode_i_sb_list: %ld\n",
+		OFFSET(inode_i_sb_list));
 
         fprintf(fp, "             vfsmount_mnt_next: %ld\n", 
 		OFFSET(vfsmount_mnt_next));
@@ -9504,6 +9506,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(super_block_s_type));
         fprintf(fp, "           super_block_s_files: %ld\n", 
 		OFFSET(super_block_s_files));
+	fprintf(fp, "          super_block_s_inodes: %ld\n",
+		OFFSET(super_block_s_inodes));
 
 	fprintf(fp, "               nlm_file_f_file: %ld\n",
 		OFFSET(nlm_file_f_file));

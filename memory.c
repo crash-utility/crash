@@ -252,6 +252,7 @@ static ulonglong get_vm_flags(char *);
 static void PG_reserved_flag_init(void);
 static void PG_slab_flag_init(void);
 static ulong nr_blockdev_pages(void);
+static ulong nr_blockdev_pages_v2(void);
 void sparse_mem_init(void);
 void dump_mem_sections(int);
 void dump_memory_blocks(int);
@@ -500,6 +501,9 @@ vm_init(void)
 	MEMBER_OFFSET_INIT(address_space_nrpages, "address_space", "nrpages");
 	if (INVALID_MEMBER(address_space_nrpages))
 		MEMBER_OFFSET_INIT(address_space_nrpages, "address_space", "__nrpages");
+
+	MEMBER_OFFSET_INIT(super_block_s_inodes, "super_block", "s_inodes");
+	MEMBER_OFFSET_INIT(inode_i_sb_list, "inode", "i_sb_list");
 
 	MEMBER_OFFSET_INIT(gendisk_major, "gendisk", "major");
 	MEMBER_OFFSET_INIT(gendisk_fops, "gendisk", "fops");
@@ -8608,6 +8612,9 @@ nr_blockdev_pages(void)
 	ulong nrpages;
 	char *block_device_buf, *inode_buf, *address_space_buf;
 
+	if (!kernel_symbol_exists("all_bdevs"))
+		return nr_blockdev_pages_v2();
+
         ld = &list_data;
         BZERO(ld, sizeof(struct list_data));
 	get_symbol_data("all_bdevs", sizeof(void *), &ld->start);
@@ -8650,6 +8657,57 @@ nr_blockdev_pages(void)
 
 	return nrpages;
 } 
+
+/*
+ *  Emulate 5.9 nr_blockdev_pages() function.
+ */
+static ulong
+nr_blockdev_pages_v2(void)
+{
+	struct list_data list_data, *ld;
+	ulong bd_sb, address_space;
+	ulong nrpages;
+	int i, inode_count;
+	char *inode_buf, *address_space_buf;
+
+	ld = &list_data;
+	BZERO(ld, sizeof(struct list_data));
+
+	get_symbol_data("blockdev_superblock", sizeof(void *), &bd_sb);
+	readmem(bd_sb + OFFSET(super_block_s_inodes), KVADDR, &ld->start,
+		sizeof(ulong), "blockdev_superblock.s_inodes", FAULT_ON_ERROR);
+
+	if (empty_list(ld->start))
+		return 0;
+	ld->flags |= LIST_ALLOCATE;
+	ld->end = bd_sb + OFFSET(super_block_s_inodes);
+	ld->list_head_offset = OFFSET(inode_i_sb_list);
+
+	inode_buf = GETBUF(SIZE(inode));
+	address_space_buf = GETBUF(SIZE(address_space));
+
+	inode_count = do_list(ld);
+
+	/*
+	 *  go through the s_inodes list, emulating:
+	 *
+	 *      ret += inode->i_mapping->nrpages;
+	 */
+	for (i = nrpages = 0; i < inode_count; i++) {
+		readmem(ld->list_ptr[i], KVADDR, inode_buf, SIZE(inode), "inode buffer",
+			FAULT_ON_ERROR);
+		address_space = ULONG(inode_buf + OFFSET(inode_i_mapping));
+		readmem(address_space, KVADDR, address_space_buf, SIZE(address_space),
+			"address_space buffer", FAULT_ON_ERROR);
+		nrpages += ULONG(address_space_buf + OFFSET(address_space_nrpages));
+	}
+
+	FREEBUF(ld->list_ptr);
+	FREEBUF(inode_buf);
+	FREEBUF(address_space_buf);
+
+	return nrpages;
+}
 
 /*
  *  dump_vmlist() displays information from the vmlist.
