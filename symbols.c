@@ -9326,8 +9326,12 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(irq_data_chip));
 	fprintf(fp, "             irq_data_affinity: %ld\n",
 		OFFSET(irq_data_affinity));
+	fprintf(fp, "      irq_common_data_affinity: %ld\n",
+		OFFSET(irq_common_data_affinity));
 	fprintf(fp, "             irq_desc_irq_data: %ld\n",
 		OFFSET(irq_desc_irq_data));
+	fprintf(fp, "      irq_desc_irq_common_data: %ld\n",
+		OFFSET(irq_desc_irq_common_data));
 	fprintf(fp, "              kernel_stat_irqs: %ld\n",
 		OFFSET(kernel_stat_irqs));
 
@@ -10683,6 +10687,7 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "                      runqueue: %ld\n", SIZE(runqueue));
 	fprintf(fp, "                    irq_desc_t: %ld\n", SIZE(irq_desc_t));
 	fprintf(fp, "                      irq_data: %ld\n", SIZE(irq_data));
+	fprintf(fp, "               irq_common_data: %ld\n", SIZE(irq_common_data));
 	fprintf(fp, "                    task_union: %ld\n", SIZE(task_union));
 	fprintf(fp, "                  thread_union: %ld\n", SIZE(thread_union));
 	fprintf(fp, "                    prio_array: %ld\n", SIZE(prio_array));

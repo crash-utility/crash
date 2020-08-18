@@ -2102,6 +2102,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long module_module_init_rx;
 	long super_block_s_inodes;
 	long inode_i_sb_list;
+	long irq_common_data_affinity;
+	long irq_desc_irq_common_data;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2260,6 +2262,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long xarray;
 	long xa_node;
 	long zram_table_entry;
+	long irq_common_data;
 };
 
 struct array_table {

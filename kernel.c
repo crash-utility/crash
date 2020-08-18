@@ -550,6 +550,12 @@ kernel_init()
 		MEMBER_OFFSET_INIT(irq_desc_irq_data, "irq_desc", "irq_data");
 	}
 
+	STRUCT_SIZE_INIT(irq_common_data, "irq_common_data");
+	if (VALID_STRUCT(irq_common_data)) {
+		MEMBER_OFFSET_INIT(irq_common_data_affinity, "irq_common_data", "affinity");
+		MEMBER_OFFSET_INIT(irq_desc_irq_common_data, "irq_desc", "irq_common_data");
+	}
+
         STRUCT_SIZE_INIT(irq_cpustat_t, "irq_cpustat_t");
         MEMBER_OFFSET_INIT(irq_cpustat_t___softirq_active, 
                 "irq_cpustat_t", "__softirq_active");
@@ -6397,10 +6403,9 @@ cmd_irq(void)
 			if (!machdep->get_irq_affinity)
 				option_not_supported(c);
 
-			if (VALID_STRUCT(irq_data)) {
-				if (INVALID_MEMBER(irq_data_affinity))
-					option_not_supported(c);
-			} else if (INVALID_MEMBER(irq_desc_t_affinity))
+			if (INVALID_MEMBER(irq_data_affinity) &&
+			    INVALID_MEMBER(irq_common_data_affinity) &&
+			    INVALID_MEMBER(irq_desc_t_affinity))
 				option_not_supported(c);
 
 			if ((nr_irqs = machdep->nr_irqs) == 0)
@@ -7162,7 +7167,10 @@ generic_get_irq_affinity(int irq)
 		len = DIV_ROUND_UP(kt->cpus, BITS_PER_LONG) * sizeof(ulong);
 
 	affinity = (ulong *)GETBUF(len);
-	if (VALID_STRUCT(irq_data))
+	if (VALID_MEMBER(irq_common_data_affinity))
+		tmp_addr = irq_desc_addr + OFFSET(irq_desc_irq_common_data)
+				+ OFFSET(irq_common_data_affinity);
+	else if (VALID_MEMBER(irq_data_affinity))
 		tmp_addr = irq_desc_addr + \
 			   OFFSET(irq_data_affinity);
 	else
