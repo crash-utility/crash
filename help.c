@@ -9299,8 +9299,7 @@ display_README(void)
 			fprintf(fp, "    GNU gdb %s\n", pc->gdb_version);
 		} else if (STREQ(README[i], README_DATE)) {
     			time(&time_now);               
-        		fprintf(fp, "            DATE: %s\n", 
-                		strip_linefeeds(ctime(&time_now)));
+			fprintf(fp, "            DATE: %s\n", ctime_tz(&time_now));
 		} else if (STREQ(README[i], README_HELP_MENU)) {
 			display_help_screen("    ");
 		} else if (STREQ(README[i], README_GPL_INFO)) {

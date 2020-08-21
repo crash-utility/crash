@@ -225,10 +225,9 @@ kernel_init()
 	get_xtime(&kt->date);
 	if (CRASHDEBUG(1))
 		fprintf(fp, "xtime timespec.tv_sec: %lx: %s\n", 
-			kt->date.tv_sec, strip_linefeeds(ctime(&kt->date.tv_sec)));
+			kt->date.tv_sec, ctime_tz(&kt->date.tv_sec));
 	if (kt->flags2 & GET_TIMESTAMP) {
-		fprintf(fp, "%s\n\n", 
-			strip_linefeeds(ctime(&kt->date.tv_sec)));
+		fprintf(fp, "%s\n\n", ctime_tz(&kt->date.tv_sec));
 		clean_exit(0);
 	}
 	
@@ -5240,7 +5239,7 @@ dump_log_entry(char *logptr, int msg_flags)
 		rem = (ulonglong)ts_nsec % (ulonglong)1000000000;
 		if (msg_flags & SHOW_LOG_CTIME) {
 			time_t t = kt->boot_date.tv_sec + nanos;
-			sprintf(buf, "[%s] ", strip_linefeeds(ctime(&t)));
+			sprintf(buf, "[%s] ", ctime_tz(&t));
 		}
 		else
 			sprintf(buf, "[%5lld.%06ld] ", nanos, rem/1000);
@@ -5615,8 +5614,7 @@ display_sys_stats(void)
 
 	if (ACTIVE())
 		get_xtime(&kt->date);
-        fprintf(fp, "        DATE: %s\n", 
-		strip_linefeeds(ctime(&kt->date.tv_sec))); 
+        fprintf(fp, "        DATE: %s\n", ctime_tz(&kt->date.tv_sec));
         fprintf(fp, "      UPTIME: %s\n", get_uptime(buf, NULL)); 
         fprintf(fp, "LOAD AVERAGE: %s\n", get_loadavg(buf)); 
 	fprintf(fp, "       TASKS: %ld\n", RUNNING_TASKS());
@@ -6107,10 +6105,8 @@ dump_kernel_table(int verbose)
 		kt->source_tree : "(not used)");
 	if (!(pc->flags & KERNEL_DEBUG_QUERY) && ACTIVE()) 
 		get_xtime(&kt->date);
-        fprintf(fp, "          date: %s\n",
-                strip_linefeeds(ctime(&kt->date.tv_sec)));
-        fprintf(fp, "    boot_ date: %s\n",
-                strip_linefeeds(ctime(&kt->boot_date.tv_sec)));
+        fprintf(fp, "          date: %s\n", ctime_tz(&kt->date.tv_sec));
+        fprintf(fp, "     boot_date: %s\n", ctime_tz(&kt->boot_date.tv_sec));
         fprintf(fp, "  proc_version: %s\n", strip_linefeeds(kt->proc_version));
         fprintf(fp, "   new_utsname: \n");
         fprintf(fp, "      .sysname: %s\n", uts->sysname);

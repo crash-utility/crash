@@ -5114,6 +5114,7 @@ char *strdupbuf(char *);
 void sigsetup(int, void *, struct sigaction *, struct sigaction *);
 #define SIGACTION(s, h, a, o) sigsetup(s, h, a, o)
 char *convert_time(ulonglong, char *);
+char *ctime_tz(time_t *);
 void stall(ulong);
 char *pages_to_size(ulong, char *);
 int clean_arg(void);

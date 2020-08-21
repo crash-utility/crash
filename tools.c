@@ -6318,6 +6318,38 @@ convert_time(ulonglong count, char *buf)
 }
 
 /*
+ * Convert a calendar time into a null-terminated string like ctime(), but
+ * the result string contains the time zone string and does not ends with a
+ * linefeed ('\n').  If localtime() or strftime() fails, fails back to return
+ * POSIX time (seconds since the Epoch) or ctime() string respectively.
+ *
+ * NOTE: The return value points to a statically allocated string which is
+ * overwritten by subsequent calls.
+ */
+char *
+ctime_tz(time_t *timep)
+{
+	static char buf[64];
+	struct tm *tm;
+	size_t size;
+
+	if (!timep)
+		return NULL;
+
+	tm = localtime(timep);
+	if (!tm) {
+		snprintf(buf, sizeof(buf), "%ld", *timep);
+		return buf;
+	}
+
+	size = strftime(buf, sizeof(buf), "%a %b %e %T %Z %Y", tm);
+	if (!size)
+		return strip_linefeeds(ctime(timep));
+
+	return buf;
+}
+
+/*
  *  Stall for a number of microseconds.
  */
 void
