@@ -1766,17 +1766,17 @@ store_module_symbols_v2(ulong total, int mods_installed)
 
 		if (THIS_KERNEL_VERSION >= LINUX(2,6,27)) {
 			nksyms = UINT(modbuf + OFFSET(module_num_symtab));
-			size = UINT(modbuf + OFFSET(module_core_size));
+			size = UINT(modbuf + MODULE_OFFSET2(module_core_size, rx));
 		} else {
 			nksyms = ULONG(modbuf + OFFSET(module_num_symtab));
-			size = ULONG(modbuf + OFFSET(module_core_size));
+			size = ULONG(modbuf + MODULE_OFFSET2(module_core_size, rx));
 		}
 
 		mod_name = modbuf + OFFSET(module_name);
 
 		lm = &st->load_modules[m++];
 		BZERO(lm, sizeof(struct load_module));
-		lm->mod_base = ULONG(modbuf + OFFSET(module_module_core));
+		lm->mod_base = ULONG(modbuf + MODULE_OFFSET2(module_module_core, rx));
 		lm->module_struct = mod;
 		lm->mod_size = size;
         	if (strlen(mod_name) < MAX_MOD_NAME)
@@ -1795,23 +1795,23 @@ store_module_symbols_v2(ulong total, int mods_installed)
 		lm->mod_flags = MOD_EXT_SYMS;
 		lm->mod_ext_symcnt = mcnt;
 		lm->mod_init_module_ptr = ULONG(modbuf + 
-			OFFSET(module_module_init));
+			MODULE_OFFSET2(module_module_init, rx));
 		if (VALID_MEMBER(module_percpu))
 			lm->mod_percpu = ULONG(modbuf + OFFSET(module_percpu));
 		if (THIS_KERNEL_VERSION >= LINUX(2,6,27)) {
 			lm->mod_etext_guess = lm->mod_base +
-				UINT(modbuf + OFFSET(module_core_text_size));
+				UINT(modbuf + MODULE_OFFSET(module_core_text_size, module_core_size_rx));
 			lm->mod_init_size =
-				UINT(modbuf + OFFSET(module_init_size));
+				UINT(modbuf + MODULE_OFFSET2(module_init_size, rx));
 			lm->mod_init_text_size = 
-				UINT(modbuf + OFFSET(module_init_text_size));
+				UINT(modbuf + MODULE_OFFSET(module_init_text_size, module_init_size_rx));
 		} else {
 			lm->mod_etext_guess = lm->mod_base +
-				ULONG(modbuf + OFFSET(module_core_text_size));
+				ULONG(modbuf + MODULE_OFFSET(module_core_text_size, module_core_size_rx));
 			lm->mod_init_size =
-				ULONG(modbuf + OFFSET(module_init_size));
+				ULONG(modbuf + MODULE_OFFSET2(module_init_size, rx));
 			lm->mod_init_text_size = 
-				ULONG(modbuf + OFFSET(module_init_text_size));
+				ULONG(modbuf + MODULE_OFFSET(module_init_text_size, module_init_size_rx));
 		}
 		lm->mod_text_start = lm->mod_base;
 
@@ -9119,12 +9119,28 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(module_core_size));
 	fprintf(fp, "         module_core_text_size: %ld\n",
 		OFFSET(module_core_text_size));
-	fprintf(fp, "         module_init_size: %ld\n",
+	fprintf(fp, "              module_init_size: %ld\n",
 		OFFSET(module_init_size));
 	fprintf(fp, "         module_init_text_size: %ld\n",
 		OFFSET(module_init_text_size));
 	fprintf(fp, "            module_module_init: %ld\n",
 		OFFSET(module_module_init));
+	fprintf(fp, "         module_module_core_rx: %ld\n",
+		OFFSET(module_module_core_rx));
+	fprintf(fp, "         module_module_core_rw: %ld\n",
+		OFFSET(module_module_core_rw));
+	fprintf(fp, "           module_core_size_rx: %ld\n",
+		OFFSET(module_core_size_rx));
+	fprintf(fp, "           module_core_size_rw: %ld\n",
+		OFFSET(module_core_size_rw));
+	fprintf(fp, "         module_module_init_rx: %ld\n",
+		OFFSET(module_module_init_rx));
+	fprintf(fp, "         module_module_init_rw: %ld\n",
+		OFFSET(module_module_init_rw));
+	fprintf(fp, "           module_init_size_rx: %ld\n",
+		OFFSET(module_init_size_rx));
+	fprintf(fp, "           module_init_size_rw: %ld\n",
+		OFFSET(module_init_size_rw));
 	fprintf(fp, "             module_num_symtab: %ld\n",
 		OFFSET(module_num_symtab));
 	fprintf(fp, "                 module_symtab: %ld\n",

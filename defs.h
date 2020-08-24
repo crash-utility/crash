@@ -654,11 +654,14 @@ struct new_utsname {
 #define TIMER_BASES                (0x20ULL)
 #define IRQ_DESC_TREE_RADIX        (0x40ULL)
 #define IRQ_DESC_TREE_XARRAY       (0x80ULL)
+#define KMOD_PAX                  (0x100ULL)
 
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
 #define PVOPS()     (kt->flags & ARCH_PVOPS)
 #define PVOPS_XEN() (kt->flags & ARCH_PVOPS_XEN)
+
+#define PAX_MODULE_SPLIT() (kt->flags2 & KMOD_PAX)
 
 #define XEN_MACHINE_TO_MFN(m)    ((ulonglong)(m) >> PAGESHIFT())
 #define XEN_PFN_TO_PSEUDO(p)     ((ulonglong)(p) << PAGESHIFT())
@@ -2089,6 +2092,14 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long size_class_size;
 	long gendisk_private_data;
 	long zram_table_entry;
+	long module_core_size_rw;
+	long module_core_size_rx;
+	long module_init_size_rw;
+	long module_init_size_rx;
+	long module_module_core_rw;
+	long module_module_core_rx;
+	long module_module_init_rw;
+	long module_module_init_rx;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2313,6 +2324,8 @@ struct array_table {
  *  in the offset table, size table or array_table.
  */
 #define OFFSET(X)	   (OFFSET_verify(offset_table.X, (char *)__FUNCTION__, __FILE__, __LINE__, #X))
+#define MODULE_OFFSET(X,Y) (PAX_MODULE_SPLIT() ? OFFSET(Y) : OFFSET(X))
+#define MODULE_OFFSET2(X,T) MODULE_OFFSET(X, X##_##T)
 #define SIZE(X)            (SIZE_verify(size_table.X, (char *)__FUNCTION__, __FILE__, __LINE__, #X))
 #define INVALID_OFFSET     (-1)
 #define INVALID_MEMBER(X)  (offset_table.X == INVALID_OFFSET)

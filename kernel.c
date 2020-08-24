@@ -3540,6 +3540,62 @@ module_init(void)
 					   "module_core");
 			MEMBER_OFFSET_INIT(module_module_init, "module",
 					   "module_init");
+		} else if (MEMBER_EXISTS("module", "module_core_rx")) {
+			if (CRASHDEBUG(1))
+				error(INFO, "PaX module layout detected.\n");
+			kt->flags2 |= KMOD_PAX;
+
+			MEMBER_OFFSET_INIT(module_core_size_rw, "module",
+					   "core_size_rw");
+			MEMBER_OFFSET_INIT(module_core_size_rx, "module",
+					   "core_size_rx");
+
+			MEMBER_OFFSET_INIT(module_init_size_rw, "module",
+					   "init_size_rw");
+			MEMBER_OFFSET_INIT(module_init_size_rx, "module",
+					   "init_size_rx");
+
+			MEMBER_OFFSET_INIT(module_module_core_rw, "module",
+					   "module_core_rw");
+			MEMBER_OFFSET_INIT(module_module_core_rx, "module",
+					   "module_core_rx");
+
+			MEMBER_OFFSET_INIT(module_module_init_rw, "module",
+					   "module_init_rw");
+			MEMBER_OFFSET_INIT(module_module_init_rx, "module",
+					   "module_init_rx");
+		} else if (MEMBER_EXISTS("module_layout", "base_rx")) {
+			if (CRASHDEBUG(1))
+				error(INFO, "PaX module layout detected.\n");
+			kt->flags2 |= KMOD_PAX;
+
+			ASSIGN_OFFSET(module_core_size_rw) =
+				MEMBER_OFFSET("module", "core_layout") +
+				MEMBER_OFFSET("module_layout", "size_rw");
+			ASSIGN_OFFSET(module_core_size_rx) =
+				MEMBER_OFFSET("module", "core_layout") +
+				MEMBER_OFFSET("module_layout", "size_rx");
+
+			ASSIGN_OFFSET(module_init_size_rw) =
+				MEMBER_OFFSET("module", "init_layout") +
+				MEMBER_OFFSET("module_layout", "size_rw");
+			ASSIGN_OFFSET(module_init_size_rx) =
+				MEMBER_OFFSET("module", "init_layout") +
+				MEMBER_OFFSET("module_layout", "size_rx");
+
+			ASSIGN_OFFSET(module_module_core_rw) =
+				MEMBER_OFFSET("module", "core_layout") +
+				MEMBER_OFFSET("module_layout", "base_rw");
+			ASSIGN_OFFSET(module_module_core_rx) =
+				MEMBER_OFFSET("module", "core_layout") +
+				MEMBER_OFFSET("module_layout", "base_rx");
+
+			ASSIGN_OFFSET(module_module_init_rw) =
+				MEMBER_OFFSET("module", "init_layout") +
+				MEMBER_OFFSET("module_layout", "base_rw");
+			ASSIGN_OFFSET(module_module_init_rx) =
+				MEMBER_OFFSET("module", "init_layout") +
+				MEMBER_OFFSET("module_layout", "base_rx");
 		} else {
 			ASSIGN_OFFSET(module_core_size) =
 				MEMBER_OFFSET("module", "core_layout") +
@@ -3682,10 +3738,10 @@ module_init(void)
 		case KALLSYMS_V2:
 			if (THIS_KERNEL_VERSION >= LINUX(2,6,27)) {
 				numksyms = UINT(modbuf + OFFSET(module_num_symtab));
-				size = UINT(modbuf + OFFSET(module_core_size));
+				size = UINT(modbuf + MODULE_OFFSET2(module_core_size, rx));
 			} else {
 				numksyms = ULONG(modbuf + OFFSET(module_num_symtab));
-				size = ULONG(modbuf + OFFSET(module_core_size));
+				size = ULONG(modbuf + MODULE_OFFSET2(module_core_size, rx));
 			}
 
 			if (!size) {
@@ -3792,7 +3848,7 @@ verify_modules(void)
 				break;
 			case KMOD_V2:
 				mod_base = ULONG(modbuf + 
-					OFFSET(module_module_core));
+					MODULE_OFFSET2(module_module_core, rx));
 				break;
 			}
 
@@ -3816,10 +3872,10 @@ verify_modules(void)
 						OFFSET(module_name);
 					if (THIS_KERNEL_VERSION >= LINUX(2,6,27))
 						mod_size = UINT(modbuf +
-							OFFSET(module_core_size));
+							MODULE_OFFSET2(module_core_size, rx));
 					else
 						mod_size = ULONG(modbuf +
-							OFFSET(module_core_size));
+							MODULE_OFFSET2(module_core_size, rx));
                 			if (strlen(module_name) < MAX_MOD_NAME)
                         			strcpy(buf, module_name);
                 			else 
@@ -5997,6 +6053,8 @@ dump_kernel_table(int verbose)
 		fprintf(fp, "%sIRQ_DESC_TREE_RADIX", others++ ? "|" : "");
 	if (kt->flags2 & IRQ_DESC_TREE_XARRAY)
 		fprintf(fp, "%sIRQ_DESC_TREE_XARRAY", others++ ? "|" : "");
+	if (kt->flags2 & KMOD_PAX)
+		fprintf(fp, "%sKMOD_PAX", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
         fprintf(fp, "         stext: %lx\n", kt->stext);
