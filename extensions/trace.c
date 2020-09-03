@@ -31,9 +31,9 @@ static int per_cpu_buffer_sizes;
  */
 static int encapsulated_current_trace;
 /*
- * trace_buffer is supported
+ * array_buffer (trace_buffer pre v5.6) is supported
  */
-static int trace_buffer_available;
+static int array_buffer_available;
 /*
  * max_buffer is supported
  */
@@ -51,9 +51,9 @@ static int buffer_page_real_end_available;
 #define koffset(struct, member) struct##_##member##_offset
 
 static int koffset(trace_array, current_trace);
-static int koffset(trace_array, trace_buffer);
+static int koffset(trace_array, array_buffer);
 static int koffset(trace_array, max_buffer);
-static int koffset(trace_buffer, buffer);
+static int koffset(array_buffer, buffer);
 static int koffset(trace_array, buffer);
 static int koffset(tracer, name);
 
@@ -117,7 +117,7 @@ static ulong max_tr_trace;
 
 struct trace_instance {
 	char name[NAME_MAX + 1];
-	ulong trace_buffer;
+	ulong array_buffer;
 	ulong max_buffer;
 	ulong ring_buffer;
 	unsigned pages;
@@ -174,8 +174,7 @@ static int write_and_check(int fd, void *data, size_t size)
 
 static int init_offsets(void)
 {
-#define init_offset(struct, member) do {				\
-		koffset(struct, member) = MEMBER_OFFSET(#struct, #member);\
+#define check_offset(struct, member) do { \
 		if (koffset(struct, member) < 0) {			\
 			fprintf(fp, "failed to init the offset, struct:"\
 				#struct ", member:" #member);		\
@@ -184,12 +183,29 @@ static int init_offsets(void)
 		}							\
 	} while (0)
 
+#define init_offset(struct, member) do {				\
+		koffset(struct, member) = MEMBER_OFFSET(#struct, #member); \
+		check_offset(struct, member);				\
+	} while (0)
+
+#define init_offset_alternative(struct, member, alt_struct, alt_member) do {	\
+		koffset(struct, member) = MEMBER_OFFSET(#alt_struct, #alt_member); \
+		check_offset(struct, member);				\
+	} while (0)
+
 	if (encapsulated_current_trace)
 		init_offset(trace_array, current_trace);
 
-	if (trace_buffer_available) {
-		init_offset(trace_array, trace_buffer);
-		init_offset(trace_buffer, buffer);
+	if (array_buffer_available) {
+		if (MEMBER_EXISTS("trace_array", "array_buffer")) {
+			init_offset(trace_array, array_buffer);
+			init_offset(array_buffer, buffer);
+		} else {
+			init_offset_alternative(trace_array, array_buffer,
+						trace_array, trace_buffer);
+			init_offset_alternative(array_buffer, buffer,
+						trace_buffer, buffer);
+		}
 
 		if (max_buffer_available)
 			init_offset(trace_array, max_buffer);
@@ -486,17 +502,17 @@ out_fail:
 
 static int ftrace_init_trace(struct trace_instance *ti, ulong instance_addr)
 {
-	if (trace_buffer_available) {
-		ti->trace_buffer = instance_addr +
-				koffset(trace_array, trace_buffer);
-		read_value(ti->ring_buffer, ti->trace_buffer,
-				trace_buffer, buffer);
+	if (array_buffer_available) {
+		ti->array_buffer = instance_addr +
+				koffset(trace_array, array_buffer);
+		read_value(ti->ring_buffer, ti->array_buffer,
+			   array_buffer, buffer);
 
 		if (max_buffer_available) {
 			ti->max_buffer = instance_addr +
 					koffset(trace_array, max_buffer);
 			read_value(ti->max_tr_ring_buffer, ti->max_buffer,
-					trace_buffer, buffer);
+					array_buffer, buffer);
 		}
 	} else {
 		read_value(ti->ring_buffer, instance_addr, trace_array, buffer);
@@ -683,8 +699,9 @@ static int ftrace_init(void)
 		current_trace = sym_current_trace->value;
 	}
 
-	if (MEMBER_EXISTS("trace_array", "trace_buffer")) {
-		trace_buffer_available = 1;
+	if (MEMBER_EXISTS("trace_array", "array_buffer") ||
+	    MEMBER_EXISTS("trace_array", "trace_buffer")) {
+		array_buffer_available = 1;
 
 		if (MEMBER_EXISTS("trace_array", "max_buffer"))
 			max_buffer_available = 1;
