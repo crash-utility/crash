@@ -57,10 +57,10 @@ static int koffset(array_buffer, buffer);
 static int koffset(trace_array, buffer);
 static int koffset(tracer, name);
 
-static int koffset(ring_buffer, pages);
-static int koffset(ring_buffer, flags);
-static int koffset(ring_buffer, cpus);
-static int koffset(ring_buffer, buffers);
+static int koffset(trace_buffer, pages);
+static int koffset(trace_buffer, flags);
+static int koffset(trace_buffer, cpus);
+static int koffset(trace_buffer, buffers);
 
 static int koffset(ring_buffer_per_cpu, cpu);
 static int koffset(ring_buffer_per_cpu, pages);
@@ -119,7 +119,7 @@ struct trace_instance {
 	char name[NAME_MAX + 1];
 	ulong array_buffer;
 	ulong max_buffer;
-	ulong ring_buffer;
+	ulong trace_buffer;
 	unsigned pages;
 	struct ring_buffer_per_cpu *buffers;
 
@@ -225,11 +225,19 @@ static int init_offsets(void)
 	else if (kernel_symbol_exists("ring_buffer_read"))
 		gdb_set_crash_scope(symbol_value("ring_buffer_read"), "ring_buffer_read");
 
-	if (!per_cpu_buffer_sizes)
-		init_offset(ring_buffer, pages);
-	init_offset(ring_buffer, flags);
-	init_offset(ring_buffer, cpus);
-	init_offset(ring_buffer, buffers);
+	if (STREQ(MEMBER_TYPE_NAME("trace_buffer", "buffer"), "ring_buffer")) {
+		if (!per_cpu_buffer_sizes)
+			init_offset_alternative(trace_buffer, pages, ring_buffer, pages);
+		init_offset_alternative(trace_buffer, flags, ring_buffer, flags);
+		init_offset_alternative(trace_buffer, cpus, ring_buffer, cpus);
+		init_offset_alternative(trace_buffer, buffers, ring_buffer, buffers);
+	} else {
+		if (!per_cpu_buffer_sizes)
+			init_offset(trace_buffer, pages);
+		init_offset(trace_buffer, flags);
+		init_offset(trace_buffer, cpus);
+		init_offset(trace_buffer, buffers);
+	}
 
 	if (MEMBER_SIZE("ring_buffer_per_cpu", "pages") == sizeof(ulong)) {
 		lockless_ring_buffer = 1;
@@ -287,10 +295,10 @@ static void print_offsets(void)
 	print_offset(trace_array, buffer);
 	print_offset(tracer, name);
 
-	print_offset(ring_buffer, pages);
-	print_offset(ring_buffer, flags);
-	print_offset(ring_buffer, cpus);
-	print_offset(ring_buffer, buffers);
+	print_offset(trace_buffer, pages);
+	print_offset(trace_buffer, flags);
+	print_offset(trace_buffer, cpus);
+	print_offset(trace_buffer, buffers);
 
 	print_offset(ring_buffer_per_cpu, cpu);
 	print_offset(ring_buffer_per_cpu, pages);
@@ -445,12 +453,12 @@ static void ftrace_destroy_buffers(struct ring_buffer_per_cpu *buffers)
 }
 
 static int ftrace_init_buffers(struct ring_buffer_per_cpu *buffers,
-		ulong ring_buffer, unsigned pages)
+			       ulong trace_buffer, unsigned pages)
 {
 	int i;
 	ulong buffers_array;
 
-	read_value(buffers_array, ring_buffer, ring_buffer, buffers);
+	read_value(buffers_array, trace_buffer, trace_buffer, buffers);
 
 	for (i = 0; i < nr_cpu_ids; i++) {
 		if (!readmem(buffers_array + sizeof(ulong) * i, KVADDR,
@@ -505,7 +513,7 @@ static int ftrace_init_trace(struct trace_instance *ti, ulong instance_addr)
 	if (array_buffer_available) {
 		ti->array_buffer = instance_addr +
 				koffset(trace_array, array_buffer);
-		read_value(ti->ring_buffer, ti->array_buffer,
+		read_value(ti->trace_buffer, ti->array_buffer,
 			   array_buffer, buffer);
 
 		if (max_buffer_available) {
@@ -515,19 +523,19 @@ static int ftrace_init_trace(struct trace_instance *ti, ulong instance_addr)
 					array_buffer, buffer);
 		}
 	} else {
-		read_value(ti->ring_buffer, instance_addr, trace_array, buffer);
-		read_value(ti->pages, ti->ring_buffer, ring_buffer, pages);
+		read_value(ti->trace_buffer, instance_addr, trace_array, buffer);
+		read_value(ti->pages, ti->trace_buffer, trace_buffer, pages);
 
 		read_value(ti->max_tr_ring_buffer, max_tr_trace, trace_array, buffer);
 		if (ti->max_tr_ring_buffer)
-			read_value(ti->max_tr_pages, ti->max_tr_ring_buffer, ring_buffer, pages);
+			read_value(ti->max_tr_pages, ti->max_tr_ring_buffer, trace_buffer, pages);
 	}
 
 	ti->buffers = calloc(sizeof(*ti->buffers), nr_cpu_ids);
 	if (ti->buffers == NULL)
 		goto out_fail;
 
-	if (ftrace_init_buffers(ti->buffers, ti->ring_buffer,
+	if (ftrace_init_buffers(ti->buffers, ti->trace_buffer,
 			ti->pages) < 0)
 		goto out_fail;
 
