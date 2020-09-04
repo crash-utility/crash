@@ -25,6 +25,7 @@
  *****************************************************************************/
 
 #include <linux/module.h>
+#include <linux/version.h>
 #include <linux/types.h>
 #include <linux/miscdevice.h>
 #include <linux/init.h>
@@ -36,6 +37,22 @@
 #include <linux/mmzone.h>
 
 extern int page_is_ram(unsigned long);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+
+#define CAN_WRITE_KERNEL	1
+
+static inline long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
+{
+	return probe_kernel_read(dst, src, size);
+}
+
+static inline long copy_to_kernel_nofault(void *dst, const void *src, size_t size)
+{
+	return probe_kernel_write(dst, src, size);
+}
+
+#endif
 
 #ifdef CONFIG_S390
 /*
@@ -138,7 +155,7 @@ static inline void unmap_virtual(struct page *page)
 #endif
 
 
-#define CRASH_VERSION   "1.4"
+#define CRASH_VERSION   "1.5"
 
 /*
  *  These are the file operation functions that allow crash utility
@@ -159,6 +176,8 @@ crash_llseek(struct file * file, loff_t offset, int orig)
 		return -EINVAL;
 	}
 }
+
+#ifdef CAN_WRITE_KERNEL
 
 static ssize_t
 crash_write(struct file *file, const char *buf, size_t count, loff_t *poff)
@@ -186,7 +205,7 @@ crash_write(struct file *file, const char *buf, size_t count, loff_t *poff)
                return -EFAULT;
        }
 
-       if (probe_kernel_write(vaddr, buffer, count)) {
+       if (copy_to_kernel_nofault(vaddr, buffer, count)) {
                unmap_virtual(page);
                return -EFAULT;
        }
@@ -196,6 +215,8 @@ crash_write(struct file *file, const char *buf, size_t count, loff_t *poff)
        *poff += written;
        return written;
 }
+
+#endif
 
 /*
  *  Determine the page address for an address offset value,
@@ -222,7 +243,7 @@ crash_read(struct file *file, char *buf, size_t count, loff_t *poff)
 	 * Use bounce buffer to bypass the CONFIG_HARDENED_USERCOPY
 	 * kernel text restriction.
 	 */
-        if (probe_kernel_read(buffer, vaddr, count)) {
+        if (copy_from_kernel_nofault(buffer, vaddr, count)) {
                 unmap_virtual(page);
                 return -EFAULT;
         }
@@ -294,7 +315,9 @@ static struct file_operations crash_fops = {
 	.owner = THIS_MODULE,
 	.llseek = crash_llseek,
 	.read = crash_read,
+#ifdef CAN_WRITE_KERNEL
 	.write = crash_write,
+#endif
 	.unlocked_ioctl = crash_ioctl,
 	.open = crash_open,
 	.release = crash_release,
