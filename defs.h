@@ -655,6 +655,7 @@ struct new_utsname {
 #define IRQ_DESC_TREE_RADIX        (0x40ULL)
 #define IRQ_DESC_TREE_XARRAY       (0x80ULL)
 #define KMOD_PAX                  (0x100ULL)
+#define VMWARE_VMSS_GUESTDUMP     (0x200ULL)
 
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
@@ -6677,6 +6678,13 @@ int vmware_vmss_valid_regs(struct bt_info *);
 int vmware_vmss_get_cr3_idtr(ulong *, ulong *);
 int vmware_vmss_phys_base(ulong *phys_base);
 int vmware_vmss_set_phys_base(ulong);
+
+/*
+ * vmware_guestdump.c
+ */
+int is_vmware_guestdump(char *filename);
+int vmware_guestdump_init(char *filename, FILE *ofp);
+int vmware_guestdump_memory_dump(FILE *);
 
 /*
  * kaslr_helper.c

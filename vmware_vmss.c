@@ -23,13 +23,7 @@
 
 #define LOGPRX "vmw: "
 
-/* VMware only supports X86/X86_64 virtual machines. */
-#define VMW_PAGE_SIZE (4096)
-#define VMW_PAGE_SHIFT (12)
-
-#define MAX_BLOCK_DUMP (128)
-
-static vmssdata vmss = { 0 };
+vmssdata vmss = { 0 };
 
 int
 is_vmware_vmss(char *filename)
