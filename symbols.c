@@ -10585,6 +10585,9 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "                 xa_node_shift: %ld\n",
 		OFFSET(xa_node_shift));
 
+	fprintf(fp, "            uts_namespace_name: %ld\n",
+		OFFSET(uts_namespace_name));
+
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
 	fprintf(fp, "                    page_flags: %ld\n", SIZE(page_flags));

@@ -230,16 +230,21 @@ kernel_init()
 		fprintf(fp, "%s\n\n", ctime_tz(&kt->date.tv_sec));
 		clean_exit(0);
 	}
-	
+
+	MEMBER_OFFSET_INIT(uts_namespace_name, "uts_namespace", "name");
 	if (symbol_exists("system_utsname"))
         	readmem(symbol_value("system_utsname"), KVADDR, &kt->utsname,
                 	sizeof(struct new_utsname), "system_utsname", 
 			RETURN_ON_ERROR);
-	else if (symbol_exists("init_uts_ns"))
-		readmem(symbol_value("init_uts_ns") + sizeof(int),
-			KVADDR,  &kt->utsname, sizeof(struct new_utsname), 
+	else if (symbol_exists("init_uts_ns")) {
+		long offset = sizeof(int);
+		if (VALID_MEMBER(uts_namespace_name))
+			offset = OFFSET(uts_namespace_name);
+
+		readmem(symbol_value("init_uts_ns") + offset,
+			KVADDR,  &kt->utsname, sizeof(struct new_utsname),
 			"init_uts_ns", RETURN_ON_ERROR);
-	else
+	} else
 		error(INFO, "cannot access utsname information\n\n");
 
 	if (CRASHDEBUG(1)) {

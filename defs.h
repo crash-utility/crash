@@ -2104,6 +2104,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long inode_i_sb_list;
 	long irq_common_data_affinity;
 	long irq_desc_irq_common_data;
+	long uts_namespace_name;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
