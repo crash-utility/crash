@@ -51,6 +51,7 @@ static int cpu_to_apicid(int cpu, int *apicid);
 static int get_sadump_smram_cpu_state(int cpu, struct sadump_smram_cpu_state *smram);
 static int block_table_init(void);
 static uint64_t pfn_to_block(uint64_t pfn);
+static void mask_reserved_fields(struct sadump_smram_cpu_state *smram);
 
 struct sadump_data *
 sadump_get_sadump_data(void)
@@ -1040,6 +1041,15 @@ int sadump_memory_dump(FILE *fp)
 				      "cpu_state\n");
 				return FALSE;
 			}
+			/*
+			 * Reserved fields in SMRAM CPU states could
+			 * be non-zero even if the corresponding APICs
+			 * are NOT used. This breaks the assumption
+			 * that SMRAM CPU state is zero cleared if and
+			 * only if the APIC corresponding to the entry
+			 * is NOT used.
+			 */
+			mask_reserved_fields(&scs);
 			if (memcmp(&scs, &zero, sizeof(scs)) != 0) {
 				fprintf(fp, "\n");
 				display_smram_cpu_state(aid, &scs);
@@ -1707,3 +1717,15 @@ sadump_get_cr3_idtr(ulong *cr3, ulong *idtr)
 	return TRUE;
 }
 #endif /* X86_64 */
+
+static void
+mask_reserved_fields(struct sadump_smram_cpu_state *smram)
+{
+	memset(smram->Reserved1, 0, sizeof(smram->Reserved1));
+	memset(smram->Reserved2, 0, sizeof(smram->Reserved2));
+	memset(smram->Reserved3, 0, sizeof(smram->Reserved3));
+	memset(smram->Reserved4, 0, sizeof(smram->Reserved4));
+	memset(smram->Reserved5, 0, sizeof(smram->Reserved5));
+	memset(smram->Reserved6, 0, sizeof(smram->Reserved6));
+	memset(smram->Reserved7, 0, sizeof(smram->Reserved7));
+}
