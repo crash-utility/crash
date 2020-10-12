@@ -70,7 +70,7 @@ CFILES=main.c tools.c global_data.c memory.c filesys.c help.c task.c \
 	unwind_x86_32_64.c unwind_arm.c \
 	xen_hyper.c xen_hyper_command.c xen_hyper_global_data.c \
 	xen_hyper_dump_tables.c kvmdump.c qemu.c qemu-load.c sadump.c ipcs.c \
-	ramdump.c vmware_vmss.c \
+	ramdump.c vmware_vmss.c vmware_guestdump.c \
 	xen_dom0.c kaslr_helper.c
 
 SOURCE_FILES=${CFILES} ${GENERIC_HFILES} ${MCORE_HFILES} \
@@ -89,7 +89,7 @@ OBJECT_FILES=main.o tools.o global_data.o memory.o filesys.o help.o task.o \
 	unwind_x86_32_64.o unwind_arm.o \
 	xen_hyper.o xen_hyper_command.o xen_hyper_global_data.o \
 	xen_hyper_dump_tables.o kvmdump.o qemu.o qemu-load.o sadump.o ipcs.o \
-	ramdump.o vmware_vmss.o \
+	ramdump.o vmware_vmss.o vmware_guestdump.o \
 	xen_dom0.o kaslr_helper.o
 
 MEMORY_DRIVER_FILES=memory_driver/Makefile memory_driver/crash.c memory_driver/README
@@ -517,6 +517,9 @@ ramdump.o: ${GENERIC_HFILES} ${REDHAT_HFILES} ramdump.c
 
 vmware_vmss.o: ${GENERIC_HFILES} ${VMWARE_HFILES} vmware_vmss.c
 	${CC} -c ${CRASH_CFLAGS} vmware_vmss.c ${WARNING_OPTIONS} ${WARNING_ERROR}
+
+vmware_guestdump.o: ${GENERIC_HFILES} ${VMWARE_HFILES} vmware_guestdump.c
+	${CC} -c ${CRASH_CFLAGS} vmware_guestdump.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 kaslr_helper.o: ${GENERIC_HFILES} kaslr_helper.c
 	${CC} -c ${CRASH_CFLAGS} kaslr_helper.c ${WARNING_OPTIONS} ${WARNING_ERROR}

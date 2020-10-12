@@ -544,6 +544,7 @@ struct program_context {
 #define is_excluded_vmemmap() (pc->flags2 & EXCLUDED_VMEMMAP)
 #define MEMSRC_LOCAL         (0x80000ULL)
 #define REDZONE             (0x100000ULL)
+#define VMWARE_VMSS_GUESTDUMP (0x200000ULL)
 	char *cleanup;
 	char *namelist_orig;
 	char *namelist_debug_orig;
@@ -6678,6 +6679,13 @@ int vmware_vmss_valid_regs(struct bt_info *);
 int vmware_vmss_get_cr3_idtr(ulong *, ulong *);
 int vmware_vmss_phys_base(ulong *phys_base);
 int vmware_vmss_set_phys_base(ulong);
+
+/*
+ * vmware_guestdump.c
+ */
+int is_vmware_guestdump(char *filename);
+int vmware_guestdump_init(char *filename, FILE *ofp);
+int vmware_guestdump_memory_dump(FILE *);
 
 /*
  * kaslr_helper.c

@@ -17115,8 +17115,12 @@ dumpfile_memory(int cmd)
                         retval = kcore_memory_dump(fp);
 		else if (pc->flags & SADUMP)
 			retval = sadump_memory_dump(fp);
-		else if (pc->flags & VMWARE_VMSS)
-			retval = vmware_vmss_memory_dump(fp);
+		else if (pc->flags & VMWARE_VMSS) {
+			if (pc->flags2 & VMWARE_VMSS_GUESTDUMP)
+				retval = vmware_guestdump_memory_dump(fp);
+			else
+				retval = vmware_vmss_memory_dump(fp);
+		}
 		break;
 	
 	case DUMPFILE_ENVIRONMENT:

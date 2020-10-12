@@ -253,9 +253,15 @@ memory_source_init(void)
 				error(FATAL, "%s: initialization failed\n",
                                         pc->dumpfile);
 		} else if (pc->flags & VMWARE_VMSS) {
-			if (!vmware_vmss_init(pc->dumpfile, fp))
-				error(FATAL, "%s: initialization failed\n",
-                                        pc->dumpfile);
+			if (pc->flags2 & VMWARE_VMSS_GUESTDUMP) {
+				if (!vmware_guestdump_init(pc->dumpfile, fp))
+					error(FATAL, "%s: initialization failed\n",
+						pc->dumpfile);
+			} else {
+				if (!vmware_vmss_init(pc->dumpfile, fp))
+					error(FATAL, "%s: initialization failed\n",
+						pc->dumpfile);
+			}
 		}
 	}
 }
