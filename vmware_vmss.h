@@ -165,6 +165,14 @@ struct vmssdata {
 };
 typedef struct vmssdata vmssdata;
 
+/* VMware only supports X86/X86_64 virtual machines. */
+#define VMW_PAGE_SIZE (4096)
+#define VMW_PAGE_SHIFT (12)
+
+#define MAX_BLOCK_DUMP (128)
+
+extern vmssdata vmss;
+
 #define DEBUG_PARSE_PRINT(x)		\
 do {					\
 	if (CRASHDEBUG(1)) {		\
