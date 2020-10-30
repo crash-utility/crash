@@ -12714,9 +12714,11 @@ numeric_forward(const void *P_x, const void *P_y)
 
 	if (SADUMP_DUMPFILE() || QEMU_MEM_DUMP_NO_VMCOREINFO() || VMSS_DUMPFILE()) {
 		/* Need for kaslr_offset and phys_base */
-		if (STREQ(x->name, "divide_error"))
+		if (STREQ(x->name, "divide_error") ||
+		    STREQ(x->name, "asm_exc_divide_error"))
 			st->divide_error_vmlinux = valueof(x);
-		else if (STREQ(y->name, "divide_error"))
+		else if (STREQ(y->name, "divide_error") ||
+			 STREQ(y->name, "asm_exc_divide_error"))
 			st->divide_error_vmlinux = valueof(y);
 
 		if (STREQ(x->name, "idt_table"))
