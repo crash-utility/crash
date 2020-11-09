@@ -2517,6 +2517,12 @@ diskdump_kaslr_check()
 }
 
 #ifdef X86_64
+int
+diskdump_get_nr_cpus(void)
+{
+	return dd->num_qemu_notes;
+}
+
 QEMUCPUState *
 diskdump_get_qemucpustate(int cpu)
 {

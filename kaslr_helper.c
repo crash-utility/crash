@@ -240,21 +240,30 @@ get_vmcoreinfo(ulong elfcorehdr, ulong *addr, int *len)
 }
 
 static int
-qemu_get_cr3_idtr(ulong *cr3, ulong *idtr)
+qemu_get_nr_cpus(void)
+{
+	if (DISKDUMP_DUMPFILE())
+		return diskdump_get_nr_cpus();
+	else if (KDUMP_DUMPFILE())
+		return kdump_get_nr_cpus();
+
+	return 0;
+}
+
+static int
+qemu_get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
 {
 	QEMUCPUState *cpustat;
 
-	if (DISKDUMP_DUMPFILE()) {
-		cpustat = diskdump_get_qemucpustate(0);
-	} else if (KDUMP_DUMPFILE()) {
-		cpustat = kdump_get_qemucpustate(0);
-	} else {
+	if (DISKDUMP_DUMPFILE())
+		cpustat = diskdump_get_qemucpustate(cpu);
+	else if (KDUMP_DUMPFILE())
+		cpustat = kdump_get_qemucpustate(cpu);
+	else
 		return FALSE;
-	}
 
-	if (!cpustat) {
+	if (!cpustat)
 		return FALSE;
-	}
 
 	*cr3 = cpustat->cr[3];
 	*idtr = cpustat->idt.base;
@@ -321,18 +330,55 @@ quit:
 	return ret;
 }
 
+static int
+get_nr_cpus(void)
+{
+	if (SADUMP_DUMPFILE())
+		return sadump_get_nr_cpus();
+	else if (QEMU_MEM_DUMP_NO_VMCOREINFO())
+		return qemu_get_nr_cpus();
+	else if (VMSS_DUMPFILE())
+		return vmware_vmss_get_nr_cpus();
+
+	return 0;
+}
+
+static int
+get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
+{
+	if (SADUMP_DUMPFILE())
+		return sadump_get_cr3_idtr(cpu, cr3, idtr);
+	else if (QEMU_MEM_DUMP_NO_VMCOREINFO())
+		return qemu_get_cr3_idtr(cpu, cr3, idtr);
+	else if (VMSS_DUMPFILE())
+		return vmware_vmss_get_cr3_idtr(cpu, cr3, idtr);
+
+	return FALSE;
+}
+
+#define BANNER "Linux version"
+static int
+verify_kaslr_offset(ulong kaslr_offset)
+{
+	char buf[sizeof(BANNER)];
+	ulong linux_banner_paddr;
+
+	if (!kvtop(NULL, st->linux_banner_vmlinux + kaslr_offset,
+		   &linux_banner_paddr,	CRASHDEBUG(1)))
+		return FALSE;
+
+	if (!readmem(linux_banner_paddr, PHYSADDR, buf,	sizeof(buf),
+		     "linux_banner", RETURN_ON_ERROR))
+		return FALSE;
+
+	if (!STRNEQ(buf, BANNER))
+		return FALSE;
+
+	return TRUE;
+}
+
 /*
- * Calculate kaslr_offset and phys_base
- *
- * kaslr_offset:
- *   The difference between original address in System.map or vmlinux and
- *   actual address placed randomly by kaslr feature. To be more accurate,
- *   kaslr_offset = actual address  - original address
- *
- * phys_base:
- *   Physical address where the kerenel is placed. In other words, it's a
- *   physical address of __START_KERNEL_map. This is also decided randomly by
- *   kaslr.
+ * IDT based method to calculate kaslr_offset and phys_base
  *
  * kaslr offset and phys_base are calculated as follows:
  *
@@ -370,17 +416,61 @@ quit:
  * Note that the address (A) cannot be used instead of (E) because (A) is
  * not direct map address, it's a fixed map address.
  *
- * This solution works in most every case, but does not work in the
- * following case.
+ * NOTE: This solution works in most every case, but does not work in the
+ * following case. If the dump is captured on early stage of kernel boot,
+ * IDTR points to the early IDT table(early_idts) instead of normal
+ * IDT(idt_table). Need enhancement.
+ */
+static int
+calc_kaslr_offset_from_idt(uint64_t idtr, uint64_t pgd, ulong *kaslr_offset, ulong *phys_base)
+{
+	uint64_t idtr_paddr;
+	ulong divide_error_vmcore;
+	int verbose = CRASHDEBUG(1)? 1: 0;
+
+	if (!idtr)
+		return FALSE;
+
+	/* Convert virtual address of IDT table to physical address */
+	if (!kvtop(NULL, idtr, &idtr_paddr, verbose))
+		return FALSE;
+
+	/* Now we can calculate kaslr_offset and phys_base */
+	divide_error_vmcore = get_vec0_addr(idtr_paddr);
+	*kaslr_offset = divide_error_vmcore - st->divide_error_vmlinux;
+	*phys_base = idtr_paddr -
+		(st->idt_table_vmlinux + *kaslr_offset - __START_KERNEL_map);
+
+	if (verbose) {
+		fprintf(fp, "calc_kaslr_offset: idtr=%lx\n", idtr);
+		fprintf(fp, "calc_kaslr_offset: pgd=%lx\n", pgd);
+		fprintf(fp, "calc_kaslr_offset: idtr(phys)=%lx\n", idtr_paddr);
+		fprintf(fp, "calc_kaslr_offset: divide_error(vmlinux): %lx\n",
+			st->divide_error_vmlinux);
+		fprintf(fp, "calc_kaslr_offset: divide_error(vmcore): %lx\n",
+			divide_error_vmcore);
+	}
+	return TRUE;
+}
+
+/*
+ * Calculate kaslr_offset and phys_base
  *
- * 1) If the dump is captured on early stage of kernel boot, IDTR points
- *    early IDT table(early_idts) instead of normal IDT(idt_table).
- * 2) If the dump is captured whle kdump is working, IDTR points
- *    IDT table of 2nd kernel, not 1st kernel.
+ * kaslr_offset:
+ *   The difference between original address in System.map or vmlinux and
+ *   actual address placed randomly by kaslr feature. To be more accurate,
+ *   kaslr_offset = actual address  - original address
  *
- * Current implementation does not support the case 1), need
- * enhancement in the future. For the case 2), get kaslr_offset and
- * phys_base as follows.
+ * phys_base:
+ *   Physical address where the kerenel is placed. In other words, it's a
+ *   physical address of __START_KERNEL_map. This is also decided randomly by
+ *   kaslr.
+ *
+ * It walks through all available CPUs registers to calculate the offset/base.
+ *
+ * Also, it considers the case where dump is captured whle kdump is working,
+ * IDTR points to the IDT table of 2nd kernel, not 1st kernel.
+ * In that case, get kaslr_offset and phys_base as follows.
  *
  * 1) Get kaslr_offset and phys_base using the above solution.
  * 2) Get kernel boot parameter from "saved_command_line"
@@ -396,110 +486,66 @@ quit:
 int
 calc_kaslr_offset(ulong *ko, ulong *pb)
 {
-	uint64_t cr3 = 0, idtr = 0, pgd = 0, idtr_paddr;
-	ulong divide_error_vmcore;
+	uint64_t cr3 = 0, idtr = 0, pgd = 0;
 	ulong kaslr_offset, phys_base;
 	ulong kaslr_offset_kdump, phys_base_kdump;
-	int ret = FALSE;
-	int verbose = CRASHDEBUG(1)? 1: 0;
+	int cpu, nr_cpus;
 
 	if (!machine_type("X86_64"))
 		return FALSE;
 
-retry:
-	if (SADUMP_DUMPFILE()) {
-		if (!sadump_get_cr3_idtr(&cr3, &idtr))
-			return FALSE;
-	} else if (QEMU_MEM_DUMP_NO_VMCOREINFO()) {
-		if (!qemu_get_cr3_idtr(&cr3, &idtr))
-			return FALSE;
-	} else if (VMSS_DUMPFILE()) {
-		if (!vmware_vmss_get_cr3_idtr(&cr3, &idtr))
-			return FALSE;
-	} else
-		return FALSE;
+	nr_cpus = get_nr_cpus();
 
-	if (st->pti_init_vmlinux || st->kaiser_init_vmlinux)
-		pgd = cr3 & ~(CR3_PCID_MASK|PTI_USER_PGTABLE_MASK);
-	else
-		pgd = cr3 & ~CR3_PCID_MASK;
+	for (cpu = 0; cpu < nr_cpus; cpu++) {
+		if (!get_cr3_idtr(cpu, &cr3, &idtr))
+			continue;
 
-	/*
-	 * Set up for kvtop.
-	 *
-	 * calc_kaslr_offset() is called before machdep_init(PRE_GDB), so some
-	 * variables are not initialized yet. Set up them here to call kvtop().
-	 *
-	 * TODO: XEN and 5-level is not supported
-	 */
-	vt->kernel_pgd[0] = pgd;
-	machdep->last_pgd_read = vt->kernel_pgd[0];
-	machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_2_6;
-	machdep->machspec->pgdir_shift = PGDIR_SHIFT;
-	machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD;
-	if (!readmem(pgd, PHYSADDR, machdep->pgd, PAGESIZE(),
-			"pgd", RETURN_ON_ERROR)) {
-		if (SADUMP_DUMPFILE())
-			goto retry;
+		if (!cr3)
+			continue;
+
+		if (st->pti_init_vmlinux || st->kaiser_init_vmlinux)
+			pgd = cr3 & ~(CR3_PCID_MASK|PTI_USER_PGTABLE_MASK);
 		else
-			goto quit;
+			pgd = cr3 & ~CR3_PCID_MASK;
+
+		/*
+		 * Set up for kvtop.
+		 *
+		 * calc_kaslr_offset() is called before machdep_init(PRE_GDB), so some
+		 * variables are not initialized yet. Set up them here to call kvtop().
+		 *
+		 * TODO: XEN and 5-level is not supported
+		 */
+		vt->kernel_pgd[0] = pgd;
+		machdep->last_pgd_read = vt->kernel_pgd[0];
+		machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_2_6;
+		machdep->machspec->pgdir_shift = PGDIR_SHIFT;
+		machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD;
+		if (!readmem(pgd, PHYSADDR, machdep->pgd, PAGESIZE(),
+					"pgd", RETURN_ON_ERROR))
+			continue;
+
+		if (!calc_kaslr_offset_from_idt(idtr, pgd, &kaslr_offset, &phys_base))
+			continue;
+
+		if (verify_kaslr_offset(kaslr_offset))
+			goto found;
 	}
 
-	/* Convert virtual address of IDT table to physical address */
-	if (!kvtop(NULL, idtr, &idtr_paddr, verbose)) {
-		if (SADUMP_DUMPFILE())
-			goto retry;
-		else
-			goto quit;
-	}
+	vt->kernel_pgd[0] = 0;
+	machdep->last_pgd_read = 0;
+	return FALSE;
 
-	/* Now we can calculate kaslr_offset and phys_base */
-	divide_error_vmcore = get_vec0_addr(idtr_paddr);
-	kaslr_offset = divide_error_vmcore - st->divide_error_vmlinux;
-	phys_base = idtr_paddr -
-		(st->idt_table_vmlinux + kaslr_offset - __START_KERNEL_map);
-
-	if (SADUMP_DUMPFILE()) {
-		char buf[sizeof("Linux version")];
-		ulong linux_banner_paddr;
-
-		if (!kvtop(NULL,
-			   st->linux_banner_vmlinux + kaslr_offset,
-			   &linux_banner_paddr,
-			   verbose))
-			goto retry;
-
-		if (!readmem(linux_banner_paddr,
-			     PHYSADDR,
-			     buf,
-			     sizeof(buf),
-			     "linux_banner",
-			     RETURN_ON_ERROR))
-			goto retry;
-
-		if (!STRNEQ(buf, "Linux version"))
-			goto retry;
-	}
-
-	if (CRASHDEBUG(1)) {
-		fprintf(fp, "calc_kaslr_offset: idtr=%lx\n", idtr);
-		fprintf(fp, "calc_kaslr_offset: pgd=%lx\n", pgd);
-		fprintf(fp, "calc_kaslr_offset: idtr(phys)=%lx\n", idtr_paddr);
-		fprintf(fp, "calc_kaslr_offset: divide_error(vmlinux): %lx\n",
-			st->divide_error_vmlinux);
-		fprintf(fp, "calc_kaslr_offset: divide_error(vmcore): %lx\n",
-			divide_error_vmcore);
-	}
-
+found:
 	/*
 	 * Check if current kaslr_offset/phys_base is for 1st kernel or 2nd
 	 * kernel. If we are in 2nd kernel, get kaslr_offset/phys_base
 	 * from vmcoreinfo
 	 */
-	if (get_kaslr_offset_from_vmcoreinfo(
-		kaslr_offset, &kaslr_offset_kdump, &phys_base_kdump)) {
-		kaslr_offset =  kaslr_offset_kdump;
-		phys_base =  phys_base_kdump;
+	if (get_kaslr_offset_from_vmcoreinfo(kaslr_offset, &kaslr_offset_kdump,
+					     &phys_base_kdump)) {
+		kaslr_offset = kaslr_offset_kdump;
+		phys_base = phys_base_kdump;
 	} else if (CRASHDEBUG(1)) {
 		fprintf(fp, "kaslr_helper: failed to determine which kernel was running at crash,\n");
 		fprintf(fp, "kaslr_helper: asssuming the kdump 1st kernel.\n");
@@ -514,11 +560,9 @@ retry:
 	*ko = kaslr_offset;
 	*pb = phys_base;
 
-	ret = TRUE;
-quit:
 	vt->kernel_pgd[0] = 0;
 	machdep->last_pgd_read = 0;
-	return ret;
+	return TRUE;
 }
 #else
 int

@@ -6457,6 +6457,7 @@ void display_ELF_note(int, int, void *, FILE *);
 void *netdump_get_prstatus_percpu(int);
 int kdump_kaslr_check(void);
 void display_vmcoredd_note(void *ptr, FILE *ofp);
+int kdump_get_nr_cpus(void);
 QEMUCPUState *kdump_get_qemucpustate(int);
 void kdump_device_dump_info(FILE *);
 void kdump_device_dump_extract(int, char *, FILE *);
@@ -6505,6 +6506,7 @@ void process_elf32_notes(void *, ulong);
 void process_elf64_notes(void *, ulong);
 void dump_registers_for_compressed_kdump(void);
 int diskdump_kaslr_check(void);
+int diskdump_get_nr_cpus(void);
 QEMUCPUState *diskdump_get_qemucpustate(int);
 void diskdump_device_dump_info(FILE *);
 void diskdump_device_dump_extract(int, char *, FILE *);
@@ -6623,7 +6625,8 @@ void sadump_unset_zero_excluded(void);
 struct sadump_data;
 struct sadump_data *get_sadump_data(void);
 int sadump_calc_kaslr_offset(ulong *);
-int sadump_get_cr3_idtr(ulong *, ulong *);
+int sadump_get_nr_cpus(void);
+int sadump_get_cr3_idtr(int, ulong *, ulong *);
 
 /*
  * qemu.c
@@ -6676,7 +6679,8 @@ void get_vmware_vmss_regs(struct bt_info *, ulong *, ulong *);
 int vmware_vmss_memory_dump(FILE *);
 void dump_registers_for_vmss_dump(void);
 int vmware_vmss_valid_regs(struct bt_info *);
-int vmware_vmss_get_cr3_idtr(ulong *, ulong *);
+int vmware_vmss_get_nr_cpus(void);
+int vmware_vmss_get_cr3_idtr(int, ulong *, ulong *);
 int vmware_vmss_phys_base(ulong *phys_base);
 int vmware_vmss_set_phys_base(ulong);
 

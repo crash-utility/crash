@@ -1671,44 +1671,20 @@ get_sadump_data(void)
 }
 
 #ifdef X86_64
-static int
-get_sadump_smram_cpu_state_any(struct sadump_smram_cpu_state *smram)
+int
+sadump_get_nr_cpus(void)
 {
-	ulong offset;
-	struct sadump_header *sh = sd->dump_header;
-	static int apicid;
-	struct sadump_smram_cpu_state scs;
-
-	if (apicid >= sh->nr_cpus)
-		return FALSE;
-
-	offset = sd->sub_hdr_offset + sizeof(uint32_t) +
-		 sd->dump_header->nr_cpus * sizeof(struct sadump_apic_state) +
-		 apicid * sizeof(scs);
-
-	while (apicid < sh->nr_cpus) {
-		apicid++;
-		if (!read_device(&scs, sizeof(scs), &offset)) {
-			error(INFO, "sadump: cannot read sub header "
-				"cpu_state\n");
-			return FALSE;
-		}
-		if (scs.Cr3 && (scs.IdtUpper || scs.IdtLower)) {
-			*smram = scs;
-			return TRUE;
-		}
-	}
-
-	return FALSE;
+	/* apicids */
+	return sd->dump_header->nr_cpus;
 }
 
 int
-sadump_get_cr3_idtr(ulong *cr3, ulong *idtr)
+sadump_get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
 {
 	struct sadump_smram_cpu_state scs;
 
 	memset(&scs, 0, sizeof(scs));
-	if (!get_sadump_smram_cpu_state_any(&scs))
+	if (!sadump_get_smram_cpu_state(cpu, &scs))
 		return FALSE;
 
 	*cr3 = scs.Cr3;

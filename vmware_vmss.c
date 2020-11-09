@@ -873,13 +873,19 @@ vmware_vmss_valid_regs(struct bt_info *bt)
 }
 
 int
-vmware_vmss_get_cr3_idtr(ulong *cr3, ulong *idtr)
+vmware_vmss_get_nr_cpus(void)
 {
-	if (vmss.num_vcpus == 0 || vmss.vcpu_regs[0] != REGS_PRESENT_ALL)
+	return vmss.num_vcpus;
+}
+
+int
+vmware_vmss_get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
+{
+	if (cpu >= vmss.num_vcpus || vmss.vcpu_regs[cpu] != REGS_PRESENT_ALL)
 		return FALSE;
 
-	*cr3 = vmss.regs64[0]->cr[3];
-	*idtr = vmss.regs64[0]->idtr;
+	*cr3 = vmss.regs64[cpu]->cr[3];
+	*idtr = vmss.regs64[cpu]->idtr;
 
 	return TRUE;
 }

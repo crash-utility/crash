@@ -5197,6 +5197,12 @@ kdump_kaslr_check(void)
 }
 
 #ifdef X86_64
+int
+kdump_get_nr_cpus(void)
+{
+	return nd->num_qemu_notes;
+}
+
 QEMUCPUState *
 kdump_get_qemucpustate(int cpu)
 {
