@@ -356,9 +356,11 @@ x86_64_init(int when)
 			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_5LEVEL;
 			machdep->machspec->pgdir_shift = PGDIR_SHIFT_5LEVEL;
 			machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD_5LEVEL;
-			if ((machdep->machspec->p4d = (char *)malloc(PAGESIZE())) == NULL)
-				error(FATAL, "cannot malloc p4d space.");
-			machdep->machspec->last_p4d_read = 0;
+			if (!machdep->machspec->p4d) {
+				if ((machdep->machspec->p4d = (char *)malloc(PAGESIZE())) == NULL)
+					error(FATAL, "cannot malloc p4d space.");
+				machdep->machspec->last_p4d_read = 0;
+			}
 			machdep->uvtop = x86_64_uvtop_level4;  /* 5-level is optional per-task */
 			machdep->kvbase = (ulong)PAGE_OFFSET;
 			machdep->identity_map_base = (ulong)PAGE_OFFSET;

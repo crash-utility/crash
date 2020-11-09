@@ -879,12 +879,13 @@ vmware_vmss_get_nr_cpus(void)
 }
 
 int
-vmware_vmss_get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
+vmware_vmss_get_cr3_cr4_idtr(int cpu, ulong *cr3, ulong *cr4, ulong *idtr)
 {
 	if (cpu >= vmss.num_vcpus || vmss.vcpu_regs[cpu] != REGS_PRESENT_ALL)
 		return FALSE;
 
 	*cr3 = vmss.regs64[cpu]->cr[3];
+	*cr4 = vmss.regs64[cpu]->cr[4];
 	*idtr = vmss.regs64[cpu]->idtr;
 
 	return TRUE;

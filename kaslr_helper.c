@@ -251,7 +251,7 @@ qemu_get_nr_cpus(void)
 }
 
 static int
-qemu_get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
+qemu_get_cr3_cr4_idtr(int cpu, ulong *cr3, ulong *cr4, ulong *idtr)
 {
 	QEMUCPUState *cpustat;
 
@@ -266,6 +266,7 @@ qemu_get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
 		return FALSE;
 
 	*cr3 = cpustat->cr[3];
+	*cr4 = cpustat->cr[4];
 	*idtr = cpustat->idt.base;
 
 	return TRUE;
@@ -344,14 +345,14 @@ get_nr_cpus(void)
 }
 
 static int
-get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
+get_cr3_cr4_idtr(int cpu, ulong *cr3, ulong *cr4, ulong *idtr)
 {
 	if (SADUMP_DUMPFILE())
-		return sadump_get_cr3_idtr(cpu, cr3, idtr);
+		return sadump_get_cr3_cr4_idtr(cpu, cr3, cr4, idtr);
 	else if (QEMU_MEM_DUMP_NO_VMCOREINFO())
-		return qemu_get_cr3_idtr(cpu, cr3, idtr);
+		return qemu_get_cr3_cr4_idtr(cpu, cr3, cr4, idtr);
 	else if (VMSS_DUMPFILE())
-		return vmware_vmss_get_cr3_idtr(cpu, cr3, idtr);
+		return vmware_vmss_get_cr3_cr4_idtr(cpu, cr3, cr4, idtr);
 
 	return FALSE;
 }
@@ -483,10 +484,11 @@ calc_kaslr_offset_from_idt(uint64_t idtr, uint64_t pgd, ulong *kaslr_offset, ulo
 #define PTI_USER_PGTABLE_BIT	PAGE_SHIFT
 #define PTI_USER_PGTABLE_MASK	(1 << PTI_USER_PGTABLE_BIT)
 #define CR3_PCID_MASK		0xFFFull
+#define CR4_LA57		(1 << 12)
 int
 calc_kaslr_offset(ulong *ko, ulong *pb)
 {
-	uint64_t cr3 = 0, idtr = 0, pgd = 0;
+	uint64_t cr3 = 0, cr4 = 0, idtr = 0, pgd = 0;
 	ulong kaslr_offset, phys_base;
 	ulong kaslr_offset_kdump, phys_base_kdump;
 	int cpu, nr_cpus;
@@ -497,7 +499,7 @@ calc_kaslr_offset(ulong *ko, ulong *pb)
 	nr_cpus = get_nr_cpus();
 
 	for (cpu = 0; cpu < nr_cpus; cpu++) {
-		if (!get_cr3_idtr(cpu, &cr3, &idtr))
+		if (!get_cr3_cr4_idtr(cpu, &cr3, &cr4, &idtr))
 			continue;
 
 		if (!cr3)
@@ -514,13 +516,23 @@ calc_kaslr_offset(ulong *ko, ulong *pb)
 		 * calc_kaslr_offset() is called before machdep_init(PRE_GDB), so some
 		 * variables are not initialized yet. Set up them here to call kvtop().
 		 *
-		 * TODO: XEN and 5-level is not supported
+		 * TODO: XEN is not supported
 		 */
 		vt->kernel_pgd[0] = pgd;
 		machdep->last_pgd_read = vt->kernel_pgd[0];
-		machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_2_6;
-		machdep->machspec->pgdir_shift = PGDIR_SHIFT;
-		machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD;
+		if (cr4 & CR4_LA57) {
+			machdep->flags |= VM_5LEVEL;
+			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_5LEVEL;
+			machdep->machspec->pgdir_shift = PGDIR_SHIFT_5LEVEL;
+			machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD_5LEVEL;
+			if ((machdep->machspec->p4d = (char *)malloc(PAGESIZE())) == NULL)
+				error(FATAL, "cannot malloc p4d space.");
+			machdep->machspec->last_p4d_read = 0;
+		} else {
+			machdep->machspec->physical_mask_shift = __PHYSICAL_MASK_SHIFT_2_6;
+			machdep->machspec->pgdir_shift = PGDIR_SHIFT;
+			machdep->machspec->ptrs_per_pgd = PTRS_PER_PGD;
+		}
 		if (!readmem(pgd, PHYSADDR, machdep->pgd, PAGESIZE(),
 					"pgd", RETURN_ON_ERROR))
 			continue;

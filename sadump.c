@@ -1679,7 +1679,7 @@ sadump_get_nr_cpus(void)
 }
 
 int
-sadump_get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
+sadump_get_cr3_cr4_idtr(int cpu, ulong *cr3, ulong *cr4, ulong *idtr)
 {
 	struct sadump_smram_cpu_state scs;
 
@@ -1688,6 +1688,7 @@ sadump_get_cr3_idtr(int cpu, ulong *cr3, ulong *idtr)
 		return FALSE;
 
 	*cr3 = scs.Cr3;
+	*cr4 = scs.Cr4;
 	*idtr = ((uint64_t)scs.IdtUpper)<<32 | (uint64_t)scs.IdtLower;
 
 	return TRUE;

@@ -6626,7 +6626,7 @@ struct sadump_data;
 struct sadump_data *get_sadump_data(void);
 int sadump_calc_kaslr_offset(ulong *);
 int sadump_get_nr_cpus(void);
-int sadump_get_cr3_idtr(int, ulong *, ulong *);
+int sadump_get_cr3_cr4_idtr(int, ulong *, ulong *, ulong *);
 
 /*
  * qemu.c
@@ -6680,7 +6680,7 @@ int vmware_vmss_memory_dump(FILE *);
 void dump_registers_for_vmss_dump(void);
 int vmware_vmss_valid_regs(struct bt_info *);
 int vmware_vmss_get_nr_cpus(void);
-int vmware_vmss_get_cr3_idtr(int, ulong *, ulong *);
+int vmware_vmss_get_cr3_cr4_idtr(int, ulong *, ulong *, ulong *);
 int vmware_vmss_phys_base(ulong *phys_base);
 int vmware_vmss_set_phys_base(ulong);
 
