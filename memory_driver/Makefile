@@ -10,6 +10,6 @@
 #
 obj-m := crash.o
 all:
-	make -C /lib/modules/`uname -r`/build SUBDIRS=${PWD} modules
+	make -C /lib/modules/`uname -r`/build M=${PWD} SUBDIRS=${PWD} modules
 clean:
 	rm -f *.mod.c *.ko *.o Module.*
