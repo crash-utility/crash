@@ -634,8 +634,11 @@ kaslr_init(void)
 		}
 	}
 
-	if (SADUMP_DUMPFILE() || VMSS_DUMPFILE())
+	if (SADUMP_DUMPFILE() || QEMU_MEM_DUMP_NO_VMCOREINFO() || VMSS_DUMPFILE()) {
+		/* Need for kaslr_offset and phys_base */
 		kt->flags2 |= KASLR_CHECK;
+		st->_stext_vmlinux = UNINITIALIZED;
+	}
 }
 
 /*

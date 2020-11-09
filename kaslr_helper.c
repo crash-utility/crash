@@ -379,6 +379,152 @@ verify_kaslr_offset(ulong kaslr_offset)
 }
 
 /*
+ * Find virtual (VA) and physical (PA) addresses of kernel start
+ *
+ * va:
+ *   Actual address of the kernel start (_stext) placed
+ *   randomly by kaslr feature. To be more accurate,
+ *   VA = _stext(from vmlinux) + kaslr_offset
+ *
+ * pa:
+ *   Physical address where the kerenel is placed.
+ *
+ * In nokaslr case, VA = _stext (from vmlinux)
+ * In kaslr case, virtual address of the kernel placement goes
+ * in this range: ffffffff80000000..ffffffff9fffffff, or
+ * __START_KERNEL_map..+512MB
+ *
+ * https://www.kernel.org/doc/Documentation/x86/x86_64/mm.txt
+ *
+ * Randomized VA will be the first valid page starting from
+ * ffffffff80000000 (__START_KERNEL_map). Page tree entry of
+ * this page will contain the PA of the kernel start.
+ */
+static int
+find_kernel_start(uint64_t pgd, ulong *va, ulong *pa)
+{
+	int pgd_idx, p4d_idx, pud_idx, pmd_idx, pte_idx;
+	uint64_t pgd_pte = 0, pud_pte, pmd_pte, pte;
+
+	pgd_idx = pgd_index(__START_KERNEL_map);
+	if (machdep->flags & VM_5LEVEL)
+		p4d_idx = p4d_index(__START_KERNEL_map);
+	pud_idx = pud_index(__START_KERNEL_map);
+	pmd_idx = pmd_index(__START_KERNEL_map);
+	pte_idx = pte_index(__START_KERNEL_map);
+
+	/* If the VM is in 5-level page table */
+	if (machdep->flags & VM_5LEVEL)
+		*va = ~((1UL << 57) - 1);
+	else
+		*va = ~__VIRTUAL_MASK;
+
+	FILL_PGD(pgd & PHYSICAL_PAGE_MASK, PHYSADDR, PAGESIZE());
+	for (; pgd_idx < PTRS_PER_PGD; pgd_idx++) {
+		pgd_pte = ULONG(machdep->pgd + pgd_idx * sizeof(uint64_t));
+		if (pgd_pte & _PAGE_PRESENT)
+			break;
+		p4d_idx = pud_idx = pmd_idx = pte_idx = 0;
+	}
+	if (pgd_idx == PTRS_PER_PGD)
+		return FALSE;
+	*va |= (ulong)pgd_idx << __PGDIR_SHIFT;
+
+	if (machdep->flags & VM_5LEVEL) {
+		FILL_P4D(pgd_pte & PHYSICAL_PAGE_MASK, PHYSADDR, PAGESIZE());
+		for (; p4d_idx < PTRS_PER_P4D; p4d_idx++) {
+			/* reuse pgd_pte */
+			pgd_pte = ULONG(machdep->machspec->p4d + p4d_idx * sizeof(uint64_t));
+			if (pgd_pte & _PAGE_PRESENT)
+				break;
+			pud_idx = pmd_idx = pte_idx = 0;
+		}
+		if (p4d_idx == PTRS_PER_P4D)
+			return FALSE;
+		*va |= (ulong)p4d_idx << P4D_SHIFT;
+	}
+
+	FILL_PUD(pgd_pte & PHYSICAL_PAGE_MASK, PHYSADDR, PAGESIZE());
+	for (; pud_idx < PTRS_PER_PUD; pud_idx++) {
+		pud_pte = ULONG(machdep->pud + pud_idx * sizeof(uint64_t));
+		if (pud_pte & _PAGE_PRESENT)
+			break;
+		pmd_idx = pte_idx = 0;
+	}
+	if (pud_idx == PTRS_PER_PUD)
+		return FALSE;
+	*va |= (ulong)pud_idx << PUD_SHIFT;
+	if (pud_pte & _PAGE_PSE) {
+		/* 1GB page */
+		*pa = pud_pte & PHYSICAL_PAGE_MASK;
+		return TRUE;
+	}
+
+	FILL_PMD(pud_pte & PHYSICAL_PAGE_MASK, PHYSADDR, PAGESIZE());
+	for (; pmd_idx < PTRS_PER_PMD; pmd_idx++) {
+		pmd_pte = ULONG(machdep->pmd + pmd_idx * sizeof(uint64_t));
+		if (pmd_pte & _PAGE_PRESENT)
+			break;
+		pte_idx = 0;
+	}
+	if (pmd_idx == PTRS_PER_PMD)
+		return FALSE;
+	*va |= pmd_idx << PMD_SHIFT;
+	if (pmd_pte & _PAGE_PSE) {
+		/* 2MB page */
+		*pa = pmd_pte & PHYSICAL_PAGE_MASK;
+		return TRUE;
+	}
+
+	FILL_PTBL(pmd_pte & PHYSICAL_PAGE_MASK, PHYSADDR, PAGESIZE());
+	for (; pte_idx < PTRS_PER_PTE; pte_idx++) {
+		pte = ULONG(machdep->ptbl + pte_idx * sizeof(uint64_t));
+		if (pte & _PAGE_PRESENT)
+			break;
+	}
+	if (pte_idx == PTRS_PER_PTE)
+		return FALSE;
+
+	*va |= pte_idx << PAGE_SHIFT;
+	*pa = pmd_pte & PHYSICAL_PAGE_MASK;
+	return TRUE;
+}
+
+/*
+ * Page Tables based method to calculate kaslr_offset and phys_base.
+ * It uses VA and PA of kernel start.
+ *
+ * kaslr offset and phys_base are calculated as follows:
+ *
+ * kaslr_offset = VA - st->_stext_vmlinux
+ * phys_base = PA - (VA - __START_KERNEL_map)
+ */
+static int
+calc_kaslr_offset_from_page_tables(uint64_t pgd, ulong *kaslr_offset,
+				   ulong *phys_base)
+{
+	ulong va, pa;
+
+	if (!st->_stext_vmlinux || st->_stext_vmlinux == UNINITIALIZED) {
+		fprintf(fp, "%s: st->_stext_vmlinux must be initialized\n",
+			__FUNCTION__);
+		return FALSE;
+	}
+	if (!find_kernel_start(pgd, &va, &pa))
+		return FALSE;
+
+	if (CRASHDEBUG(1)) {
+		fprintf(fp, "calc_kaslr_offset: _stext(vmlinux): %lx\n", st->_stext_vmlinux);
+		fprintf(fp, "calc_kaslr_offset: kernel start VA: %lx\n", va);
+		fprintf(fp, "calc_kaslr_offset: kernel start PA: %lx\n", pa);
+	}
+
+	*kaslr_offset = va - st->_stext_vmlinux;
+	*phys_base = pa - (va - __START_KERNEL_map);
+	return TRUE;
+}
+
+/*
  * IDT based method to calculate kaslr_offset and phys_base
  *
  * kaslr offset and phys_base are calculated as follows:
@@ -537,8 +683,13 @@ calc_kaslr_offset(ulong *ko, ulong *pb)
 					"pgd", RETURN_ON_ERROR))
 			continue;
 
-		if (!calc_kaslr_offset_from_idt(idtr, pgd, &kaslr_offset, &phys_base))
-			continue;
+		if (!calc_kaslr_offset_from_page_tables(pgd, &kaslr_offset,
+							&phys_base)) {
+			if (!calc_kaslr_offset_from_idt(idtr, pgd,
+							&kaslr_offset,
+							&phys_base))
+				continue;
+		}
 
 		if (verify_kaslr_offset(kaslr_offset))
 			goto found;
