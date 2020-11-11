@@ -10244,6 +10244,9 @@ static void add_ikconfig_entry(char *line, struct ikconfig_list *ent)
 	sscanf(name, "CONFIG_%s", name);
 	val = strtok_r(NULL, "", &tokptr);
 
+	if (!val)
+		return;
+
 	ent->name = strdup(name);
 	ent->val = strdup(val);
 }
