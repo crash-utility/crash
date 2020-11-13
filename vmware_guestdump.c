@@ -292,9 +292,9 @@ int
 vmware_guestdump_memory_dump(FILE *ofp)
 {
 	fprintf(ofp, "vmware_guestdump:\n");
-	fprintf(ofp, "    Header: version=%d num_vcpus=%ld\n",
-		GUESTDUMP_VERSION, vmss.num_vcpus);
-	fprintf(ofp, "Total memory: %ld\n", vmss.memsize);
+	fprintf(ofp, "    Header: version=%d num_vcpus=%llu\n",
+		GUESTDUMP_VERSION, (ulonglong)vmss.num_vcpus);
+	fprintf(ofp, "Total memory: %llu\n", (ulonglong)vmss.memsize);
 
 	if (vmss.regionscount > 1) {
 		uint64_t holes_sum = 0;
@@ -303,11 +303,11 @@ vmware_guestdump_memory_dump(FILE *ofp)
 		fprintf(ofp, "Memory regions[%d]:\n", vmss.regionscount);
 		fprintf(ofp, "    [0x%016x-", 0);
 		for (i = 0; i < vmss.regionscount - 1; i++) {
-			fprintf(ofp, "0x%016lx]\n", (uint64_t)vmss.regions[i].startpagenum << VMW_PAGE_SHIFT);
-			fprintf(ofp, "    [0x%016lx-", (uint64_t)vmss.regions[i].startppn << VMW_PAGE_SHIFT);
+			fprintf(ofp, "0x%016llx]\n", (ulonglong)vmss.regions[i].startpagenum << VMW_PAGE_SHIFT);
+			fprintf(ofp, "    [0x%016llx-", (ulonglong)vmss.regions[i].startppn << VMW_PAGE_SHIFT);
 			holes_sum += vmss.regions[i].startppn - vmss.regions[i].startpagenum;
 		}
-		fprintf(ofp, "0x%016lx]\n", vmss.memsize + (holes_sum << VMW_PAGE_SHIFT));
+		fprintf(ofp, "0x%016llx]\n", (ulonglong)vmss.memsize + (holes_sum << VMW_PAGE_SHIFT));
 	}
 
 	return TRUE;
