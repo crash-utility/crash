@@ -713,6 +713,7 @@ irqstacks_init(void)
 	} else 
 		error(WARNING, "cannot determine hardirq_ctx addresses\n");
 
+	/* TODO: Use multithreading to parallely update irq_tasks. */
 	for (i = 0; i < NR_CPUS; i++) {
 		if (!(tt->hardirq_ctx[i]))
 			continue;
@@ -5005,6 +5006,10 @@ pid_exists(ulong pid)
 /*
  *  Translate a stack pointer to a task, dealing with possible split.
  *  If that doesn't work, check the hardirq_stack and softirq_stack.
+ *
+ * TODO: This function can be optimized by getting min & max of the
+ *       stack range in first pass and use these values against the
+ *       given SP to decide whether or not to proceed with stack lookup.
  */
 ulong
 stkptr_to_task(ulong sp)
@@ -5012,6 +5017,9 @@ stkptr_to_task(ulong sp)
         int i, c;
         struct task_context *tc;
 	struct bt_info bt_info, *bt;
+
+	if (!sp)
+		return NO_TASK;
 
 	bt = &bt_info;
         tc = FIRST_CONTEXT();
