@@ -2106,6 +2106,18 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long irq_common_data_affinity;
 	long irq_desc_irq_common_data;
 	long uts_namespace_name;
+	long printk_ringbuffer_count_bits;
+	long printk_ringbuffer_descs;
+	long printk_ringbuffer_infos;
+	long printk_ringbuffer_head_id;
+	long printk_ringbuffer_tail_id;
+	long printk_ringbuffer_size_bits;
+	long printk_ringbuffer_data;
+	long prb_desc_state_var;
+	long prb_desc_text_blk_lpos_begin;
+	long printk_info_ts_nsec;
+	long printk_info_text_len;
+	long printk_info_caller_id;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2265,6 +2277,9 @@ struct size_table {         /* stash of commonly-used sizes */
 	long xa_node;
 	long zram_table_entry;
 	long irq_common_data;
+	long printk_ringbuffer;
+	long printk_info;
+	long prb_desc;
 };
 
 struct array_table {
