@@ -82,6 +82,7 @@ static char *log_from_idx(uint32_t, char *);
 static uint32_t log_next(uint32_t, char *);
 static void dump_log_entry(char *, int);
 static void dump_variable_length_record_log(int);
+static void dump_lockless_record_log(int, ulong, int);
 static void hypervisor_init(void);
 static void dump_log_legacy(void);
 static void dump_variable_length_record(void);
@@ -5042,6 +5043,11 @@ dump_log(int msg_flags)
 	struct syment *nsp;
 	int log_wrap, loglevel, log_buf_len;
 
+	if (kernel_symbol_exists("prb")) {
+		dump_lockless_record_log(msg_flags, 0, KVADDR);
+		return;
+	}
+
 	if (kernel_symbol_exists("log_first_idx") && 
 	    kernel_symbol_exists("log_next_idx")) {
 		dump_variable_length_record_log(msg_flags);
@@ -5388,6 +5394,381 @@ dump_variable_length_record_log(int msg_flags)
 	FREEBUF(logbuf);
 }
 
+/*
+ *  Handle the new variable-length-record log_buf.
+ */
+enum {
+	index_printk_ringbuffer = 0,
+	index_printk_info,
+	index_prb_desc,
+	prb_size_count
+};
+
+#define PRB_INIT_ENTRY(x)	[index_##x] = #x
+static const char *prb_size_name_table[prb_size_count] =
+{
+	PRB_INIT_ENTRY(printk_ringbuffer),
+	PRB_INIT_ENTRY(printk_info),
+	PRB_INIT_ENTRY(prb_desc)
+};
+#undef PRB_INIT_ENTRY
+
+enum {
+	index_atomic_long_t__counter = 0,
+	index_printk_ringbuffer__desc_ring,
+	index_printk_ringbuffer__text_data_ring,
+	index_prb_desc_ring__count_bits,
+	index_prb_desc_ring__descs,
+	index_prb_desc_ring__infos,
+	index_prb_desc_ring__head_id,
+	index_prb_desc_ring__tail_id,
+	index_prb_data_ring__size_bits,
+	index_prb_data_ring__data,
+	index_prb_desc__state_var,
+	index_prb_desc__text_blk_lpos,
+	index_prb_data_blk_lpos__begin,
+	index_printk_info__ts_nsec,
+	index_printk_info__text_len,
+	index_printk_info__caller_id,
+	prb_offset_count
+};
+
+struct string_pair {
+	const char *left, *right;
+};
+
+#define PRB_INIT_ENTRY(x,y) [index_##x##__##y] = { #x, #y }
+static struct string_pair prb_offset_name_table[prb_offset_count] =
+{
+	PRB_INIT_ENTRY(atomic_long_t, counter),
+	PRB_INIT_ENTRY(printk_ringbuffer, desc_ring),
+	PRB_INIT_ENTRY(printk_ringbuffer, text_data_ring),
+	PRB_INIT_ENTRY(prb_desc_ring, count_bits),
+	PRB_INIT_ENTRY(prb_desc_ring, descs),
+	PRB_INIT_ENTRY(prb_desc_ring, infos),
+	PRB_INIT_ENTRY(prb_desc_ring, head_id),
+	PRB_INIT_ENTRY(prb_desc_ring, tail_id),
+	PRB_INIT_ENTRY(prb_data_ring, size_bits),
+	PRB_INIT_ENTRY(prb_data_ring, data),
+	PRB_INIT_ENTRY(prb_desc, state_var),
+	PRB_INIT_ENTRY(prb_desc, text_blk_lpos),
+	PRB_INIT_ENTRY(prb_data_blk_lpos, begin),
+	PRB_INIT_ENTRY(printk_info, ts_nsec),
+	PRB_INIT_ENTRY(printk_info, text_len),
+	PRB_INIT_ENTRY(printk_info, caller_id)
+};
+#undef PRB_INIT_ENTRY
+
+static void init_prb_size_offset_info(int *sizes, int *offsets)
+{
+	ASSIGN_SIZE(printk_ringbuffer) =
+		sizes[index_printk_ringbuffer];
+	ASSIGN_SIZE(printk_info) =
+		sizes[index_printk_info];
+	ASSIGN_SIZE(prb_desc) =
+		sizes[index_prb_desc];
+
+	ASSIGN_OFFSET(printk_ringbuffer_count_bits) =
+		offsets[index_printk_ringbuffer__desc_ring] +
+		offsets[index_prb_desc_ring__count_bits];
+	ASSIGN_OFFSET(printk_ringbuffer_descs) =
+		offsets[index_printk_ringbuffer__desc_ring] +
+		offsets[index_prb_desc_ring__descs];
+	ASSIGN_OFFSET(printk_ringbuffer_infos) =
+		offsets[index_printk_ringbuffer__desc_ring] +
+		offsets[index_prb_desc_ring__infos];
+	ASSIGN_OFFSET(printk_ringbuffer_head_id) =
+		offsets[index_printk_ringbuffer__desc_ring] +
+		offsets[index_prb_desc_ring__head_id] +
+		offsets[index_atomic_long_t__counter];
+	ASSIGN_OFFSET(printk_ringbuffer_tail_id) =
+		offsets[index_printk_ringbuffer__desc_ring] +
+		offsets[index_prb_desc_ring__tail_id] +
+		offsets[index_atomic_long_t__counter];
+	ASSIGN_OFFSET(printk_ringbuffer_size_bits) =
+		offsets[index_printk_ringbuffer__text_data_ring] +
+		offsets[index_prb_data_ring__size_bits];
+	ASSIGN_OFFSET(printk_ringbuffer_data) =
+		offsets[index_printk_ringbuffer__text_data_ring] +
+		offsets[index_prb_data_ring__data];
+	ASSIGN_OFFSET(prb_desc_state_var) =
+		offsets[index_prb_desc__state_var] +
+		offsets[index_atomic_long_t__counter];
+	ASSIGN_OFFSET(prb_desc_text_blk_lpos_begin) =
+		offsets[index_prb_desc__text_blk_lpos] +
+		offsets[index_prb_data_blk_lpos__begin];
+	ASSIGN_OFFSET(printk_info_ts_nsec) =
+		offsets[index_printk_info__ts_nsec];
+	ASSIGN_OFFSET(printk_info_text_len) =
+		offsets[index_printk_info__text_len];
+	ASSIGN_OFFSET(printk_info_caller_id) =
+		offsets[index_printk_info__caller_id];
+}
+
+/*
+ * init_prb_from_vmcoreinfo():
+ * 	prb_sym_string: SYMBOL(prb) string
+ * 	return: prb pointer value
+ */
+static ulong init_prb_from_vmcoreinfo(char *prb_sym_string)
+{
+	int sizes[prb_size_count];
+	int offsets[prb_offset_count];
+	char name[100], *string;
+	int i, val;
+	ulong prb_sym, prb_kvaddr;
+
+	prb_sym = htol(prb_sym_string, RETURN_ON_ERROR, NULL);
+	if (CRASHDEBUG(1))
+		fprintf(fp, "%s: %lx\n", "SYMBOL(prb)", prb_sym);
+
+	if (!readmem(VTOP(prb_sym), PHYSADDR, &prb_kvaddr, sizeof(prb_kvaddr),
+				"prb ptr", RETURN_ON_ERROR|QUIET)) {
+		error(WARNING, "\ncannot read prb ptr\n");
+		return 0;
+	}
+
+	if (CRASHDEBUG(1))
+		fprintf(fp, "%s: %lx\n", "prb", prb_kvaddr);
+	for(i = 0; i < prb_size_count; i++) {
+		snprintf(name, sizeof(name), "SIZE(%s)", prb_size_name_table[i]);
+		string = pc->read_vmcoreinfo(name);
+		if(!string || !string[0])
+			return 0;
+		val = dtol(string, RETURN_ON_ERROR, NULL);
+		if (CRASHDEBUG(1))
+			fprintf(fp, "%s: %d\n", name, val);
+		free(string);
+		sizes[i] = val;
+	}
+
+	for(i = 0; i < prb_offset_count; i++) {
+		snprintf(name, sizeof(name), "OFFSET(%s.%s)",
+				prb_offset_name_table[i].left,
+				prb_offset_name_table[i].right);
+		string = pc->read_vmcoreinfo(name);
+		if(!string || !string[0])
+			return 0;
+		val = dtol(string, RETURN_ON_ERROR, NULL);
+		if (CRASHDEBUG(1))
+			fprintf(fp, "%s: %d\n", name, val);
+		free(string);
+		offsets[i] = val;
+	}
+
+	init_prb_size_offset_info(sizes, offsets);
+
+	return prb_kvaddr;
+}
+
+/*
+ * init_prb_from_symbols():
+ * return 0 success, -1 failed
+ */
+static int init_prb_from_symbols(void)
+{
+	int sizes[prb_size_count];
+	int offsets[prb_offset_count];
+	int i;
+
+	if(!symbol_exists("prb"))
+		return -1;
+
+	for(i = 0; i < prb_size_count; i++) {
+		/* STRUCT_EXISTS & STRUCT_SIZE don't like const */
+		char *st = (char *)prb_size_name_table[i];
+		if(!STRUCT_EXISTS(st)) {
+			error(WARNING, "symbol info for struct %s not found\n", st);
+			return -1;
+		}
+		sizes[i] = STRUCT_SIZE(st);
+	}
+
+	for(i = 0; i < prb_offset_count; i++) {
+		char *st = (char *)prb_offset_name_table[i].left;
+		char *mb = (char *)prb_offset_name_table[i].right;
+		if(!MEMBER_EXISTS(st, mb)) {
+			error(WARNING, "symbol info for struct %s.%s not found\n", st, mb);
+			return -1;
+		}
+		offsets[i] = MEMBER_OFFSET(st, mb);
+	}
+
+	init_prb_size_offset_info(sizes, offsets);
+
+	return 0;
+}
+
+/*
+ * dump_lockless_record_log():
+ * 	msg_flags: the flags
+ * 	prb_kvaddr: prb ptr value from vmcoreinfo
+ * 	addrtype: PHYSADDR from vmcoreinfo, KVADDR otherwise
+ */
+static void
+dump_lockless_record_log(int msg_flags, ulong prb_kvaddr, int addrtype)
+{
+	ulong descs, infos, text_data;
+	uint32_t seq_mask, text_size_mask, desc_item_size, info_item_size;
+	int64_t tail, head;
+	char *desc_buf, *info_buf;
+	ulong addr;
+
+	if (INVALID_SIZE(printk_ringbuffer) && init_prb_from_symbols() < 0) {
+		error(WARNING, "\nprintk_ringbuffer data structure(s) have changed\n");
+		return;
+	} else {
+		char *prbbuf;
+
+		if(prb_kvaddr == 0)
+			get_symbol_data("prb", sizeof(void *), &prb_kvaddr);
+
+		prbbuf = GETBUF(SIZE(printk_ringbuffer));
+
+		/* convert to PHYSADDR if from vmcoreinfo */
+		addr = addrtype == KVADDR ? prb_kvaddr : VTOP(prb_kvaddr);
+		if (!readmem(addr, addrtype, prbbuf, SIZE(printk_ringbuffer),
+					"prb contents", RETURN_ON_ERROR|QUIET)) {
+			error(WARNING, "\ncannot read prb contents\n");
+			FREEBUF(prbbuf);
+			return;
+		}
+
+		descs = ULONGLONG(prbbuf + OFFSET(printk_ringbuffer_descs));
+		infos = ULONGLONG(prbbuf + OFFSET(printk_ringbuffer_infos));
+		seq_mask = UINT(prbbuf + OFFSET(printk_ringbuffer_count_bits));
+		seq_mask = (1UL<<seq_mask) - 1;
+		desc_item_size = SIZE(prb_desc);
+		info_item_size = SIZE(printk_info);
+		text_data = ULONGLONG(prbbuf + OFFSET(printk_ringbuffer_data));
+		text_size_mask = UINT(prbbuf + OFFSET(printk_ringbuffer_size_bits));
+		text_size_mask = (1UL<<text_size_mask) - 1;
+		tail = ULONGLONG(prbbuf + OFFSET(printk_ringbuffer_tail_id));
+		head = ULONGLONG(prbbuf + OFFSET(printk_ringbuffer_head_id));
+
+		FREEBUF(prbbuf);
+
+		desc_buf = GETBUF(desc_item_size);
+		info_buf = GETBUF(info_item_size);
+	}
+
+	for (;tail <= head; tail++) {
+		ulong desc_kvaddr, info_kvaddr;
+		uint64_t state_var;
+		uint32_t text_len;
+		char buf[BUFSIZE], *msg, *p;
+		int ilen = 0, i;
+
+		desc_kvaddr = descs + (tail & seq_mask) * desc_item_size;
+		addr = addrtype == KVADDR ? desc_kvaddr : VTOP(desc_kvaddr);
+		if (!readmem(addr, addrtype, desc_buf, desc_item_size,
+					"prb_desc contents", RETURN_ON_ERROR|QUIET)) {
+			error(WARNING, "\ncannot read prb_desc contents\n");
+			return;
+		}
+
+		state_var = ULONGLONG(desc_buf + OFFSET(prb_desc_state_var));
+
+		switch(state_var>>62) {
+			case 0: /* desc_reserverd */
+			case 3: /* desc_reusable */
+				continue;
+			case 1: /* desc_committed */
+			case 2: /* desc_finalized */
+				break;
+		}
+
+		state_var &= (1ULL<<62) - 1;
+		if(tail < (int64_t)state_var) {
+			/* adjust tail if recorded seq is not same */
+			tail = state_var;
+		}
+
+		info_kvaddr = infos + (tail & seq_mask) * info_item_size;
+		addr = addrtype == KVADDR ? info_kvaddr : VTOP(info_kvaddr);
+		if (!readmem(addr, addrtype, info_buf, info_item_size,
+					"printk_info contents", RETURN_ON_ERROR|QUIET)) {
+			error(WARNING, "\ncannot read printk_info contents\n");
+			return;
+		}
+
+		if ((msg_flags & SHOW_LOG_TEXT) == 0) {
+			uint64_t ts_nsec = ULONGLONG(info_buf + OFFSET(printk_info_ts_nsec));
+			ulonglong nanos;
+			ulong rem;
+
+			nanos = (ulonglong)ts_nsec / (ulonglong)1000000000;
+			rem = (ulonglong)ts_nsec % (ulonglong)1000000000;
+			if (msg_flags & SHOW_LOG_CTIME) {
+				time_t t = kt->boot_date.tv_sec + nanos;
+				sprintf(buf, "[%s] ", ctime_tz(&t));
+			}
+			else
+				sprintf(buf, "[%5lld.%06ld] ", nanos, rem/1000);
+			ilen = strlen(buf);
+			fprintf(fp, "%s", buf);
+		}
+
+		if ((msg_flags & SHOW_LOG_DICT)) {
+			/*
+			 * caller_id always present, treat it as LOG_DICT, and prepend to prefix
+			 */
+			uint32_t caller_id = UINT(info_buf + OFFSET(printk_info_caller_id));
+			if(caller_id & 0x80000000)
+				sprintf(buf, "CPU=%d: ", caller_id & 0xFFFFFFF);
+			else
+				sprintf(buf, "PID=%d: ", caller_id);
+
+			ilen = strlen(buf);
+			fprintf(fp, "%s", buf);
+		}
+
+		text_len = UINT(info_buf + OFFSET(printk_info_text_len));
+
+		if (msg_flags & SHOW_LOG_LEVEL) {
+			unsigned int level = text_len >> 29;
+			sprintf(buf, "<%x>", level);
+			ilen += strlen(buf);
+			fprintf(fp, "%s", buf);
+		}
+
+		text_len &= 0xFFFF;
+		msg = GETBUF(text_len+1);
+		if (text_len > 0) {
+			ulong text_pos = ULONG(desc_buf + OFFSET(prb_desc_text_blk_lpos_begin));
+			text_pos = text_data + ((text_pos + sizeof(uint64_t)) & text_size_mask);
+
+			addr = addrtype == KVADDR ? text_pos : VTOP(text_pos);
+			if(!readmem(addr, addrtype, msg, text_len,
+						"log contents", RETURN_ON_ERROR|QUIET)) {
+				error(WARNING, "\ncannot read log contents\n");
+				FREEBUF(msg);
+				return;
+			}
+		}
+		msg[text_len] = 0;
+
+		for (i = 0, p = msg; i < text_len; i++, p++) {
+			if (*p == '\n')
+				fprintf(fp, "\n%s", space(ilen));
+			else if (isprint(*p) || isspace(*p))
+				fputc(*p, fp);
+			else
+				fputc('.', fp);
+		}
+		FREEBUF(msg);
+
+		if ((msg_flags & SHOW_LOG_DICT)) {
+			/*
+			 * TODO: show dev_printk_info
+			 *   no user in current kernel version: 5.10
+			 */
+		}
+
+		fprintf(fp, "\n");
+	}
+
+}
 
 /*
  *  Display general system info.
@@ -10926,7 +11307,14 @@ get_log_from_vmcoreinfo(char *file)
 	 */
 	machdep_init(LOG_ONLY);
 
-	if (vmc->log_buf_SYMBOL && vmc->log_buf_len_SYMBOL &&
+	if ((string = pc->read_vmcoreinfo("SYMBOL(prb)"))) {
+	    ulong prb_kvaddr = init_prb_from_vmcoreinfo(string);
+	    free(string);
+	    if(prb_kvaddr)
+		    dump_lockless_record_log(0, prb_kvaddr, PHYSADDR);
+	    else
+		    error(FATAL, "VMCOREINFO: incompatible prb info");
+	} else if (vmc->log_buf_SYMBOL && vmc->log_buf_len_SYMBOL &&
 	    vmc->log_first_idx_SYMBOL && vmc->log_next_idx_SYMBOL &&
             (vmc->log_SIZE > 0) &&
             (vmc->log_ts_nsec_OFFSET >= 0) &&
