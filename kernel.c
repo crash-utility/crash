@@ -5042,6 +5042,11 @@ dump_log(int msg_flags)
 	struct syment *nsp;
 	int log_wrap, loglevel, log_buf_len;
 
+	if (kernel_symbol_exists("prb")) {
+		dump_lockless_record_log(msg_flags);
+		return;
+	}
+
 	if (kernel_symbol_exists("log_first_idx") && 
 	    kernel_symbol_exists("log_next_idx")) {
 		dump_variable_length_record_log(msg_flags);
@@ -5289,7 +5294,7 @@ dump_log_entry(char *logptr, int msg_flags)
 }
 
 /* 
- *  Handle the new variable-length-record log_buf.
+ *  Handle the variable-length-record log_buf.
  */
 static void
 dump_variable_length_record_log(int msg_flags)

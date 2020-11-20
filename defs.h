@@ -2106,6 +2106,28 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long irq_common_data_affinity;
 	long irq_desc_irq_common_data;
 	long uts_namespace_name;
+	long printk_info_seq;
+	long printk_info_ts_nsec;
+	long printk_info_text_len;
+	long printk_info_level;
+	long printk_info_caller_id;
+	long printk_info_dev_info;
+	long dev_printk_info_subsystem;
+	long dev_printk_info_device;
+	long prb_desc_ring;
+	long prb_text_data_ring;
+	long prb_desc_ring_count_bits;
+	long prb_desc_ring_descs;
+	long prb_desc_ring_infos;
+	long prb_desc_ring_head_id;
+	long prb_desc_ring_tail_id;
+	long prb_desc_state_var;
+	long prb_desc_text_blk_lpos;
+	long prb_data_blk_lpos_begin;
+	long prb_data_blk_lpos_next;
+	long prb_data_ring_size_bits;
+	long prb_data_ring_data;
+	long atomic_long_t_counter;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2265,6 +2287,9 @@ struct size_table {         /* stash of commonly-used sizes */
 	long xa_node;
 	long zram_table_entry;
 	long irq_common_data;
+	long printk_info;
+	long printk_ringbuffer;
+	long prb_desc;
 };
 
 struct array_table {
@@ -6695,6 +6720,11 @@ int vmware_guestdump_memory_dump(FILE *);
  * kaslr_helper.c
  */
 int calc_kaslr_offset(ulong *, ulong *);
+
+/*
+ * printk.c
+ */
+void dump_lockless_record_log(int);
 
 /*
  *  gnu_binutils.c

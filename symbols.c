@@ -10426,6 +10426,30 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(log_level));
 	fprintf(fp, "               log_flags_level: %ld\n",
 		OFFSET(log_flags_level));
+
+	fprintf(fp, "               printk_info_seq: %ld\n", OFFSET(printk_info_seq));
+	fprintf(fp, "           printk_info_ts_nseq: %ld\n", OFFSET(printk_info_ts_nsec));
+	fprintf(fp, "          printk_info_text_len: %ld\n", OFFSET(printk_info_text_len));
+	fprintf(fp, "             printk_info_level: %ld\n", OFFSET(printk_info_level));
+	fprintf(fp, "         printk_info_caller_id: %ld\n", OFFSET(printk_info_caller_id));
+	fprintf(fp, "          printk_info_dev_info: %ld\n", OFFSET(printk_info_dev_info));
+	fprintf(fp, "     dev_printk_info_subsystem: %ld\n", OFFSET(dev_printk_info_subsystem));
+	fprintf(fp, "        dev_printk_info_device: %ld\n", OFFSET(dev_printk_info_device));
+	fprintf(fp, "                 prb_desc_ring: %ld\n", OFFSET(prb_desc_ring));
+	fprintf(fp, "            prb_text_data_ring: %ld\n", OFFSET(prb_text_data_ring));
+	fprintf(fp, "      prb_desc_ring_count_bits: %ld\n", OFFSET(prb_desc_ring_count_bits));
+	fprintf(fp, "           prb_desc_ring_descs: %ld\n", OFFSET(prb_desc_ring_descs));
+	fprintf(fp, "           prb_desc_ring_infos: %ld\n", OFFSET(prb_desc_ring_infos));
+	fprintf(fp, "         prb_desc_ring_head_id: %ld\n", OFFSET(prb_desc_ring_head_id));
+	fprintf(fp, "         prb_desc_ring_tail_id: %ld\n", OFFSET(prb_desc_ring_tail_id));
+	fprintf(fp, "            prb_desc_state_var: %ld\n", OFFSET(prb_desc_state_var));
+	fprintf(fp, "        prb_desc_text_blk_lpos: %ld\n", OFFSET(prb_desc_text_blk_lpos));
+	fprintf(fp, "       prb_data_blk_lpos_begin: %ld\n", OFFSET(prb_data_blk_lpos_begin));
+	fprintf(fp, "        prb_data_blk_lpos_next: %ld\n", OFFSET(prb_data_blk_lpos_next));
+	fprintf(fp, "       prb_data_ring_size_bits: %ld\n", OFFSET(prb_data_ring_size_bits));
+	fprintf(fp, "            prb_data_ring_data: %ld\n", OFFSET(prb_data_ring_data));
+	fprintf(fp, "         atomit_long_t_counter: %ld\n", OFFSET(atomic_long_t_counter));
+
 	fprintf(fp, "          sched_rt_entity_my_q: %ld\n",
 		OFFSET(sched_rt_entity_my_q));
 	fprintf(fp, "             task_group_parent: %ld\n",
@@ -10850,6 +10874,9 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(xarray));
 	fprintf(fp, "                       xa_node: %ld\n",
 		SIZE(xa_node));
+	fprintf(fp, "                   printk_info: %ld\n", SIZE(printk_info));
+	fprintf(fp, "             printk_ringbuffer: %ld\n", SIZE(printk_ringbuffer));
+	fprintf(fp, "                      prb_desc: %ld\n", SIZE(prb_desc));
 
 
         fprintf(fp, "\n                   array_table:\n");

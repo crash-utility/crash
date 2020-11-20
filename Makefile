@@ -61,6 +61,7 @@ VMWARE_HFILES=vmware_vmss.h
 
 CFILES=main.c tools.c global_data.c memory.c filesys.c help.c task.c \
 	kernel.c test.c gdb_interface.c configure.c net.c dev.c bpf.c \
+	printk.c \
 	alpha.c x86.c ppc.c ia64.c s390.c s390x.c s390dbf.c ppc64.c x86_64.c \
 	arm.c arm64.c mips.c sparc64.c \
 	extensions.c remote.c va_server.c va_server_v1.c symbols.c cmdline.c \
@@ -80,6 +81,7 @@ SOURCE_FILES=${CFILES} ${GENERIC_HFILES} ${MCORE_HFILES} \
 
 OBJECT_FILES=main.o tools.o global_data.o memory.o filesys.o help.o task.o \
 	build_data.o kernel.o test.o gdb_interface.o net.o dev.o bpf.o \
+	printk.o \
 	alpha.o x86.o ppc.o ia64.o s390.o s390x.o s390dbf.o ppc64.o x86_64.o \
 	arm.o arm64.o mips.o sparc64.o \
 	extensions.o remote.o va_server.o va_server_v1.o symbols.o cmdline.o \
@@ -362,6 +364,9 @@ task.o: ${GENERIC_HFILES} task.c
 
 kernel.o: ${GENERIC_HFILES} kernel.c
 	${CC} -c ${CRASH_CFLAGS} kernel.c ${WARNING_OPTIONS} ${WARNING_ERROR}
+
+printk.o: ${GENERIC_HFILES} printk.c
+	${CC} -c ${CRASH_CFLAGS} printk.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 gdb_interface.o: ${GENERIC_HFILES} gdb_interface.c
 	${CC} -c ${CRASH_CFLAGS} gdb_interface.c ${WARNING_OPTIONS} ${WARNING_ERROR}
