@@ -1,12 +1,6 @@
 #include "defs.h"
 #include <ctype.h>
 
-#define DESC_SV_BITS		(sizeof(unsigned long) * 8)
-#define DESC_COMMITTED_MASK	(1UL << (DESC_SV_BITS - 1))
-#define DESC_REUSE_MASK		(1UL << (DESC_SV_BITS - 2))
-#define DESC_FLAGS_MASK		(DESC_COMMITTED_MASK | DESC_REUSE_MASK)
-#define DESC_ID_MASK		(~DESC_FLAGS_MASK)
-
 /* convenience struct for passing many values to helper functions */
 struct prb_map {
 	char *prb;
@@ -20,6 +14,44 @@ struct prb_map {
 	unsigned long text_data_ring_size;
 	char *text_data;
 };
+
+/*
+ * desc_state and DESC_* definitions taken from kernel source:
+ *
+ * kernel/printk/printk_ringbuffer.h
+ */
+
+/* The possible responses of a descriptor state-query. */
+enum desc_state {
+	desc_miss	=  -1,	/* ID mismatch (pseudo state) */
+	desc_reserved	= 0x0,	/* reserved, in use by writer */
+	desc_committed	= 0x1,	/* committed by writer, could get reopened */
+	desc_finalized	= 0x2,	/* committed, no further modification allowed */
+	desc_reusable	= 0x3,	/* free, not yet used by any writer */
+};
+
+#define DESC_SV_BITS		(sizeof(unsigned long) * 8)
+#define DESC_FLAGS_SHIFT	(DESC_SV_BITS - 2)
+#define DESC_FLAGS_MASK		(3UL << DESC_FLAGS_SHIFT)
+#define DESC_STATE(sv)		(3UL & (sv >> DESC_FLAGS_SHIFT))
+#define DESC_ID_MASK		(~DESC_FLAGS_MASK)
+#define DESC_ID(sv)		((sv) & DESC_ID_MASK)
+
+/*
+ * get_desc_state() taken from kernel source:
+ *
+ * kernel/printk/printk_ringbuffer.c
+ */
+
+/* Query the state of a descriptor. */
+static enum desc_state get_desc_state(unsigned long id,
+				      unsigned long state_val)
+{
+	if (id != DESC_ID(state_val))
+		return desc_miss;
+
+	return DESC_STATE(state_val);
+}
 
 static void
 init_offsets(void)
@@ -74,6 +106,7 @@ dump_record(struct prb_map *m, unsigned long id, int msg_flags)
 	unsigned short text_len;
 	unsigned long state_var;
 	unsigned int caller_id;
+	enum desc_state state;
 	unsigned char level;
 	unsigned long begin;
 	unsigned long next;
@@ -90,7 +123,8 @@ dump_record(struct prb_map *m, unsigned long id, int msg_flags)
 	/* skip non-committed record */
 	state_var = ULONG(desc + OFFSET(prb_desc_state_var) +
 			OFFSET(atomic_long_t_counter));
-	if ((state_var & DESC_FLAGS_MASK) != DESC_COMMITTED_MASK)
+	state = get_desc_state(id, state_var);
+	if (state != desc_committed && state != desc_finalized)
 		return;
 
 	info = m->infos + ((id % m->desc_ring_count) * SIZE(printk_info));
