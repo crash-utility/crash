@@ -510,9 +510,11 @@ arm64_verify_symbol(const char *name, ulong value, char type)
 	    ((type == 'a') || (type == 'n') || (type == 'N') || (type == 'U')))
 		return FALSE;
 
-	if (STREQ(name, "$d") || STREQ(name, "$x"))
+	if (STREQ(name, "$d") || STRNEQ(name, "$d.") ||
+	    STREQ(name, "$x") || STRNEQ(name, "$x.") ||
+	    STREQ(name, "$c") || STRNEQ(name, "$c."))
 		return FALSE;
-	
+
 	if ((type == 'A') && STRNEQ(name, "__crc_"))
 		return FALSE;
 
