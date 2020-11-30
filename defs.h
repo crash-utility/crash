@@ -5938,6 +5938,7 @@ struct x86_64_pt_regs_offsets {
 struct x86_64_stkinfo {
 	ulong ebase[NR_CPUS][MAX_EXCEPTION_STACKS];
 	int esize[MAX_EXCEPTION_STACKS];
+	char available[NR_CPUS][MAX_EXCEPTION_STACKS];
 	ulong ibase[NR_CPUS];
 	int isize;
 	int NMI_stack_index;
