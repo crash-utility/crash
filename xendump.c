@@ -429,7 +429,7 @@ xc_save_verify(char *buf)
 	}	
 
 	/* 
-	 *  Get the list of PFNs that are not in the psuedo-phys map 
+	 *  Get the list of PFNs that are not in the pseudo-phys map 
 	 */
 	if (read(xd->xfd, &xd->xc_save.pfns_not, 
 	    sizeof(xd->xc_save.pfns_not)) != sizeof(xd->xc_save.pfns_not))
