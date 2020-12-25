@@ -2780,6 +2780,9 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 		}
 		decompressor = (void *)lzo1x_decompress_safe;
 #else
+		error(WARNING,
+		      "zram decompress error: this executable needs to be built"
+		      " with lzo library\n");
 		return 0;
 #endif
 	} else { /* todo: support more compressor */
