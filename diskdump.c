@@ -2591,7 +2591,6 @@ diskdump_device_dump_info(FILE *ofp)
 	}
 }
 
-#ifdef LZO
 static void
 zram_init(void)
 {
@@ -2772,6 +2771,7 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 	readmem(zram + OFFSET(zram_compressor), KVADDR, name,
 		sizeof(name), "zram compressor", FAULT_ON_ERROR);
 	if (STREQ(name, "lzo")) {
+#ifdef LZO
 		if (!(dd->flags & LZO_SUPPORTED)) {
 			if (lzo_init() == LZO_E_OK)
 				dd->flags |= LZO_SUPPORTED;
@@ -2779,6 +2779,9 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 				return 0;
 		}
 		decompressor = (void *)lzo1x_decompress_safe;
+#else
+		return 0;
+#endif
 	} else { /* todo: support more compressor */
 		error(WARNING, "only the lzo compressor is supported\n");
 		return 0;
@@ -2846,9 +2849,3 @@ out:
 	FREEBUF(zram_buf);
 	return len;
 }
-#else
-ulong try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong vaddr)
-{
-	return 0;
-}
-#endif
