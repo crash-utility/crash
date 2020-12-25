@@ -2725,9 +2725,6 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 	unsigned char *zram_buf = NULL;
 	unsigned char *outbuf = NULL;
 
-	if (INVALID_MEMBER(zram_compressor))
-		zram_init();
-
 	off = PAGEOFFSET(vaddr);
 	if (!symbol_exists("swap_info"))
 		return 0;
@@ -2755,6 +2752,9 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 			error(WARNING, "this page has been swapped to %s\n", name);
 		return 0;
 	}
+
+	if (INVALID_MEMBER(zram_compressor))
+		zram_init();
 
 	if (CRASHDEBUG(2))
 		error(WARNING, "this page has swapped to zram\n");
