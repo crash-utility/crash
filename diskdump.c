@@ -2749,85 +2749,88 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 			sizeof(void *), "block_device_bd_disk", FAULT_ON_ERROR);
 	readmem(bd_disk + OFFSET(gendisk_disk_name), KVADDR, name,
 			strlen("zram"), "gendisk_disk_name", FAULT_ON_ERROR);
-	if (!strncmp(name, "zram", strlen("zram"))) {
+
+	if (strncmp(name, "zram", strlen("zram"))) {
 		if (CRASHDEBUG(2))
-			error(WARNING, "this page has swapped to zram\n");
-
-		readmem(bd_disk + OFFSET(gendisk_private_data), KVADDR, &zram,
-				sizeof(void *), "gendisk_private_data", FAULT_ON_ERROR);
-
-		readmem(zram + OFFSET(zram_compressor), KVADDR, name,
-			sizeof(name), "zram compressor", FAULT_ON_ERROR);
-		if (STREQ(name, "lzo")) {
-			if (!(dd->flags & LZO_SUPPORTED)) {
-				if (lzo_init() == LZO_E_OK)
-					dd->flags |= LZO_SUPPORTED;
-				else
-					return 0;
-			}
-			decompressor = (void *)lzo1x_decompress_safe;
-		} else {//todo,support more compressor
-			error(WARNING, "only the lzo compressor is supported\n");
-			return 0;
-		}
-
-		if (THIS_KERNEL_VERSION >= LINUX(2, 6, 0)) {
-			swp_offset = (ulonglong)__swp_offset(pte_val);
-		} else {
-			swp_offset = (ulonglong)SWP_OFFSET(pte_val);
-		}
-
-		zram_buf = (unsigned char *)GETBUF(PAGESIZE());
-		/*lookup page from swap cache*/
-		obj_addr = lookup_swap_cache(pte_val, zram_buf);
-		if (obj_addr != NULL) {
-			memcpy(buf, obj_addr + off, len);
-			goto out;
-		}
-
-		sector = swp_offset << (PAGESHIFT() - 9);
-		index = sector >> SECTORS_PER_PAGE_SHIFT;
-		readmem(zram, KVADDR, &zram_table_entry,
-				sizeof(void *), "zram_table_entry", FAULT_ON_ERROR);
-		zram_table_entry += (index * SIZE(zram_table_entry));
-		readmem(zram_table_entry, KVADDR, &entry,
-				sizeof(void *), "entry of table", FAULT_ON_ERROR);
-		readmem(zram_table_entry + OFFSET(zram_table_flag), KVADDR, &flags,
-				sizeof(void *), "zram_table_flag", FAULT_ON_ERROR);
-		if (!entry || (flags & ZRAM_FLAG_SAME_BIT)) {
-			memset(buf, entry, len);
-			goto out;
-		}
-		size = flags & (ZRAM_FLAG_SHIFT -1);
-		if (size == 0) {
-			len = 0;
-			goto out;
-		}
-
-		readmem(zram + OFFSET(zram_mempoll), KVADDR, &zram,
-				sizeof(void *), "zram_mempoll", FAULT_ON_ERROR);
-
-		obj_addr = zram_object_addr(zram, entry, zram_buf);
-		if (obj_addr == NULL) {
-			len = 0;
-			goto out;
-		}
-
-		if (size == PAGESIZE()) {
-			memcpy(buf, obj_addr + off, len);
-		} else {
-			outbuf = (unsigned char *)GETBUF(PAGESIZE());
-			outsize = PAGESIZE();
-			if (!decompressor(obj_addr, size, outbuf, &outsize, NULL))
-				memcpy(buf, outbuf + off, len);
-			else {
-				error(WARNING, "zram decompress error\n");
-				len = 0;
-			}
-			FREEBUF(outbuf);
-		}
-	} else {
+			error(WARNING, "this page has been swapped to %s\n", name);
 		return 0;
+	}
+
+	if (CRASHDEBUG(2))
+		error(WARNING, "this page has swapped to zram\n");
+
+	readmem(bd_disk + OFFSET(gendisk_private_data), KVADDR, &zram,
+		sizeof(void *), "gendisk_private_data", FAULT_ON_ERROR);
+
+	readmem(zram + OFFSET(zram_compressor), KVADDR, name,
+		sizeof(name), "zram compressor", FAULT_ON_ERROR);
+	if (STREQ(name, "lzo")) {
+		if (!(dd->flags & LZO_SUPPORTED)) {
+			if (lzo_init() == LZO_E_OK)
+				dd->flags |= LZO_SUPPORTED;
+			else
+				return 0;
+		}
+		decompressor = (void *)lzo1x_decompress_safe;
+	} else { /* todo: support more compressor */
+		error(WARNING, "only the lzo compressor is supported\n");
+		return 0;
+	}
+
+	if (THIS_KERNEL_VERSION >= LINUX(2, 6, 0)) {
+		swp_offset = (ulonglong)__swp_offset(pte_val);
+	} else {
+		swp_offset = (ulonglong)SWP_OFFSET(pte_val);
+	}
+
+	zram_buf = (unsigned char *)GETBUF(PAGESIZE());
+	/* lookup page from swap cache */
+	obj_addr = lookup_swap_cache(pte_val, zram_buf);
+	if (obj_addr != NULL) {
+		memcpy(buf, obj_addr + off, len);
+		goto out;
+	}
+
+	sector = swp_offset << (PAGESHIFT() - 9);
+	index = sector >> SECTORS_PER_PAGE_SHIFT;
+	readmem(zram, KVADDR, &zram_table_entry,
+		sizeof(void *), "zram_table_entry", FAULT_ON_ERROR);
+	zram_table_entry += (index * SIZE(zram_table_entry));
+	readmem(zram_table_entry, KVADDR, &entry,
+		sizeof(void *), "entry of table", FAULT_ON_ERROR);
+	readmem(zram_table_entry + OFFSET(zram_table_flag), KVADDR, &flags,
+		sizeof(void *), "zram_table_flag", FAULT_ON_ERROR);
+	if (!entry || (flags & ZRAM_FLAG_SAME_BIT)) {
+		memset(buf, entry, len);
+		goto out;
+	}
+	size = flags & (ZRAM_FLAG_SHIFT -1);
+	if (size == 0) {
+		len = 0;
+		goto out;
+	}
+
+	readmem(zram + OFFSET(zram_mempoll), KVADDR, &zram,
+		sizeof(void *), "zram_mempoll", FAULT_ON_ERROR);
+
+	obj_addr = zram_object_addr(zram, entry, zram_buf);
+	if (obj_addr == NULL) {
+		len = 0;
+		goto out;
+	}
+
+	if (size == PAGESIZE()) {
+		memcpy(buf, obj_addr + off, len);
+	} else {
+		outbuf = (unsigned char *)GETBUF(PAGESIZE());
+		outsize = PAGESIZE();
+		if (!decompressor(obj_addr, size, outbuf, &outsize, NULL))
+			memcpy(buf, outbuf + off, len);
+		else {
+			error(WARNING, "zram decompress error\n");
+			len = 0;
+		}
+		FREEBUF(outbuf);
 	}
 
 out:
