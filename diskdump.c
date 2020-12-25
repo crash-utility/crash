@@ -2753,8 +2753,11 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 		return 0;
 	}
 
-	if (INVALID_MEMBER(zram_compressor))
+	if (INVALID_MEMBER(zram_compressor)) {
 		zram_init();
+		if (INVALID_MEMBER(zram_compressor))
+			return 0;
+	}
 
 	if (CRASHDEBUG(2))
 		error(WARNING, "this page has swapped to zram\n");
