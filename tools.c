@@ -6371,7 +6371,7 @@ char *
 pages_to_size(ulong pages, char *buf)
 {
 	double total;
-	char *p1, *p2;
+	char *p;
 
 	if (pages == 0) {
 		sprintf(buf, "0");
@@ -6387,11 +6387,8 @@ pages_to_size(ulong pages, char *buf)
         else
         	sprintf(buf, "%ld KB", (ulong)(total/(double)KILOBYTES(1)));
 
-	if ((p1 = strstr(buf, ".0 "))) {
-		p2 = p1 + 3;
-		*p1++ = ' ';
-		strcpy(p1, p2);
-	}
+	if ((p = strstr(buf, ".0 ")))
+		memmove(p, p + 2, sizeof(" GB"));
 
 	return buf;
 }
