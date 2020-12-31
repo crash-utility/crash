@@ -555,6 +555,9 @@ resize_elf_header(int fd, char *file, char **eheader_ptr, char **sect0_ptr,
 	} else
 		*eheader_ptr = eheader;
 
+	elf32 = (Elf32_Ehdr *)&eheader[0];
+	elf64 = (Elf64_Ehdr *)&eheader[0];
+
 	if (FLAT_FORMAT()) {
 		if (!read_flattened_format(fd, 0, eheader, header_size))
 			return 0;
