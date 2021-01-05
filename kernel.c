@@ -10241,7 +10241,7 @@ static struct ikconfig_list {
 	char *val;
 } *ikconfig_all;
 
-static void add_ikconfig_entry(char *line, struct ikconfig_list *ent)
+static int add_ikconfig_entry(char *line, struct ikconfig_list *ent)
 {
 	char *tokptr, *name, *val;
 
@@ -10249,8 +10249,16 @@ static void add_ikconfig_entry(char *line, struct ikconfig_list *ent)
 	sscanf(name, "CONFIG_%s", name);
 	val = strtok_r(NULL, "", &tokptr);
 
+	if (!val) {
+		if (CRASHDEBUG(2))
+			error(WARNING, "invalid ikconfig entry: %s\n", line);
+		return FALSE;
+	}
+
 	ent->name = strdup(name);
 	ent->val = strdup(val);
+
+	return TRUE;
 }
 
 static int setup_ikconfig(char *config)
@@ -10270,8 +10278,8 @@ static int setup_ikconfig(char *config)
 			ent++;
 
 		if (STRNEQ(ent, "CONFIG_")) {
-			add_ikconfig_entry(ent,
-					 &ikconfig_all[kt->ikconfig_ents++]);
+			if (add_ikconfig_entry(ent, &ikconfig_all[kt->ikconfig_ents]))
+				kt->ikconfig_ents++;
 			if (kt->ikconfig_ents == IKCONFIG_MAX) {
 				error(WARNING, "ikconfig overflow.\n");
 				return 1;
