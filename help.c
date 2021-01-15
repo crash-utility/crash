@@ -1088,7 +1088,7 @@ char *help_set[] = {
 "                               of data structures; the \"text-addr\" argument",
 "                               must be a kernel or module text address, which", 
 "                               may be expressed symbolically or as a hexadecimal",
-"                               value.",
+"                               value; set scope 0 to un-set.",
 "         offline  show | hide  show or hide command output that is associated",
 "                               with offline cpus.",
 "         redzone  on | off     if on, CONFIG_SLUB object addresses displayed by",
