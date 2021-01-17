@@ -4473,6 +4473,7 @@ do_module_cmd(ulong flag, char *modref, ulong address,
 	char buf1[BUFSIZE];
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
+	char buf4[BUFSIZE];
 
 	if (NO_MODULES())
 		return;
@@ -4494,10 +4495,12 @@ do_module_cmd(ulong flag, char *modref, ulong address,
 	        }
 	
 		if (flag == LIST_MODULE_HDR) {
-			fprintf(fp, "%s  %s  %s  OBJECT FILE\n",
+			fprintf(fp, "%s  %s  %s  %s  OBJECT FILE\n",
 				mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, 
 				"MODULE"),
 				mkstring(buf2, maxnamelen, LJUST, "NAME"),
+				mkstring(buf4, VADDR_PRLEN, CENTER|LJUST,
+				"BASE"),
 				mkstring(buf3, maxsizelen, RJUST, "SIZE"));
 		}
 	
@@ -4509,6 +4512,8 @@ do_module_cmd(ulong flag, char *modref, ulong address,
 				    LONG_HEX|RJUST, MKSTR(lm->module_struct)));
 				fprintf(fp, "%s  ", mkstring(buf2, maxnamelen, 
 					LJUST, lm->mod_name));
+				fprintf(fp, "%s  ", mkstring(buf4, VADDR_PRLEN,
+				    LONG_HEX|RJUST, MKSTR(lm->mod_base)));
 				fprintf(fp, "%s  ", mkstring(buf3, maxsizelen,
 					RJUST|LONG_DEC, MKSTR(lm->mod_size)));
 				// fprintf(fp, "%6ld  ", lm->mod_size);
