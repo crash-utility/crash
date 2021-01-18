@@ -1012,23 +1012,25 @@ gdb_set_crash_scope(ulong vaddr, char *arg)
 	char name[BUFSIZE];
 	struct load_module *lm;
 
-	if (!is_kernel_text(vaddr)) {
-		error(INFO, "invalid text address: %s\n", arg);
-		return FALSE;
-	}
-
-	if (module_symbol(vaddr, NULL, &lm, name, 0)) {
-		if (!(lm->mod_flags & MOD_LOAD_SYMS)) {
-			error(INFO, "attempting to find/load \"%s\" module debuginfo\n", 
-				lm->mod_name);
-			if (!load_module_symbols_helper(lm->mod_name)) {
-				error(INFO, "cannot find/load \"%s\" module debuginfo\n", 
-					lm->mod_name);
-				return FALSE;
-			}
+	if (vaddr) {
+		if (!is_kernel_text(vaddr)) {
+			error(INFO, "invalid text address: %s\n", arg);
+			return FALSE;
 		}
-	} else if (kt->flags2 & KASLR)
-		vaddr -= (kt->relocate * -1);
+
+		if (module_symbol(vaddr, NULL, &lm, name, 0)) {
+			if (!(lm->mod_flags & MOD_LOAD_SYMS)) {
+				error(INFO, "attempting to find/load \"%s\" module debuginfo\n",
+					lm->mod_name);
+				if (!load_module_symbols_helper(lm->mod_name)) {
+					error(INFO, "cannot find/load \"%s\" module debuginfo\n",
+						lm->mod_name);
+					return FALSE;
+				}
+			}
+		} else if (kt->flags2 & KASLR)
+			vaddr -= (kt->relocate * -1);
+	}
 
 	req->command = GNU_SET_CRASH_BLOCK;
 	req->addr = vaddr;
