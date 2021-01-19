@@ -403,8 +403,6 @@ vm_init(void)
 	    VALID_MEMBER(vmap_area_va_end) &&
 	    VALID_MEMBER(vmap_area_list) &&
 	    VALID_MEMBER(vmap_area_vm) &&
-	    (VALID_MEMBER(vmap_area_flags) || 
-		(OFFSET(vmap_area_vm) == MEMBER_OFFSET("vmap_area", "purge_list"))) &&
 	    kernel_symbol_exists("vmap_area_list"))
 		vt->flags |= USE_VMAP_AREA;
 
