@@ -2128,6 +2128,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long prb_data_ring_size_bits;
 	long prb_data_ring_data;
 	long atomic_long_t_counter;
+	long block_device_bd_device;
+	long block_device_bd_stats;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

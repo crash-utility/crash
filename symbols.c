@@ -9291,6 +9291,10 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(block_device_bd_list));
 	fprintf(fp, "          block_device_bd_disk: %ld\n",
 		OFFSET(block_device_bd_disk));
+	fprintf(fp, "        block_device_bd_device: %ld\n",
+		OFFSET(block_device_bd_device));
+	fprintf(fp, "         block_device_bd_stats: %ld\n",
+		OFFSET(block_device_bd_stats));
 	fprintf(fp, "         address_space_nrpages: %ld\n",
 		OFFSET(address_space_nrpages));
 	fprintf(fp, "       address_space_page_tree: %ld\n",

@@ -4067,13 +4067,22 @@ get_gendisk_5(unsigned long entry)
 {
 	unsigned long device_address;
 	unsigned long device_private_address;
+	unsigned long gendisk;
 
 	device_private_address = entry - OFFSET(device_private_knode_class);
 	readmem(device_private_address + OFFSET(device_private_device),
 		KVADDR, &device_address, sizeof(device_address),
 		"device_private.device", FAULT_ON_ERROR);
 
-	return device_address - OFFSET(hd_struct_dev) - OFFSET(gendisk_part0);
+	if (VALID_MEMBER(hd_struct_dev))
+		return device_address - OFFSET(hd_struct_dev) - OFFSET(gendisk_part0);
+
+	/* kernel version >= 5.11 */
+	readmem(device_address - OFFSET(block_device_bd_device) +
+		OFFSET(block_device_bd_disk), KVADDR, &gendisk,
+		sizeof(ulong), "block_device.bd_disk", FAULT_ON_ERROR);
+
+	return gendisk;
 }
 
 /* 2.6.24 < kernel version <= 2.6.27 */
@@ -4290,9 +4299,19 @@ get_diskio_1(unsigned long rq, unsigned long gendisk, struct diskio *io)
 			io->read = count[0];
 			io->write = count[1];
 		} else {
-			readmem(gendisk + OFFSET(gendisk_part0) +
-				OFFSET(hd_struct_dkstats), KVADDR, &dkstats,
-				sizeof(ulong), "gendisk.part0.dkstats", FAULT_ON_ERROR);
+			if (VALID_MEMBER(hd_struct_dkstats))
+				readmem(gendisk + OFFSET(gendisk_part0) +
+					OFFSET(hd_struct_dkstats), KVADDR, &dkstats,
+					sizeof(ulong), "gendisk.part0.dkstats", FAULT_ON_ERROR);
+			else { /* kernel version >= 5.11 */
+				ulong block_device;
+				readmem(gendisk + OFFSET(gendisk_part0), KVADDR, &block_device,
+					sizeof(ulong), "gendisk.part0", FAULT_ON_ERROR);
+				readmem(block_device + OFFSET(block_device_bd_stats), KVADDR,
+					&dkstats, sizeof(ulong), "block_device.bd_stats",
+					FAULT_ON_ERROR);
+			}
+
 			get_one_diskio_from_dkstats(dkstats, io_counts);
 
 			io->read = io_counts[0];
@@ -4549,6 +4568,8 @@ void diskio_init(void)
 	MEMBER_OFFSET_INIT(gendisk_queue, "gendisk", "queue");
 	MEMBER_OFFSET_INIT(hd_struct_dev, "hd_struct", "__dev");
 	MEMBER_OFFSET_INIT(hd_struct_dkstats, "hd_struct", "dkstats");
+	MEMBER_OFFSET_INIT(block_device_bd_device, "block_device", "bd_device");
+	MEMBER_OFFSET_INIT(block_device_bd_stats, "block_device", "bd_stats");
 	MEMBER_OFFSET_INIT(klist_k_list, "klist", "k_list");
 	MEMBER_OFFSET_INIT(klist_node_n_klist, "klist_node", "n_klist");
 	MEMBER_OFFSET_INIT(klist_node_n_node, "klist_node", "n_node");
