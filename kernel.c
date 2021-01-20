@@ -11160,7 +11160,8 @@ show_kernel_taints_v4_10(char *buf, int verbose)
 	ulong tainted_mask, *tainted_mask_ptr;
 	struct syment *sp;
 
-	if (!VALID_STRUCT(taint_flag)) {
+	if (!(VALID_STRUCT(taint_flag) &&
+	     VALID_MEMBER(tnt_true) && VALID_MEMBER(tnt_false))) {
 		STRUCT_SIZE_INIT(taint_flag, "taint_flag");
 		MEMBER_OFFSET_INIT(tnt_true, "taint_flag", "true");
 		MEMBER_OFFSET_INIT(tnt_false, "taint_flag", "false");
