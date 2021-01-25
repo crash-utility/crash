@@ -3585,7 +3585,7 @@ struct arm64_stackframe {
  *  PHYSICAL_PAGE_MASK changed (enlarged) between 2.4 and 2.6, so
  *  for safety, use the 2.6 values to generate it.
  */ 
-#define __PHYSICAL_MASK_SHIFT_XEN     40
+#define __PHYSICAL_MASK_SHIFT_XEN     52
 #define __PHYSICAL_MASK_SHIFT_2_6     46
 #define __PHYSICAL_MASK_SHIFT_5LEVEL  52
 #define __PHYSICAL_MASK_SHIFT  (machdep->machspec->physical_mask_shift)
