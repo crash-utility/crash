@@ -5262,6 +5262,8 @@ dump_log_entry(char *logptr, int msg_flags)
 		fprintf(fp, "%s", buf);
 	}
 
+	level = LOG_LEVEL(level);
+
 	if (msg_flags & SHOW_LOG_LEVEL) {
 		sprintf(buf, "<%x>", level);
 		ilen += strlen(buf);
