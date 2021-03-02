@@ -1326,6 +1326,8 @@ x86_64_per_cpu_init(void)
 		    	    KVADDR, &hardirq_stack_ptr, sizeof(void *),
 		    	    "hardirq_stack_ptr (per_cpu)", QUIET|RETURN_ON_ERROR))
 				continue;
+			if (hardirq_stack_ptr != PAGEBASE(hardirq_stack_ptr))
+				hardirq_stack_ptr += 8;
 			ms->stkinfo.ibase[i] = hardirq_stack_ptr - ms->stkinfo.isize;
 		} else if (irq_sp)
 			ms->stkinfo.ibase[i] = irq_sp->value + kt->__per_cpu_offset[i];
