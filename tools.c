@@ -18,6 +18,11 @@
 #include "defs.h"
 #include <ctype.h>
 
+#ifdef VALGRIND
+#include <valgrind/valgrind.h>
+#include <valgrind/memcheck.h>
+#endif
+
 static void print_number(struct number_option *, int, int);
 static long alloc_hq_entry(void);
 struct hq_entry;
@@ -5679,8 +5684,21 @@ buf_init(void)
 
 	bp->smallest = 0x7fffffff; 
 	bp->total = 0.0;
-}
 
+#ifdef VALGRIND
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_1K, sizeof(bp->buf_1K));
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_2K, sizeof(bp->buf_2K));
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_4K, sizeof(bp->buf_4K));
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_8K, sizeof(bp->buf_8K));
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_32K, sizeof(bp->buf_32K));
+
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_1K, 0, 1);
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_2K, 0, 1);
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_4K, 0, 1);
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_8K, 0, 1);
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_32K, 0, 1);
+#endif
+}
 
 /*
  *  Free up all buffers used by the last command.
@@ -5707,6 +5725,26 @@ void free_all_bufs(void)
 	if (bp->mallocs != bp->frees)
 		error(WARNING, "malloc/free mismatch (%ld/%ld)\n",
 			bp->mallocs, bp->frees);
+
+#ifdef VALGRIND
+	VALGRIND_DESTROY_MEMPOOL(&bp->buf_1K);
+	VALGRIND_DESTROY_MEMPOOL(&bp->buf_2K);
+	VALGRIND_DESTROY_MEMPOOL(&bp->buf_4K);
+	VALGRIND_DESTROY_MEMPOOL(&bp->buf_8K);
+	VALGRIND_DESTROY_MEMPOOL(&bp->buf_32K);
+
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_1K, sizeof(bp->buf_1K));
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_2K, sizeof(bp->buf_2K));
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_4K, sizeof(bp->buf_4K));
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_8K, sizeof(bp->buf_8K));
+	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_32K, sizeof(bp->buf_32K));
+
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_1K, 0, 1);
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_2K, 0, 1);
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_4K, 0, 1);
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_8K, 0, 1);
+	VALGRIND_CREATE_MEMPOOL(&bp->buf_32K, 0, 1);
+#endif
 }
 
 /*
@@ -5731,6 +5769,9 @@ freebuf(char *addr)
 	for (i = 0; i < NUMBER_1K_BUFS; i++) {
 		if (addr == (char *)&bp->buf_1K[i]) {
 			bp->buf_inuse[B1K] &= ~(1 << i);
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_FREE(&bp->buf_1K, addr);
+#endif
 			return;
 		}
 	}
@@ -5738,6 +5779,9 @@ freebuf(char *addr)
 	for (i = 0; i < NUMBER_2K_BUFS; i++) {
 		if (addr == (char *)&bp->buf_2K[i]) {
 			bp->buf_inuse[B2K] &= ~(1 << i);
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_FREE(&bp->buf_2K, addr);
+#endif
 			return;
 		}
 	}
@@ -5745,6 +5789,9 @@ freebuf(char *addr)
 	for (i = 0; i < NUMBER_4K_BUFS; i++) {
 		if (addr == (char *)&bp->buf_4K[i]) {
 			bp->buf_inuse[B4K] &= ~(1 << i);
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_FREE(&bp->buf_4K, addr);
+#endif
 			return;
 		}
 	}
@@ -5752,6 +5799,9 @@ freebuf(char *addr)
 	for (i = 0; i < NUMBER_8K_BUFS; i++) {
 		if (addr == (char *)&bp->buf_8K[i]) {
 			bp->buf_inuse[B8K] &= ~(1 << i);
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_FREE(&bp->buf_8K, addr);
+#endif
 			return;
 		}
 	}
@@ -5759,6 +5809,9 @@ freebuf(char *addr)
         for (i = 0; i < NUMBER_32K_BUFS; i++) {
                 if (addr == (char *)&bp->buf_32K[i]) {
                         bp->buf_inuse[B32K] &= ~(1 << i);
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_FREE(&bp->buf_32K, addr);
+#endif
                         return;
                 }
         }
@@ -5924,6 +5977,9 @@ getbuf(long reqsize)
                         bp->buf_inuse[B1K] |= (1 << bdx);
 			bp->buf_1K_maxuse = MAX(bp->buf_1K_maxuse, 
 				count_bits_int(bp->buf_inuse[B1K]));
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_ALLOC(&bp->buf_1K, bufp, 1024);
+#endif
                         BZERO(bufp, 1024);
                         return(bufp);
                 }
@@ -5938,6 +5994,9 @@ getbuf(long reqsize)
                         bp->buf_inuse[B2K] |= (1 << bdx);
                         bp->buf_2K_maxuse = MAX(bp->buf_2K_maxuse,
                                 count_bits_int(bp->buf_inuse[B2K]));
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_ALLOC(&bp->buf_2K, bufp, 2048);
+#endif
                         BZERO(bufp, 2048);
                         return(bufp);
                 }
@@ -5952,6 +6011,9 @@ getbuf(long reqsize)
                         bp->buf_inuse[B4K] |= (1 << bdx);
                         bp->buf_4K_maxuse = MAX(bp->buf_4K_maxuse,
                                 count_bits_int(bp->buf_inuse[B4K]));
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_ALLOC(&bp->buf_4K, bufp, 4096);
+#endif
                         BZERO(bufp, 4096);
                         return(bufp);
                 }
@@ -5966,6 +6028,9 @@ getbuf(long reqsize)
                         bp->buf_inuse[B8K] |= (1 << bdx);
                         bp->buf_8K_maxuse = MAX(bp->buf_8K_maxuse,
                                 count_bits_int(bp->buf_inuse[B8K]));
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_ALLOC(&bp->buf_8K, bufp, 8192);
+#endif
                         BZERO(bufp, 8192);
                         return(bufp);
                 }
@@ -5980,6 +6045,9 @@ getbuf(long reqsize)
                         bp->buf_inuse[B32K] |= (1 << bdx);
                         bp->buf_32K_maxuse = MAX(bp->buf_32K_maxuse,
                                 count_bits_int(bp->buf_inuse[B32K]));
+#ifdef VALGRIND
+			VALGRIND_MEMPOOL_ALLOC(&bp->buf_32K, bufp, 32768);
+#endif
                         BZERO(bufp, 32768);
                         return(bufp);
                 }

@@ -105,6 +105,10 @@
   use either the LZO or snappy compression libraries.  To build crash with
   either or both of those libraries, type "make lzo" or "make snappy".
 
+  crash supports valgrind Memcheck tool on the crash's custom memory allocator.
+  To build crash with this feature enabled, type "make valgrind" and then run
+  crash with valgrind as "valgrind crash vmlinux vmcore".
+
   All of the alternate build commands above are "sticky" in that the
   special "make" targets only have to be entered one time; all subsequent
   builds will follow suit.

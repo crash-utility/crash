@@ -1704,18 +1704,22 @@ get_extra_flags(char *filename, char *initial)
  *  a CFLAGS.extra file and an LDFLAGS.extra file.
 
  *  For lzo: 
+ *    - enter -DLZO in the CFLAGS.extra file
+ *    - enter -llzo2 in the LDFLAGS.extra file
+ *
+ *  For snappy:
  *    - enter -DSNAPPY in the CFLAGS.extra file
  *    - enter -lsnappy in the LDFLAGS.extra file
  *
- *  For snappy:
- *    - enter -DLZO in the CFLAGS.extra file
- *    - enter -llzo2 in the LDFLAGS.extra file.
+ *  For valgrind:
+ *    - enter -DVALGRIND in the CFLAGS.extra file
  */
 void
 add_extra_lib(char *option)
 {
 	int lzo, add_DLZO, add_llzo2; 
 	int snappy, add_DSNAPPY, add_lsnappy;
+	int valgrind, add_DVALGRIND;
 	char *cflags, *ldflags;
 	FILE *fp_cflags, *fp_ldflags;
 	char *mode;
@@ -1723,6 +1727,7 @@ add_extra_lib(char *option)
 
 	lzo = add_DLZO = add_llzo2 = 0;
 	snappy = add_DSNAPPY = add_lsnappy = 0;
+	valgrind = add_DVALGRIND = 0;
 
 	ldflags = get_extra_flags("LDFLAGS.extra", NULL);
 	cflags = get_extra_flags("CFLAGS.extra", NULL);
@@ -1743,11 +1748,23 @@ add_extra_lib(char *option)
 			add_lsnappy++;
 	}
 
+	if (strcmp(option, "valgrind") == 0) {
+		valgrind++;
+		if (!cflags || !strstr(cflags, "-DVALGRIND"))
+			add_DVALGRIND++;
+	}
+
 	if ((lzo || snappy) &&
 	    file_exists("diskdump.o") && (unlink("diskdump.o") < 0)) {
 		perror("diskdump.o");
 		return;
 	} 
+
+	if (valgrind &&
+	    file_exists("tools.o") && (unlink("tools.o") < 0)) {
+		perror("tools.o");
+		return;
+	}
 
 	mode = file_exists("CFLAGS.extra") ? "r+" : "w+";
 	if ((fp_cflags = fopen("CFLAGS.extra", mode)) == NULL) {
@@ -1762,13 +1779,15 @@ add_extra_lib(char *option)
 		return;
 	}
 
-	if (add_DLZO || add_DSNAPPY) {
+	if (add_DLZO || add_DSNAPPY || add_DVALGRIND) {
 		while (fgets(inbuf, 512, fp_cflags))
 			;
 		if (add_DLZO)
 			fputs("-DLZO\n", fp_cflags);
 		if (add_DSNAPPY)
 			fputs("-DSNAPPY\n", fp_cflags);
+		if (add_DVALGRIND)
+			fputs("-DVALGRIND\n", fp_cflags);
 	}
 
 	if (add_llzo2 || add_lsnappy) {
