@@ -1150,7 +1150,7 @@ extract_hex(char *s, ulong *result, char stripchar, ulong first_instance)
 	ulong value;
 	char *buf;
 
-	buf = GETBUF(strlen(s));
+	buf = GETBUF(strlen(s) + 1);
 	strcpy(buf, s);
 	argc = parse_line(buf, arglist);
 
