@@ -5611,7 +5611,7 @@ datatype_init(void)
 long
 datatype_info(char *name, char *member, struct datatype_member *dm)
 {
-	struct gnu_request *req;
+	struct gnu_request request, *req = &request;
 	long offset, size, member_size;
 	int member_typecode;
 	ulong type_found;
@@ -5625,7 +5625,7 @@ datatype_info(char *name, char *member, struct datatype_member *dm)
 
 	strcpy(buf, name);
 
-	req = (struct gnu_request *)GETBUF(sizeof(struct gnu_request));
+	BZERO(req, sizeof(*req));
 	req->command = GNU_GET_DATATYPE;
 	req->flags |= GNU_RETURN_ON_ERROR;
 	req->name = buf;
@@ -5633,10 +5633,8 @@ datatype_info(char *name, char *member, struct datatype_member *dm)
 	req->fp = pc->nullfp;
 
 	gdb_interface(req);
-	if (req->flags & GNU_COMMAND_FAILED) {
-		FREEBUF(req);
+	if (req->flags & GNU_COMMAND_FAILED)
 		return (dm == MEMBER_TYPE_NAME_REQUEST) ? 0 : -1;
-	}
 
 	if (!req->typecode) {
 		sprintf(buf, "struct %s", name);
@@ -5747,8 +5745,6 @@ datatype_info(char *name, char *member, struct datatype_member *dm)
 		offset = -1;
 		break;
 	}
-
-	FREEBUF(req);
 
         if (dm && (dm != MEMBER_SIZE_REQUEST) && (dm != MEMBER_TYPE_REQUEST) &&
 	    (dm != STRUCT_SIZE_REQUEST) && (dm != MEMBER_TYPE_NAME_REQUEST)) {
