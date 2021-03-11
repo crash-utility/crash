@@ -1260,11 +1260,14 @@ arm64_uvtop(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, int verbos
 #define PTE_TO_PHYS(pteval)  (machdep->max_physmem_bits == 52 ? \
 	(((pteval & PTE_ADDR_LOW) | ((pteval & PTE_ADDR_HIGH) << 36))) : (pteval & PTE_ADDR_LOW))
 
+#define PUD_TYPE_MASK   3
+#define PUD_TYPE_SECT   1
 #define PMD_TYPE_MASK   3
 #define PMD_TYPE_SECT   1
 #define PMD_TYPE_TABLE  2
 #define SECTION_PAGE_MASK_2MB    ((long)(~((MEGABYTES(2))-1)))
 #define SECTION_PAGE_MASK_512MB  ((long)(~((MEGABYTES(512))-1)))
+#define SECTION_PAGE_MASK_1GB    ((long)(~((GIGABYTES(1))-1)))
 
 static int 
 arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
@@ -1420,6 +1423,15 @@ arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if (!pgd_val)
 		goto no_page;
 
+	if ((pgd_val & PUD_TYPE_MASK) == PUD_TYPE_SECT) {
+		ulong sectionbase = (pgd_val & SECTION_PAGE_MASK_1GB) & PHYS_MASK;
+		if (verbose) {
+			fprintf(fp, "  PAGE: %lx  (1GB)\n\n", sectionbase);
+			arm64_translate_pte(pgd_val, 0, 0);
+		}
+		*paddr = sectionbase + (vaddr & ~SECTION_PAGE_MASK_1GB);
+		return TRUE;
+	}
 	/* 
 	 * #define __PAGETABLE_PUD_FOLDED 
 	 */
