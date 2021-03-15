@@ -7918,7 +7918,8 @@ parse_for_member(struct datatype_member *dm, ulong flag)
 		sprintf(lookfor2, "  %s[", s);
 next_item:
 		while (fgets(buf, BUFSIZE, pc->tmpfile)) {
-			if (embed && (count_leading_spaces(buf) == embed))
+			if ((embed && (count_leading_spaces(buf) == embed)) ||
+				(strstr(buf, "}}") && embed == count_leading_spaces(buf) - 2))
 				embed = 0;
 
 			if (!on && !embed && strstr(buf, "= {") && !strstr(buf, lookfor1))
@@ -7938,6 +7939,11 @@ next_item:
 			if (on) {
 				if ((indent && (on > 1) && (count_leading_spaces(buf) == indent) &&
 				    !strstr(buf, "}")) || (buf[0] == '}')) {
+					break;
+				}
+				if (indent && (on > 1) && indent == count_leading_spaces(buf) - 2 &&
+					strstr(buf, "}}")) {
+					fprintf(pc->saved_fp, "%s", buf);
 					break;
 				}
 				if (!indent) {
