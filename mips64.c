@@ -1277,9 +1277,79 @@ mips64_init(int when)
 	}
 }
 
+/*
+ * 'help -r' command output
+ */
 void
 mips64_display_regs_from_elf_notes(int cpu, FILE *ofp)
 {
+	const struct machine_specific *ms = machdep->machspec;
+	struct mips64_register *regs;
+
+	if (!ms->crash_task_regs) {
+		error(INFO, "registers not collected for cpu %d\n", cpu);
+		return;
+	}
+
+	regs = &ms->crash_task_regs[cpu];
+	if (!regs->regs[MIPS64_EF_R29] && !regs->regs[MIPS64_EF_CP0_EPC]) {
+		error(INFO, "registers not collected for cpu %d\n", cpu);
+		return;
+	}
+
+	fprintf(ofp,
+		"     R0: %016lx   R1: %016lx   R2: %016lx\n"
+		"     R3: %016lx   R4: %016lx   R5: %016lx\n"
+		"     R6: %016lx   R7: %016lx   R8: %016lx\n"
+		"     R9: %016lx  R10: %016lx  R11: %016lx\n"
+		"    R12: %016lx  R13: %016lx  R14: %016lx\n"
+		"    R15: %016lx  R16: %016lx  R17: %016lx\n"
+		"    R18: %016lx  R19: %016lx  R20: %016lx\n"
+		"    R21: %016lx  R22: %016lx  R23: %016lx\n"
+		"    R24: %016lx  R25: %016lx  R26: %016lx\n"
+		"    R27: %016lx  R28: %016lx  R29: %016lx\n"
+		"    R30: %016lx  R31: %016lx\n"
+		"       LO: %016lx        HI: %016lx\n"
+		"      EPC: %016lx  BADVADDR: %016lx\n"
+		"   STATUS: %016lx     CAUSE: %016lx\n",
+		regs->regs[MIPS64_EF_R0],
+		regs->regs[MIPS64_EF_R0 + 1],
+		regs->regs[MIPS64_EF_R0 + 2],
+		regs->regs[MIPS64_EF_R0 + 3],
+		regs->regs[MIPS64_EF_R0 + 4],
+		regs->regs[MIPS64_EF_R0 + 5],
+		regs->regs[MIPS64_EF_R0 + 6],
+		regs->regs[MIPS64_EF_R0 + 7],
+		regs->regs[MIPS64_EF_R0 + 8],
+		regs->regs[MIPS64_EF_R0 + 9],
+		regs->regs[MIPS64_EF_R0 + 10],
+		regs->regs[MIPS64_EF_R0 + 11],
+		regs->regs[MIPS64_EF_R0 + 12],
+		regs->regs[MIPS64_EF_R0 + 13],
+		regs->regs[MIPS64_EF_R0 + 14],
+		regs->regs[MIPS64_EF_R0 + 15],
+		regs->regs[MIPS64_EF_R0 + 16],
+		regs->regs[MIPS64_EF_R0 + 17],
+		regs->regs[MIPS64_EF_R0 + 18],
+		regs->regs[MIPS64_EF_R0 + 19],
+		regs->regs[MIPS64_EF_R0 + 20],
+		regs->regs[MIPS64_EF_R0 + 21],
+		regs->regs[MIPS64_EF_R0 + 22],
+		regs->regs[MIPS64_EF_R0 + 23],
+		regs->regs[MIPS64_EF_R0 + 24],
+		regs->regs[MIPS64_EF_R0 + 25],
+		regs->regs[MIPS64_EF_R0 + 26],
+		regs->regs[MIPS64_EF_R0 + 27],
+		regs->regs[MIPS64_EF_R0 + 28],
+		regs->regs[MIPS64_EF_R0 + 29],
+		regs->regs[MIPS64_EF_R0 + 30],
+		regs->regs[MIPS64_EF_R0 + 31],
+		regs->regs[MIPS64_EF_LO],
+		regs->regs[MIPS64_EF_HI],
+		regs->regs[MIPS64_EF_CP0_EPC],
+		regs->regs[MIPS64_EF_CP0_BADVADDR],
+		regs->regs[MIPS64_EF_CP0_STATUS],
+		regs->regs[MIPS64_EF_CP0_CAUSE]);
 }
 
 #else /* !MIPS64 */

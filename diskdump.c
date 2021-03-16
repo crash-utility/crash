@@ -2486,6 +2486,12 @@ diskdump_display_regs(int cpu, FILE *ofp)
 		    UINT(user_regs + OFFSET(user_regs_struct_eflags))
 		);
 	}
+
+	if (machine_type("MIPS"))
+		mips_display_regs_from_elf_notes(cpu, ofp);
+
+	if (machine_type("MIPS64"))
+		mips64_display_regs_from_elf_notes(cpu, ofp);
 }
 
 void
@@ -2494,8 +2500,9 @@ dump_registers_for_compressed_kdump(void)
 	int c;
 
 	if (!KDUMP_CMPRS_VALID() || (dd->header->header_version < 4) ||
-	    !(machine_type("X86") || machine_type("X86_64") || 
-	      machine_type("ARM64") || machine_type("PPC64")))
+	    !(machine_type("X86") || machine_type("X86_64") ||
+	      machine_type("ARM64") || machine_type("PPC64") ||
+	      machine_type("MIPS") || machine_type("MIPS64")))
 		error(FATAL, "-r option not supported for this dumpfile\n");
 
 	if (machine_type("ARM64") && (kt->cpus != dd->num_prstatus_notes))
