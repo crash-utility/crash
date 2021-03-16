@@ -440,6 +440,7 @@ mips64_init(int when)
 		machdep->memory_size = generic_memory_size;
 		machdep->is_task_addr = mips64_is_task_addr;
 		machdep->get_smp_cpus = mips64_get_smp_cpus;
+		machdep->dis_filter = generic_dis_filter;
 		machdep->value_to_symbol = generic_machdep_value_to_symbol;
 		machdep->init_kernel_pgd = NULL;
 		break;
