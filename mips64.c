@@ -23,6 +23,9 @@ static int mips64_uvtop(struct task_context *tc, ulong vaddr,
 			physaddr_t *paddr, int verbose);
 static int mips64_kvtop(struct task_context *tc, ulong kvaddr,
 			physaddr_t *paddr, int verbose);
+static void mips64_init_page_flags(void);
+static int mips64_translate_pte(ulong pte, void *physaddr,
+			ulonglong pte64);
 
 /*
  * 3 Levels paging       PAGE_SIZE=16KB
@@ -73,6 +76,104 @@ static struct machine_specific mips64_machine_specific = { 0 };
  * Holds registers during the crash.
  */
 static struct mips64_register *panic_task_regs;
+
+/*
+ * 31                15 14    12 11 10  9  8  7  6  5  4  3  2  1  0
+ * +-------------------+--------+--+--+--+--+--+--+--+--+--+--+--+--+
+ * |       VPN         |    C   | D| V| G|RI|XI|SP|PN| H| M| A| W| P|
+ * +-------------------+--------+--+--+--+--+--+--+--+--+--+--+--+--+
+ */
+static void
+mips64_init_page_flags(void)
+{
+	ulong shift = 0;
+
+	_PAGE_PRESENT = 1UL << shift++;
+	_PAGE_WRITE = 1UL << shift++;
+	_PAGE_ACCESSED = 1UL << shift++;
+	_PAGE_MODIFIED = 1UL << shift++;
+	_PAGE_HUGE = 1UL << shift++;
+	_PAGE_PROTNONE = 1UL << shift++;
+
+	if (THIS_KERNEL_VERSION >= LINUX(4,5,0))
+		_PAGE_SPECIAL = 1UL << shift++;
+
+	_PAGE_NO_EXEC = 1UL << shift++;
+	_PAGE_NO_READ = _PAGE_READ = 1UL << shift++;
+	_PAGE_GLOBAL = 1UL << shift++;
+	_PAGE_VALID = 1UL << shift++;
+	_PAGE_DIRTY = 1UL << shift++;
+
+	_PFN_SHIFT =  PAGESHIFT() - 12 + shift + 3;
+}
+
+/*
+ * Translate a PTE, returning TRUE if the page is present.
+ * If a physaddr pointer is passed in, don't print anything.
+ */
+static int
+mips64_translate_pte(ulong pte, void *physaddr, ulonglong pte64)
+{
+	char ptebuf[BUFSIZE];
+	char physbuf[BUFSIZE];
+	char buf[BUFSIZE];
+	int page_present;
+	int len1, len2, others;
+	ulong paddr;
+
+	paddr = PTOB(pte >> _PFN_SHIFT);
+	page_present = !!(pte & _PAGE_PRESENT);
+
+	if (physaddr) {
+		*(ulong *)physaddr = paddr;
+		return page_present;
+	}
+
+	sprintf(ptebuf, "%lx", pte);
+	len1 = MAX(strlen(ptebuf), strlen("PTE"));
+	fprintf(fp, "%s  ", mkstring(buf, len1, CENTER | LJUST, "PTE"));
+
+	if (!page_present)
+		return page_present;
+
+	sprintf(physbuf, "%lx", paddr);
+	len2 = MAX(strlen(physbuf), strlen("PHYSICAL"));
+	fprintf(fp, "%s  ", mkstring(buf, len2, CENTER | LJUST, "PHYSICAL"));
+
+	fprintf(fp, "FLAGS\n");
+	fprintf(fp, "%s  %s  ",
+		mkstring(ptebuf, len1, CENTER | RJUST, NULL),
+		mkstring(physbuf, len2, CENTER | RJUST, NULL));
+
+	fprintf(fp, "(");
+	others = 0;
+
+#define CHECK_PAGE_FLAG(flag)				\
+	if ((_PAGE_##flag) && (pte & _PAGE_##flag))	\
+		fprintf(fp, "%s" #flag, others++ ? "|" : "")
+
+	if (pte) {
+		CHECK_PAGE_FLAG(PRESENT);
+		CHECK_PAGE_FLAG(WRITE);
+		CHECK_PAGE_FLAG(ACCESSED);
+		CHECK_PAGE_FLAG(MODIFIED);
+		CHECK_PAGE_FLAG(HUGE);
+		CHECK_PAGE_FLAG(PROTNONE);
+		CHECK_PAGE_FLAG(SPECIAL);
+		CHECK_PAGE_FLAG(NO_EXEC);
+		CHECK_PAGE_FLAG(NO_READ);
+		CHECK_PAGE_FLAG(READ);
+		CHECK_PAGE_FLAG(GLOBAL);
+		CHECK_PAGE_FLAG(VALID);
+		CHECK_PAGE_FLAG(DIRTY);
+	} else {
+		fprintf(fp, "no mapping");
+	}
+
+	fprintf(fp, ")\n");
+
+	return page_present;
+}
 
 /*
  * Virtual to physical memory translation. This function will be called
@@ -139,6 +240,21 @@ mips64_pgd_vtop(ulong *pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		fprintf(fp, "  PTE: %016lx => %016lx\n", (ulong)pte_ptr, pte_val);
 	if (!pte_val)
 		goto no_page;
+
+	if (!(pte_val & _PAGE_PRESENT)) {
+		if (verbose) {
+			fprintf(fp, "\n");
+			mips64_translate_pte((ulong)pte_val, 0, pte_val);
+		}
+		return FALSE;
+	}
+
+	*paddr = PTOB(pte_val >> _PFN_SHIFT) + PAGEOFFSET(vaddr);
+
+	if (verbose) {
+		fprintf(fp, " PAGE: %016lx\n\n", PAGEBASE(*paddr));
+		mips64_translate_pte(pte_val, 0, 0);
+	}
 
 	return TRUE;
 no_page:
@@ -320,6 +436,7 @@ mips64_init(int when)
 		machdep->processor_speed = mips64_processor_speed;
 		machdep->get_stackbase = generic_get_stackbase;
 		machdep->get_stacktop = generic_get_stacktop;
+		machdep->translate_pte = mips64_translate_pte;
 		machdep->memory_size = generic_memory_size;
 		machdep->is_task_addr = mips64_is_task_addr;
 		machdep->get_smp_cpus = mips64_get_smp_cpus;
@@ -328,6 +445,7 @@ mips64_init(int when)
 		break;
 
 	case POST_GDB:
+		mips64_init_page_flags();
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
 		break;
