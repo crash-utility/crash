@@ -36,7 +36,8 @@
 #endif
 
 #if defined(ARM) || defined(X86) || defined(PPC) || defined(S390) || \
-	defined(S390X) || defined(ARM64) || defined(MIPS) || defined(SPARC64)
+	defined(S390X) || defined(ARM64) || defined(MIPS) || \
+	defined(MIPS64) || defined(SPARC64)
 
 /*
  * Kernel header file for Linux crash dumps.

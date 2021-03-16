@@ -591,8 +591,11 @@ restart:
 	else if (STRNEQ(header->utsname.machine, "arm") &&
 	    machine_type_mismatch(file, "ARM", NULL, 0))
 		goto err;
-	else if (STRNEQ(header->utsname.machine, "mips") &&
+	else if (STREQ(header->utsname.machine, "mips") &&
 	    machine_type_mismatch(file, "MIPS", NULL, 0))
+		goto err;
+	else if (STRNEQ(header->utsname.machine, "mips64") &&
+	    machine_type_mismatch(file, "MIPS64", NULL, 0))
 		goto err;
 	else if (STRNEQ(header->utsname.machine, "s390x") &&
 	    machine_type_mismatch(file, "S390X", NULL, 0))
@@ -751,7 +754,7 @@ restart:
 
 	if (machine_type("ARM"))
 		dd->machine_type = EM_ARM;
-	else if (machine_type("MIPS"))
+	else if (machine_type("MIPS") || machine_type("MIPS64"))
 		dd->machine_type = EM_MIPS;
 	else if (machine_type("X86"))
 		dd->machine_type = EM_386;

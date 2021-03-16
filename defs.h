@@ -71,7 +71,8 @@
 
 #if !defined(X86) && !defined(X86_64) && !defined(ALPHA) && !defined(PPC) && \
     !defined(IA64) && !defined(PPC64) && !defined(S390) && !defined(S390X) && \
-    !defined(ARM) && !defined(ARM64) && !defined(MIPS) && !defined(SPARC64)
+    !defined(ARM) && !defined(ARM64) && !defined(MIPS) && !defined(MIPS64) && \
+    !defined(SPARC64)
 #ifdef __alpha__
 #define ALPHA
 #endif
@@ -104,7 +105,11 @@
 #define ARM64
 #endif
 #ifdef __mipsel__
+#ifndef __mips64
 #define MIPS
+#else
+#define MIPS64
+#endif
 #endif
 #ifdef __sparc_v9__
 #define SPARC64
@@ -143,6 +148,9 @@
 #endif
 #ifdef MIPS
 #define NR_CPUS  (32)
+#endif
+#ifdef MIPS64
+#define NR_CPUS  (256)
 #endif
 #ifdef SPARC64
 #define NR_CPUS  (4096)
@@ -3375,6 +3383,45 @@ struct arm64_stackframe {
 #define _MAX_PHYSMEM_BITS	32
 #endif  /* MIPS */
 
+#ifdef MIPS64
+#define _64BIT_
+#define MACHINE_TYPE		"MIPS64"
+
+#define PAGEBASE(X)		(((ulong)(X)) & (ulong)machdep->pagemask)
+#define IS_CKPHYS(X)		(((X) >= 0xffffffff80000000lu) && \
+				((X) < 0xffffffffc0000000lu))
+#define IS_XKPHYS(X)		(((X) >= 0x8000000000000000lu) && \
+				((X) < 0xc000000000000000lu))
+
+#define PTOV(X) 		((ulong)(X) + 0x9800000000000000lu)
+#define VTOP(X) 		(IS_CKPHYS(X) ? ((ulong)(X) & 0x000000001ffffffflu) \
+				: ((ulong)(X) & 0x0000fffffffffffflu))
+
+#define IS_VMALLOC_ADDR(X) (vt->vmalloc_start && (ulong)(X) >= vt->vmalloc_start && !IS_CKPHYS(X))
+
+#define DEFAULT_MODULES_VADDR   0xffffffffc0000000lu
+#define MODULES_VADDR           (machdep->machspec->modules_vaddr)
+#define MODULES_END             (machdep->machspec->modules_end)
+#define VMALLOC_START           (machdep->machspec->vmalloc_start_addr)
+#define VMALLOC_END             (machdep->machspec->vmalloc_end)
+
+#define __SWP_TYPE_SHIFT        16
+#define __SWP_TYPE_BITS         8
+#define __SWP_TYPE_MASK         ((1 << __SWP_TYPE_BITS) - 1)
+#define __SWP_OFFSET_SHIFT      (__SWP_TYPE_BITS + __SWP_TYPE_SHIFT)
+
+#define SWP_TYPE(entry)         (((entry) >> __SWP_TYPE_SHIFT) & __SWP_TYPE_MASK)
+#define SWP_OFFSET(entry)       ((entry) >> __SWP_OFFSET_SHIFT)
+
+#define __swp_type(entry)       SWP_TYPE(entry)
+#define __swp_offset(entry)     SWP_OFFSET(entry)
+
+#define TIF_SIGPENDING          (2)
+
+#define _SECTION_SIZE_BITS      28
+#define _MAX_PHYSMEM_BITS       48
+#endif  /* MIPS64 */
+
 #ifdef X86
 #define _32BIT_
 #define MACHINE_TYPE       "X86"
@@ -4415,6 +4462,10 @@ struct machine_specific {
 #define MAX_HEXADDR_STRLEN (8)
 #define UVADDR_PRLEN       (8)
 #endif
+#ifdef MIPS64
+#define MAX_HEXADDR_STRLEN (16)
+#define UVADDR_PRLEN       (16)
+#endif
 #ifdef SPARC64
 #define MAX_HEXADDR_STRLEN (16)
 #define UVADDR_PRLEN      (16)
@@ -4991,6 +5042,9 @@ void dump_build_data(void);
 #ifdef MIPS
 #define machdep_init(X) mips_init(X)
 #endif
+#ifdef MIPS64
+#define machdep_init(X) mips64_init(X)
+#endif
 #ifdef SPARC64
 #define machdep_init(X) sparc64_init(X)
 #endif
@@ -5470,6 +5524,9 @@ void display_help_screen(char *);
 #endif
 #ifdef MIPS
 #define dump_machdep_table(X) mips_dump_machdep_table(X)
+#endif
+#ifdef MIPS64
+#define dump_machdep_table(X) mips64_dump_machdep_table(X)
 #endif
 #ifdef SPARC64
 #define dump_machdep_table(X) sparc64_dump_machdep_table(X)
@@ -6418,6 +6475,86 @@ struct machine_specific {
 	struct mips_regset *crash_task_regs;
 };
 #endif /* MIPS */
+
+/*
+ * mips64.c
+ */
+void mips64_display_regs_from_elf_notes(int, FILE *);
+
+#ifdef MIPS64
+void mips64_init(int);
+void mips64_dump_machdep_table(ulong);
+
+#define display_idt_table() \
+	error(FATAL, "-d option is not applicable to MIPS64 architecture\n")
+
+/* from arch/mips/include/uapi/asm/ptrace.h */
+struct mips64_register {
+	ulong regs[45];
+};
+
+struct mips64_pt_regs_main {
+	ulong regs[32];
+	ulong cp0_status;
+	ulong hi;
+	ulong lo;
+};
+
+struct mips64_pt_regs_cp0 {
+	ulong cp0_badvaddr;
+	ulong cp0_cause;
+	ulong cp0_epc;
+};
+
+struct mips64_unwind_frame {
+	unsigned long sp;
+	unsigned long pc;
+	unsigned long ra;
+};
+
+#define KSYMS_START	(0x1)
+
+struct machine_specific {
+	ulong phys_base;
+	ulong vmalloc_start_addr;
+	ulong modules_vaddr;
+	ulong modules_end;
+
+	ulong _page_present;
+	ulong _page_read;
+	ulong _page_write;
+	ulong _page_accessed;
+	ulong _page_modified;
+	ulong _page_huge;
+	ulong _page_special;
+	ulong _page_protnone;
+	ulong _page_global;
+	ulong _page_valid;
+	ulong _page_no_read;
+	ulong _page_no_exec;
+	ulong _page_dirty;
+
+	ulong _pfn_shift;
+
+	struct mips64_register *crash_task_regs;
+};
+/* from arch/mips/include/asm/pgtable-bits.h */
+#define _PAGE_PRESENT	(machdep->machspec->_page_present)
+#define _PAGE_READ	(machdep->machspec->_page_read)
+#define _PAGE_WRITE	(machdep->machspec->_page_write)
+#define _PAGE_ACCESSED	(machdep->machspec->_page_accessed)
+#define _PAGE_MODIFIED	(machdep->machspec->_page_modified)
+#define _PAGE_HUGE	(machdep->machspec->_page_huge)
+#define _PAGE_SPECIAL	(machdep->machspec->_page_special)
+#define _PAGE_PROTNONE	(machdep->machspec->_page_protnone)
+#define _PAGE_GLOBAL	(machdep->machspec->_page_global)
+#define _PAGE_VALID	(machdep->machspec->_page_valid)
+#define _PAGE_NO_READ	(machdep->machspec->_page_no_read)
+#define _PAGE_NO_EXEC	(machdep->machspec->_page_no_exec)
+#define _PAGE_DIRTY	(machdep->machspec->_page_dirty)
+#define _PFN_SHIFT	(machdep->machspec->_pfn_shift)
+
+#endif /* MIPS64 */
 
 /*
  * sparc64.c
