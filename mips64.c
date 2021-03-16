@@ -640,6 +640,15 @@ mips64_dump_backtrace_entry(struct bt_info *bt, struct syment *sym,
 
 	fprintf(fp, "\n");
 
+	/*
+	 * 'bt -l', get a line number associated with a current pc address.
+	 */
+	if (bt->flags & BT_LINE_NUMBERS) {
+		get_line_number(current->pc, buf, FALSE);
+		if (strlen(buf))
+			fprintf(fp, "    %s\n", buf);
+	}
+
 	if (sym && mips64_is_exception_entry(sym)) {
 		GET_STACK_DATA(current->sp, &pt_regs, SIZE(pt_regs));
 		mips64_dump_exception_stack(bt, pt_regs);
