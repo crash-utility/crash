@@ -37,6 +37,9 @@ static void mips64_dump_backtrace_entry(struct bt_info *bt,
 			struct mips64_unwind_frame *previous, int level);
 static void mips64_dump_exception_stack(struct bt_info *bt, char *pt_regs);
 static int mips64_is_exception_entry(struct syment *sym);
+static void mips64_display_full_frame(struct bt_info *bt,
+			struct mips64_unwind_frame *current,
+			struct mips64_unwind_frame *previous);
 static void mips64_stackframe_init(void);
 static void mips64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp);
 static int mips64_get_dumpfile_stack_frame(struct bt_info *bt,
@@ -641,6 +644,15 @@ mips64_dump_backtrace_entry(struct bt_info *bt, struct syment *sym,
 		GET_STACK_DATA(current->sp, &pt_regs, SIZE(pt_regs));
 		mips64_dump_exception_stack(bt, pt_regs);
 	}
+
+	/* bt -f */
+	if (bt->flags & BT_FULL) {
+		fprintf(fp, "    "
+			"[PC: %016lx RA: %016lx SP: %016lx SIZE: %ld]\n",
+			current->pc, current->ra, current->sp,
+			previous->sp - current->sp);
+		mips64_display_full_frame(bt, current, previous);
+	}
 }
 
 static void
@@ -683,6 +695,40 @@ mips64_is_exception_entry(struct syment *sym)
 		STREQ(sym->name, "handle_sys") ||
 		STREQ(sym->name, "handle_sysn32") ||
 		STREQ(sym->name, "handle_sys64");
+}
+
+/*
+ * 'bt -f' commend output
+ * Display all stack data contained in a frame
+ */
+static void
+mips64_display_full_frame(struct bt_info *bt, struct mips64_unwind_frame *current,
+			  struct mips64_unwind_frame *previous)
+{
+	int i, u_idx;
+	ulong *up;
+	ulong words, addr;
+	char buf[BUFSIZE];
+
+	if (previous->sp < current->sp)
+		return;
+
+	if (!(INSTACK(previous->sp, bt) && INSTACK(current->sp, bt)))
+		return;
+
+	words = (previous->sp - current->sp) / sizeof(ulong) + 1;
+	addr = current->sp;
+	u_idx = (current->sp - bt->stackbase) / sizeof(ulong);
+
+	for (i = 0; i < words; i++, u_idx++) {
+		if (!(i & 1))
+			fprintf(fp, "%s    %lx: ", i ? "\n" : "", addr);
+
+		up = (ulong *)(&bt->stackbuf[u_idx*sizeof(ulong)]);
+		fprintf(fp, "%s ", format_stack_entry(bt, buf, *up, 0));
+		addr += sizeof(ulong);
+	}
+	fprintf(fp, "\n");
 }
 
 static void
