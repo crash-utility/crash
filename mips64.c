@@ -1048,7 +1048,14 @@ mips64_get_elf_notes(void)
 static int
 mips64_verify_symbol(const char *name, ulong value, char type)
 {
-	return TRUE;
+	if (CRASHDEBUG(8) && name && strlen(name))
+		fprintf(fp, "%08lx %s\n", value, name);
+
+	if (STREQ(name, "_text") || STREQ(name, "_stext"))
+		machdep->flags |= KSYMS_START;
+
+	return (name && strlen(name) && (machdep->flags & KSYMS_START) &&
+		!STRNEQ(name, "__func__.") && !STRNEQ(name, "__crc_"));
 }
 
 /*
