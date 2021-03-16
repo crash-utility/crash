@@ -355,9 +355,29 @@ mips64_vmalloc_start(void)
 	return 0;
 }
 
+/*
+ * Calculate and return the speed of the processor.
+ */
 static ulong
 mips64_processor_speed(void)
 {
+	unsigned long cpu_hz1 = 0, cpu_hz2 = 0;
+
+	if (machdep->mhz)
+		return (machdep->mhz);
+
+	if (symbol_exists("mips_cpu_frequency")) {
+		get_symbol_data("mips_cpu_frequency", sizeof(int), &cpu_hz1);
+		if (cpu_hz1)
+			return(machdep->mhz = cpu_hz1/1000000);
+	}
+
+	if (symbol_exists("cpu_clock_freq")) {
+		get_symbol_data("cpu_clock_freq", sizeof(int), &cpu_hz2);
+		if (cpu_hz2)
+			return(machdep->mhz = cpu_hz2/1000000);
+	}
+
 	return 0;
 }
 
