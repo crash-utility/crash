@@ -17,15 +17,17 @@
 #include <elf.h>
 #include "defs.h"
 
+static void mips64_init_page_flags(void);
+static int mips64_translate_pte(ulong pte, void *physaddr,
+			ulonglong pte64);
 static int mips64_pgd_vtop(ulong *pgd, ulong vaddr,
 			physaddr_t *paddr, int verbose);
 static int mips64_uvtop(struct task_context *tc, ulong vaddr,
 			physaddr_t *paddr, int verbose);
 static int mips64_kvtop(struct task_context *tc, ulong kvaddr,
 			physaddr_t *paddr, int verbose);
-static void mips64_init_page_flags(void);
-static int mips64_translate_pte(ulong pte, void *physaddr,
-			ulonglong pte64);
+static void mips64_cmd_mach(void);
+static void mips64_display_machine_stats(void);
 
 /*
  * 3 Levels paging       PAGE_SIZE=16KB
@@ -323,6 +325,59 @@ mips64_kvtop(struct task_context *tc, ulong kvaddr, physaddr_t *paddr, int verbo
 }
 
 /*
+ * Machine dependent command.
+ */
+static void
+mips64_cmd_mach(void)
+{
+	int c;
+
+	while ((c = getopt(argcnt, args, "cmo")) != EOF) {
+		switch (c) {
+		case 'c':
+		case 'm':
+		case 'o':
+			option_not_supported(c);
+			break;
+		default:
+			argerrs++;
+			break;
+		}
+	}
+
+	if (argerrs)
+		cmd_usage(pc->curcmd, SYNOPSIS);
+
+	mips64_display_machine_stats();
+}
+
+/*
+ * "mach" command output.
+ */
+static void
+mips64_display_machine_stats(void)
+{
+	struct new_utsname *uts;
+	char buf[BUFSIZE];
+	ulong mhz;
+
+	uts = &kt->utsname;
+
+	fprintf(fp, "       MACHINE TYPE: %s\n", uts->machine);
+	fprintf(fp, "        MEMORY SIZE: %s\n", get_memory_size(buf));
+	fprintf(fp, "               CPUS: %d\n", get_cpus_to_display());
+	fprintf(fp, "    PROCESSOR SPEED: ");
+	if ((mhz = machdep->processor_speed()))
+		fprintf(fp, "%ld Mhz\n", mhz);
+	else
+		fprintf(fp, "(unknown)\n");
+	fprintf(fp, "                 HZ: %d\n", machdep->hz);
+	fprintf(fp, "          PAGE SIZE: %d\n", PAGESIZE());
+	fprintf(fp, "  KERNEL STACK SIZE: %ld\n", STACKSIZE());
+
+}
+
+/*
  * Accept or reject a symbol from the kernel namelist.
  */
 static int
@@ -452,6 +507,7 @@ mips64_init(int when)
 		machdep->is_uvaddr = generic_is_uvaddr;
 		machdep->uvtop = mips64_uvtop;
 		machdep->kvtop = mips64_kvtop;
+		machdep->cmd_mach = mips64_cmd_mach;
 		machdep->vmalloc_start = mips64_vmalloc_start;
 		machdep->processor_speed = mips64_processor_speed;
 		machdep->get_stackbase = generic_get_stackbase;
@@ -469,6 +525,8 @@ mips64_init(int when)
 		mips64_init_page_flags();
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+		if (!machdep->hz)
+			machdep->hz = 250;
 		break;
 
 	case POST_VM:
