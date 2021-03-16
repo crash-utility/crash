@@ -28,6 +28,21 @@ static int mips64_kvtop(struct task_context *tc, ulong kvaddr,
 			physaddr_t *paddr, int verbose);
 static void mips64_cmd_mach(void);
 static void mips64_display_machine_stats(void);
+static void mips64_back_trace_cmd(struct bt_info *bt);
+static void mips64_analyze_function(ulong start, ulong offset,
+			struct mips64_unwind_frame *current,
+			struct mips64_unwind_frame *previous);
+static void mips64_dump_backtrace_entry(struct bt_info *bt,
+			struct syment *sym, struct mips64_unwind_frame *current,
+			struct mips64_unwind_frame *previous, int level);
+static void mips64_dump_exception_stack(struct bt_info *bt, char *pt_regs);
+static int mips64_is_exception_entry(struct syment *sym);
+static void mips64_stackframe_init(void);
+static void mips64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp);
+static int mips64_get_dumpfile_stack_frame(struct bt_info *bt,
+			ulong *nip, ulong *ksp);
+static int mips64_get_frame(struct bt_info *bt, ulong *pcp, ulong *spp);
+
 
 /*
  * 3 Levels paging       PAGE_SIZE=16KB
@@ -378,6 +393,413 @@ mips64_display_machine_stats(void)
 }
 
 /*
+ * Unroll a kernel stack.
+ */
+static void
+mips64_back_trace_cmd(struct bt_info *bt)
+{
+	struct mips64_unwind_frame current, previous;
+	struct mips64_register *regs;
+	struct mips64_pt_regs_main *mains;
+	struct mips64_pt_regs_cp0 *cp0;
+	char pt_regs[SIZE(pt_regs)];
+	int level = 0;
+	int invalid_ok = 1;
+
+	if (bt->flags & BT_REGS_NOT_FOUND)
+		return;
+
+	previous.sp = previous.pc = previous.ra = 0;
+
+	current.pc = bt->instptr;
+	current.sp = bt->stkptr;
+	current.ra = 0;
+
+	if (!INSTACK(current.sp, bt))
+		return;
+
+	if (bt->machdep) {
+		regs = bt->machdep;
+		previous.pc = current.ra = regs->regs[MIPS64_EF_R31];
+	}
+
+	while (current.sp <= bt->stacktop - 32 - SIZE(pt_regs)) {
+		struct syment *symbol = NULL;
+		ulong offset;
+
+		if (CRASHDEBUG(8))
+			fprintf(fp, "level %d pc %#lx ra %#lx sp %lx\n",
+				level, current.pc, current.ra, current.sp);
+
+		if (!IS_KVADDR(current.pc) && !invalid_ok)
+			return;
+
+		symbol = value_search(current.pc, &offset);
+		if (!symbol && !invalid_ok) {
+			error(FATAL, "PC is unknown symbol (%lx)", current.pc);
+			return;
+		}
+		invalid_ok = 0;
+
+		/*
+		 * If we get an address which points to the start of a
+		 * function, then it could one of the following:
+		 *
+		 *  - we are dealing with a noreturn function.  The last call
+		 *    from a noreturn function has an ra which points to the
+		 *    start of the function after it.  This is common in the
+		 *    oops callchain because of die() which is annotated as
+		 *    noreturn.
+		 *
+		 *  - we have taken an exception at the start of this function.
+		 *    In this case we already have the RA in current.ra.
+		 *
+		 *  - we are in one of these routines which appear with zero
+		 *    offset in manually-constructed stack frames:
+		 *
+		 *    * ret_from_exception
+		 *    * ret_from_irq
+		 *    * ret_from_fork
+		 *    * ret_from_kernel_thread
+		 */
+		if (symbol && !STRNEQ(symbol->name, "ret_from") && !offset &&
+			!current.ra && current.sp < bt->stacktop - 32 - SIZE(pt_regs)) {
+			if (CRASHDEBUG(8))
+				fprintf(fp, "zero offset at %s, try previous symbol\n",
+					symbol->name);
+
+			symbol = value_search(current.pc - 4, &offset);
+			if (!symbol) {
+				error(FATAL, "PC is unknown symbol (%lx)", current.pc);
+				return;
+			}
+		}
+
+		if (symbol && mips64_is_exception_entry(symbol)) {
+
+			mains = (struct mips64_pt_regs_main *) \
+			       (pt_regs + OFFSET(pt_regs_regs));
+			cp0 = (struct mips64_pt_regs_cp0 *) \
+			      (pt_regs + OFFSET(pt_regs_cp0_badvaddr));
+
+			GET_STACK_DATA(current.sp, pt_regs, sizeof(pt_regs));
+
+			previous.ra = mains->regs[31];
+			previous.sp = mains->regs[29];
+			current.ra = cp0->cp0_epc;
+
+			if (CRASHDEBUG(8))
+				fprintf(fp, "exception pc %#lx ra %#lx sp %lx\n",
+					previous.pc, previous.ra, previous.sp);
+
+			/* The PC causing the exception may have been invalid */
+			invalid_ok = 1;
+		} else if (symbol) {
+			mips64_analyze_function(symbol->value, offset, &current, &previous);
+		} else {
+			/*
+			 * The current PC is invalid. Assume that the code
+			 * jumped through a invalid pointer and that the SP has
+			 * not been adjusted.
+			 */
+			previous.sp = current.sp;
+		}
+
+		mips64_dump_backtrace_entry(bt, symbol, &current, &previous, level++);
+
+		current.pc = current.ra;
+		current.sp = previous.sp;
+		current.ra = previous.ra;
+
+		if (CRASHDEBUG(8))
+			fprintf(fp, "next %d pc %#lx ra %#lx sp %lx\n",
+				level, current.pc, current.ra, current.sp);
+
+		previous.sp = previous.pc = previous.ra = 0;
+	}
+}
+
+static void
+mips64_analyze_function(ulong start, ulong offset,
+		      struct mips64_unwind_frame *current,
+		      struct mips64_unwind_frame *previous)
+{
+	ulong i, reg;
+	ulong rapos = 0;
+	ulong spadjust = 0;
+	uint32_t *funcbuf, *ip;
+
+	if (CRASHDEBUG(8))
+		fprintf(fp, "%s: start %#lx offset %#lx\n",
+			__func__, start, offset);
+
+	if (!offset) {
+		previous->sp = current->sp;
+		return;
+	}
+
+	ip = funcbuf = (uint32_t *)GETBUF(offset);
+	if (!readmem(start, KVADDR, funcbuf, offset,
+		     "mips64_analyze_function", RETURN_ON_ERROR)) {
+		FREEBUF(funcbuf);
+		error(WARNING, "Cannot read function at %16lx\n", start);
+		return;
+	}
+
+	for (i = 0; i < offset; i += 4) {
+		ulong insn = *ip & 0xffffffff;
+		ulong high = (insn >> 16) & 0xffff;
+		ulong low = insn & 0xffff;
+
+		if (CRASHDEBUG(8))
+			fprintf(fp, "insn @ %#lx = %#lx\n", start + i, insn);
+
+		if (high == 0x27bd || high == 0x67bd) { /* ADDIU/DADDIU sp, sp, imm */
+			if (!(low & 0x8000))
+				break;
+
+			spadjust += 0x10000 - low;
+			if (CRASHDEBUG(8))
+				fprintf(fp, "spadjust = %lu\n", spadjust);
+		} else if (high == 0xafbf) { /* SW RA, imm(SP) */
+			rapos = current->sp + low;
+			if (CRASHDEBUG(8))
+				fprintf(fp, "rapos %lx\n", rapos);
+			break;
+		} else if (high == 0xffbf) { /* SD RA, imm(SP) */
+			rapos = current->sp + low;
+			if (CRASHDEBUG(8))
+				fprintf(fp, "rapos %lx\n", rapos);
+			break;
+		} else if ((insn & 0xffe08020) == 0xeba00020) { /* GSSQ reg, reg, offset(SP) */
+			reg = (insn >> 16) & 0x1f;
+			if (reg == 31) {
+				low = ((((insn >> 6) & 0x1ff) ^ 0x100) - 0x100) << 4;
+				rapos = current->sp + low;
+				if (CRASHDEBUG(8))
+					fprintf(fp, "rapos %lx\n", rapos);
+				break;
+			}
+			reg = insn & 0x1f;
+			if (reg == 31) {
+				low = (((((insn >> 6) & 0x1ff) ^ 0x100) - 0x100) << 4) + 8;
+				rapos = current->sp + low;
+				if (CRASHDEBUG(8))
+					fprintf(fp, "rapos %lx\n", rapos);
+				break;
+			}
+		}
+
+		ip++;
+	}
+
+	FREEBUF(funcbuf);
+
+	previous->sp = current->sp + spadjust;
+
+	if (rapos && !readmem(rapos, KVADDR, &current->ra,
+			      sizeof(current->ra), "RA from stack",
+			      RETURN_ON_ERROR)) {
+		error(FATAL, "Cannot read RA from stack %lx", rapos);
+		return;
+	}
+}
+
+static void
+mips64_dump_backtrace_entry(struct bt_info *bt, struct syment *sym,
+			struct mips64_unwind_frame *current,
+			struct mips64_unwind_frame *previous, int level)
+{
+	const char *name = sym ? sym->name : "(invalid)";
+	struct load_module *lm;
+	char *name_plus_offset = NULL;
+	struct syment *symp;
+	ulong symbol_offset;
+	char buf[BUFSIZE];
+	char pt_regs[SIZE(pt_regs)];
+
+	if (bt->flags & BT_SYMBOL_OFFSET) {
+		symp = value_search(current->pc, &symbol_offset);
+
+		if (symp && symbol_offset)
+			name_plus_offset =
+				value_to_symstr(current->pc, buf, bt->radix);
+	}
+
+	fprintf(fp, "%s#%d [%016lx] %s at %016lx", level < 10 ? " " : "", level,
+		current->sp, name_plus_offset ? name_plus_offset : name,
+		current->pc);
+
+	if (module_symbol(current->pc, NULL, &lm, NULL, 0))
+		fprintf(fp, " [%s]", lm->mod_name);
+
+	fprintf(fp, "\n");
+
+	if (sym && mips64_is_exception_entry(sym)) {
+		GET_STACK_DATA(current->sp, &pt_regs, SIZE(pt_regs));
+		mips64_dump_exception_stack(bt, pt_regs);
+	}
+}
+
+static void
+mips64_dump_exception_stack(struct bt_info *bt, char *pt_regs)
+{
+	struct mips64_pt_regs_main *mains;
+	struct mips64_pt_regs_cp0 *cp0;
+	int i;
+	char buf[BUFSIZE];
+
+	mains = (struct mips64_pt_regs_main *) (pt_regs + OFFSET(pt_regs_regs));
+	cp0 = (struct mips64_pt_regs_cp0 *) \
+		(pt_regs + OFFSET(pt_regs_cp0_badvaddr));
+
+	for (i = 0; i < 32; i += 4) {
+		fprintf(fp, "    $%2d   : %016lx %016lx %016lx %016lx\n",
+			i, mains->regs[i], mains->regs[i+1],
+			mains->regs[i+2], mains->regs[i+3]);
+	}
+	fprintf(fp, "    Hi    : %016lx\n", mains->hi);
+	fprintf(fp, "    Lo    : %016lx\n", mains->lo);
+
+	value_to_symstr(cp0->cp0_epc, buf, 16);
+	fprintf(fp, "    epc   : %016lx %s\n", cp0->cp0_epc, buf);
+
+	value_to_symstr(mains->regs[31], buf, 16);
+	fprintf(fp, "    ra    : %016lx %s\n", mains->regs[31], buf);
+
+	fprintf(fp, "    Status: %016lx\n", mains->cp0_status);
+	fprintf(fp, "    Cause : %016lx\n", cp0->cp0_cause);
+	fprintf(fp, "    BadVA : %016lx\n", cp0->cp0_badvaddr);
+}
+
+static int
+mips64_is_exception_entry(struct syment *sym)
+{
+	return STREQ(sym->name, "ret_from_exception") ||
+		STREQ(sym->name, "ret_from_irq") ||
+		STREQ(sym->name, "work_resched") ||
+		STREQ(sym->name, "handle_sys") ||
+		STREQ(sym->name, "handle_sysn32") ||
+		STREQ(sym->name, "handle_sys64");
+}
+
+static void
+mips64_stackframe_init(void)
+{
+	long task_struct_thread = MEMBER_OFFSET("task_struct", "thread");
+	long thread_reg29 = MEMBER_OFFSET("thread_struct", "reg29");
+	long thread_reg31 = MEMBER_OFFSET("thread_struct", "reg31");
+
+	if ((task_struct_thread == INVALID_OFFSET) ||
+	    (thread_reg29 == INVALID_OFFSET) ||
+	    (thread_reg31 == INVALID_OFFSET)) {
+		error(FATAL,
+		      "cannot determine thread_struct offsets\n");
+		return;
+	}
+
+	ASSIGN_OFFSET(task_struct_thread_reg29) =
+		task_struct_thread + thread_reg29;
+	ASSIGN_OFFSET(task_struct_thread_reg31) =
+		task_struct_thread + thread_reg31;
+
+	STRUCT_SIZE_INIT(pt_regs, "pt_regs");
+	MEMBER_OFFSET_INIT(pt_regs_regs, "pt_regs", "regs");
+	MEMBER_OFFSET_INIT(pt_regs_cp0_badvaddr, "pt_regs", "cp0_badvaddr");
+}
+
+/*
+ * Get a stack frame combination of pc and ra from the most relevant spot.
+ */
+static void
+mips64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
+{
+	ulong ksp, nip;
+	int ret = 0;
+
+	nip = ksp = 0;
+	bt->machdep = NULL;
+
+	if (DUMPFILE() && is_task_active(bt->task))
+		ret = mips64_get_dumpfile_stack_frame(bt, &nip, &ksp);
+	else
+		ret = mips64_get_frame(bt, &nip, &ksp);
+
+	if (!ret)
+		error(WARNING, "cannot determine starting stack frame for task %lx\n",
+			bt->task);
+
+	if (pcp)
+		*pcp = nip;
+	if (spp)
+		*spp = ksp;
+}
+
+/*
+ * Get the starting point for the active cpu in a diskdump.
+ */
+static int
+mips64_get_dumpfile_stack_frame(struct bt_info *bt, ulong *nip, ulong *ksp)
+{
+	const struct machine_specific *ms = machdep->machspec;
+	struct mips64_register *regs;
+	ulong epc, r29;
+
+	if (!ms->crash_task_regs) {
+		bt->flags |= BT_REGS_NOT_FOUND;
+		return FALSE;
+	}
+
+	/*
+	 * We got registers for panic task from crash_notes. Just return them.
+	 */
+	regs = &ms->crash_task_regs[bt->tc->processor];
+	epc = regs->regs[MIPS64_EF_CP0_EPC];
+	r29 = regs->regs[MIPS64_EF_R29];
+
+	if (!epc && !r29) {
+		bt->flags |= BT_REGS_NOT_FOUND;
+		return FALSE;
+	}
+
+	if (nip)
+		*nip = epc;
+	if (ksp)
+		*ksp = r29;
+
+	bt->machdep = regs;
+
+	return TRUE;
+}
+
+/*
+ * Do the work for mips64_get_stack_frame() for non-active tasks.
+ * Get SP and PC values for idle tasks.
+ */
+static int
+mips64_get_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
+{
+	if (!bt->tc || !(tt->flags & THREAD_INFO))
+		return FALSE;
+
+	if (!readmem(bt->task + OFFSET(task_struct_thread_reg31),
+		     KVADDR, pcp, sizeof(*pcp),
+		     "thread_struct.regs31",
+		     RETURN_ON_ERROR)) {
+		return FALSE;
+	}
+
+	if (!readmem(bt->task + OFFSET(task_struct_thread_reg29),
+		     KVADDR, spp, sizeof(*spp),
+		     "thread_struct.regs29",
+		     RETURN_ON_ERROR)) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+/*
  * Accept or reject a symbol from the kernel namelist.
  */
 static int
@@ -407,7 +829,7 @@ mips64_get_page_size(void)
 static ulong
 mips64_vmalloc_start(void)
 {
-	return 0;
+	return first_vmalloc_address();
 }
 
 /*
@@ -508,6 +930,8 @@ mips64_init(int when)
 		machdep->uvtop = mips64_uvtop;
 		machdep->kvtop = mips64_kvtop;
 		machdep->cmd_mach = mips64_cmd_mach;
+		machdep->back_trace = mips64_back_trace_cmd;
+		machdep->get_stack_frame = mips64_get_stack_frame;
 		machdep->vmalloc_start = mips64_vmalloc_start;
 		machdep->processor_speed = mips64_processor_speed;
 		machdep->get_stackbase = generic_get_stackbase;
@@ -525,6 +949,7 @@ mips64_init(int when)
 		mips64_init_page_flags();
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+		mips64_stackframe_init();
 		if (!machdep->hz)
 			machdep->hz = 250;
 		break;
