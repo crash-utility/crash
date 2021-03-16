@@ -22,9 +22,18 @@ mips64_dump_machdep_table(ulong arg)
 {
 }
 
+/*
+ * Do all necessary machine-specific setup here. This is called several
+ * times during initialization.
+ */
 void
 mips64_init(int when)
 {
+	switch (when) {
+	case SETUP_ENV:
+		machdep->process_elf_notes = process_elf64_notes;
+		break;
+	}
 }
 
 void
