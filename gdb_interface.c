@@ -702,7 +702,7 @@ static char *prohibited_list[] = {
 	"clear", "disable", "enable", "condition", "ignore", "frame", 
 	"select-frame", "f", "up", "down", "catch", "tcatch", "return",
 	"file", "exec-file", "core-file", "symbol-file", "load", "si", "ni", 
-	"shell", 
+	"shell", "sy",
 	NULL  /* must be last */
 };
 
