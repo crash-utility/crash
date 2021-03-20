@@ -267,6 +267,11 @@ vmware_guestdump_init(char *filename, FILE *ofp)
 	fseek(vmss.dfp, 0L, SEEK_SET);
 	fprintf(ofp, LOGPRX"vmem file: %s\n\n", vmem_filename);
 
+	if (CRASHDEBUG(1)) {
+                vmware_guestdump_memory_dump(ofp);
+                dump_registers_for_vmss_dump();
+        }
+
 exit:
 	if (fp)
 		fclose(fp);
