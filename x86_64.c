@@ -4415,7 +4415,7 @@ x86_64_function_called_by(ulong rip)
 	if (gdb_pass_through(buf, pc->tmpfile2, GNU_RETURN_ON_ERROR)) {
 	        rewind(pc->tmpfile2);
 	        while (fgets(buf, BUFSIZE, pc->tmpfile2)) {
-			if ((p1 = strstr(buf, "callq")) &&
+			if ((p1 = strstr(buf, "call")) &&
 			    whitespace(*(p1-1))) { 
 				if (extract_hex(p1, &value, NULLCHAR, TRUE)) 
 					break;
@@ -6381,11 +6381,13 @@ search_for_switch_to(ulong start, ulong end)
 	char search_string1[BUFSIZE];
 	char search_string2[BUFSIZE];
 	char search_string3[BUFSIZE];
+	char search_string4[BUFSIZE];
 	int found;
 
 	max_instructions = end - start;
 	found = FALSE;
-	search_string1[0] = search_string2[0] = search_string3[0] = NULLCHAR;
+	search_string1[0] = search_string2[0] = NULLCHAR;
+	search_string3[0] = search_string4[0] = NULLCHAR;
 	sprintf(buf1, "x/%ldi 0x%lx", max_instructions, start);
 
 	if (symbol_exists("__switch_to")) {
@@ -6396,7 +6398,9 @@ search_for_switch_to(ulong start, ulong end)
 	}
 	if (symbol_exists("__switch_to_asm")) {
 		sprintf(search_string3, 
-			"callq  0x%lx", symbol_value("__switch_to_asm")); 
+			"callq  0x%lx", symbol_value("__switch_to_asm"));
+		sprintf(search_string4,
+			"call   0x%lx", symbol_value("__switch_to_asm"));
 	}
 
 	open_tmpfile();
@@ -6415,6 +6419,8 @@ search_for_switch_to(ulong start, ulong end)
 		if (strlen(search_string2) && strstr(buf1, search_string2))
 			found = TRUE;
 		if (strlen(search_string3) && strstr(buf1, search_string3))
+			found = TRUE;
+		if (strlen(search_string4) && strstr(buf1, search_string4))
 			found = TRUE;
 	}
 	close_tmpfile();
@@ -8230,7 +8236,7 @@ x86_64_do_not_cache_framesize(struct syment *sp, ulong textaddr)
 			return TRUE;
 		}
 
-		if (STREQ(arglist[instr], "callq"))
+		if (STREQ(arglist[instr], "callq") || STREQ(arglist[instr], "call"))
 			break;
 	}
 	close_tmpfile2();
