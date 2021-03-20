@@ -7000,7 +7000,7 @@ append_struct_symbol (struct gnu_request *req, void *data)
 	struct type_request *treq = (struct type_request *)data;
 
 	for (i = 0; i < treq->idx; i++)
-		if (treq->types[i].name == req->name)
+		if (!strcmp(treq->types[i].name, req->name))
 			break;
 
 	if (i < treq->idx) // We've already collected this type
