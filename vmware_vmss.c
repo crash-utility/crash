@@ -444,11 +444,13 @@ vmware_vmss_init(char *filename, FILE *ofp)
 	if (vmss.memsize == 0) {
 		char *vmem_filename, *p;
 
-		fprintf(ofp, LOGPRX"Memory dump is not part of this vmss file.\n");
+		if (!(pc->flags & SILENT))
+			fprintf(ofp, LOGPRX"Memory dump is not part of this vmss file.\n");
 		fclose(fp);
 		fp = NULL;
 
-		fprintf(ofp, LOGPRX"Try to locate the companion vmem file ...\n");
+		if (!(pc->flags & SILENT))
+			fprintf(ofp, LOGPRX"Try to locate the companion vmem file ...\n");
 		/* check the companion vmem file */
 		vmem_filename = strdup(filename);
 		p = vmem_filename + strlen(vmem_filename) - 4;
@@ -471,7 +473,8 @@ vmware_vmss_init(char *filename, FILE *ofp)
 		vmss.separate_vmem = TRUE;
 		vmss.filename = filename;
 
-		fprintf(ofp, LOGPRX"vmem file: %s\n\n", vmem_filename);
+		if (!(pc->flags & SILENT))
+			fprintf(ofp, LOGPRX"vmem file: %s\n\n", vmem_filename);
 		free(vmem_filename);
 	}
 
