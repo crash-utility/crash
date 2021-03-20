@@ -5206,11 +5206,17 @@ kdump_kaslr_check(void)
 		return FALSE;
 }
 
-#ifdef X86_64
 int
 kdump_get_nr_cpus(void)
 {
-	return nd->num_qemu_notes;
+        if (nd->num_prstatus_notes)
+                return nd->num_prstatus_notes;
+        else if (nd->num_qemu_notes)
+                return nd->num_qemu_notes;
+        else if (nd->num_vmcoredd_notes)
+                return nd->num_vmcoredd_notes;
+
+        return 1;
 }
 
 QEMUCPUState *
@@ -5232,7 +5238,6 @@ kdump_get_qemucpustate(int cpu)
 
 	return (QEMUCPUState *)nd->nt_qemu_percpu[cpu];
 }
-#endif
 
 static void *
 get_kdump_device_dump_offset(void)

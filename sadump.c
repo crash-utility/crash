@@ -1670,7 +1670,6 @@ get_sadump_data(void)
 	return sd;
 }
 
-#ifdef X86_64
 int
 sadump_get_nr_cpus(void)
 {
@@ -1678,6 +1677,7 @@ sadump_get_nr_cpus(void)
 	return sd->dump_header->nr_cpus;
 }
 
+#ifdef X86_64
 int
 sadump_get_cr3_cr4_idtr(int cpu, ulong *cr3, ulong *cr4, ulong *idtr)
 {

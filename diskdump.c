@@ -2593,13 +2593,22 @@ diskdump_kaslr_check()
 	return FALSE;
 }
 
-#ifdef X86_64
 int
 diskdump_get_nr_cpus(void)
 {
-	return dd->num_qemu_notes;
+        if (dd->num_prstatus_notes)
+                return dd->num_prstatus_notes;
+        else if (dd->num_qemu_notes)
+                return dd->num_qemu_notes;
+        else if (dd->num_vmcoredd_notes)
+                return dd->num_vmcoredd_notes;
+        else if (dd->header->nr_cpus)
+                return dd->header->nr_cpus;
+
+        return 1;
 }
 
+#ifdef X86_64
 QEMUCPUState *
 diskdump_get_qemucpustate(int cpu)
 {
