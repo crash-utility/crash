@@ -698,11 +698,10 @@ static char *prohibited_list[] = {
 	"run", "r", "break", "b", "tbreak", "hbreak", "thbreak", "rbreak",
 	"watch", "rwatch", "awatch", "attach", "continue", "c", "fg", "detach", 
 	"finish", "handle", "interrupt", "jump", "kill", "next", "nexti", 
-	"signal", "step", "s", "stepi", "target", "thread", "until", "delete", 
-	"clear", "disable", "enable", "condition", "ignore", "frame", 
-	"select-frame", "f", "up", "down", "catch", "tcatch", "return",
-	"file", "exec-file", "core-file", "symbol-file", "load", "si", "ni", 
-	"shell", "sy",
+	"signal", "step", "s", "stepi", "target", "until", "delete", 
+	"clear", "disable", "enable", "condition", "ignore", "frame", "catch",
+	"tcatch", "return", "file", "exec-file", "core-file", "symbol-file",
+	"load", "si", "ni", "shell", "sy",
 	NULL  /* must be last */
 };
 
@@ -1067,6 +1066,8 @@ unsigned long crash_get_kaslr_offset(void)
 
 /* Callbacks for crash_target */
 int crash_get_nr_cpus(void);
+int crash_get_cpu_reg (int cpu, int regno, const char *regname,
+                       int regsize, void *val);
 
 int crash_get_nr_cpus(void)
 {
@@ -1081,5 +1082,13 @@ int crash_get_nr_cpus(void)
 
         /* Just CPU #0 */
         return 1;
+}
+
+int crash_get_cpu_reg (int cpu, int regno, const char *regname,
+                       int regsize, void *value)
+{
+        if (!machdep->get_cpu_reg)
+                return FALSE;
+        return machdep->get_cpu_reg(cpu, regno, regname, regsize, value);
 }
 

@@ -1,7 +1,7 @@
 /*
  * vmware_vmss.c
  *
- * Copyright (c) 2015 VMware, Inc.
+ * Copyright (c) 2015, 2020 VMware, Inc.
  * Copyright (c) 2018 Red Hat Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -16,6 +16,7 @@
  *
  * Authors: Dyno Hongjun Fu <hfu@vmware.com>
  *          Sergio Lopez <slp@redhat.com>
+ *          Alexey Makhalov <amakhalov@vmware.com>
  */
 
 #include "defs.h"
@@ -889,6 +890,54 @@ vmware_vmss_get_cr3_cr4_idtr(int cpu, ulong *cr3, ulong *cr4, ulong *idtr)
 	*idtr = vmss.regs64[cpu]->idtr;
 
 	return TRUE;
+}
+
+int
+vmware_vmss_get_cpu_reg(int cpu, int regno, const char *name, int size,
+                        void *value)
+{
+        if (cpu >= vmss.num_vcpus)
+                return FALSE;
+
+        /* All supported registers are 8 bytes long. */
+        if (size != 8)
+                return FALSE;
+
+#define CASE(R,r) \
+                case R##_REGNUM: \
+                        if (!(vmss.vcpu_regs[cpu] & REGS_PRESENT_##R)) \
+                                return FALSE; \
+                        memcpy(value, &vmss.regs64[cpu]->r, size); \
+                        break
+
+
+        switch (regno) {
+                CASE (RAX, rax);
+                CASE (RBX, rbx);
+                CASE (RCX, rcx);
+                CASE (RDX, rdx);
+                CASE (RSI, rsi);
+                CASE (RDI, rdi);
+                CASE (RBP, rbp);
+                CASE (RSP, rsp);
+                CASE (R8, r8);
+                CASE (R9, r9);
+                CASE (R10, r10);
+                CASE (R11, r11);
+                CASE (R12, r12);
+                CASE (R13, r13);
+                CASE (R14, r14);
+                CASE (R15, r15);
+                CASE (RIP, rip);
+                case EFLAGS_REGNUM:
+                        if (!(vmss.vcpu_regs[cpu] & REGS_PRESENT_RFLAGS))
+                                return FALSE;
+                        memcpy(value, &vmss.regs64[cpu]->rflags, size);
+                        break;
+                default:
+                        return FALSE;
+        }
+        return TRUE;
 }
 
 int

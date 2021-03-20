@@ -27,6 +27,8 @@ void crash_target_init (void);
 
 extern "C" int gdb_readmem_callback(unsigned long, void *, int, int);
 extern "C" int crash_get_nr_cpus(void);
+extern "C" int crash_get_cpu_reg (int cpu, int regno, const char *regname,
+                                  int regsize, void *val);
 
 
 /* The crash target.  */
@@ -44,6 +46,7 @@ public:
   const target_info &info () const override
   { return crash_target_info; }
 
+  void fetch_registers (struct regcache *, int) override;
   enum target_xfer_status xfer_partial (enum target_object object,
                                         const char *annex,
                                         gdb_byte *readbuf,
@@ -54,12 +57,34 @@ public:
   bool has_all_memory () override { return true; }
   bool has_memory () override { return true; }
   bool has_stack () override { return true; }
-  bool has_registers () override { return false; }
+  bool has_registers () override { return true; }
   bool thread_alive (ptid_t ptid) override { return true; }
   std::string pid_to_str (ptid_t ptid) override
   { return string_printf ("CPU %ld", ptid.tid ()); }
 
 };
+
+/* We just get all the registers, so we don't use regno.  */
+void
+crash_target::fetch_registers (struct regcache *regcache, int regno)
+{
+  gdb_byte regval[16];
+  int cpu = inferior_ptid.tid();
+  struct gdbarch *arch = regcache->arch ();
+
+  for (int r = 0; r < gdbarch_num_regs (arch); r++)
+    {
+      const char *regname = gdbarch_register_name(arch, r);
+      int regsize = register_size (arch, r);
+      if (regsize > sizeof (regval))
+        error (_("fatal error: buffer size is not enough to fit register value"));
+
+      if (crash_get_cpu_reg (cpu, r, regname, regsize, (void *)&regval))
+        regcache->raw_supply (r, regval);
+      else
+        regcache->raw_supply (r, NULL);
+    }
+}
 
 
 enum target_xfer_status
@@ -101,4 +126,10 @@ crash_target_init (void)
       if (!i)
         switch_to_thread (thread);
     }
+
+  /* Fetch all registers from core file.  */
+  target_fetch_registers (get_current_regcache (), -1);
+
+  /* Now, set up the frame cache. */
+  reinit_frame_cache ();
 }

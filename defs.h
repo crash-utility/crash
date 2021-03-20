@@ -1013,6 +1013,7 @@ struct machdep_table {
         ulong (*processor_speed)(void);
         int (*uvtop)(struct task_context *, ulong, physaddr_t *, int);
         int (*kvtop)(struct task_context *, ulong, physaddr_t *, int);
+	int (*get_cpu_reg)(int, int, const char *, int, void *);
         ulong (*get_task_pgd)(ulong);
 	void (*dump_irq)(int);
 	void (*get_stack_frame)(struct bt_info *, ulong *, ulong *);
@@ -6858,6 +6859,7 @@ int vmware_vmss_get_nr_cpus(void);
 int vmware_vmss_get_cr3_cr4_idtr(int, ulong *, ulong *, ulong *);
 int vmware_vmss_phys_base(ulong *phys_base);
 int vmware_vmss_set_phys_base(ulong);
+int vmware_vmss_get_cpu_reg(int, int, const char *, int, void *);
 
 /*
  * vmware_guestdump.c
@@ -7281,5 +7283,54 @@ extern int have_full_symbols(void);
 #if defined(X86) || defined(X86_64) || defined(IA64)
 #define XEN_HYPERVISOR_ARCH 
 #endif
+
+/*
+ * Register numbers must be in sync with gdb/features/i386/64bit-core.c
+ * to make crash_target->fetch_registers() ---> machdep->get_cpu_reg()
+ * working properly.
+ */
+enum x86_64_regnum {
+        RAX_REGNUM,
+        RBX_REGNUM,
+        RCX_REGNUM,
+        RDX_REGNUM,
+        RSI_REGNUM,
+        RDI_REGNUM,
+        RBP_REGNUM,
+        RSP_REGNUM,
+        R8_REGNUM,
+        R9_REGNUM,
+        R10_REGNUM,
+        R11_REGNUM,
+        R12_REGNUM,
+        R13_REGNUM,
+        R14_REGNUM,
+        R15_REGNUM,
+        RIP_REGNUM,
+        EFLAGS_REGNUM,
+        CS_REGNUM,
+        SS_REGNUM,
+        DS_REGNUM,
+        ES_REGNUM,
+        FS_REGNUM,
+        GS_REGNUM,
+        ST0_REGNUM,
+        ST1_REGNUM,
+        ST2_REGNUM,
+        ST3_REGNUM,
+        ST4_REGNUM,
+        ST5_REGNUM,
+        ST6_REGNUM,
+        ST7_REGNUM,
+        FCTRL_REGNUM,
+        FSTAT_REGNUM,
+        FTAG_REGNUM,
+        FISEG_REGNUM,
+        FIOFF_REGNUM,
+        FOSEG_REGNUM,
+        FOOFF_REGNUM,
+        FOP_REGNUM,
+        LAST_REGNUM
+};
 
 #endif /* !GDB_COMMON */

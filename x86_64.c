@@ -126,6 +126,7 @@ static int x86_64_get_framesize(struct bt_info *, ulong, ulong);
 static void x86_64_framesize_debug(struct bt_info *);
 static void x86_64_get_active_set(void);
 static int x86_64_get_kvaddr_ranges(struct vaddr_range *);
+static int x86_64_get_cpu_reg(int, int, const char *, int, void *);
 static int x86_64_verify_paddr(uint64_t);
 static void GART_init(void);
 static void x86_64_exception_stacks_init(void);
@@ -194,6 +195,7 @@ x86_64_init(int when)
 		machdep->machspec->irq_eframe_link = UNINITIALIZED;
 		machdep->machspec->irq_stack_gap = UNINITIALIZED;
 		machdep->get_kvaddr_ranges = x86_64_get_kvaddr_ranges;
+		machdep->get_cpu_reg = x86_64_get_cpu_reg;
                 if (machdep->cmdline_args[0])
                         parse_cmdline_args();
 		if ((string = pc->read_vmcoreinfo("relocate"))) {
@@ -884,6 +886,7 @@ x86_64_dump_machdep_table(ulong arg)
         fprintf(fp, "        is_page_ptr: x86_64_is_page_ptr()\n");
         fprintf(fp, "       verify_paddr: x86_64_verify_paddr()\n");
         fprintf(fp, "  get_kvaddr_ranges: x86_64_get_kvaddr_ranges()\n");
+	fprintf(fp, "        get_cpu_reg: x86_64_get_cpu_reg()\n");
         fprintf(fp, "    init_kernel_pgd: x86_64_init_kernel_pgd()\n");
         fprintf(fp, "clear_machdep_cache: x86_64_clear_machdep_cache()\n");
 	fprintf(fp, " xendump_p2m_create: %s\n", PVOPS_XEN() ?
@@ -8932,6 +8935,19 @@ x86_64_get_kvaddr_ranges(struct vaddr_range *vrp)
 	qsort(vrp, cnt, sizeof(struct vaddr_range), compare_kvaddr);
 
 	return cnt;
+}
+
+static int
+x86_64_get_cpu_reg(int cpu, int regno, const char *name,
+                   int size, void *value)
+{
+        if (regno >= LAST_REGNUM)
+                return FALSE;
+
+        if (VMSS_DUMPFILE())
+                return vmware_vmss_get_cpu_reg(cpu, regno, name, size, value);
+
+        return FALSE;
 }
 
 /*
