@@ -2501,3 +2501,39 @@ diff -up gdb-7.6/opcodes/configure.orig gdb-7.6/opcodes/configure
  #include "features/aarch64.c"
  #include "features/aarch64-without-fpu.c"
  
+--- gdb-7.6/gdb/symtab.c.orig
++++ gdb-7.6/gdb/symtab.c
+@@ -2080,7 +2080,7 @@ find_pc_sect_symtab (CORE_ADDR pc, struct obj_section *section)
+   struct symtab *s = NULL;
+   struct symtab *best_s = NULL;
+   struct objfile *objfile;
+-  CORE_ADDR distance = 0;
++  CORE_ADDR distance = 0, start, end;
+   struct minimal_symbol *msymbol;
+
+   /* If we know that this is not a text address, return failure.  This is
+@@ -2117,10 +2117,20 @@ find_pc_sect_symtab (CORE_ADDR pc, struct obj_section *section)
+     bv = BLOCKVECTOR (s);
+     b = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
+
+-    if (BLOCK_START (b) <= pc
+-	&& BLOCK_END (b) > pc
+-	&& (distance == 0
+-	    || BLOCK_END (b) - BLOCK_START (b) < distance))
++    start = BLOCK_START (b);
++    end = BLOCK_END (b);
++
++    /*
++     * If we have an addrmap mapping code addresses to blocks, and pc
++     * is in the range [start, end), let's use it.
++     */
++    if ((pc >= start && pc < end) && BLOCKVECTOR_MAP (bv)) {
++        if (addrmap_find (BLOCKVECTOR_MAP (bv), pc))
++            return s;
++    }
++
++    if ((pc >= start && pc < end) && ((distance == 0)
++                                   || (end - start < distance)))
+       {
+ 	/* For an objfile that has its functions reordered,
+ 	   find_pc_psymtab will find the proper partial symbol table
