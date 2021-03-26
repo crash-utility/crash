@@ -23,6 +23,8 @@
  * GNU General Public License for more details.
  */
 
+#define LZO
+#define SNAPPY
 #include "defs.h"
 #include "diskdump.h"
 #include "xen_dom0.h"

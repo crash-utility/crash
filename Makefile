@@ -23,7 +23,7 @@ PROGRAM=crash
 # Supported targets: X86 ALPHA PPC IA64 PPC64 SPARC64
 # TARGET and GDB_CONF_FLAGS will be configured automatically by configure
 #
-TARGET=
+TARGET=X86_64
 GDB_CONF_FLAGS=
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -34,10 +34,10 @@ endif
 #
 # GDB, GDB_FILES, GDB_OFILES and GDB_PATCH_FILES will be configured automatically by configure 
 #
-GDB=
-GDB_FILES=
-GDB_OFILES=
-GDB_PATCH_FILES=
+GDB=gdb-7.6
+GDB_FILES=${GDB_7.6_FILES}
+GDB_OFILES=${GDB_7.6_OFILES}
+GDB_PATCH_FILES=gdb-7.6.patch gdb-7.6-ppc64le-support.patch gdb-7.6-proc_service.h.patch
 
 #
 # Default installation directory
@@ -185,7 +185,7 @@ GDB_7.6_OFILES=${GDB}/gdb/symtab.o
 # 
 # GDB_FLAGS is passed up from the gdb Makefile.
 #
-GDB_FLAGS=
+GDB_FLAGS=-DGDB_7_6
 
 #
 # WARNING_OPTIONS and WARNING_ERROR are both applied on a per-file basis. 
@@ -202,7 +202,7 @@ TARGET_CFLAGS=
 
 CRASH_CFLAGS=-g -D${TARGET} ${TARGET_CFLAGS} ${GDB_FLAGS} ${CFLAGS}
 
-GPL_FILES=
+GPL_FILES=COPYING3
 TAR_FILES=${SOURCE_FILES} Makefile ${GPL_FILES} README .rh_rpm_package crash.8 \
 	${EXTENSION_SOURCE_FILES} ${MEMORY_DRIVER_FILES}
 CSCOPE_FILES=${SOURCE_FILES}
@@ -230,7 +230,7 @@ all: make_configure
 gdb_merge: force
 	@if [ ! -f ${GDB}/README ]; then \
 	  make --no-print-directory gdb_unzip; fi
-	@echo "${LDFLAGS} -lz -ldl -rdynamic" > ${GDB}/gdb/mergelibs
+	@echo "${LDFLAGS} -lz -llzo2 -lsnappy -ldl -rdynamic" > ${GDB}/gdb/mergelibs
 	@echo "../../${PROGRAM} ../../${PROGRAM}lib.a" > ${GDB}/gdb/mergeobj
 	@rm -f ${PROGRAM}
 	@if [ ! -f ${GDB}/config.status ]; then \
