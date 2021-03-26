@@ -8356,8 +8356,15 @@ show_member_offset(FILE *ofp, struct datatype_member *dm, char *inbuf)
 		}
 	} else if (c) { 
 		for (i = 0; i < c; i++) {
-			if (STRNEQ(arglist[i], "(*")) {
-				target = arglist[i]+2;
+			if (strstr(inbuf, "(*")) {
+				if (STRNEQ(arglist[i], "(*"))
+					target = arglist[i]+2;
+				else if (STRNEQ(arglist[i], "*(*"))
+					target = arglist[i]+3;
+				else if (STRNEQ(arglist[i], "**(*"))
+					target = arglist[i]+4;
+				else
+					continue;
 				if (!(t1 = strstr(target, ")")))
 					continue;
 				*t1 = NULLCHAR;
