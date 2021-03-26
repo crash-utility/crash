@@ -17,19 +17,25 @@
 
 #include "defs.h"      /* From the crash source top-level directory */
 
-void echo_init(void);    /* constructor function */
-void echo_fini(void);    /* destructor function (optional) */
+static void echo_init(void);    /* constructor function */
+static void echo_fini(void);    /* destructor function (optional) */
 
-void cmd_echo(void);     /* Declare the commands and their help data. */
-char *help_echo[];
+static void cmd_echo(void);     /* Declare the commands and their help data. */
+static char *help_echo[];
 
+/*
+ * Please making the functions and global variables static within your
+ * extension if you don't want to make them visiable to subsequently
+ * loaded extensions.  Otherwise, non-static symbols within 2 extensions
+ * that have the same name can cause confliction.
+ */
 static struct command_table_entry command_table[] = {
         { "echo", cmd_echo, help_echo, 0},          /* One or more commands, */
         { NULL },                                     /* terminated by NULL, */
 };
 
 
-void __attribute__((constructor))
+static void __attribute__((constructor))
 echo_init(void) /* Register the command set. */
 { 
         register_extension(command_table);
@@ -39,7 +45,7 @@ echo_init(void) /* Register the command set. */
  *  This function is called if the shared object is unloaded. 
  *  If desired, perform any cleanups here. 
  */
-void __attribute__((destructor))
+static void __attribute__((destructor))
 echo_fini(void) { }
 
 
@@ -49,7 +55,7 @@ echo_fini(void) { }
  *  other crash commands for usage of the myriad of utility routines available
  *  to accomplish what your task.
  */
-void
+static void
 cmd_echo(void)
 {
         int c;
@@ -94,7 +100,7 @@ cmd_echo(void)
  *
  */
  
-char *help_echo[] = {
+static char *help_echo[] = {
         "echo",                        /* command name */
         "echoes back its arguments",   /* short description */
         "arg ...",                     /* argument synopsis, or " " if none */
