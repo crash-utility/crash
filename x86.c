@@ -4998,7 +4998,8 @@ x86_xendump_p2m_create(struct xendump_data *xd)
 	/*
 	 *  Check for pvops Xen kernel before presuming it's HVM.
 	 */
-	if (symbol_exists("pv_init_ops") && symbol_exists("xen_patch") &&
+	if (symbol_exists("pv_init_ops") &&
+	    (symbol_exists("xen_patch") || symbol_exists("paravirt_patch_default")) &&
 	    (xd->xc_core.header.xch_magic == XC_CORE_MAGIC))
 		return x86_pvops_xendump_p2m_create(xd);
 

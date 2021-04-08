@@ -172,8 +172,8 @@ kernel_init()
 	if (PVOPS() && symbol_exists("pv_init_ops") &&
 	    readmem(symbol_value("pv_init_ops"), KVADDR, &pv_init_ops,
 	    sizeof(void *), "pv_init_ops", RETURN_ON_ERROR) &&
-	    (p1 = value_symbol(pv_init_ops)) && 
-	    STREQ(p1, "xen_patch")) {
+	    ((p1 = value_symbol(pv_init_ops)) &&
+	    (STREQ(p1, "xen_patch") || STREQ(p1, "paravirt_patch_default")))) {
 		kt->flags |= ARCH_XEN | ARCH_PVOPS_XEN;
 		kt->xen_flags |= WRITABLE_PAGE_TABLES;
 		if (machine_type("X86"))
