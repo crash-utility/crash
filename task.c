@@ -417,7 +417,8 @@ task_init(void)
 
 	STRUCT_SIZE_INIT(cputime_t, "cputime_t");
 
-	if (symbol_exists("cfq_slice_async")) {
+	if ((THIS_KERNEL_VERSION < LINUX(4,8,0)) &&
+	    symbol_exists("cfq_slice_async")) {
 		uint cfq_slice_async;
 
 		get_symbol_data("cfq_slice_async", sizeof(int), 
