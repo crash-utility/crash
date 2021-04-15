@@ -6026,6 +6026,7 @@ struct machine_specific {
 	ulong cpu_entry_area_start;
 	ulong cpu_entry_area_end;
 	ulong page_offset_force;
+	char **exception_functions;
 };
 
 #define KSYMS_START    (0x1)

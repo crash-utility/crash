@@ -139,6 +139,9 @@ static void orc_dump(ulong);
 
 struct machine_specific x86_64_machine_specific = { 0 };
 
+static const char *exception_functions_orig[];
+static const char *exception_functions_5_8[];
+
 /*
  *  Do all necessary machine-specific setup here.  This is called several
  *  times during initialization.
@@ -735,6 +738,12 @@ x86_64_init(int when)
 		STRUCT_SIZE_INIT(percpu_data, "percpu_data");
 
 		GART_init();
+
+		if (kernel_symbol_exists("asm_exc_divide_error"))
+			machdep->machspec->exception_functions = (char **)exception_functions_5_8;
+		else
+			machdep->machspec->exception_functions = (char **)exception_functions_orig;
+
 		break;
 
 	case POST_VM:
@@ -1104,6 +1113,12 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%016lx\n", (ulong)ms->cpu_entry_area_end);
 	else
 		fprintf(fp, "(unused)\n");
+
+	fprintf(fp, "      excpetion_functions: ");
+	if (ms->exception_functions == (char **)exception_functions_5_8)
+		fprintf(fp, "excpetion_functions_5_8\n");
+	else
+		fprintf(fp, "excpetion_functions_orig\n");
 }
 
 /*
@@ -3086,7 +3101,7 @@ text_lock_function(char *name, struct bt_info *bt, ulong locktext)
  * zeroentry xen_debug do_debug
  * zeroentry xen_int3 do_int3
 */
-static const char *exception_functions[] = {
+static const char *exception_functions_orig[] = {
 	"invalid_TSS",
 	"segment_not_present",
 	"alignment_check",
@@ -3106,6 +3121,28 @@ static const char *exception_functions[] = {
 	"xen_debug",
 	"xen_int3",
 	"async_page_fault",
+	NULL,
+};
+
+static const char *exception_functions_5_8[] = {
+	"asm_exc_invalid_tss",
+	"asm_exc_segment_not_present",
+	"asm_exc_alignment_check",
+	"asm_exc_general_protection",
+	"asm_exc_page_fault",
+	"asm_exc_divide_error",
+	"asm_exc_overflow",
+	"asm_exc_bounds",
+	"asm_exc_invalid_op",
+	"asm_exc_device_not_available",
+	"asm_exc_coproc_segment_overrun",
+	"asm_exc_spurious_interrupt_bug",
+	"asm_exc_coprocessor_error",
+	"asm_exc_simd_coprocessor_error",
+	"asm_exc_debug",
+	"xen_asm_exc_stack_segment",
+	"xen_asm_exc_xen_hypervisor_callback",
+	"xen_asm_exc_int3",
 	NULL,
 };
 
@@ -3185,8 +3222,8 @@ x86_64_print_stack_entry(struct bt_info *bt, FILE *ofp, int level,
 	if ((THIS_KERNEL_VERSION >= LINUX(2,6,29)) && 
 	    (eframe_check == -1) && offset && 
 	    !(bt->flags & (BT_EXCEPTION_FRAME|BT_START|BT_SCHEDULE))) { 
-		for (i = 0; exception_functions[i]; i++) {
-			if (STREQ(name, exception_functions[i])) {
+		for (i = 0; machdep->machspec->exception_functions[i]; i++) {
+			if (STREQ(name, machdep->machspec->exception_functions[i])) {
 				eframe_check = 8;
 				break;
 			}
