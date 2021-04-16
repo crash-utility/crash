@@ -1125,17 +1125,18 @@ arm_lpae_vtop(ulong vaddr, ulong *pgd, physaddr_t *paddr, int verbose)
 	pmd_t pmd_pte;
 	pte_t pte;
 
-	if (!vt->vmalloc_start) {
-		*paddr = LPAE_VTOP(vaddr);
-		return TRUE;
-	}
-
-	if (!IS_VMALLOC_ADDR(vaddr)) {
-		*paddr = LPAE_VTOP(vaddr);
-		if (!verbose)
+	if (IS_KVADDR(vaddr)) {
+		if (!vt->vmalloc_start) {
+			*paddr = LPAE_VTOP(vaddr);
 			return TRUE;
-	}
+		}
 
+		if (!IS_VMALLOC_ADDR(vaddr)) {
+			*paddr = LPAE_VTOP(vaddr);
+			if (!verbose)
+				return TRUE;
+		}
+	}
 
 	if (verbose)
 		fprintf(fp, "PAGE DIRECTORY: %lx\n", (ulong)pgd);
