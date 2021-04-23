@@ -6488,7 +6488,7 @@ void mips64_dump_machdep_table(ulong);
 #define display_idt_table() \
 	error(FATAL, "-d option is not applicable to MIPS64 architecture\n")
 
-/* from arch/mips/include/uapi/asm/ptrace.h */
+/* from arch/mips/include/asm/ptrace.h */
 struct mips64_register {
 	ulong regs[45];
 };

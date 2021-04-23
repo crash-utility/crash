@@ -1700,7 +1700,7 @@ dump_note_offsets(FILE *fp)
 			qemu = FALSE;
 			if (machine_type("X86_64") || machine_type("S390X") ||
 			    machine_type("ARM64") || machine_type("PPC64") ||
-			    machine_type("SPARC64")) {
+			    machine_type("SPARC64") || machine_type("MIPS64")) {
 				note64 = (void *)dd->notes_buf + tot;
 				len = sizeof(Elf64_Nhdr);
 				if (STRNEQ((char *)note64 + len, "QEMU"))
