@@ -1160,6 +1160,9 @@ mips64_dump_machdep_table(ulong arg)
 	fprintf(fp, "       is_task_addr: mips64_is_task_addr()\n");
 	fprintf(fp, "      verify_symbol: mips64_verify_symbol()\n");
 	fprintf(fp, "         dis_filter: generic_dis_filter()\n");
+	fprintf(fp, "           dump_irq: generic_dump_irq()\n");
+	fprintf(fp, "    show_interrupts: generic_show_interrupts()\n");
+	fprintf(fp, "   get_irq_affinity: generic_get_irq_affinity()\n");
 	fprintf(fp, "           cmd_mach: mips64_cmd_mach()\n");
 	fprintf(fp, "       get_smp_cpus: mips64_get_smp_cpus()\n");
 	fprintf(fp, "          is_kvaddr: generic_is_kvaddr()\n");
@@ -1246,6 +1249,9 @@ mips64_init(int when)
 		machdep->is_task_addr = mips64_is_task_addr;
 		machdep->get_smp_cpus = mips64_get_smp_cpus;
 		machdep->dis_filter = generic_dis_filter;
+		machdep->dump_irq = generic_dump_irq;
+		machdep->show_interrupts = generic_show_interrupts;
+		machdep->get_irq_affinity = generic_get_irq_affinity;
 		machdep->value_to_symbol = generic_machdep_value_to_symbol;
 		machdep->init_kernel_pgd = NULL;
 		break;
@@ -1257,6 +1263,14 @@ mips64_init(int when)
 		mips64_stackframe_init();
 		if (!machdep->hz)
 			machdep->hz = 250;
+
+		if (symbol_exists("irq_desc"))
+			ARRAY_LENGTH_INIT(machdep->nr_irqs, irq_desc,
+					  "irq_desc", NULL, 0);
+		else if (kernel_symbol_exists("nr_irqs"))
+			get_symbol_data("nr_irqs", sizeof(unsigned int),
+				&machdep->nr_irqs);
+
 		MEMBER_OFFSET_INIT(elf_prstatus_pr_reg, "elf_prstatus",
 				   "pr_reg");
 		STRUCT_SIZE_INIT(note_buf, "note_buf_t");

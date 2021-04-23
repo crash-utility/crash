@@ -1126,8 +1126,14 @@ mips_init(int when)
 		machdep->get_irq_affinity = generic_get_irq_affinity;
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
-		ARRAY_LENGTH_INIT(machdep->nr_irqs, irq_desc,
-			"irq_desc", NULL, 0);
+
+		if (symbol_exists("irq_desc"))
+			ARRAY_LENGTH_INIT(machdep->nr_irqs, irq_desc,
+					  "irq_desc", NULL, 0);
+		else if (kernel_symbol_exists("nr_irqs"))
+			get_symbol_data("nr_irqs", sizeof(unsigned int),
+					&machdep->nr_irqs);
+
 		mips_stackframe_init();
 
 		if (!machdep->hz)
