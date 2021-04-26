@@ -432,6 +432,29 @@ task_init(void)
 			    	    "cfq_slice_async exists: setting hz to %d\n", 
 					machdep->hz);
 		}
+	} else if ((symbol_exists("dd_init_queue") &&
+	    gdb_set_crash_scope(symbol_value("dd_init_queue"), "dd_init_queue")) ||
+	    (symbol_exists("deadline_init_queue") &&
+	    gdb_set_crash_scope(symbol_value("deadline_init_queue"), "deadline_init_queue"))) {
+		char buf[BUFSIZE];
+		uint write_expire = 0;
+
+		open_tmpfile();
+		sprintf(buf, "printf \"%%d\", write_expire");
+		if (gdb_pass_through(buf, pc->tmpfile, GNU_RETURN_ON_ERROR)) {
+			rewind(pc->tmpfile);
+			if (fgets(buf, BUFSIZE, pc->tmpfile))
+				sscanf(buf, "%d", &write_expire);
+		}
+		close_tmpfile();
+
+		if (write_expire) {
+			machdep->hz = write_expire / 5;
+			if (CRASHDEBUG(2))
+				fprintf(fp, "write_expire exists: setting hz to %d\n",
+					machdep->hz);
+		}
+		gdb_set_crash_scope(0, NULL);
 	}
 
 	if (VALID_MEMBER(runqueue_arrays)) 
