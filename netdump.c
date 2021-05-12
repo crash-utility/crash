@@ -1927,6 +1927,12 @@ vmcoreinfo_read_string(const char *key)
 			pc->read_vmcoreinfo = no_vmcoreinfo;
 			return value;
 		}
+		if (STREQ(key, "NUMBER(tcr_el1_t1sz)") && nd->arch_data2) {
+			value = calloc(VADDR_PRLEN+1, sizeof(char));
+			sprintf(value, "%lld", ((ulonglong)nd->arch_data2 >> 32) & 0xffffffff);
+			pc->read_vmcoreinfo = no_vmcoreinfo;
+			return value;
+		}
 		if (STREQ(key, "relocate") && nd->arch_data1) {
 			value = calloc(VADDR_PRLEN+1, sizeof(char));
 			sprintf(value, "%lx", nd->arch_data1);
