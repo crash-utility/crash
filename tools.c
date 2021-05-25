@@ -3343,6 +3343,7 @@ void
 cmd_list(void)
 {
 	int c;
+	long head_member_offset = 0; /* offset for head like denty.d_subdirs */
 	struct list_data list_data, *ld;
 	struct datatype_member struct_member, *sm;
 	struct syment *sp;
@@ -3353,7 +3354,7 @@ cmd_list(void)
 	BZERO(ld, sizeof(struct list_data));
 	struct_list_offset = 0;
 
-	while ((c = getopt(argcnt, args, "BHhrs:S:e:o:xdl:")) != EOF) {
+	while ((c = getopt(argcnt, args, "BHhrs:S:e:o:O:xdl:")) != EOF) {
                 switch(c)
 		{
 		case 'B':
@@ -3392,6 +3393,20 @@ cmd_list(void)
 			else
 				error(FATAL, "invalid -l option: %s\n", 
 					optarg);
+			break;
+
+		case 'O':
+			if (ld->flags & LIST_HEAD_OFFSET_ENTERED)
+				error(FATAL, "offset value %d (0x%lx) already entered\n",
+					head_member_offset, head_member_offset);
+			else if (IS_A_NUMBER(optarg))
+				head_member_offset = stol(optarg, FAULT_ON_ERROR, NULL);
+			else if (arg_to_datatype(optarg, sm, RETURN_ON_ERROR) > 1)
+				head_member_offset = sm->member_offset;
+			else
+				error(FATAL, "invalid -O argument: %s\n", optarg);
+
+			ld->flags |= LIST_HEAD_OFFSET_ENTERED;
 			break;
 
 		case 'o':
@@ -3599,8 +3614,19 @@ next_arg:
 				fprintf(fp, "(empty)\n");
 				return;
 			}
-		} else
-			ld->start += ld->list_head_offset;
+		} else {
+			if (ld->flags & LIST_HEAD_OFFSET_ENTERED) {
+				if (!ld->end)
+					ld->end = ld->start + head_member_offset;
+				readmem(ld->start + head_member_offset, KVADDR, &ld->start,
+					sizeof(void *), "LIST_HEAD contents", FAULT_ON_ERROR);
+				if (ld->start == ld->end) {
+					fprintf(fp, "(empty)\n");
+					return;
+				}
+			} else
+				ld->start += ld->list_head_offset;
+		}
 	}
 
 	ld->flags &= ~(LIST_OFFSET_ENTERED|LIST_START_ENTERED);

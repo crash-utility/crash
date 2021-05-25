@@ -2613,6 +2613,7 @@ struct list_data {             /* generic structure used by do_list() to walk */
 #define LIST_PARSE_MEMBER   (VERBOSE << 13)
 #define LIST_READ_MEMBER    (VERBOSE << 14)
 #define LIST_BRENT_ALGO     (VERBOSE << 15)
+#define LIST_HEAD_OFFSET_ENTERED  (VERBOSE << 16)
 
 struct tree_data {
 	ulong flags;
