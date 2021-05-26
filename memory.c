@@ -17270,12 +17270,13 @@ nr_to_section(ulong nr)
  *      which results in PFN_SECTION_SHIFT equal 6.
  * To sum it up, at least 6 bits are available.
  */
-#define SECTION_MARKED_PRESENT	(1UL<<0)
-#define SECTION_HAS_MEM_MAP	(1UL<<1)
-#define SECTION_IS_ONLINE	(1UL<<2)
-#define SECTION_IS_EARLY	(1UL<<3)
-#define SECTION_MAP_LAST_BIT	(1UL<<4)
-#define SECTION_MAP_MASK	(~(SECTION_MAP_LAST_BIT-1))
+#define SECTION_MARKED_PRESENT		(1UL<<0)
+#define SECTION_HAS_MEM_MAP		(1UL<<1)
+#define SECTION_IS_ONLINE		(1UL<<2)
+#define SECTION_IS_EARLY		(1UL<<3)
+#define SECTION_TAINT_ZONE_DEVICE	(1UL<<4)
+#define SECTION_MAP_LAST_BIT		(1UL<<5)
+#define SECTION_MAP_MASK		(~(SECTION_MAP_LAST_BIT-1))
 
 
 int 
@@ -17373,6 +17374,8 @@ fill_mem_section_state(ulong state, char *buf)
 		bufidx += sprintf(buf + bufidx, "%s", "O");
 	if (state & SECTION_IS_EARLY)
 		bufidx += sprintf(buf + bufidx, "%s", "E");
+	if (state & SECTION_TAINT_ZONE_DEVICE)
+		bufidx += sprintf(buf + bufidx, "%s", "D");
 }
 
 void 
