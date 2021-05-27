@@ -20,6 +20,7 @@
 #include <sys/mman.h>
 #include <ctype.h>
 #include <netinet/in.h>
+#include <byteswap.h>
 
 struct meminfo {           /* general purpose memory information structure */
         ulong cache;       /* used by the various memory searching/dumping */
@@ -19336,10 +19337,14 @@ count_free_objects(struct meminfo *si, ulong freelist)
 static ulong
 freelist_ptr(struct meminfo *si, ulong ptr, ulong ptr_addr)
 {
-	if (VALID_MEMBER(kmem_cache_random))
+	if (VALID_MEMBER(kmem_cache_random)) {
 		/* CONFIG_SLAB_FREELIST_HARDENED */
+
+		if (THIS_KERNEL_VERSION >= LINUX(5,7,0))
+			ptr_addr = (sizeof(long) == 8) ? bswap_64(ptr_addr)
+						       : bswap_32(ptr_addr);
 		return (ptr ^ si->random ^ ptr_addr);
-	else
+	} else
 		return ptr;
 }
 
