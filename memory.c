@@ -17568,13 +17568,13 @@ print_memory_block(ulong memory_block)
 
 	if (MEMBER_EXISTS("memory_block", "nid")) {
 		readmem(memory_block + OFFSET(memory_block_nid), KVADDR, &nid,
-			sizeof(void *), "memory_block nid", FAULT_ON_ERROR);
+			sizeof(int), "memory_block nid", FAULT_ON_ERROR);
 		fprintf(fp, " %s %s %s %s  %s %s\n",
 			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX,
 			MKSTR(memory_block)),
 			mkstring(buf2, 12, CENTER, name),
 			parangebuf,
-			mkstring(buf5, strlen("NODE"), CENTER|LONG_DEC,
+			mkstring(buf5, strlen("NODE"), CENTER|INT_DEC,
 			MKSTR(nid)),
 			mkstring(buf6, strlen("OFFLINE"), LJUST,
 			statebuf),
