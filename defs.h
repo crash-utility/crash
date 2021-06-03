@@ -2997,7 +2997,7 @@ typedef struct QEMUCPUState QEMUCPUState;
 #define __swp_type(entry)	SWP_TYPE(entry)
 #define __swp_offset(entry)	SWP_OFFSET(entry)
 
-#define TIF_SIGPENDING		(2)
+#define TIF_SIGPENDING		(THIS_KERNEL_VERSION >= LINUX(2,6,23) ? 0 : 2)
 
 #define _SECTION_SIZE_BITS	28
 #define _MAX_PHYSMEM_BITS	32
@@ -3377,7 +3377,7 @@ struct arm64_stackframe {
 #define __swp_type(entry)	SWP_TYPE(entry)
 #define __swp_offset(entry)	SWP_OFFSET(entry)
 
-#define TIF_SIGPENDING		(2)
+#define TIF_SIGPENDING		(THIS_KERNEL_VERSION >= LINUX(2,6,23) ? 1 : 2)
 
 #define _SECTION_SIZE_BITS	26
 #define _MAX_PHYSMEM_BITS	32
@@ -3416,7 +3416,7 @@ struct arm64_stackframe {
 #define __swp_type(entry)       SWP_TYPE(entry)
 #define __swp_offset(entry)     SWP_OFFSET(entry)
 
-#define TIF_SIGPENDING          (2)
+#define TIF_SIGPENDING          (THIS_KERNEL_VERSION >= LINUX(2,6,23) ? 1 : 2)
 
 #define _SECTION_SIZE_BITS      28
 #define _MAX_PHYSMEM_BITS       48
@@ -3884,7 +3884,7 @@ struct machine_specific {
 #define __swp_type(entry)   SWP_TYPE(entry)
 #define __swp_offset(entry) SWP_OFFSET(entry)
 
-#define TIF_SIGPENDING (2)
+#define TIF_SIGPENDING (THIS_KERNEL_VERSION >= LINUX(2,6,23) ? 1 : 2)
 
 #define _SECTION_SIZE_BITS	24
 #define _MAX_PHYSMEM_BITS	44
@@ -4079,7 +4079,7 @@ struct efi_memory_desc_t {
 #define __swp_type(entry)    ((entry >> 2) & 0x7f)
 #define __swp_offset(entry)  ((entry << 1) >> 10)
 
-#define TIF_SIGPENDING (1)
+#define TIF_SIGPENDING (THIS_KERNEL_VERSION >= LINUX(2,6,23) ? 0 : 1)
 
 #define KERNEL_TR_PAGE_SIZE (1 << _PAGE_SIZE_64M)
 #define KERNEL_TR_PAGE_MASK (~(KERNEL_TR_PAGE_SIZE - 1))
@@ -4219,7 +4219,7 @@ struct efi_memory_desc_t {
 #define PTE_RPN_MASK    (machdep->machspec->pte_rpn_mask)
 #define PTE_RPN_SHIFT   (machdep->machspec->pte_rpn_shift)
 
-#define TIF_SIGPENDING (2)
+#define TIF_SIGPENDING (THIS_KERNEL_VERSION >= LINUX(2,6,23) ? 1 : 2)
 
 #define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
 #define SWP_OFFSET(entry) ((entry) >> 8)
@@ -4259,7 +4259,7 @@ struct efi_memory_desc_t {
 #define __swp_type(entry)   SWP_TYPE(entry)
 #define __swp_offset(entry) SWP_OFFSET(entry)
 
-#define TIF_SIGPENDING (2)
+#define TIF_SIGPENDING (THIS_KERNEL_VERSION >= LINUX(3,16,0) ? 1 : 2)
 
 #define _SECTION_SIZE_BITS	25
 #define _MAX_PHYSMEM_BITS	31
@@ -4284,7 +4284,7 @@ struct efi_memory_desc_t {
 #define __swp_type(entry)  SWP_TYPE(entry)
 #define __swp_offset(entry) SWP_OFFSET(entry)
 
-#define TIF_SIGPENDING (2)
+#define TIF_SIGPENDING (THIS_KERNEL_VERSION >= LINUX(3,16,0) ? 1 : 2)
 
 #define _SECTION_SIZE_BITS	28
 #define _MAX_PHYSMEM_BITS_OLD	42
