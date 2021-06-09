@@ -35,7 +35,7 @@ all:
           if [ -f "$(GIT)" ]; \
           then \
              if [ -n "$(EPPIC_GIT_URL)" ]; then \
-               git clone "$(EPPIC_GIT_URL)" eppic; \
+               git clone $(EPPIC_GIT_URL) eppic; \
              else \
 	          if ping -c 1 -W 5 github.com >/dev/null ; then \
 		    git clone https://github.com/lucchouina/eppic.git eppic; \
