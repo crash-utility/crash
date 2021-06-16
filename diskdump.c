@@ -510,6 +510,27 @@ arm_kdump_header_adjust(int header_version)
 }
 #endif  /* __i386__ && (ARM || MIPS) */
 
+/*
+ * Read page descriptor.
+ */
+static int
+read_pd(int fd, off_t offset, page_desc_t *pd)
+{
+	const off_t failed = (off_t)-1;
+
+	if (FLAT_FORMAT()) {
+		if (!read_flattened_format(fd, offset, pd, sizeof(*pd)))
+			return READ_ERROR;
+	} else {
+		if (lseek(fd, offset, SEEK_SET) == failed)
+			return SEEK_ERROR;
+		if (read(fd, pd, sizeof(*pd)) != sizeof(*pd))
+			return READ_ERROR;
+	}
+
+	return 0;
+}
+
 static int 
 read_dump_header(char *file)
 {
@@ -1130,15 +1151,9 @@ cache_page(physaddr_t paddr)
 			+ (off_t)(desc_pos - 1)*sizeof(page_desc_t);
 
 	/* read page descriptor */
-	if (FLAT_FORMAT()) {
-		if (!read_flattened_format(dd->dfd, seek_offset, &pd, sizeof(pd)))
-			return READ_ERROR;
-	} else {
-		if (lseek(dd->dfd, seek_offset, SEEK_SET) == failed)
-			return SEEK_ERROR;
-		if (read(dd->dfd, &pd, sizeof(pd)) != sizeof(pd))
-			return READ_ERROR;
-	}
+	ret = read_pd(dd->dfd, seek_offset, &pd);
+	if (ret)
+		return ret;
 
 	/* sanity check */
 	if (pd.size > block_size)
