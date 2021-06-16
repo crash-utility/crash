@@ -819,10 +819,9 @@ read_netdump(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 		read_ret = read(nd->ndfd, bufptr, cnt);
 		if (read_ret != cnt) {
 			/*
-	 		 *  If the incomplete flag has been set in the header, 
-			 *  first check whether zero_excluded has been set.
+			 *  First check whether zero_excluded has been set.
 			 */
-			if (is_incomplete_dump() && (read_ret >= 0) &&
+			if ((read_ret >= 0) &&
 			    (*diskdump_flags & ZERO_EXCLUDED)) {
 				if (CRASHDEBUG(8))
 					fprintf(fp, "read_netdump: zero-fill: "
