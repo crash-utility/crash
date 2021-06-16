@@ -2213,6 +2213,7 @@ accessible(ulong kva)
 #define READ_ERRMSG      "read error: %s address: %llx  type: \"%s\"\n"
 #define WRITE_ERRMSG     "write error: %s address: %llx  type: \"%s\"\n"
 #define PAGE_EXCLUDED_ERRMSG  "page excluded: %s address: %llx  type: \"%s\"\n"
+#define PAGE_INCOMPLETE_ERRMSG  "page incomplete: %s address: %llx  type: \"%s\"\n"
 
 #define RETURN_ON_PARTIAL_READ() \
 	if ((error_handle & RETURN_PARTIAL) && (size < orig_size)) {		\
@@ -2377,6 +2378,12 @@ readmem(ulonglong addr, int memtype, void *buffer, long size,
                         if (PRINT_ERROR_MESSAGE)
                         	error(INFO, PAGE_EXCLUDED_ERRMSG, memtype_string(memtype, 0), addr, type);
                         goto readmem_error;
+
+		case PAGE_INCOMPLETE:
+			RETURN_ON_PARTIAL_READ();
+			if (PRINT_ERROR_MESSAGE)
+				error(INFO, PAGE_INCOMPLETE_ERRMSG, memtype_string(memtype, 0), addr, type);
+			goto readmem_error;
 
 		default:
 			break;

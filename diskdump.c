@@ -1146,10 +1146,9 @@ cache_page(physaddr_t paddr)
 	if (FLAT_FORMAT()) {
 		if (!read_flattened_format(dd->dfd, pd.offset, dd->compressed_page, pd.size))
 			return READ_ERROR;
-	} else if (is_incomplete_dump() && (0 == pd.offset)) {
+	} else if (0 == pd.offset) {
 		/*
-		 *  If the incomplete flag has been set in the header, 
-		 *  first check whether zero_excluded has been set.
+		 *  First check whether zero_excluded has been set.
 		 */
 		if (*diskdump_flags & ZERO_EXCLUDED) {
 			if (CRASHDEBUG(8))
@@ -1158,8 +1157,15 @@ cache_page(physaddr_t paddr)
 				    "paddr/pfn: %llx/%lx\n", 
 					(ulonglong)paddr, pfn);
 			memset(dd->compressed_page, 0, dd->block_size);
-		} else
-			return READ_ERROR;
+		} else {
+			if (CRASHDEBUG(8))
+				fprintf(fp,
+					"read_diskdump/cache_page: "
+					"descriptor with zero offset found at "
+					"paddr/pfn/pos: %llx/%lx/%lx\n",
+					(ulonglong)paddr, pfn, desc_pos);
+			return PAGE_INCOMPLETE;
+		}
 	} else {
 		if (lseek(dd->dfd, pd.offset, SEEK_SET) == failed)
 			return SEEK_ERROR;

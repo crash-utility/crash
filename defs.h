@@ -361,6 +361,7 @@ struct number_option {
 #define READ_ERROR       (-2)
 #define WRITE_ERROR      (-3)
 #define PAGE_EXCLUDED    (-4)
+#define PAGE_INCOMPLETE  (-5)
 
 #define RESTART()         (longjmp(pc->main_loop_env, 1))
 #define RESUME_FOREACH()  (longjmp(pc->foreach_loop_env, 1))
