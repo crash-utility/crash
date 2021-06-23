@@ -615,7 +615,15 @@ kernel_init()
 		kt->flags |= TVEC_BASES_V1;
 
         STRUCT_SIZE_INIT(__wait_queue, "__wait_queue");
-        if (VALID_STRUCT(__wait_queue)) {
+	STRUCT_SIZE_INIT(wait_queue_entry, "wait_queue_entry");
+	if (VALID_STRUCT(wait_queue_entry)) {
+		MEMBER_OFFSET_INIT(wait_queue_entry_private,
+			"wait_queue_entry", "private");
+		MEMBER_OFFSET_INIT(wait_queue_head_head,
+			"wait_queue_head", "head");
+		MEMBER_OFFSET_INIT(wait_queue_entry_entry,
+			"wait_queue_entry", "entry");
+	} else if (VALID_STRUCT(__wait_queue)) {
 		if (MEMBER_EXISTS("__wait_queue", "task"))
 			MEMBER_OFFSET_INIT(__wait_queue_task,
 				"__wait_queue", "task");
@@ -9367,9 +9375,9 @@ dump_waitq(ulong wq, char *wq_name)
 	struct list_data list_data, *ld;
 	ulong *wq_list;			/* addr of wait queue element */
 	ulong next_offset;		/* next pointer of wq element */
-	ulong task_offset;		/* offset of task in wq element */
+	ulong task_offset = 0;		/* offset of task in wq element */
 	int cnt;			/* # elems on Queue */
-	int start_index;		/* where to start in wq array */
+	int start_index = -1;		/* where to start in wq array */
 	int i;
 
 	ld = &list_data;
@@ -9398,8 +9406,19 @@ dump_waitq(ulong wq, char *wq_name)
                 ld->member_offset = next_offset;
 
 		start_index = 1;
+	} else if (VALID_STRUCT(wait_queue_entry)) {
+		ulong head_offset;
+
+		next_offset = OFFSET(list_head_next);
+		task_offset = OFFSET(wait_queue_entry_private);
+		head_offset = OFFSET(wait_queue_head_head);
+		ld->end = ld->start = wq + head_offset + next_offset;
+		ld->list_head_offset = OFFSET(wait_queue_entry_entry);
+		ld->member_offset = next_offset;
+
+		start_index = 1;
 	} else {
-		return;
+		error(FATAL, "cannot determine wait queue structures\n");
 	}
 
 	hq_open();

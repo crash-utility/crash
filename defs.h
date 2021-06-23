@@ -2138,6 +2138,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long atomic_long_t_counter;
 	long block_device_bd_device;
 	long block_device_bd_stats;
+	long wait_queue_entry_private;
+	long wait_queue_head_head;
+	long wait_queue_entry_entry;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2300,6 +2303,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long printk_info;
 	long printk_ringbuffer;
 	long prb_desc;
+	long wait_queue_entry;
 };
 
 struct array_table {

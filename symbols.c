@@ -9817,7 +9817,13 @@ dump_offset_table(char *spec, ulong makestruct)
         	OFFSET(__wait_queue_head_task_list));
         fprintf(fp, "        __wait_queue_task_list: %ld\n", 
         	OFFSET(__wait_queue_task_list));
- 
+	fprintf(fp, "      wait_queue_entry_private: %ld\n",
+		OFFSET(wait_queue_entry_private));
+	fprintf(fp, "          wait_queue_head_head: %ld\n",
+		OFFSET(wait_queue_head_head));
+	fprintf(fp, "        wait_queue_entry_entry: %ld\n",
+		OFFSET(wait_queue_entry_entry));
+
 	fprintf(fp, "        pglist_data_node_zones: %ld\n",
 		OFFSET(pglist_data_node_zones));
 	fprintf(fp, "      pglist_data_node_mem_map: %ld\n",
@@ -10717,6 +10723,8 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "                    wait_queue: %ld\n", SIZE(wait_queue));
 	fprintf(fp, "                  __wait_queue: %ld\n", 
 		SIZE(__wait_queue));
+	fprintf(fp, "              wait_queue_entry: %ld\n",
+		SIZE(wait_queue_entry));
 	fprintf(fp, "                        device: %ld\n", SIZE(device));
 	fprintf(fp, "                    net_device: %ld\n", SIZE(net_device));
 
