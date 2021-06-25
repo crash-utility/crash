@@ -95,6 +95,7 @@ static ulong __dump_audit(char *);
 static void dump_audit(void);
 static char *vmcoreinfo_read_string(const char *);
 static void check_vmcoreinfo(void);
+static int is_pvops_xen(void);
 
 
 /*
@@ -109,7 +110,6 @@ kernel_init()
 	char *rqstruct;
 	char *rq_timestamp_name = NULL;
 	char *irq_desc_type_name;	
-	ulong pv_init_ops;
 	struct gnu_request req;
 
 	if (pc->flags & KERNEL_DEBUG_QUERY)
@@ -169,11 +169,7 @@ kernel_init()
                        	error(FATAL, "cannot malloc m2p page.");
 	}
 
-	if (PVOPS() && symbol_exists("pv_init_ops") &&
-	    readmem(symbol_value("pv_init_ops"), KVADDR, &pv_init_ops,
-	    sizeof(void *), "pv_init_ops", RETURN_ON_ERROR) &&
-	    ((p1 = value_symbol(pv_init_ops)) &&
-	    (STREQ(p1, "xen_patch") || STREQ(p1, "paravirt_patch_default")))) {
+	if (is_pvops_xen()) {
 		kt->flags |= ARCH_XEN | ARCH_PVOPS_XEN;
 		kt->xen_flags |= WRITABLE_PAGE_TABLES;
 		if (machine_type("X86"))
@@ -10707,6 +10703,32 @@ paravirt_init(void)
 			error(INFO, "pv_ops exists: ARCH_PVOPS\n");
 		kt->flags |= ARCH_PVOPS;
 	}
+}
+
+static int
+is_pvops_xen(void)
+{
+	ulong addr;
+	char *sym;
+
+	if (!PVOPS())
+		return FALSE;
+
+	if (symbol_exists("pv_init_ops") &&
+	    readmem(symbol_value("pv_init_ops"), KVADDR, &addr,
+	    sizeof(void *), "pv_init_ops", RETURN_ON_ERROR) &&
+	    (sym = value_symbol(addr)) &&
+	    (STREQ(sym, "xen_patch") ||
+	     STREQ(sym, "paravirt_patch_default")))
+		return TRUE;
+
+	if (symbol_exists("xen_start_info") &&
+	    readmem(symbol_value("xen_start_info"), KVADDR, &addr,
+	    sizeof(void *), "xen_start_info", RETURN_ON_ERROR) &&
+	    addr != 0)
+		return TRUE;
+
+	return FALSE;
 }
 
 /*
