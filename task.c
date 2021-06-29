@@ -297,6 +297,11 @@ task_init(void)
 	}
 
         MEMBER_OFFSET_INIT(task_struct_state, "task_struct", "state");
+	MEMBER_SIZE_INIT(task_struct_state, "task_struct", "state");
+	if (INVALID_MEMBER(task_struct_state)) {
+		MEMBER_OFFSET_INIT(task_struct_state, "task_struct", "__state");
+		MEMBER_SIZE_INIT(task_struct_state, "task_struct", "__state");
+	}
         MEMBER_OFFSET_INIT(task_struct_exit_state, "task_struct", "exit_state");
         MEMBER_OFFSET_INIT(task_struct_pid, "task_struct", "pid");
         MEMBER_OFFSET_INIT(task_struct_comm, "task_struct", "comm");
@@ -5926,7 +5931,10 @@ task_state(ulong task)
 	if (!tt->last_task_read)
 		return 0;
 
-	state = ULONG(tt->task_struct + OFFSET(task_struct_state));
+	if (SIZE(task_struct_state) == sizeof(ulong))
+		state = ULONG(tt->task_struct + OFFSET(task_struct_state));
+	else
+		state = UINT(tt->task_struct + OFFSET(task_struct_state));
 	exit_state = VALID_MEMBER(task_struct_exit_state) ?
 		ULONG(tt->task_struct + OFFSET(task_struct_exit_state)) : 0;
 

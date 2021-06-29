@@ -2304,6 +2304,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long printk_ringbuffer;
 	long prb_desc;
 	long wait_queue_entry;
+	long task_struct_state;
 };
 
 struct array_table {
