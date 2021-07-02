@@ -217,10 +217,12 @@ arm64_init(int when)
 		arm64_calc_VA_BITS();
 		arm64_calc_KERNELPACMASK();
 		ms = machdep->machspec;
+
+		/* vabits_actual introduced after mm flip, so it should be flipped layout */
 		if (ms->VA_BITS_ACTUAL) {
-			ms->page_offset = ARM64_PAGE_OFFSET_ACTUAL;
-			machdep->identity_map_base = ARM64_PAGE_OFFSET_ACTUAL;
-			machdep->kvbase = ARM64_PAGE_OFFSET_ACTUAL;
+			ms->page_offset = ARM64_FLIP_PAGE_OFFSET_ACTUAL;
+			machdep->identity_map_base = ARM64_FLIP_PAGE_OFFSET_ACTUAL;
+			machdep->kvbase = ARM64_FLIP_PAGE_OFFSET_ACTUAL;
 			ms->userspace_top = ARM64_USERSPACE_TOP_ACTUAL;
 		} else {
 			ms->page_offset = ARM64_PAGE_OFFSET;
@@ -401,7 +403,7 @@ arm64_init(int when)
 				fprintf(fp, "CONFIG_ARM64_VA_BITS: %ld\n", ms->CONFIG_ARM64_VA_BITS);
 				fprintf(fp, "      VA_BITS_ACTUAL: %ld\n", ms->VA_BITS_ACTUAL);
 				fprintf(fp, "(calculated) VA_BITS: %ld\n", ms->VA_BITS);
-				fprintf(fp, " PAGE_OFFSET: %lx\n", ARM64_PAGE_OFFSET_ACTUAL);
+				fprintf(fp, " PAGE_OFFSET: %lx\n", ARM64_FLIP_PAGE_OFFSET_ACTUAL);
 				fprintf(fp, "    VA_START: %lx\n", ms->VA_START);
 				fprintf(fp, "     modules: %lx - %lx\n", ms->modules_vaddr, ms->modules_end);
 				fprintf(fp, "     vmalloc: %lx - %lx\n", ms->vmalloc_start_addr, ms->vmalloc_end);

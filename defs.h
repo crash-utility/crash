@@ -3233,7 +3233,8 @@ typedef signed int s32;
 
 #define ARM64_PAGE_OFFSET    ((0xffffffffffffffffUL) \
 					<< (machdep->machspec->VA_BITS - 1))
-#define ARM64_PAGE_OFFSET_ACTUAL ((0xffffffffffffffffUL) \
+/* kernels >= v5.4 the kernel VA space is flipped */
+#define ARM64_FLIP_PAGE_OFFSET_ACTUAL ((0xffffffffffffffffUL) \
 					- ((1UL) << machdep->machspec->VA_BITS_ACTUAL) + 1)
 
 #define ARM64_USERSPACE_TOP  ((1UL) << machdep->machspec->VA_BITS)
