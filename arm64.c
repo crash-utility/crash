@@ -563,6 +563,10 @@ arm64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sMACHDEP_BT_TEXT", others++ ? "|" : "");
 	if (machdep->flags & NEW_VMEMMAP)
 		fprintf(fp, "%sNEW_VMEMMAP", others++ ? "|" : "");
+	if (machdep->flags & FLIPPED_VM)
+		fprintf(fp, "%sFLIPPED_VM", others++ ? "|" : "");
+	if (machdep->flags & HAS_PHYSVIRT_OFFSET)
+		fprintf(fp, "%sHAS_PHYSVIRT_OFFSET", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "              kvbase: %lx\n", machdep->kvbase);
@@ -997,6 +1001,7 @@ arm64_calc_physvirt_offset(void)
 		if (READMEM(pc->mfd, &physvirt_offset, sizeof(physvirt_offset),
 			sp->value, sp->value -
 			machdep->machspec->kimage_voffset) > 0) {
+				machdep->flags |= HAS_PHYSVIRT_OFFSET;
 				ms->physvirt_offset = physvirt_offset;
 		}
 	}
@@ -3963,6 +3968,11 @@ arm64_calc_VA_BITS(void)
 				error(FATAL, "cannot determine VA_BITS_ACTUAL\n");
 		}
 
+		/*
+		 * The mm flip commit is introduced before 52-bits VA, which is before the
+		 * commit to export NUMBER(TCR_EL1_T1SZ)
+		 */
+		machdep->flags |= FLIPPED_VM;
 		return;
 	}
 

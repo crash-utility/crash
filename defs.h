@@ -3214,6 +3214,8 @@ typedef signed int s32;
 #define NEW_VMEMMAP   (0x80)
 #define VM_L4_4K      (0x100)
 #define UNW_4_14      (0x200)
+#define FLIPPED_VM    (0x400)
+#define HAS_PHYSVIRT_OFFSET (0x800)
 
 /*
  * Get kimage_voffset from /dev/crash
