@@ -220,9 +220,10 @@ arm64_init(int when)
 
 		/* vabits_actual introduced after mm flip, so it should be flipped layout */
 		if (ms->VA_BITS_ACTUAL) {
-			ms->page_offset = ARM64_FLIP_PAGE_OFFSET_ACTUAL;
-			machdep->identity_map_base = ARM64_FLIP_PAGE_OFFSET_ACTUAL;
-			machdep->kvbase = ARM64_FLIP_PAGE_OFFSET_ACTUAL;
+			ms->page_offset = ARM64_FLIP_PAGE_OFFSET;
+			/* useless on arm64 */
+			machdep->identity_map_base = ARM64_FLIP_PAGE_OFFSET;
+			machdep->kvbase = ARM64_FLIP_PAGE_OFFSET;
 			ms->userspace_top = ARM64_USERSPACE_TOP_ACTUAL;
 		} else {
 			ms->page_offset = ARM64_PAGE_OFFSET;
