@@ -994,8 +994,6 @@ arm64_calc_physvirt_offset(void)
 	ulong physvirt_offset;
 	struct syment *sp;
 
-	ms->physvirt_offset = ms->phys_offset - ms->page_offset;
-
 	if ((sp = kernel_symbol_search("physvirt_offset")) &&
 			machdep->machspec->kimage_voffset) {
 		if (READMEM(pc->mfd, &physvirt_offset, sizeof(physvirt_offset),
@@ -1003,8 +1001,13 @@ arm64_calc_physvirt_offset(void)
 			machdep->machspec->kimage_voffset) > 0) {
 				machdep->flags |= HAS_PHYSVIRT_OFFSET;
 				ms->physvirt_offset = physvirt_offset;
+				return;
 		}
 	}
+
+	/* Useless if no symbol 'physvirt_offset', just keep semantics */
+	ms->physvirt_offset = ms->phys_offset - ms->page_offset;
+
 }
 
 static void
@@ -1051,6 +1054,7 @@ arm64_calc_phys_offset(void)
 			if (READMEM(pc->mfd, &phys_offset, sizeof(phys_offset),
 			    vaddr, paddr) > 0) {
 				ms->phys_offset = phys_offset;
+
 				return;
 			}
 		}
@@ -1178,6 +1182,21 @@ arm64_init_kernel_pgd(void)
                 vt->kernel_pgd[i] = value;
 }
 
+ulong arm64_PTOV(ulong paddr)
+{
+	struct machine_specific *ms = machdep->machspec;
+
+	/*
+	 * Either older kernel before kernel has 'physvirt_offset' or newer
+	 * kernel which removes 'physvirt_offset' has the same formula:
+	 * #define __phys_to_virt(x)   ((unsigned long)((x) - PHYS_OFFSET) | PAGE_OFFSET)
+	 */
+	if (!(machdep->flags & HAS_PHYSVIRT_OFFSET))
+		return (paddr - ms->phys_offset) | PAGE_OFFSET;
+	else
+		return paddr - ms->physvirt_offset;
+}
+
 ulong
 arm64_VTOP(ulong addr)
 {
@@ -1188,8 +1207,18 @@ arm64_VTOP(ulong addr)
 			return addr - machdep->machspec->kimage_voffset;
 		}
 
-		if (addr >= machdep->machspec->page_offset)
-			return addr + machdep->machspec->physvirt_offset;
+		if (addr >= machdep->machspec->page_offset) {
+			if (machdep->flags & HAS_PHYSVIRT_OFFSET) {
+				return addr + machdep->machspec->physvirt_offset;
+			} else {
+				/*
+				 * Either older kernel before kernel has 'physvirt_offset' or newer
+				 * kernel which removes 'physvirt_offset' has the same formula:
+				 * #define __lm_to_phys(addr)	(((addr) & ~PAGE_OFFSET) + PHYS_OFFSET)
+				 */
+				return (addr & ~PAGE_OFFSET) + machdep->machspec->phys_offset;
+			}
+		}
 		else if (machdep->machspec->kimage_voffset)
 			return addr - machdep->machspec->kimage_voffset;
 		else /* no randomness */

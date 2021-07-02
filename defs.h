@@ -3092,11 +3092,6 @@ typedef u64 pte_t;
 #define _64BIT_
 #define MACHINE_TYPE       "ARM64"    
 
-#define PTOV(X) \
-	((unsigned long)(X) - (machdep->machspec->physvirt_offset))
-
-#define VTOP(X)               arm64_VTOP((ulong)(X))
-
 #define USERSPACE_TOP   (machdep->machspec->userspace_top)
 #define PAGE_OFFSET     (machdep->machspec->page_offset)
 #define VMALLOC_START   (machdep->machspec->vmalloc_start_addr)
@@ -3105,6 +3100,9 @@ typedef u64 pte_t;
 #define VMEMMAP_END     (machdep->machspec->vmemmap_end)
 #define MODULES_VADDR   (machdep->machspec->modules_vaddr)
 #define MODULES_END     (machdep->machspec->modules_end)
+
+#define PTOV(X)	arm64_PTOV((ulong)(X))
+#define VTOP(X)	arm64_VTOP((ulong)(X))
 
 #define IS_VMALLOC_ADDR(X)    arm64_IS_VMALLOC_ADDR((ulong)(X))
 
@@ -5910,6 +5908,7 @@ void unwind_backtrace(struct bt_info *);
 void arm64_init(int);
 void arm64_dump_machdep_table(ulong);
 ulong arm64_VTOP(ulong);
+ulong arm64_PTOV(ulong);
 int arm64_IS_VMALLOC_ADDR(ulong);
 ulong arm64_swp_type(ulong);
 ulong arm64_swp_offset(ulong);
