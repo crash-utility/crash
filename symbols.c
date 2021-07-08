@@ -4296,8 +4296,7 @@ get_line_number(ulong addr, char *buf, int reserved)
 	if (module_symbol(addr, NULL, &lm, NULL, 0)) {
 		if (!(lm->mod_flags & MOD_LOAD_SYMS))
 			return(buf);
-	} else if (kt->flags2 & KASLR)
-		addr -= (kt->relocate * -1);
+	}
 
 	if ((lnh = machdep->line_number_hooks)) {
         	name = closest_symbol(addr);

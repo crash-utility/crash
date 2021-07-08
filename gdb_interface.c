@@ -1013,8 +1013,7 @@ gdb_set_crash_scope(ulong vaddr, char *arg)
 					return FALSE;
 				}
 			}
-		} else if (kt->flags2 & KASLR)
-			vaddr -= (kt->relocate * -1);
+		}
 	}
 
 	req->command = GNU_SET_CRASH_BLOCK;

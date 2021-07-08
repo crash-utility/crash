@@ -1484,8 +1484,7 @@ list_source_code(struct gnu_request *req, int count_entered)
 		if (!(lm->mod_flags & MOD_LOAD_SYMS))
 			error(FATAL, "%s: module source code is not available\n", lm->mod_name);
 		get_line_number(req->addr, buf1, FALSE);
-	} else if (kt->flags2 & KASLR)
-		req->addr -= (kt->relocate * -1);
+	}
 
 	sprintf(buf1, "list *0x%lx", req->addr);
 	open_tmpfile();
