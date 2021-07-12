@@ -6601,7 +6601,7 @@ char *help_kmem[] = {
 "kmem",
 "kernel memory",
 "[-f|-F|-c|-C|-i|-v|-V|-n|-z|-o|-h] [-p | -m member[,member]]\n"
-"       [[-s|-S|-r] [slab] [-I slab[,slab]]] [-g [flags]] [[-P] address]]",
+"       [[-s|-S|-S=cpu[s]|-r] [slab] [-I slab[,slab]]] [-g [flags]] [[-P] address]]",
 "  This command displays information about the use of kernel memory.\n",
 "        -f  displays the contents of the system free memory headers.",
 "            also verifies that the page count equals nr_free_pages.",
@@ -6649,6 +6649,9 @@ char *help_kmem[] = {
 "            slab data for each per-cpu slab is displayed, along with the",
 "            address of each kmem_cache_node, its count of full and partial",
 "            slabs, and a list of all tracked slabs.",
+"            Note: one can specify the per-cpu slab data to be displayed;",
+"            the cpu[s] can be given as \"1,3,5\", \"1-3\", \"1,3,5-7,10\",",
+"            \"all\", or \"a\" (shortcut for \"all\").",
 "        -r  displays the accumulated basic kmalloc() slab data of each",
 "            root slab cache and its children.  The kernel must contain the",
 "            \"slab_root_caches\" list_head. (currently only available if",
