@@ -48,6 +48,7 @@ struct meminfo {           /* general purpose memory information structure */
 	int slab_offset;
         char *reqname;
 	char *curname;
+	ulong *spec_cpumask;
 	ulong *addrlist;
 	int *kmem_bufctl;
 	ulong *cpudata[NR_CPUS];
@@ -4851,10 +4852,13 @@ cmd_kmem(void)
 	struct meminfo meminfo;
 	ulonglong value[MAXARGS];
 	char buf[BUFSIZE];
+	char arg_buf[BUFSIZE];
 	char *p1;
-	int spec_addr, escape;
+	ulong *cpus;
+	int spec_addr, escape, choose_cpu;
 
-	spec_addr = 0;
+	cpus = NULL;
+	spec_addr = choose_cpu = 0;
         sflag =	Sflag = pflag = fflag = Fflag = Pflag = zflag = oflag = 0;
 	vflag = Cflag = cflag = iflag = nflag = lflag = Lflag = Vflag = 0;
 	gflag = hflag = rflag = 0;
@@ -4863,7 +4867,7 @@ cmd_kmem(void)
 	BZERO(&value[0], sizeof(ulonglong)*MAXARGS);
 	pc->curcmd_flags &= ~HEADER_PRINTED;
 
-        while ((c = getopt(argcnt, args, "gI:sSrFfm:pvczCinl:L:PVoh")) != EOF) {
+        while ((c = getopt(argcnt, args, "gI:sS::rFfm:pvczCinl:L:PVoh")) != EOF) {
                 switch(c)
 		{
 		case 'V':
@@ -4903,6 +4907,29 @@ cmd_kmem(void)
 			break;
 
 		case 'S':
+			if (choose_cpu)
+				error(FATAL, "only one -S option allowed\n");
+			/* Use the GNU extension with getopt(3) ... */
+			if (optarg) {
+				if (!(vt->flags & KMALLOC_SLUB))
+					error(FATAL,
+						"can only use -S=cpu(s) with a kernel \n"
+						"that is built with CONFIG_SLUB support.\n");
+				if (optarg[0] != '=')
+					error(FATAL,
+						"CPU-specific slab data to be displayed "
+						"must be written as expected only e.g. -S=1,45.\n");
+				/* Skip = ... */
+				optarg++;
+
+				choose_cpu = 1;
+				BZERO(arg_buf, BUFSIZE);
+				strcpy(arg_buf, optarg);
+
+				cpus = get_cpumask_buf();
+				make_cpumask(arg_buf, cpus, FAULT_ON_ERROR, NULL);
+				meminfo.spec_cpumask = cpus;
+			}
 			Sflag = 1; sflag = rflag = 0;
 			break;
 
@@ -5185,6 +5212,8 @@ cmd_kmem(void)
 			meminfo.flags = VERBOSE;
 			vt->dump_kmem_cache(&meminfo);
 		}
+		if (choose_cpu)
+			FREEBUF(cpus);
 	}
 
 	if (vflag == 1)
@@ -19083,6 +19112,8 @@ do_kmem_cache_slub(struct meminfo *si)
 	per_cpu = (ulong *)GETBUF(sizeof(ulong) * vt->numnodes);
 
         for (i = 0; i < kt->cpus; i++) {
+		if (si->spec_cpumask && !NUM_IN_BITMAP(si->spec_cpumask, i))
+			continue;
 		if (hide_offline_cpu(i)) {
 			fprintf(fp, "CPU %d [OFFLINE]\n", i);
 			continue;
