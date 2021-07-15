@@ -6472,7 +6472,6 @@ x86_64_irq_eframe_link_init(void)
 	char buf[BUFSIZE];
 	char link_register[BUFSIZE];
         char *arglist[MAXARGS];
-	ulong max_instructions;
 
 	if (machdep->machspec->irq_eframe_link == UNINITIALIZED)
 		machdep->machspec->irq_eframe_link = 0;
@@ -6487,12 +6486,10 @@ x86_64_irq_eframe_link_init(void)
 		return;
 	}
 
-	max_instructions = spn->value - sp->value;
-
 	open_tmpfile();
 
-        sprintf(buf, "x/%ldi 0x%lx",
-		max_instructions, sp->value);
+        sprintf(buf, "disassemble 0x%lx, 0x%lx",
+		sp->value, spn->value);
 
         if (!gdb_pass_through(buf, pc->tmpfile, GNU_RETURN_ON_ERROR))
 		return;
@@ -6501,6 +6498,8 @@ x86_64_irq_eframe_link_init(void)
 
 	rewind(pc->tmpfile);
         while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+		if (STRNEQ(buf, "Dump of assembler code"))
+			continue;
 		if (!strstr(buf, sp->name))
 			break;
 		if ((c = parse_line(buf, arglist)) < 4)
