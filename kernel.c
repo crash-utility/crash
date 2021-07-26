@@ -5106,6 +5106,10 @@ dump_log(int msg_flags)
 	if ((len = get_symbol_length("log_end")) == sizeof(int)) {
 		get_symbol_data("log_end", len, &tmp);
 		log_end = (ulong)tmp;
+	} else if (len == 0) {
+		THIS_KERNEL_VERSION >= LINUX(2,6,25) ?
+			get_symbol_data("log_end", sizeof(unsigned), &log_end) :
+			get_symbol_data("log_end", sizeof(unsigned long), &log_end);
 	} else
 		get_symbol_data("log_end", len, &log_end);
 
