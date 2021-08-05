@@ -1285,6 +1285,7 @@ x86_64_per_cpu_init(void)
 	struct machine_specific *ms;
 	struct syment *irq_sp, *curr_sp, *cpu_sp, *hardirq_stack_ptr_sp;
 	ulong hardirq_stack_ptr;
+	ulong __per_cpu_load = 0;
 
 	ms = machdep->machspec;
 
@@ -1326,7 +1327,12 @@ x86_64_per_cpu_init(void)
 	else if (!ms->stkinfo.isize)
 		ms->stkinfo.isize = 16384;
 
+	if (kernel_symbol_exists("__per_cpu_load"))
+		__per_cpu_load = symbol_value("__per_cpu_load");
+
 	for (i = cpus = 0; i < NR_CPUS; i++) {
+		if (__per_cpu_load && kt->__per_cpu_offset[i] == __per_cpu_load)
+			break;
 		if (!readmem(cpu_sp->value + kt->__per_cpu_offset[i],
 		    KVADDR, &cpunumber, sizeof(int),
 		    "cpu number (per_cpu)", QUIET|RETURN_ON_ERROR))
@@ -5595,14 +5601,18 @@ x86_64_get_smp_cpus(void)
 	char *cpu_pda_buf;
 	ulong level4_pgt, cpu_pda_addr;
 	struct syment *sp;
+	ulong __per_cpu_load = 0;
 
 	if (!VALID_STRUCT(x8664_pda)) {
 		if (!(sp = per_cpu_symbol_search("per_cpu__cpu_number")) ||
 		    !(kt->flags & PER_CPU_OFF))
 			return 1;
 
+		if (kernel_symbol_exists("__per_cpu_load"))
+			__per_cpu_load = symbol_value("__per_cpu_load");
+
 		for (i = cpus = 0; i < NR_CPUS; i++) {
-			if (kt->__per_cpu_offset[i] == 0)
+			if (__per_cpu_load && kt->__per_cpu_offset[i] == __per_cpu_load)
 				break;
 			if (!readmem(sp->value + kt->__per_cpu_offset[i], 
 			    KVADDR, &cpunumber, sizeof(int),
