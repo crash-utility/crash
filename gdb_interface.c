@@ -300,6 +300,13 @@ retry:
 	sprintf(req->buf, "set width 0");
 	gdb_interface(req);
 
+#ifdef GDB_10_2
+	req->command = GNU_PASS_THROUGH;
+	req->name = NULL, req->flags = 0;
+	sprintf(req->buf, "set max-value-size unlimited");
+	gdb_interface(req);
+#endif
+
 #if 0
        /*
         *  Patch gdb's symbol values with the correct values from either
