@@ -1052,7 +1052,7 @@ verify_version(void)
 
 	if (!(sp = symbol_search("linux_banner")))
 		error(FATAL, "linux_banner symbol does not exist?\n");
-	else if ((sp->type == 'R') || (sp->type == 'r') ||
+	else if ((sp->type == 'R') || (sp->type == 'r') || (sp->type == 'D') ||
 		 (machine_type("ARM") && sp->type == 'T') ||
 		 (machine_type("ARM64")))
 		linux_banner = symbol_value("linux_banner");

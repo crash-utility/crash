@@ -6239,7 +6239,7 @@ drop_core(char *s)
  *  The first time it's called, the device will be opened.
  */
 int
-console(char *fmt, ...)
+console(const char *fmt, ...)
 {
         char output[BUFSIZE*2];
 	va_list ap;

@@ -8302,6 +8302,7 @@ char *version_info[] = {
 "Copyright (C) 2005, 2011, 2020-2021  NEC Corporation",
 "Copyright (C) 1999, 2002, 2007  Silicon Graphics, Inc.",
 "Copyright (C) 1999, 2000, 2001, 2002  Mission Critical Linux, Inc.",
+"Copyright (C) 2015, 2021  VMware, Inc.",
 "This program is free software, covered by the GNU General Public License,",
 "and you are welcome to change it and/or distribute copies of it under",
 "certain conditions.  Enter \"help copying\" to see the conditions.",

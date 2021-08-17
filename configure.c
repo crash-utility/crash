@@ -161,13 +161,13 @@ void add_extra_lib(char *);
 
 #define GDB_TARGET_DEFAULT        "GDB_CONF_FLAGS="
 #define GDB_TARGET_ARM_ON_X86     "GDB_CONF_FLAGS=--target=arm-elf-linux"
-#define GDB_TARGET_ARM_ON_X86_64  "GDB_CONF_FLAGS=--target=arm-elf-linux CFLAGS=-m32"
-#define GDB_TARGET_X86_ON_X86_64  "GDB_CONF_FLAGS=--target=i686-pc-linux-gnu CFLAGS=-m32"
-#define GDB_TARGET_PPC_ON_PPC64   "GDB_CONF_FLAGS=--target=ppc-elf-linux CFLAGS=-m32"
+#define GDB_TARGET_ARM_ON_X86_64  "GDB_CONF_FLAGS=--target=arm-elf-linux CFLAGS=-m32 CXXFLAGS=-m32"
+#define GDB_TARGET_X86_ON_X86_64  "GDB_CONF_FLAGS=--target=i686-pc-linux-gnu CFLAGS=-m32 CXXFLAGS=-m32"
+#define GDB_TARGET_PPC_ON_PPC64   "GDB_CONF_FLAGS=--target=ppc-elf-linux CFLAGS=-m32 CXXFLAGS=-m32"
 #define GDB_TARGET_ARM64_ON_X86_64  "GDB_CONF_FLAGS=--target=aarch64-elf-linux"   /* TBD */
 #define GDB_TARGET_PPC64_ON_X86_64  "GDB_CONF_FLAGS=--target=powerpc64le-unknown-linux-gnu"
 #define GDB_TARGET_MIPS_ON_X86     "GDB_CONF_FLAGS=--target=mipsel-elf-linux"
-#define GDB_TARGET_MIPS_ON_X86_64  "GDB_CONF_FLAGS=--target=mipsel-elf-linux CFLAGS=-m32"
+#define GDB_TARGET_MIPS_ON_X86_64  "GDB_CONF_FLAGS=--target=mipsel-elf-linux CFLAGS=-m32 CXXFLAGS=-m32"
      
 /*
  *  The original plan was to allow the use of a particular version
@@ -182,9 +182,10 @@ void add_extra_lib(char *);
 #define GDB_7_0   (3)
 #define GDB_7_3_1 (4)
 #define GDB_7_6   (5)
-#define SUPPORTED_GDB_VERSIONS (GDB_7_6 + 1)
+#define GDB_10_2   (6)
+#define SUPPORTED_GDB_VERSIONS (GDB_10_2 + 1)
 
-int default_gdb = GDB_7_6;
+int default_gdb = GDB_10_2;
 
 struct supported_gdb_version {
 	char *GDB;
@@ -249,6 +250,15 @@ struct supported_gdb_version {
 	    "GDB_FLAGS=-DGDB_7_6",
 	    "GPLv3"
 	},
+        {
+            "GDB=gdb-10.2",
+            "10.2",
+            "GDB_FILES=${GDB_10.2_FILES}",
+            "GDB_OFILES=${GDB_10.2_OFILES}",
+            "GDB_PATCH_FILES=gdb-10.2.patch",
+            "GDB_FLAGS=-DGDB_10_2",
+            "GPLv3"
+        },
 };
 
 #define DAEMON  0x1
@@ -1514,6 +1524,12 @@ setup_gdb_defaults(void)
 			fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
 			return store_gdb_defaults(sp);
 		}
+                if (strcmp(buf, "10.2") == 0) {
+                        fclose(fp);
+                        sp = &supported_gdb_versions[GDB_10_2];
+                        fprintf(stderr, ".gdb configuration: %s\n", sp->GDB_VERSION_IN);
+                        return store_gdb_defaults(sp);
+                }
 
         }
 	

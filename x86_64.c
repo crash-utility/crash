@@ -7104,7 +7104,8 @@ x86_64_virt_phys_base(void)
 	ulong phys, linux_banner_phys;
 
 	if (!(sp = symbol_search("linux_banner")) ||
-	    !((sp->type == 'R') || (sp->type == 'r')))
+	    !((sp->type == 'R') || (sp->type == 'r') ||
+	    (sp->type == 'D')))
 		return FALSE;
 
 	linux_banner_phys = sp->value - __START_KERNEL_map;

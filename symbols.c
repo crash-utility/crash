@@ -17,7 +17,7 @@
 
 #include "defs.h"
 #include <elf.h>
-#ifdef GDB_7_6
+#if defined(GDB_7_6) || defined(GDB_10_2)
 #define __CONFIG_H__ 1
 #include "config.h"
 #endif
@@ -34,7 +34,7 @@ static int compare_mods(const void *, const void *);
 static int compare_prios(const void *v1, const void *v2);
 static int compare_size_name(const void *, const void *);
 struct type_request;
-static void append_struct_symbol (struct type_request *, struct gnu_request *);
+static void append_struct_symbol (struct gnu_request *, void *);
 static void request_types(ulong, ulong, char *);
 static asection *get_kernel_section(char *);
 static char * get_section(ulong vaddr, char *buf);
@@ -278,7 +278,7 @@ check_gnu_debuglink(bfd *bfd)
 		return FALSE;
 	}
 
-	debuglink_size = bfd_section_size(bfd, sect);
+	debuglink_size = bfd_section_size(sect);
 
 	contents = GETBUF(debuglink_size);
 
@@ -443,7 +443,7 @@ separate_debug_file_exists(const char *name, unsigned long crc, int *exists)
 #ifdef GDB_5_3
     		file_crc = calc_crc32(file_crc, buffer, count);
 #else
-#ifdef GDB_7_6
+#if defined(GDB_7_6) || defined(GDB_10_2)
     		file_crc = bfd_calc_gnu_debuglink_crc32(file_crc, 
 			(unsigned char *)buffer, count);
 #else
@@ -524,9 +524,9 @@ get_text_init_space(void)
 		return;
 	}
 
-        kt->stext_init = (ulong)bfd_get_section_vma(st->bfd, section);
+        kt->stext_init = (ulong)bfd_section_vma(section);
         kt->etext_init = kt->stext_init +
-        	(ulong)bfd_section_size(st->bfd, section);
+		(ulong)bfd_section_size(section);
 
 	if (kt->relocate) {
 		kt->stext_init -= kt->relocate;
@@ -2864,10 +2864,8 @@ is_kernel_text(ulong value)
 	        for (i = 0; i < st->bfd->section_count; i++, sec++) {
 			section = *sec;
 	                if (section->flags & SEC_CODE) {
-				start = (ulong)bfd_get_section_vma(st->bfd, 
-					section);
-				end = start + (ulong)bfd_section_size(st->bfd, 
-					section);
+				start = (ulong)bfd_section_vma(section);
+				end = start + (ulong)bfd_section_size(section);
 
 				if (kt->flags2 & KASLR) {
 					start += (kt->relocate * -1);
@@ -3470,8 +3468,8 @@ dump_symbol_table(void)
 		section = *sec;
 		fprintf(fp, "%25s  vma: %.*lx  size: %ld\n", 
 			section->name, VADDR_PRLEN,
-			(ulong)bfd_get_section_vma(st->bfd, section),
-			(ulong)bfd_section_size(st->bfd, section));
+			(ulong)bfd_section_vma(section),
+			(ulong)bfd_section_size(section));
 	}
 	fprintf(fp, "\n           downsized: ");
 	if (st->downsized.name) {
@@ -4363,12 +4361,11 @@ get_section(ulong vaddr, char *buf)
 	        sec = (asection **)st->sections;
 	        for (i = 0; i < st->bfd->section_count; i++, sec++) {
 			section = *sec;
-	                start = (ulong)bfd_get_section_vma(st->bfd, section);
-	                end = start + (ulong)bfd_section_size(st->bfd, section);
+	                start = (ulong)bfd_section_vma(section);
+	                end = start + (ulong)bfd_section_size(section);
 	
 	                if ((vaddr >= start) && (vaddr < end)) {
-				strcpy(buf, bfd_get_section_name(st->bfd, 
-					section));
+				strcpy(buf, bfd_section_name(section));
 				break;
 			}
 		}
@@ -6996,10 +6993,11 @@ compare_size_name(const void *va, const void *vb) {
 }
 
 static void
-append_struct_symbol (struct type_request *treq,  struct gnu_request *req)
+append_struct_symbol (struct gnu_request *req, void *data)
 {
 	int i; 
 	long s;
+	struct type_request *treq = (struct type_request *)data;
 
 	for (i = 0; i < treq->idx; i++)
 		if (treq->types[i].name == req->name)
@@ -7037,22 +7035,13 @@ request_types(ulong lowest, ulong highest, char *member_name)
 	request.type_name = member_name;
 #endif
 
-	while (!request.global_iterator.finished) {
-		request.command = GNU_GET_NEXT_DATATYPE;
-		gdb_interface(&request);
-		if (highest && 
-		    !(lowest <= request.length && request.length <= highest))
-			continue;
-
-		if (member_name) {
-			request.command = GNU_LOOKUP_STRUCT_CONTENTS;
-			gdb_interface(&request);
-			if (!request.value)
-				continue;
-		}
-
-		append_struct_symbol(&typereq, &request);		
-	}
+        request.command = GNU_ITERATE_DATATYPES;
+        request.lowest = lowest;
+        request.highest = highest;
+        request.member = member_name;
+        request.callback = append_struct_symbol;
+        request.callback_data = (void *)&typereq;
+        gdb_interface(&request);
 
 	qsort(typereq.types, typereq.idx, sizeof(struct type_info), compare_size_name);
 
@@ -11192,39 +11181,39 @@ section_header_info(bfd *bfd, asection *section, void *reqptr)
 			sec++;
 		*sec = section;
 
-        	if (STREQ(bfd_get_section_name(bfd, section), ".text.init") ||
-		    STREQ(bfd_get_section_name(bfd, section), ".init.text")) {
+		if (STREQ(bfd_section_name(section), ".text.init") ||
+		    STREQ(bfd_section_name(section), ".init.text")) {
                 	kt->stext_init = (ulong)
-				bfd_get_section_vma(bfd, section);
+				bfd_section_vma(section);
                 	kt->etext_init = kt->stext_init +
-                        	(ulong)bfd_section_size(bfd, section);
+				(ulong)bfd_section_size(section);
 		}
 
-		if (STREQ(bfd_get_section_name(bfd, section), ".text")) {
+		if (STREQ(bfd_section_name(section), ".text")) {
 			st->first_section_start = (ulong)
-				bfd_get_section_vma(bfd, section);
+				bfd_section_vma(section);
 		}
-                if (STREQ(bfd_get_section_name(bfd, section), ".text") ||
-                    STREQ(bfd_get_section_name(bfd, section), ".data")) {
-                        if (!(bfd_get_section_flags(bfd, section) & SEC_LOAD))
+                if (STREQ(bfd_section_name(section), ".text") ||
+                    STREQ(bfd_section_name(section), ".data")) {
+                        if (!(bfd_section_flags(section) & SEC_LOAD))
                                 st->flags |= NO_SEC_LOAD;
-                        if (!(bfd_get_section_flags(bfd, section) &
+                        if (!(bfd_section_flags(section) &
                             SEC_HAS_CONTENTS))
                                 st->flags |= NO_SEC_CONTENTS;
                 }
-                if (STREQ(bfd_get_section_name(bfd, section), ".eh_frame")) {
+                if (STREQ(bfd_section_name(section), ".eh_frame")) {
 			st->dwarf_eh_frame_file_offset = (off_t)section->filepos;
-			st->dwarf_eh_frame_size = (ulong)bfd_section_size(bfd, section);
+			st->dwarf_eh_frame_size = (ulong)bfd_section_size(section);
 		}
-                if (STREQ(bfd_get_section_name(bfd, section), ".debug_frame")) {
+                if (STREQ(bfd_section_name(section), ".debug_frame")) {
 			st->dwarf_debug_frame_file_offset = (off_t)section->filepos;
-			st->dwarf_debug_frame_size = (ulong)bfd_section_size(bfd, section);
+			st->dwarf_debug_frame_size = (ulong)bfd_section_size(section);
 		}
 
 		if (st->first_section_start != 0) {
 			section_end_address =
-				(ulong) bfd_get_section_vma(bfd, section) +
-				(ulong) bfd_section_size(bfd, section);
+				(ulong) bfd_section_vma(section) +
+				(ulong) bfd_section_size(section);
 			if (section_end_address > st->last_section_end)
 				st->last_section_end = section_end_address;
 		}
@@ -11236,21 +11225,21 @@ section_header_info(bfd *bfd, asection *section, void *reqptr)
 		break;
 
 	case (ulong)VERIFY_SECTIONS:
-		if (STREQ(bfd_get_section_name(bfd, section), ".text") ||
-		    STREQ(bfd_get_section_name(bfd, section), ".data")) {
-			if (!(bfd_get_section_flags(bfd, section) & SEC_LOAD))
+		if (STREQ(bfd_section_name(section), ".text") ||
+		    STREQ(bfd_section_name(section), ".data")) {
+			if (!(bfd_section_flags(section) & SEC_LOAD))
 				st->flags |= NO_SEC_LOAD;
-			if (!(bfd_get_section_flags(bfd, section) & 
+			if (!(bfd_section_flags(section) &
 			    SEC_HAS_CONTENTS))
 				st->flags |= NO_SEC_CONTENTS;
 		}
-                if (STREQ(bfd_get_section_name(bfd, section), ".eh_frame")) {
+                if (STREQ(bfd_section_name(section), ".eh_frame")) {
 			st->dwarf_eh_frame_file_offset = (off_t)section->filepos;
-			st->dwarf_eh_frame_size = (ulong)bfd_section_size(bfd, section);
+			st->dwarf_eh_frame_size = (ulong)bfd_section_size(section);
 		}
-                if (STREQ(bfd_get_section_name(bfd, section), ".debug_frame")) {
+                if (STREQ(bfd_section_name(section), ".debug_frame")) {
 			st->dwarf_debug_frame_file_offset = (off_t)section->filepos;
-			st->dwarf_debug_frame_size = (ulong)bfd_section_size(bfd, section);
+			st->dwarf_debug_frame_size = (ulong)bfd_section_size(section);
 		}
 		break;
 
@@ -11290,7 +11279,7 @@ store_section_data(struct load_module *lm, bfd *bfd, asection *section)
 	char *name;
 
 	prio = 0;
-	name = (char *)bfd_get_section_name(bfd, section);
+	name = (char *)bfd_section_name(section);
 
         if (name[0] != '.' || strlen(name) != 10 || strcmp(name + 5, ".init")) 
 		prio |= 32;
@@ -11312,10 +11301,10 @@ store_section_data(struct load_module *lm, bfd *bfd, asection *section)
 	 */
 	if (lm->mod_percpu &&
 	    (STREQ(name,".data.percpu") || STREQ(name, ".data..percpu"))) {
-		lm->mod_percpu_size = bfd_section_size(bfd, section);
+		lm->mod_percpu_size = bfd_section_size(section);
 		lm->mod_section_data[i].flags |= SEC_FOUND;
 	}
-	lm->mod_section_data[i].size = bfd_section_size(bfd, section);
+	lm->mod_section_data[i].size = bfd_section_size(section);
 	lm->mod_section_data[i].offset = 0;
 	if (strlen(name) < MAX_MOD_SEC_NAME)
 		strcpy(lm->mod_section_data[i].name, name);
@@ -11393,7 +11382,7 @@ calculate_load_order_v1(struct load_module *lm, bfd *bfd)
 	for (i = (lm->mod_sections-1); i >= 0; i--) {
 		section = lm->mod_section_data[i].section;
 
-               	alignment = power(2, bfd_get_section_alignment(bfd, section));
+		alignment = power(2, bfd_section_alignment(section));
 
                 if (alignment && (offset & (alignment - 1)))
                 	offset = (offset | (alignment - 1)) + 1;
@@ -11422,9 +11411,9 @@ calculate_load_order_v1(struct load_module *lm, bfd *bfd)
                 if (STREQ(lm->mod_section_data[i].name, ".rodata"))
                         lm->mod_rodata_start = lm->mod_base + offset;
 
-		offset += bfd_section_size(bfd, section);
+		offset += bfd_section_size(section);
 
-                if (STREQ(bfd_get_section_name(bfd, section), ".kstrtab"))
+                if (STREQ(bfd_section_name(section), ".kstrtab"))
                 	offset += strlen(lm->mod_name)+1;
         }
 }
@@ -11501,7 +11490,7 @@ calculate_load_order_v2(struct load_module *lm, bfd *bfd, int dynamic,
                                 (long) syminfo.value);
                     }
 		    if (strcmp(syminfo.name, s1->name) == 0) {
-			    secname = (char *)bfd_get_section_name(bfd, sym->section);
+			    secname = (char *)bfd_section_name(sym->section);
 			    break;
 		    }
 
@@ -12249,7 +12238,7 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 
                 bfd_get_symbol_info(bfd, sym, &syminfo);
 
-		secname = (char *)bfd_get_section_name(bfd, sym->section);
+		secname = (char *)bfd_section_name(sym->section);
                 found = 0;
 
                 if (kt->flags & KMOD_V1) {
@@ -12806,8 +12795,8 @@ numeric_forward(const void *P_x, const void *P_y)
 			st->saved_command_line_vmlinux = valueof(y);
 	}
 
-  	xs = bfd_get_section(x);
-  	ys = bfd_get_section(y);
+	xs = bfd_asymbol_section(x);
+	ys = bfd_asymbol_section(y);
 
   	if (bfd_is_und_section(xs)) {
       		if (!bfd_is_und_section(ys))

@@ -182,6 +182,9 @@ GDB_7.3.1_OFILES=${GDB}/gdb/symtab.o
 GDB_7.6_FILES=
 GDB_7.6_OFILES=${GDB}/gdb/symtab.o
 
+GDB_10.2_FILES=
+GDB_10.2_OFILES=${GDB}/gdb/symtab.o
+
 # 
 # GDB_FLAGS is passed up from the gdb Makefile.
 #
@@ -207,7 +210,7 @@ TAR_FILES=${SOURCE_FILES} Makefile ${GPL_FILES} README .rh_rpm_package crash.8 \
 	${EXTENSION_SOURCE_FILES} ${MEMORY_DRIVER_FILES}
 CSCOPE_FILES=${SOURCE_FILES}
 
-READLINE_DIRECTORY=./${GDB}/readline
+READLINE_DIRECTORY=./${GDB}/readline/readline
 BFD_DIRECTORY=./${GDB}/bfd
 GDB_INCLUDE_DIRECTORY=./${GDB}/include
 
@@ -266,18 +269,6 @@ gdb_unzip:
 gdb_patch:
 	if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ]; then \
 		patch -p0 < ${GDB}.patch; cp ${GDB}.patch ${GDB}; fi
-	if [ "${ARCH}" = "ppc64le" ] && [ -f ${GDB}-ppc64le-support.patch ]; then \
-		patch -d ${GDB} -p1 -F0 < ${GDB}-ppc64le-support.patch ; \
-	fi
-	if [ "${ARCH}" = "x86_64" ] && [ "${TARGET}" = "PPC64" ] && [ -f ${GDB}-ppc64le-support.patch ]; then \
-		patch -d ${GDB} -p1 -F0 < ${GDB}-ppc64le-support.patch ; \
-	fi
-	if [ -f /usr/include/proc_service.h ]; then \
-		grep 'extern ps_err_e ps_get_thread_area (struct' /usr/include/proc_service.h; \
-		if [ $$? -eq 0 ]; then \
-			patch -p0 < ${GDB}-proc_service.h.patch; \
-		fi; \
-	fi
 
 library: make_build_data ${OBJECT_FILES}
 	ar -rs ${PROGRAM}lib.a ${OBJECT_FILES}

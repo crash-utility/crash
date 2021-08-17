@@ -1704,7 +1704,6 @@ dump_program_context(void)
 	fprintf(fp, "    gdb_sigaction: %lx\n", (ulong)&pc->gdb_sigaction);
 	fprintf(fp, "    main_loop_env: %lx\n", (ulong)&pc->main_loop_env);
 	fprintf(fp, " foreach_loop_env: %lx\n", (ulong)&pc->foreach_loop_env);
-	fprintf(fp, "gdb_interface_env: %lx\n", (ulong)&pc->gdb_interface_env);
 	fprintf(fp, "     termios_orig: %lx\n", (ulong)&pc->termios_orig);
 	fprintf(fp, "      termios_raw: %lx\n", (ulong)&pc->termios_raw);
 	fprintf(fp, "            ncmds: %d\n", pc->ncmds);
