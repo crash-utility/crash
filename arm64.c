@@ -3698,14 +3698,48 @@ arm64_get_crash_notes(void)
 {
 	struct machine_specific *ms = machdep->machspec;
 	ulong crash_notes;
-	Elf64_Nhdr *note;
+	Elf64_Nhdr *note = NULL;
 	ulong offset;
 	char *buf, *p;
 	ulong *notes_ptrs;
 	ulong i, found;
 
-	if (!symbol_exists("crash_notes"))
+	if (!symbol_exists("crash_notes")) {
+		if (DISKDUMP_DUMPFILE() || KDUMP_DUMPFILE()) {
+			if (!(ms->panic_task_regs = calloc((size_t)kt->cpus, sizeof(struct arm64_pt_regs))))
+				error(FATAL, "cannot calloc panic_task_regs space\n");
+
+			for  (i = found = 0; i < kt->cpus; i++) {
+				if (DISKDUMP_DUMPFILE())
+					note = diskdump_get_prstatus_percpu(i);
+				else if (KDUMP_DUMPFILE())
+					note = netdump_get_prstatus_percpu(i);
+
+				if (!note) {
+					error(WARNING, "cpu %d: cannot find NT_PRSTATUS note\n", i);
+					continue;
+				}
+
+				/*
+				 * Find correct location of note data. This contains elf_prstatus
+				 * structure which has registers etc. for the crashed task.
+				 */
+				offset = sizeof(Elf64_Nhdr);
+				offset = roundup(offset + note->n_namesz, 4);
+				p = (char *)note + offset; /* start of elf_prstatus */
+
+				BCOPY(p + OFFSET(elf_prstatus_pr_reg), &ms->panic_task_regs[i],
+				      sizeof(struct arm64_pt_regs));
+
+				found++;
+			}
+			if (!found) {
+				free(ms->panic_task_regs);
+				ms->panic_task_regs = NULL;
+			}
+		}
 		return;
+	}
 
 	crash_notes = symbol_value("crash_notes");
 
