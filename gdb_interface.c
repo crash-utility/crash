@@ -305,6 +305,11 @@ retry:
 	req->name = NULL, req->flags = 0;
 	sprintf(req->buf, "set max-value-size unlimited");
 	gdb_interface(req);
+
+	req->command = GNU_PASS_THROUGH;
+	req->name = NULL, req->flags = 0;
+	sprintf(req->buf, "set max-completions unlimited");
+	gdb_interface(req);
 #endif
 
 #if 0

@@ -1580,3 +1580,14 @@
    _rl_tracefp = 0;
    return r;
  }
+--- gdb-10.2/gdb/completer.c.orig
++++ gdb-10.2/gdb/completer.c
+@@ -2949,6 +2949,8 @@
+ 
+   /* How many items of MAX length can we fit in the screen window? */
+   cols = gdb_complete_get_screenwidth (displayer);
++  rl_reset_screen_size();
++  rl_get_screen_size(NULL, &cols);
+   max += 2;
+   limit = cols / max;
+   if (limit != 1 && (limit * max == cols))
