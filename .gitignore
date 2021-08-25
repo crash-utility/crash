@@ -14,3 +14,14 @@ gdb-7.6/
 extensions/defs.h
 extensions/*.so
 extensions/eppic
+
+# cscope files
+cscope.*
+ncscope.*
+
+# ctags files
+tags
+TAGS
+
+# Clang's compilation database file
+/compile_commands.json
