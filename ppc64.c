@@ -3027,6 +3027,8 @@ ppc64_display_machine_stats(void)
         else
                 fprintf(fp, "(unknown)\n");
         fprintf(fp, "                 HZ: %d\n", machdep->hz);
+	fprintf(fp, "                MMU: %s\n", machdep->flags & RADIX_MMU
+							? "RADIX" : "HASH");
         fprintf(fp, "          PAGE SIZE: %d\n", PAGESIZE());
 //      fprintf(fp, "      L1 CACHE SIZE: %d\n", l1_cache_size());
         fprintf(fp, "KERNEL VIRTUAL BASE: %lx\n", machdep->kvbase);
