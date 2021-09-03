@@ -4796,7 +4796,18 @@ module_objfile_search(char *modref, char *filename, char *tree)
 
 	sprintf(dir, "%s/%s", DEFAULT_REDHAT_DEBUG_LOCATION, 
 		kt->utsname.release);
-	retbuf = search_directory_tree(dir, file, 0);
+	if (!(retbuf = search_directory_tree(dir, file, 0))) {
+		switch (kt->flags & (KMOD_V1|KMOD_V2))
+		{
+		case KMOD_V2:
+			sprintf(file, "%s.ko", modref);
+			retbuf = search_directory_tree(dir, file, 0);
+			if (!retbuf) {
+				sprintf(file, "%s.ko.debug", modref);
+				retbuf = search_directory_tree(dir, file, 0);
+			}
+		}
+	}
 
 	if (!retbuf && (env = getenv("CRASH_MODULE_PATH"))) {
 		sprintf(dir, "%s", env);
