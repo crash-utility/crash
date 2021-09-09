@@ -1235,7 +1235,6 @@ restore_sanity(void)
 	if (CRASHDEBUG(5)) {
                 dump_filesys_table(0);
 		dump_vma_cache(0);
-		dump_text_value_cache(0);
 	}
 	
 	if (REMOTE())

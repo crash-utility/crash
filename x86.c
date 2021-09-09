@@ -474,17 +474,10 @@ db_get_value(addr, size, is_signed, bt)
 		else
 			GET_STACK_DATA(addr, data, size);
 	} else {
-		if ((size == sizeof(int)) && 
-		    text_value_cache(addr, 0, (uint32_t *)&value))
-			return value;
-
 		if (!readmem(addr, KVADDR, &value, size, "db_get_value", 
 	    	     RETURN_ON_ERROR))
 			error(FATAL, "db_get_value: read error: address: %lx\n",
 				 addr);
-
-		if (size == sizeof(int)) 
-			text_value_cache(addr, value, NULL);
 	}
 #endif
 

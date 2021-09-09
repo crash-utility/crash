@@ -4661,7 +4661,6 @@ reinit_modules(void)
         st->ext_module_symtable = NULL;
         st->load_modules = NULL;
         kt->mods_installed = 0;
-	clear_text_value_cache();
 
         module_init();
 }

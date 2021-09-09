@@ -535,7 +535,7 @@ cmd_help(void)
 	oflag = 0;
 
         while ((c = getopt(argcnt, args, 
-	        "efNDdmM:ngcaBbHhkKsvVoptTzLxOr")) != EOF) {
+	        "efNDdmM:ngcaBbHhkKsvVoptTzLOr")) != EOF) {
                 switch(c)
                 {
 		case 'e':
@@ -549,10 +549,6 @@ cmd_help(void)
 		case 'n':
 		case 'D':
 			dumpfile_memory(DUMPFILE_MEM_DUMP);
-			return;
-
-		case 'x':
-			dump_text_value_cache(VERBOSE);
 			return;
 
 		case 'd':
@@ -666,7 +662,6 @@ cmd_help(void)
 			fprintf(fp, " -T - task_table plus context_array\n");
 			fprintf(fp, " -v - vm_table\n");
 			fprintf(fp, " -V - vm_table (verbose)\n");
-			fprintf(fp, " -x - text cache\n");
 			fprintf(fp, " -z - help options\n");
 			return;
 
@@ -1026,7 +1021,6 @@ char *help_help[] = {
 "    -T - task_table plus context_array",
 "    -v - vm_table",
 "    -V - vm_table (verbose)",
-"    -x - text cache",
 "    -z - help options",
 NULL               
 };

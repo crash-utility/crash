@@ -776,12 +776,8 @@ alpha_frame_offset(struct gnu_request *req, ulong alt_pc)
 	 *  Don't go any farther than "stq ra,0(sp)" (0xb75e0000)
 	 */
 	while (ival != 0xb75e0000) {
-		if (!text_value_cache((ulong)ip, 0, &ival)) {
-	        	readmem((ulong)ip, KVADDR, &ival,
-                		sizeof(uint), "uncached text value", 
-				FAULT_ON_ERROR); 
-			text_value_cache((ulong)ip, ival, NULL);
-		}
+		readmem((ulong)ip, KVADDR, &ival, sizeof(uint),
+			"text value", FAULT_ON_ERROR);
 
 		if ((ival & 0xffe01fff) == 0x43c0153e) {
 			value = (ival & 0x1fe000) >> 13;

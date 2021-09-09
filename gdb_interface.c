@@ -828,7 +828,6 @@ int
 gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 { 
 	char locbuf[SIZEOF_32BIT], *p1;
-	uint32_t *p2;
 	int memtype;
 	ulong readflags;
 
@@ -885,19 +884,12 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 		}
 
 		p1 = (char *)buf;
-		if ((memtype == KVADDR) && 
-		    text_value_cache_byte(addr, (unsigned char *)p1)) 
-			return TRUE;
 
 		if (!readmem(addr, memtype, locbuf, SIZEOF_32BIT,
 		    "gdb_readmem_callback", readflags)) 
 			return FALSE;
 
 		*p1 = locbuf[0];
-		if (memtype == KVADDR) {
-			p2 = (uint32_t *)locbuf;
-			text_value_cache(addr, *p2, 0);
-		}
 		return TRUE;
 
 	case SIZEOF_32BIT:
@@ -907,16 +899,10 @@ gdb_readmem_callback(ulong addr, void *buf, int len, int write)
 				return TRUE;
 		}
 
-		if ((memtype == KVADDR) && text_value_cache(addr, 0, buf)) 
-			return TRUE;
-
 		if (!readmem(addr, memtype, buf, SIZEOF_32BIT, 
 		    "gdb_readmem callback", readflags))
 			return FALSE;
 
-		if (memtype == KVADDR)
-			text_value_cache(addr, 
-				(uint32_t)*((uint32_t *)buf), NULL);
 		return TRUE;
 	}
 
