@@ -1738,6 +1738,10 @@ get_extra_flags(char *filename, char *initial)
  *    - enter -DSNAPPY in the CFLAGS.extra file
  *    - enter -lsnappy in the LDFLAGS.extra file
  *
+ *  For zstd:
+ *    - enter -DZSTD in the CFLAGS.extra file
+ *    - enter -lzstd in the LDFLAGS.extra file
+ *
  *  For valgrind:
  *    - enter -DVALGRIND in the CFLAGS.extra file
  */
@@ -1746,6 +1750,7 @@ add_extra_lib(char *option)
 {
 	int lzo, add_DLZO, add_llzo2; 
 	int snappy, add_DSNAPPY, add_lsnappy;
+	int zstd, add_DZSTD, add_lzstd;
 	int valgrind, add_DVALGRIND;
 	char *cflags, *ldflags;
 	FILE *fp_cflags, *fp_ldflags;
@@ -1754,6 +1759,7 @@ add_extra_lib(char *option)
 
 	lzo = add_DLZO = add_llzo2 = 0;
 	snappy = add_DSNAPPY = add_lsnappy = 0;
+	zstd = add_DZSTD = add_lzstd = 0;
 	valgrind = add_DVALGRIND = 0;
 
 	ldflags = get_extra_flags("LDFLAGS.extra", NULL);
@@ -1775,13 +1781,21 @@ add_extra_lib(char *option)
 			add_lsnappy++;
 	}
 
+	if (strcmp(option, "zstd") == 0) {
+		zstd++;
+		if (!cflags || !strstr(cflags, "-DZSTD"))
+			add_DZSTD++;
+		if (!ldflags || !strstr(ldflags, "-lzstd"))
+			add_lzstd++;
+	}
+
 	if (strcmp(option, "valgrind") == 0) {
 		valgrind++;
 		if (!cflags || !strstr(cflags, "-DVALGRIND"))
 			add_DVALGRIND++;
 	}
 
-	if ((lzo || snappy) &&
+	if ((lzo || snappy || zstd) &&
 	    file_exists("diskdump.o") && (unlink("diskdump.o") < 0)) {
 		perror("diskdump.o");
 		return;
@@ -1806,24 +1820,28 @@ add_extra_lib(char *option)
 		return;
 	}
 
-	if (add_DLZO || add_DSNAPPY || add_DVALGRIND) {
+	if (add_DLZO || add_DSNAPPY || add_DZSTD || add_DVALGRIND) {
 		while (fgets(inbuf, 512, fp_cflags))
 			;
 		if (add_DLZO)
 			fputs("-DLZO\n", fp_cflags);
 		if (add_DSNAPPY)
 			fputs("-DSNAPPY\n", fp_cflags);
+		if (add_DZSTD)
+			fputs("-DZSTD\n", fp_cflags);
 		if (add_DVALGRIND)
 			fputs("-DVALGRIND\n", fp_cflags);
 	}
 
-	if (add_llzo2 || add_lsnappy) {
+	if (add_llzo2 || add_lsnappy || add_lzstd) {
 		while (fgets(inbuf, 512, fp_ldflags))
 			;
 		if (add_llzo2)
 			fputs("-llzo2\n", fp_ldflags);
 		if (add_lsnappy)
 			fputs("-lsnappy\n", fp_ldflags);
+		if (add_lzstd)
+			fputs("-lzstd\n", fp_ldflags);
 	}
 
 	fclose(fp_cflags);

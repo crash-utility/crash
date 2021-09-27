@@ -54,6 +54,9 @@
 #ifdef SNAPPY
 #include <snappy-c.h>
 #endif
+#ifdef ZSTD
+#include <zstd.h>
+#endif
 
 #ifndef ATTRIBUTE_UNUSED
 #define ATTRIBUTE_UNUSED __attribute__ ((__unused__))
@@ -327,6 +330,7 @@ struct number_option {
 #define NO_ELF_NOTES        (0x20)
 #define LZO_SUPPORTED       (0x40)
 #define SNAPPY_SUPPORTED    (0x80)
+#define ZSTD_SUPPORTED      (0x100)
 #define DISKDUMP_VALID()    (dd->flags & DISKDUMP_LOCAL)
 #define KDUMP_CMPRS_VALID() (dd->flags & KDUMP_CMPRS_LOCAL)
 #define KDUMP_SPLIT()       (dd->flags & DUMPFILE_SPLIT)

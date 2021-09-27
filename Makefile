@@ -333,6 +333,10 @@ snappy: make_configure
 	@./configure -x snappy ${CONF_TARGET_FLAG} -w -b
 	@make --no-print-directory gdb_merge
 
+zstd: make_configure
+	@./configure -x zstd ${CONF_TARGET_FLAG} -w -b
+	@make --no-print-directory gdb_merge
+
 valgrind: make_configure
 	@./configure -x valgrind ${CONF_TARGET_FLAG} -w -b
 	@make --no-print-directory gdb_merge

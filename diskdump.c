@@ -1001,6 +1001,9 @@ is_diskdump(char *file)
 #ifdef SNAPPY
 	dd->flags |= SNAPPY_SUPPORTED;
 #endif
+#ifdef ZSTD
+	dd->flags |= ZSTD_SUPPORTED;
+#endif
 
 	pc->read_vmcoreinfo = vmcoreinfo_read_string;
 
@@ -1124,6 +1127,9 @@ cache_page(physaddr_t paddr)
 	const int block_size = dd->block_size;
 	const off_t failed = (off_t)-1;
 	ulong retlen;
+#ifdef ZSTD
+	static ZSTD_DCtx *dctx = NULL;
+#endif
 
 	for (i = found = 0; i < DISKDUMP_CACHED_PAGES; i++) {
 		if (DISKDUMP_VALID_PAGE(dd->page_cache_hdr[i].pg_flags))
@@ -1249,6 +1255,33 @@ cache_page(physaddr_t paddr)
 			error(INFO, "%s: uncompress failed: %d\n", 
 			      DISKDUMP_VALID() ? "diskdump" : "compressed kdump",
 			      ret);
+			return READ_ERROR;
+		}
+#endif
+	} else if (pd.flags & DUMP_DH_COMPRESSED_ZSTD) {
+
+		if (!(dd->flags & ZSTD_SUPPORTED)) {
+			error(INFO, "%s: uncompess failed: no zstd compression support\n",
+				DISKDUMP_VALID() ? "diskdump" : "compressed kdump");
+			return READ_ERROR;
+		}
+#ifdef ZSTD
+		if (!dctx) {
+			dctx = ZSTD_createDCtx();
+			if (!dctx) {
+				error(INFO, "%s: uncompess failed: cannot create ZSTD_DCtx\n",
+					DISKDUMP_VALID() ? "diskdump" : "compressed kdump");
+				return READ_ERROR;
+			}
+		}
+
+		retlen = ZSTD_decompressDCtx(dctx,
+				dd->page_cache_hdr[i].pg_bufptr, block_size,
+				dd->compressed_page, pd.size);
+		if (ZSTD_isError(retlen) || (retlen != block_size)) {
+			error(INFO, "%s: uncompress failed: %d (%s)\n",
+				DISKDUMP_VALID() ? "diskdump" : "compressed kdump",
+				retlen, ZSTD_getErrorName(retlen));
 			return READ_ERROR;
 		}
 #endif
@@ -1806,6 +1839,8 @@ __diskdump_memory_dump(FILE *fp)
 		fprintf(fp, "%sLZO_SUPPORTED", others++ ? "|" : "");
 	if (dd->flags & SNAPPY_SUPPORTED)
 		fprintf(fp, "%sSNAPPY_SUPPORTED", others++ ? "|" : "");
+	if (dd->flags & ZSTD_SUPPORTED)
+		fprintf(fp, "%sZSTD_SUPPORTED", others++ ? "|" : "");
         fprintf(fp, ") %s\n", FLAT_FORMAT() ? "[FLAT]" : "");
         fprintf(fp, "               dfd: %d\n", dd->dfd);
         fprintf(fp, "               ofp: %lx\n", (ulong)dd->ofp);
@@ -1872,6 +1907,8 @@ __diskdump_memory_dump(FILE *fp)
 			fprintf(fp, "DUMP_DH_COMPRESSED_LZO");
 		if (dh->status & DUMP_DH_COMPRESSED_SNAPPY)
 			fprintf(fp, "DUMP_DH_COMPRESSED_SNAPPY");
+		if (dh->status & DUMP_DH_COMPRESSED_ZSTD)
+			fprintf(fp, "DUMP_DH_COMPRESSED_ZSTD");
 		if (dh->status & DUMP_DH_COMPRESSED_INCOMPLETE)
 			fprintf(fp, "DUMP_DH_COMPRESSED_INCOMPLETE");
 		if (dh->status & DUMP_DH_EXCLUDED_VMEMMAP)
