@@ -65,7 +65,7 @@ static void symval_hash_init(void);
 static struct syment *symval_hash_search(ulong);
 static void symname_hash_init(void);
 static void symname_hash_install(struct syment *);
-static struct syment *symname_hash_search(char *);
+static struct syment *symname_hash_search(struct syment *[], char *);
 static void gnu_qsort(bfd *, void *, long, unsigned int, asymbol *, asymbol *);
 static int check_gnu_debuglink(bfd *);
 static int separate_debug_file_exists(const char *, unsigned long, int *);
@@ -1234,11 +1234,11 @@ mod_symtable_hash_remove_range(struct syment *from, struct syment *to)
  *  Static kernel symbol value search
  */
 static struct syment *
-symname_hash_search(char *name)
+symname_hash_search(struct syment *table[], char *name)
 {
 	struct syment *sp;
 
-        sp = st->symname_hash[SYMNAME_HASH_INDEX(name)];
+	sp = table[SYMNAME_HASH_INDEX(name)];
 
 	while (sp) {
 		if (STREQ(sp->name, name)) 
@@ -4575,7 +4575,7 @@ symbol_search(char *s)
 {
 	struct syment *sp_hashed, *sp;
 
-	sp_hashed = symname_hash_search(s);
+	sp_hashed = symname_hash_search(st->symname_hash, s);
 
         for (sp = sp_hashed ? sp_hashed : st->symtable; sp < st->symend; sp++) {
                 if (STREQ(s, sp->name)) 
@@ -5489,7 +5489,7 @@ symbol_exists(char *symbol)
         struct syment *sp, *sp_end;
 	struct load_module *lm;
 
-	if ((sp = symname_hash_search(symbol)))
+	if ((sp = symname_hash_search(st->symname_hash, symbol)))
 		return TRUE;
 
         for (i = 0; i < st->mods_installed; i++) {
@@ -5568,7 +5568,7 @@ kernel_symbol_exists(char *symbol)
 {
 	struct syment *sp;
 
-        if ((sp = symname_hash_search(symbol)))
+	if ((sp = symname_hash_search(st->symname_hash, symbol)))
                 return TRUE;
 	else
         	return FALSE;
@@ -5580,7 +5580,7 @@ kernel_symbol_exists(char *symbol)
 struct syment *
 kernel_symbol_search(char *symbol)
 {
-	return symname_hash_search(symbol);
+	return symname_hash_search(st->symname_hash, symbol);
 }
 
 /*
