@@ -1158,6 +1158,79 @@ symname_hash_install(struct syment *spn)
 }
 
 /*
+ *  Install a single kernel module symbol into the mod_symname_hash.
+ */
+static void
+mod_symname_hash_install(struct syment *spn)
+{
+	struct syment *sp;
+	int index;
+
+	if (!spn)
+		return;
+
+	index = SYMNAME_HASH_INDEX(spn->name);
+
+	sp = st->mod_symname_hash[index];
+
+	if (!sp || (spn->value < sp->value)) {
+		st->mod_symname_hash[index] = spn;
+		spn->name_hash_next = sp;
+		return;
+	}
+	for (; sp; sp = sp->name_hash_next) {
+		if (!sp->name_hash_next ||
+		    spn->value < sp->name_hash_next->value) {
+			spn->name_hash_next = sp->name_hash_next;
+			sp->name_hash_next = spn;
+			return;
+		}
+	}
+}
+
+static void
+mod_symname_hash_remove(struct syment *spn)
+{
+	struct syment *sp;
+	int index;
+
+	if (!spn)
+		return;
+
+	index = SYMNAME_HASH_INDEX(spn->name);
+
+	if (st->mod_symname_hash[index] == spn) {
+		st->mod_symname_hash[index] = spn->name_hash_next;
+		return;
+	}
+
+	for (sp = st->mod_symname_hash[index]; sp; sp = sp->name_hash_next) {
+		if (sp->name_hash_next == spn) {
+			sp->name_hash_next = spn->name_hash_next;
+			return;
+		}
+	}
+}
+
+static void
+mod_symtable_hash_install_range(struct syment *from, struct syment *to)
+{
+	struct syment *sp;
+
+	for (sp = from; sp <= to; sp++)
+		mod_symname_hash_install(sp);
+}
+
+static void
+mod_symtable_hash_remove_range(struct syment *from, struct syment *to)
+{
+	struct syment *sp;
+
+	for (sp = from; sp <= to; sp++)
+		mod_symname_hash_remove(sp);
+}
+
+/*
  *  Static kernel symbol value search
  */
 static struct syment *
