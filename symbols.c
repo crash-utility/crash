@@ -1127,6 +1127,21 @@ symname_hash_init(void)
 		st->__per_cpu_end = sp->value;
 }
 
+static unsigned int
+symname_hash_index(char *name)
+{
+	unsigned int len, value;
+	unsigned char *array = (unsigned char *)name;
+
+	len = strlen(name);
+	if (!len)
+		error(FATAL, "The length of the symbol name is zero!\n");
+
+	value = array[len - 1] * array[len / 2];
+
+	return (array[0] ^ value) % SYMNAME_HASH;
+}
+
 /*
  *  Install a single static kernel symbol into the symname_hash.
  */
@@ -1134,9 +1149,9 @@ static void
 symname_hash_install(struct syment *spn)
 {
 	struct syment *sp;
-        int index;
+	unsigned int index;
 
-        index = SYMNAME_HASH_INDEX(spn->name);
+	index = symname_hash_index(spn->name);
 	spn->cnt = 1;
 
         if ((sp = st->symname_hash[index]) == NULL) 
@@ -1164,12 +1179,12 @@ static void
 mod_symname_hash_install(struct syment *spn)
 {
 	struct syment *sp;
-	int index;
+	unsigned int index;
 
 	if (!spn)
 		return;
 
-	index = SYMNAME_HASH_INDEX(spn->name);
+	index = symname_hash_index(spn->name);
 
 	sp = st->mod_symname_hash[index];
 
@@ -1192,12 +1207,12 @@ static void
 mod_symname_hash_remove(struct syment *spn)
 {
 	struct syment *sp;
-	int index;
+	unsigned int index;
 
 	if (!spn)
 		return;
 
-	index = SYMNAME_HASH_INDEX(spn->name);
+	index = symname_hash_index(spn->name);
 
 	if (st->mod_symname_hash[index] == spn) {
 		st->mod_symname_hash[index] = spn->name_hash_next;
@@ -1238,7 +1253,7 @@ symname_hash_search(struct syment *table[], char *name)
 {
 	struct syment *sp;
 
-	sp = table[SYMNAME_HASH_INDEX(name)];
+	sp = table[symname_hash_index(name)];
 
 	while (sp) {
 		if (STREQ(sp->name, name)) 
@@ -4585,7 +4600,7 @@ symbol_search(char *s)
                         return(sp);
         }
 
-	sp = st->mod_symname_hash[SYMNAME_HASH_INDEX(s)];
+	sp = st->mod_symname_hash[symname_hash_index(s)];
 	while (sp) {
 		if (skip_symbols(sp, s)) {
 			sp = sp->name_hash_next;

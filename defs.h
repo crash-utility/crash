@@ -2728,8 +2728,6 @@ struct downsized {
         (((vaddr) >> machdep->pageshift) % SYMVAL_HASH)
 
 #define SYMNAME_HASH (512)
-#define SYMNAME_HASH_INDEX(name) \
- ((name[0] ^ (name[strlen(name)-1] * name[strlen(name)/2])) % SYMNAME_HASH)
 
 #define PATCH_KERNEL_SYMBOLS_START  ((char *)(1))
 #define PATCH_KERNEL_SYMBOLS_STOP   ((char *)(2))
