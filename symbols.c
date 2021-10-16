@@ -3219,13 +3219,40 @@ kallsyms_module_function_size(struct syment *sp, struct load_module *lm, ulong *
 	return FALSE;
 }
 
+static void
+dump_symname_hash_table(struct syment *table[])
+{
+	int i, cnt, tot;
+	struct syment *sp;
+
+	fprintf(fp, "    ");
+	for (i = tot = 0; i < SYMNAME_HASH; i++) {
+		fprintf(fp, "[%3d]: ", i);
+		if ((sp = table[i]) == NULL)
+			fprintf(fp, "%3d  ", 0);
+		else {
+			cnt = 1;
+			while (sp->name_hash_next) {
+				cnt++;
+				sp = sp->name_hash_next;
+			}
+			fprintf(fp, "%3d  ", cnt);
+			tot += cnt;
+		}
+		if (i && (((i+1) % 6) == 0))
+			fprintf(fp, "\n    ");
+	}
+	if (SYMNAME_HASH % 6)
+		fprintf(fp, "\n");
+}
+
 /*
  *  "help -s" output
  */
 void
 dump_symbol_table(void)
 {
-	int i, s, cnt, tot;
+	int i, s, cnt;
         struct load_module *lm;
 	struct syment *sp;
 	struct downsized *ds;
@@ -3355,28 +3382,14 @@ dump_symbol_table(void)
 
         fprintf(fp, "   symname_hash[%d]: %lx\n", SYMNAME_HASH,
                 (ulong)&st->symname_hash[0]);
+	if (CRASHDEBUG(1))
+		dump_symname_hash_table(st->symname_hash);
 
-	if (CRASHDEBUG(1)) {
-		fprintf(fp, "    ");
-	        for (i = tot = 0; i < SYMNAME_HASH; i++) {
-	                fprintf(fp, "[%3d]: ", i);
-	                if ((sp = st->symname_hash[i]) == NULL) 
-	                        fprintf(fp, "%3d  ", 0);
-	                else {
-		                cnt = 1;
-		                while (sp->name_hash_next) {
-		                        cnt++;
-		                        sp = sp->name_hash_next;
-		                }
-		                fprintf(fp, "%3d  ", cnt);
-				tot += cnt;
-			}
-			if (i && (((i+1) % 6) == 0))
-				fprintf(fp, "\n    ");
-	        }
-		if (SYMNAME_HASH % 6)
-			fprintf(fp, "\n");
-	}
+	fprintf(fp, "mod_symname_hash[%d]: %lx\n", SYMNAME_HASH,
+		(ulong)&st->mod_symname_hash[0]);
+	if (CRASHDEBUG(1))
+		dump_symname_hash_table(st->mod_symname_hash);
+
 	fprintf(fp, "    symbol_namespace: ");
 	fprintf(fp, "address: %lx  ", (ulong)st->kernel_namespace.address);
 	fprintf(fp, "index: %ld  ", st->kernel_namespace.index); 
