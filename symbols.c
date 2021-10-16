@@ -5481,33 +5481,11 @@ value_symbol(ulong value)
 int
 symbol_exists(char *symbol)
 {
-	int i;
-        struct syment *sp, *sp_end;
-	struct load_module *lm;
-
-	if ((sp = symname_hash_search(st->symname_hash, symbol)))
+	if (symname_hash_search(st->symname_hash, symbol))
 		return TRUE;
 
-        for (i = 0; i < st->mods_installed; i++) {
-                lm = &st->load_modules[i];
-		sp = lm->mod_symtable;
-                sp_end = lm->mod_symend;
-
-                for ( ; sp < sp_end; sp++) {
-                	if (STREQ(symbol, sp->name))
-                        	return(TRUE);
-                }
-
-		if (lm->mod_init_symtable) {
-			sp = lm->mod_init_symtable;
-			sp_end = lm->mod_init_symend;
-	
-			for ( ; sp < sp_end; sp++) {
-				if (STREQ(symbol, sp->name))
-					return(TRUE);
-			}
-		}
-	}
+	if (symname_hash_search(st->mod_symname_hash, symbol))
+		return TRUE;
 
         return(FALSE);
 }
@@ -5562,12 +5540,7 @@ per_cpu_symbol_search(char *symbol)
 int
 kernel_symbol_exists(char *symbol)
 {
-	struct syment *sp;
-
-	if ((sp = symname_hash_search(st->symname_hash, symbol)))
-                return TRUE;
-	else
-        	return FALSE;
+	return !!symname_hash_search(st->symname_hash, symbol);
 }
 
 /*
