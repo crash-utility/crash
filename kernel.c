@@ -4661,6 +4661,7 @@ reinit_modules(void)
         st->ext_module_symtable = NULL;
         st->load_modules = NULL;
         kt->mods_installed = 0;
+	memset(st->mod_symname_hash, 0, sizeof(st->mod_symname_hash));
 	clear_text_value_cache();
 
         module_init();

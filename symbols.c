@@ -1668,6 +1668,7 @@ store_module_symbols_v1(ulong total, int mods_installed)
 				lm->mod_symend = sp;
 			}
 		}
+		mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
 	}
 
 	st->flags |= MODULE_SYMS;
@@ -2148,6 +2149,8 @@ store_module_symbols_v2(ulong total, int mods_installed)
 				lm->mod_init_symend = sp;
 			}
 		}
+		mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
+		mod_symtable_hash_install_range(lm->mod_init_symtable, lm->mod_init_symend);
 	}
 
 	st->flags |= MODULE_SYMS;
@@ -12490,8 +12493,10 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 		error(INFO, "%s: last symbol: %s is not _MODULE_END_%s?\n",
 			lm->mod_name, lm->mod_load_symend->name, lm->mod_name);
 
+	mod_symtable_hash_remove_range(lm->mod_symtable, lm->mod_symend);
         lm->mod_symtable = lm->mod_load_symtable;
         lm->mod_symend = lm->mod_load_symend;
+	mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
 
 	lm->mod_flags &= ~MOD_EXT_SYMS;
 	lm->mod_flags |= MOD_LOAD_SYMS;
@@ -12521,6 +12526,7 @@ delete_load_module(ulong base_addr)
         			req->name = lm->mod_namelist;
         			gdb_interface(req); 
 			}
+			mod_symtable_hash_remove_range(lm->mod_symtable, lm->mod_symend);
 			if (lm->mod_load_symtable) {
                         	free(lm->mod_load_symtable);
                                 namespace_ctl(NAMESPACE_FREE,
@@ -12530,6 +12536,7 @@ delete_load_module(ulong base_addr)
 				unlink_module(lm);
 			lm->mod_symtable = lm->mod_ext_symtable;
 			lm->mod_symend = lm->mod_ext_symend;
+			mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
 			lm->mod_flags &= ~(MOD_LOAD_SYMS|MOD_REMOTE|MOD_NOPATCH);
 			lm->mod_flags |= MOD_EXT_SYMS;
 			lm->mod_load_symtable = NULL;
@@ -12558,6 +12565,7 @@ delete_load_module(ulong base_addr)
                         	req->name = lm->mod_namelist;
                         	gdb_interface(req);
 			}
+			mod_symtable_hash_remove_range(lm->mod_symtable, lm->mod_symend);
 			if (lm->mod_load_symtable) {
                         	free(lm->mod_load_symtable);
 				namespace_ctl(NAMESPACE_FREE,
@@ -12567,6 +12575,7 @@ delete_load_module(ulong base_addr)
 				unlink_module(lm);
 			lm->mod_symtable = lm->mod_ext_symtable;
 			lm->mod_symend = lm->mod_ext_symend;
+			mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
                         lm->mod_flags &= ~(MOD_LOAD_SYMS|MOD_REMOTE|MOD_NOPATCH);
                         lm->mod_flags |= MOD_EXT_SYMS;
                         lm->mod_load_symtable = NULL;
