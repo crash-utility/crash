@@ -4551,6 +4551,17 @@ symbol_query(char *s, char *print_pad, struct syment **spp)
 	return(cnt);
 }
 
+static int
+skip_symbols(struct syment *sp, char *s)
+{
+	int pseudos, skip = FALSE;
+
+	pseudos = (strstr(s, "_MODULE_START_") || strstr(s, "_MODULE_END_") ||
+		strstr(s, "_MODULE_INIT_START_") || strstr(s, "_MODULE_INIT_END_"));
+	if (!pseudos && MODULE_PSEUDO_SYMBOL(sp))
+		skip = TRUE;
+	return skip;
+}
 
 /*
  *  Return the syment of a symbol.
@@ -4558,10 +4569,7 @@ symbol_query(char *s, char *print_pad, struct syment **spp)
 struct syment *
 symbol_search(char *s)
 {
-	int i;
-        struct syment *sp_hashed, *sp, *sp_end;
-	struct load_module *lm;
-	int pseudos, search_init;
+	struct syment *sp_hashed, *sp;
 
 	sp_hashed = symname_hash_search(s);
 
@@ -4570,43 +4578,15 @@ symbol_search(char *s)
                         return(sp);
         }
 
-	pseudos = (strstr(s, "_MODULE_START_") || strstr(s, "_MODULE_END_"));
-	search_init = FALSE;
-
-        for (i = 0; i < st->mods_installed; i++) {
-                lm = &st->load_modules[i];
-		if (lm->mod_flags & MOD_INIT)
-			search_init = TRUE;
-		sp = lm->mod_symtable;
-                sp_end = lm->mod_symend;
-
-                for ( ; sp <= sp_end; sp++) {
-                	if (!pseudos && MODULE_PSEUDO_SYMBOL(sp))
-                        	continue;
-                	if (STREQ(s, sp->name))
-                        	return(sp);
-                }
-        }
-
-	if (!search_init)
-		return((struct syment *)NULL);
-
-	pseudos = (strstr(s, "_MODULE_INIT_START_") || strstr(s, "_MODULE_INIT_END_"));
-
-	for (i = 0; i < st->mods_installed; i++) {
-		lm = &st->load_modules[i];
-		if (!lm->mod_init_symtable)
+	sp = st->mod_symname_hash[SYMNAME_HASH_INDEX(s)];
+	while (sp) {
+		if (skip_symbols(sp, s)) {
+			sp = sp->name_hash_next;
 			continue;
-		sp = lm->mod_init_symtable;
-		sp_end = lm->mod_init_symend;
-
-		for ( ; sp < sp_end; sp++) {
-			if (!pseudos && MODULE_PSEUDO_SYMBOL(sp))
-				continue;
-
-			if (STREQ(s, sp->name))
-				return(sp);
 		}
+		if (STREQ(sp->name, s))
+			return sp;
+		sp = sp->name_hash_next;
 	}
 
         return((struct syment *)NULL);
