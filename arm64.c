@@ -404,7 +404,7 @@ arm64_init(int when)
 				fprintf(fp, "CONFIG_ARM64_VA_BITS: %ld\n", ms->CONFIG_ARM64_VA_BITS);
 				fprintf(fp, "      VA_BITS_ACTUAL: %ld\n", ms->VA_BITS_ACTUAL);
 				fprintf(fp, "(calculated) VA_BITS: %ld\n", ms->VA_BITS);
-				fprintf(fp, " PAGE_OFFSET: %lx\n", ARM64_FLIP_PAGE_OFFSET_ACTUAL);
+				fprintf(fp, " PAGE_OFFSET: %lx\n", ARM64_FLIP_PAGE_OFFSET);
 				fprintf(fp, "    VA_START: %lx\n", ms->VA_START);
 				fprintf(fp, "     modules: %lx - %lx\n", ms->modules_vaddr, ms->modules_end);
 				fprintf(fp, "     vmalloc: %lx - %lx\n", ms->vmalloc_start_addr, ms->vmalloc_end);
@@ -4030,6 +4030,9 @@ arm64_calc_VA_BITS(void)
 			} else
 				error(FATAL, "cannot determine VA_BITS_ACTUAL\n");
 		}
+
+		if (machdep->machspec->CONFIG_ARM64_VA_BITS)
+			machdep->machspec->VA_BITS = machdep->machspec->CONFIG_ARM64_VA_BITS;
 
 		/*
 		 * The mm flip commit is introduced before 52-bits VA, which is before the
