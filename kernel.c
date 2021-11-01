@@ -5561,16 +5561,18 @@ display_sys_stats(void)
 		}
 	} else {
         	if (pc->system_map) {
-                	fprintf(fp, "  SYSTEM MAP: %s%s\n", pc->system_map,
-				is_livepatch() ? "  [LIVEPATCH]" : "");
+			fprintf(fp, "  SYSTEM MAP: %s%s%s\n", pc->system_map,
+				is_livepatch() ? "  [LIVEPATCH]" : "",
+				is_kernel_tainted() ? "  [TAINTED]" : "");
 			fprintf(fp, "DEBUG KERNEL: %s %s\n", 
 					pc->namelist_orig ?
 					pc->namelist_orig : pc->namelist,
 					debug_kernel_version(pc->namelist));
 		} else
-			fprintf(fp, "      KERNEL: %s%s\n", pc->namelist_orig ? 
+			fprintf(fp, "      KERNEL: %s%s%s\n", pc->namelist_orig ?
 				pc->namelist_orig : pc->namelist,
-				is_livepatch() ? "  [LIVEPATCH]" : "");
+				is_livepatch() ? "  [LIVEPATCH]" : "",
+				is_kernel_tainted() ? "  [TAINTED]" : "");
 	}
 
 	if (pc->debuginfo_file) { 
