@@ -5481,6 +5481,24 @@ cmd_sys(void)
 }
 
 static int
+is_kernel_tainted(void)
+{
+	ulong tainted_mask;
+	int tainted;
+
+	if (kernel_symbol_exists("tainted")) {
+		get_symbol_data("tainted", sizeof(int), &tainted);
+		if (tainted)
+			return TRUE;
+	} else if (kernel_symbol_exists("tainted_mask")) {
+		get_symbol_data("tainted_mask", sizeof(ulong), &tainted_mask);
+		if (tainted_mask)
+			return TRUE;
+	}
+	return FALSE;
+}
+
+static int
 is_livepatch(void)
 {
 	int i;
