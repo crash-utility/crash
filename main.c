@@ -1119,7 +1119,7 @@ setup_environment(int argc, char **argv)
 	pc->flags2 |= REDZONE;
 	pc->confd = -2;
 	pc->machine_type = MACHINE_TYPE;
-	if (file_exists("/dev/mem", NULL)) {     /* defaults until argv[] is parsed */
+	if (file_readable("/dev/mem")) {     /* defaults until argv[] is parsed */
 		pc->readmem = read_dev_mem;
 		pc->writemem = write_dev_mem;
 	} else if (file_exists("/proc/kcore", NULL)) {

@@ -3666,7 +3666,7 @@ get_live_memory_source(void)
 	if (pc->live_memsrc)
 		goto live_report;
 
-	if (file_exists("/dev/mem", NULL))
+	if (file_readable("/dev/mem"))
 		pc->live_memsrc = "/dev/mem";
 	else if (file_exists("/proc/kcore", NULL)) {
 		pc->flags &= ~DEVMEM;
