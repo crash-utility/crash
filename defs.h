@@ -3261,7 +3261,9 @@ typedef signed int s32;
 #define ARM64_STACK_SIZE   (16384)
 #define ARM64_IRQ_STACK_SIZE   ARM64_STACK_SIZE
 
-#define _SECTION_SIZE_BITS      30
+#define _SECTION_SIZE_BITS           30
+#define _SECTION_SIZE_BITS_5_12      27
+#define _SECTION_SIZE_BITS_5_12_64K  29
 #define _MAX_PHYSMEM_BITS       40
 #define _MAX_PHYSMEM_BITS_3_17  48
 #define _MAX_PHYSMEM_BITS_52    52

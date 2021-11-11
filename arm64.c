@@ -1116,7 +1116,13 @@ arm64_get_section_size_bits(void)
 	int ret;
 	char *string;
 
-	machdep->section_size_bits = _SECTION_SIZE_BITS;
+	if (THIS_KERNEL_VERSION >= LINUX(5,12,0)) {
+		if (machdep->pagesize == 65536)
+			machdep->section_size_bits = _SECTION_SIZE_BITS_5_12_64K;
+		else
+			machdep->section_size_bits = _SECTION_SIZE_BITS_5_12;
+	} else
+		machdep->section_size_bits = _SECTION_SIZE_BITS;
 
 	if ((string = pc->read_vmcoreinfo("NUMBER(SECTION_SIZE_BITS)"))) {
 		machdep->section_size_bits = atol(string);
