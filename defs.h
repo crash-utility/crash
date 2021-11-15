@@ -3218,6 +3218,7 @@ typedef signed int s32;
 #define UNW_4_14      (0x200)
 #define FLIPPED_VM    (0x400)
 #define HAS_PHYSVIRT_OFFSET (0x800)
+#define OVERFLOW_STACKS     (0x1000)
 
 /*
  * Get kimage_voffset from /dev/crash
@@ -3260,6 +3261,7 @@ typedef signed int s32;
 
 #define ARM64_STACK_SIZE   (16384)
 #define ARM64_IRQ_STACK_SIZE   ARM64_STACK_SIZE
+#define ARM64_OVERFLOW_STACK_SIZE   (4096)
 
 #define _SECTION_SIZE_BITS           30
 #define _SECTION_SIZE_BITS_5_12      27
@@ -3332,6 +3334,9 @@ struct machine_specific {
 	char  *irq_stackbuf;
 	ulong __irqentry_text_start;
 	ulong __irqentry_text_end;
+	ulong overflow_stack_size;
+	ulong *overflow_stacks;
+	char  *overflow_stackbuf;
 	/* for exception vector code */
 	ulong exp_entry1_start;
 	ulong exp_entry1_end;
@@ -5778,6 +5783,7 @@ ulong cpu_map_addr(const char *type);
 #define BT_CPUMASK        (0x1000000000000ULL)
 #define BT_SHOW_ALL_REGS  (0x2000000000000ULL)
 #define BT_REGS_NOT_FOUND (0x4000000000000ULL)
+#define BT_OVERFLOW_STACK (0x8000000000000ULL)
 #define BT_SYMBOL_OFFSET   (BT_SYMBOLIC_ARGS)
 
 #define BT_REF_HEXVAL         (0x1)
