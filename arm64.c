@@ -45,6 +45,7 @@ static int arm64_vtop_3level_4k(ulong, ulong, physaddr_t *, int);
 static int arm64_vtop_4level_4k(ulong, ulong, physaddr_t *, int);
 static ulong arm64_get_task_pgd(ulong);
 static void arm64_irq_stack_init(void);
+static void arm64_overflow_stack_init(void);
 static void arm64_stackframe_init(void);
 static int arm64_eframe_search(struct bt_info *);
 static int arm64_is_kernel_exception_frame(struct bt_info *, ulong);
@@ -78,8 +79,11 @@ static int arm64_get_smp_cpus(void);
 static void arm64_clear_machdep_cache(void);
 static int arm64_on_process_stack(struct bt_info *, ulong);
 static int arm64_in_alternate_stack(int, ulong);
+static int arm64_in_alternate_stackv(int cpu, ulong stkptr, ulong *stacks, ulong stack_size);
 static int arm64_on_irq_stack(int, ulong);
+static int arm64_on_overflow_stack(int, ulong);
 static void arm64_set_irq_stack(struct bt_info *);
+static void arm64_set_overflow_stack(struct bt_info *);
 static void arm64_set_process_stack(struct bt_info *);
 static int arm64_get_kvaddr_ranges(struct vaddr_range *);
 static void arm64_get_crash_notes(void);
@@ -463,6 +467,7 @@ arm64_init(int when)
 			machdep->hz = 100;
 
 		arm64_irq_stack_init();
+		arm64_overflow_stack_init();
 		arm64_stackframe_init();
 		break;
 
@@ -1716,6 +1721,50 @@ arm64_irq_stack_init(void)
 }
 
 /*
+ *  Gather Overflow stack values.
+ *
+ *  Overflow stack supported since 4.14, in commit 872d8327c
+ */
+static void
+arm64_overflow_stack_init(void)
+{
+	int i;
+	struct syment *sp;
+	struct gnu_request request, *req;
+	struct machine_specific *ms = machdep->machspec;
+	ulong p, sz;
+	req = &request;
+
+	if (symbol_exists("overflow_stack") &&
+	    (sp = per_cpu_symbol_search("overflow_stack")) &&
+	    get_symbol_type("overflow_stack", NULL, req)) {
+		if (CRASHDEBUG(1)) {
+			fprintf(fp, "overflow_stack: \n");
+			fprintf(fp, "  type: %x, %s\n",
+				(int)req->typecode,
+				(req->typecode == TYPE_CODE_PTR) ?
+						"TYPE_CODE_PTR" : "other");
+			fprintf(fp, "  target_typecode: %x, %s\n",
+				(int)req->target_typecode,
+				req->target_typecode == TYPE_CODE_INT ?
+						"TYPE_CODE_INT" : "other");
+			fprintf(fp, "  target_length: %ld\n",
+						req->target_length);
+			fprintf(fp, "  length: %ld\n", req->length);
+		}
+
+		if (!(ms->overflow_stacks = (ulong *)malloc((size_t)(kt->cpus * sizeof(ulong)))))
+			error(FATAL, "cannot malloc overflow_stack addresses\n");
+
+		ms->overflow_stack_size = ARM64_OVERFLOW_STACK_SIZE;
+		machdep->flags |= OVERFLOW_STACKS;
+
+		for (i = 0; i < kt->cpus; i++)
+			ms->irq_stacks[i] = kt->__per_cpu_offset[i] + sp->value;
+	}
+}
+
+/*
  *  Gather and verify all of the backtrace requirements.
  */
 static void
@@ -2673,6 +2722,12 @@ arm64_back_trace_cmd(struct bt_info *bt)
 			bt->hp->eip : GET_STACK_ULONG(bt->hp->esp);
 		stackframe.sp = bt->hp->esp + 8;
 		bt->flags &= ~BT_REGS_NOT_FOUND;
+	} else if (arm64_on_overflow_stack(bt->tc->processor, bt->frameptr)) {
+		arm64_set_overflow_stack(bt);
+		bt->flags |= BT_OVERFLOW_STACK;
+		stackframe.sp = bt->stkptr;
+		stackframe.pc = bt->instptr;
+		stackframe.fp = bt->frameptr;
 	} else {
 		if (arm64_on_irq_stack(bt->tc->processor, bt->frameptr)) {
 			arm64_set_irq_stack(bt);
@@ -3881,18 +3936,36 @@ arm64_on_irq_stack(int cpu, ulong stkptr)
 }
 
 static int
+arm64_in_alternate_stackv(int cpu, ulong stkptr, ulong *stacks, ulong stack_size)
+{
+	struct machine_specific *ms = machdep->machspec;
+
+	if (!stack_size || (cpu >= kt->cpus))
+		return FALSE;
+
+	if ((stkptr >= stacks[cpu]) &&
+	    (stkptr < (stacks[cpu] + stack_size)))
+		return TRUE;
+
+	return FALSE;
+}
+
+static int
 arm64_in_alternate_stack(int cpu, ulong stkptr)
 {
 	struct machine_specific *ms = machdep->machspec;
 
-	if (!ms->irq_stack_size || (cpu >= kt->cpus))
-		return FALSE;
+	return arm64_in_alternate_stackv(cpu, stkptr,
+			ms->irq_stacks, ms->irq_stack_size);
+}
 
-	if ((stkptr >= ms->irq_stacks[cpu]) &&
-	    (stkptr < (ms->irq_stacks[cpu] + ms->irq_stack_size)))
-		return TRUE;
+static int
+arm64_on_overflow_stack(int cpu, ulong stkptr)
+{
+	struct machine_specific *ms = machdep->machspec;
 
-	return FALSE;
+	return arm64_in_alternate_stackv(cpu, stkptr,
+			ms->overflow_stacks, ms->overflow_stack_size);
 }
 
 static void
@@ -3902,6 +3975,16 @@ arm64_set_irq_stack(struct bt_info *bt)
 
 	bt->stackbase = ms->irq_stacks[bt->tc->processor];
 	bt->stacktop = bt->stackbase + ms->irq_stack_size;
+	alter_stackbuf(bt);
+}
+
+static void
+arm64_set_overflow_stack(struct bt_info *bt)
+{
+	struct machine_specific *ms = machdep->machspec;
+
+	bt->stackbase = ms->overflow_stacks[bt->tc->processor];
+	bt->stacktop = bt->stackbase + ms->overflow_stack_size;
 	alter_stackbuf(bt);
 }
 
