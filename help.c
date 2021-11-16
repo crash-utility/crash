@@ -3893,6 +3893,8 @@ char *help_log[] = {
 "  record format, where the timestamp is contained in each log entry's header.",
 "  ",
 "    -T  Display the message text with human readable timestamp.",
+"        (Be aware that the timestamp could be inaccurate!  The timestamp is",
+"         from local_clock(), which is different from the elapsed wall time.)",
 "    -t  Display the message text without the timestamp; only applicable to the",
 "        variable-length record format.",
 "    -d  Display the dictionary of key/value pair properties that are optionally",
