@@ -1856,6 +1856,7 @@ is_remote_daemon(char *dp)
 	char *portp, *filep, *file1, *file2;
 	struct hostent *hp;
         struct sockaddr_in serv_addr;
+	char addrbuf[INET_ADDRSTRLEN];
 
 	if (!strstr(dp, ":") || file_exists(dp, NULL))
 		return FALSE;
@@ -1914,7 +1915,7 @@ is_remote_daemon(char *dp)
 
         	listptr = hp->h_addr_list;
         	while ((ip = (struct in_addr *) *listptr++) != NULL)
-                	printf("%s\n", inet_ntoa(*ip));
+                       printf("%s\n", inet_ntop(AF_INET, ip, addrbuf, INET_ADDRSTRLEN));
 	}
 
         if ((pc->sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {

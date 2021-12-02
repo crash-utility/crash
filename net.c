@@ -339,6 +339,7 @@ cmd_net(void)
 	struct task_context *tc = NULL;
 	struct in_addr in_addr;
 	struct reference reference, *ref;
+	char addrbuf[INET_ADDRSTRLEN];
 
 	if (!(net->flags & NETDEV_INIT)) 
 		error(FATAL, "net subsystem not initialized!");
@@ -367,7 +368,7 @@ cmd_net(void)
 		case 'N':
 			value = stol(optarg, FAULT_ON_ERROR, NULL);
 			in_addr.s_addr = (in_addr_t)value;
-			fprintf(fp, "%s\n", inet_ntoa(in_addr));
+			fprintf(fp, "%s\n", inet_ntop(AF_INET, &in_addr, addrbuf, INET_ADDRSTRLEN));
 			return;
 
 		case 's':
@@ -730,6 +731,7 @@ print_neighbour_q(ulong addr, int key_len)
 	struct devinfo dinfo;
 	unsigned char state;		/* state of ARP entry */
 	struct in_addr in_addr;
+	char addrbuf[INET_ADDRSTRLEN];
 
 	ha_size = (i = ARRAY_LENGTH(neighbour_ha)) ?
 		i : get_array_length("neighbour.ha", NULL, sizeof(char));
@@ -752,7 +754,7 @@ print_neighbour_q(ulong addr, int key_len)
 			FAULT_ON_ERROR);
 
 		in_addr.s_addr = ipaddr;
-		fprintf(fp, "%-16lx %-16s", addr, inet_ntoa(in_addr));
+		fprintf(fp, "%-16lx %-16s", addr, inet_ntop(AF_INET, &in_addr, addrbuf, INET_ADDRSTRLEN));
 
 		switch (dinfo.dev_type) {
 		case ARPHRD_ETHER:
@@ -884,6 +886,7 @@ get_device_address(ulong devaddr, char **bufp, long buflen)
 {
 	ulong ip_ptr, ifa_list;
 	struct in_addr ifa_address;
+	char addrbuf[INET_ADDRSTRLEN];
 	char *buf;
 	char buf2[BUFSIZE];
 	long pos = 0;
@@ -906,7 +909,7 @@ get_device_address(ulong devaddr, char **bufp, long buflen)
         		&ifa_address, sizeof(struct in_addr), "ifa_address", 
 			FAULT_ON_ERROR);
 
-		sprintf(buf2, "%s%s", pos ? ", " : "", inet_ntoa(ifa_address));
+		sprintf(buf2, "%s%s", pos ? ", " : "", inet_ntop(AF_INET, &ifa_address, addrbuf, INET_ADDRSTRLEN));
 		if (pos + strlen(buf2) >= buflen) {
 			RESIZEBUF(*bufp, buflen, buflen * 2);
 			buf = *bufp;
@@ -938,6 +941,7 @@ get_sock_info(ulong sock, char *buf)
 	uint16_t u6_addr16_dest[8];
 	char buf2[BUFSIZE];
 	struct in_addr in_addr;
+	char addrbuf[INET_ADDRSTRLEN];
 	int len;
 
 	BZERO(buf, BUFSIZE);
@@ -1067,25 +1071,25 @@ get_sock_info(ulong sock, char *buf)
 			in_addr.s_addr = rcv_saddr;
 			sprintf(&buf[strlen(buf)], "%*s-%-*d%s",
 				BYTES_IP_ADDR,
-				inet_ntoa(in_addr),
+				inet_ntop(AF_INET, &in_addr, addrbuf, INET_ADDRSTRLEN),
 				BYTES_PORT_NUM,
 				ntohs(sport),
 				space(1));
 			in_addr.s_addr = daddr;
 			sprintf(&buf[strlen(buf)], "%*s-%-*d%s",
 				BYTES_IP_ADDR,
-				inet_ntoa(in_addr), 
+				inet_ntop(AF_INET, &in_addr, addrbuf, INET_ADDRSTRLEN), 
 				BYTES_PORT_NUM,
 				ntohs(dport),
 				space(1));
 		} else {
 			in_addr.s_addr = rcv_saddr;
 	                sprintf(&buf[strlen(buf)], " %s-%d ",
-	                        inet_ntoa(in_addr),
+	                        inet_ntop(AF_INET, &in_addr, addrbuf, INET_ADDRSTRLEN),
 	                        ntohs(sport));
 			in_addr.s_addr = daddr;
 	                sprintf(&buf[strlen(buf)], "%s-%d",
-	                        inet_ntoa(in_addr),
+	                        inet_ntop(AF_INET, &in_addr, addrbuf, INET_ADDRSTRLEN),
 	                        ntohs(dport));
 		}
 	}
