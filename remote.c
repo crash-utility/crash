@@ -71,9 +71,10 @@ struct remote_context *rc = &remote_context;
 int
 main(int argc, char **argv)
 {
-        int c, sockfd, newsockfd, clilen;
+        int c, hp, sockfd, newsockfd, clilen;
         struct sockaddr_in serv_addr, cli_addr;
-        struct hostent *hp;
+        struct addrinfo hints;
+        struct addrinfo *result;
         ushort tcp_port;
         char hostname[MAXHOSTNAMELEN];
 
@@ -112,9 +113,18 @@ main(int argc, char **argv)
 
 	console("hostname: %s\n", hostname);
 
-        if ((hp = gethostbyname(hostname)) == NULL) {
-		console("gethostbyname failed: %s\n", hstrerror(h_errno));
-                perror("gethostbyname");
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_flags = AI_PASSIVE;
+        hints.ai_protocol = 0;
+        hints.ai_canonname = NULL;
+        hints.ai_addr = NULL;
+        hints.ai_next = NULL;
+
+        if ((hp = getaddrinfo(hostname, NULL, &hints, &result)) != 0) {
+		console("getaddinfo failed: %s\n", gai_strerror(hp));
+                perror("getaddrinfo");
                 exit(1);
         }
 
@@ -125,14 +135,15 @@ main(int argc, char **argv)
 
 	console("<daemon %d initiated>\n", getpid());
 
-        if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-                exit(1);
-
         BZERO((char *)&serv_addr, sizeof(serv_addr));
         serv_addr.sin_family = AF_INET;
-        BCOPY(hp->h_addr, (char *)&serv_addr.sin_addr, hp->h_length);
         serv_addr.sin_port = htons(tcp_port);
+        BCOPY(result->ai_addr, (char *)&serv_addr.sin_addr, result->ai_addrlen);
 
+        if ((sockfd = socket(result->ai_family, SOCK_STREAM, 0)) < 0)
+                exit(1);
+
+        freeaddrinfo(result);
         daemon_socket_options(sockfd);
 
         if (bind(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0){
@@ -1854,7 +1865,9 @@ is_remote_daemon(char *dp)
 	char sendbuf[BUFSIZE];
 	char recvbuf[BUFSIZE];
 	char *portp, *filep, *file1, *file2;
-	struct hostent *hp;
+	int hp;
+	struct addrinfo hints;
+	struct addrinfo *result, *rp;
         struct sockaddr_in serv_addr;
 	char addrbuf[INET_ADDRSTRLEN];
 
@@ -1904,18 +1917,27 @@ is_remote_daemon(char *dp)
 		fprintf(fp, " file2: [%s]\n", file2);
 	}
 
-        if ((hp = gethostbyname(pc->server)) == NULL) {
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_flags = AI_PASSIVE;
+        hints.ai_protocol = 0;
+        hints.ai_canonname = NULL;
+        hints.ai_addr = NULL;
+        hints.ai_next = NULL;
+
+        if ((hp = getaddrinfo(pc->server, NULL, &hints, &result)) != 0) {
                 herror(pc->server);
-                error(FATAL, "gethostbyname [%s] failed\n", pc->server);
+                error(FATAL, "getaddrinfo [%s] failed: %s\n", pc->server, gai_strerror(hp));
         }
 
 	if (CRASHDEBUG(1)) {
-		struct in_addr *ip;
-        	char **listptr;
+               struct in_addr *ip;
+               struct addrinfo *listptr;
 
-        	listptr = hp->h_addr_list;
-        	while ((ip = (struct in_addr *) *listptr++) != NULL)
-                       printf("%s\n", inet_ntop(AF_INET, ip, addrbuf, INET_ADDRSTRLEN));
+               listptr = result;
+               for (listptr = result; listptr != NULL; listptr = listptr->ai_next)
+                      printf("%s\n", inet_ntop(listptr->ai_family, listptr->ai_addr, addrbuf, INET_ADDRSTRLEN));
 	}
 
         if ((pc->sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -1924,20 +1946,21 @@ is_remote_daemon(char *dp)
         }
 
         BZERO((char *)&serv_addr, sizeof(struct sockaddr_in));
-        serv_addr.sin_family = AF_INET;
-        BCOPY(hp->h_addr, (char *)&serv_addr.sin_addr, hp->h_length);
+        serv_addr.sin_family = result->ai_family;
+        BCOPY(result->ai_addr, &serv_addr.sin_addr, result->ai_addrlen);
         serv_addr.sin_port = htons(pc->port);
 
         if (connect(pc->sockfd, (struct sockaddr *)&serv_addr,
             sizeof(struct sockaddr_in)) < 0) {
-                herror(hp->h_name);
-                error(FATAL, "connect [%s:%d] failed\n", hp->h_name, pc->port);
+                herror(pc->server);
+                error(FATAL, "connect [%s:%d] failed\n", pc->server, pc->port);
                 clean_exit(1);
         }
 
 	if (CRASHDEBUG(1))
-        	printf("connect [%s:%d]: success\n", hp->h_name, pc->port);
+               printf("connect [%s:%d]: success\n", pc->server, pc->port);
 
+	freeaddrinfo(result);
 	remote_socket_options(pc->sockfd);
 
 	/*
