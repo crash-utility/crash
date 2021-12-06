@@ -576,7 +576,8 @@ vm_init(void)
 		STRUCT_SIZE_INIT(cpucache_s, "cpucache_s");
 
         } else if (!VALID_STRUCT(kmem_slab_s) && 
-		   !VALID_STRUCT(slab_s) && 
+		   !VALID_STRUCT(slab_s) &&
+		   !MEMBER_EXISTS("kmem_cache", "cpu_slab") &&
 		   (VALID_STRUCT(slab) || (vt->flags & SLAB_OVERLOAD_PAGE))) {
                 vt->flags |= PERCPU_KMALLOC_V2;
 
