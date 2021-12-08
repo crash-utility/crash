@@ -2753,7 +2753,6 @@ struct symbol_table_data {
         double val_hash_searches;
         double val_hash_iterations;
         struct syment *symname_hash[SYMNAME_HASH];
-	struct syment *mod_symname_hash[SYMNAME_HASH];
 	struct symbol_namespace kernel_namespace;
 	struct syment *ext_module_symtable;
 	struct syment *ext_module_symend;
@@ -2780,6 +2779,7 @@ struct symbol_table_data {
 	ulong kaiser_init_vmlinux;
 	int kernel_symbol_type;
 	ulong linux_banner_vmlinux;
+	struct syment *mod_symname_hash[SYMNAME_HASH];
 };
 
 /* flags for st */
