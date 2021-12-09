@@ -1013,7 +1013,6 @@ struct machdep_table {
         ulong (*processor_speed)(void);
         int (*uvtop)(struct task_context *, ulong, physaddr_t *, int);
         int (*kvtop)(struct task_context *, ulong, physaddr_t *, int);
-	int (*get_cpu_reg)(int, int, const char *, int, void *);
         ulong (*get_task_pgd)(ulong);
 	void (*dump_irq)(int);
 	void (*get_stack_frame)(struct bt_info *, ulong *, ulong *);
@@ -1063,6 +1062,7 @@ struct machdep_table {
         void (*get_irq_affinity)(int);
         void (*show_interrupts)(int, ulong *);
 	int (*is_page_ptr)(ulong, physaddr_t *);
+	int (*get_cpu_reg)(int, int, const char *, int, void *);
 };
 
 /*
