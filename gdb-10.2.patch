@@ -8,6 +8,11 @@
 # shell script that can restore any gdb file to its original state prior
 # to all subsequent patch applications.
 
+tar xvzmf gdb-10.2.tar.gz \
+	gdb-10.2/gdb/Makefile.in
+
+exit 0
+
 --- gdb-10.2/Makefile.in.orig
 +++ gdb-10.2/Makefile.in
 @@ -340,6 +340,9 @@ AR_FOR_BUILD = @AR_FOR_BUILD@
@@ -1622,3 +1627,14 @@
      {
        if (user_name.back () == '>')
  	m_encoded_name
+--- gdb-10.2/gdb/Makefile.in.orig
++++ gdb-10.2/gdb/Makefile.in
+@@ -1865,7 +1865,7 @@ libgdb.a: $(LIBGDB_OBS)
+ # Removing the old gdb first works better if it is running, at least on SunOS.
+ gdb$(EXEEXT): gdb.o $(LIBGDB_OBS) $(CDEPS) $(TDEPLIBS)
+ 	$(SILENCE) rm -f gdb$(EXEEXT)
+-	@(cd ../..; make --no-print-directory GDB_FLAGS=-DGDB_10_2 library)
++	@$(MAKE) -C ../.. GDB_FLAGS=-DGDB_10_2 library
+ 	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
+                 -o $(shell /bin/cat mergeobj) $(LIBGDB_OBS) \
+                 $(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES) $(shell /bin/cat mergelibs)
