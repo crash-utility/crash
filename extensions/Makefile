@@ -34,7 +34,7 @@ link_defs:
 
 $(CONTRIB_SO): %.so: %.c defs.h
 	@if [ -f $*.mk ]; then \
-		make -f $*.mk; \
+		$(MAKE) -f $*.mk; \
 	else \
 		grep '((constructor))' $*.c > .constructor; \
 		if [ -s .constructor ]; then \
@@ -51,5 +51,5 @@ $(CONTRIB_SO): %.so: %.c defs.h
 clean:
 	rm -f $(CONTRIB_SO)
 	@for MAKEFILE in `grep -sl "^clean:" *.mk`; \
-	  do make --no-print-directory -f $$MAKEFILE clean; \
+	  do $(MAKE) -f $$MAKEFILE clean; \
 	done

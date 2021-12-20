@@ -18,7 +18,8 @@ fi
  
 tar xvzmf gdb-7.6.tar.gz \
 	gdb-7.6/gdb/symtab.c \
-	gdb-7.6/gdb/printcmd.c
+	gdb-7.6/gdb/printcmd.c \
+	gdb-7.6/gdb/Makefile.in
 
 exit 0
 
@@ -2556,3 +2557,14 @@ diff -up gdb-7.6/opcodes/configure.orig gdb-7.6/opcodes/configure
        else if (high_word == 0x27be)	/* addiu $30,$sp,size */
  	{
  	  /* Old gcc frame, r30 is virtual frame pointer.  */
+--- gdb-7.6/gdb/Makefile.in.orig
++++ gdb-7.6/gdb/Makefile.in
+@@ -1173,7 +1173,7 @@ libgdb.a: $(LIBGDB_OBS)
+ # Removing the old gdb first works better if it is running, at least on SunOS.
+ gdb$(EXEEXT): gdb.o $(LIBGDB_OBS) $(ADD_DEPS) $(CDEPS) $(TDEPLIBS)
+ 	@rm -f gdb$(EXEEXT)
+-	@(cd ../..; make --no-print-directory GDB_FLAGS=-DGDB_7_6 library)
++	@$(MAKE) -C ../.. GDB_FLAGS=-DGDB_7_6 library
+ 	$(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
+ 		-o $(shell /bin/cat mergeobj) $(LIBGDB_OBS) \
+ 		$(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES) $(shell /bin/cat mergelibs)

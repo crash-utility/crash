@@ -17,6 +17,7 @@
 # GNU General Public License for more details.
 #
 
+MAKEFLAGS += --no-print-directory
 PROGRAM=crash
 
 #
@@ -224,20 +225,20 @@ endif
 
 all: make_configure
 	@./configure ${CONF_TARGET_FLAG} -p "RPMPKG=${RPMPKG}" -b
-	@make --no-print-directory gdb_merge
-#	@make --no-print-directory extensions
+	@$(MAKE) gdb_merge
+#	@$(MAKE) extensions
 
 gdb_merge: force
 	@if [ ! -f ${GDB}/README ]; then \
-	  make --no-print-directory gdb_unzip; fi
+	  $(MAKE) gdb_unzip; fi
 	@echo "${LDFLAGS} -lz -ldl -rdynamic" > ${GDB}/gdb/mergelibs
 	@echo "../../${PROGRAM} ../../${PROGRAM}lib.a" > ${GDB}/gdb/mergeobj
 	@rm -f ${PROGRAM}
 	@if [ ! -f ${GDB}/config.status ]; then \
 	  (cd ${GDB}; ./configure ${GDB_CONF_FLAGS} --with-separate-debug-dir=/usr/lib/debug \
 	    --with-bugurl="" --with-expat=no --with-python=no --disable-sim; \
-	  make --no-print-directory CRASH_TARGET=${TARGET}; echo ${TARGET} > crash.target) \
-	else make --no-print-directory rebuild; fi
+	  $(MAKE) CRASH_TARGET=${TARGET}; echo ${TARGET} > crash.target) \
+	else $(MAKE) rebuild; fi
 	@if [ ! -f ${PROGRAM} ]; then \
 	  echo; echo "${PROGRAM} build failed"; \
 	  echo; exit 1; fi
@@ -248,8 +249,8 @@ rebuild:
 	@if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ] && \
 	  [ "`sum ${GDB}.patch`" != "`sum ${GDB}/${GDB}.patch`" ]; then \
 	  (sh -x ${GDB}.patch ${TARGET}; patch -N -p0 -r- --fuzz=0 < ${GDB}.patch; cp ${GDB}.patch ${GDB}; cd ${GDB}; \
-	  make --no-print-directory CRASH_TARGET=${TARGET}) \
-	else (cd ${GDB}/gdb; make --no-print-directory CRASH_TARGET=${TARGET}); fi
+	  $(MAKE) CRASH_TARGET=${TARGET}) \
+	else (cd ${GDB}/gdb; $(MAKE) CRASH_TARGET=${TARGET}); fi
 
 gdb_unzip:
 	@rm -f gdb.files
@@ -261,7 +262,7 @@ gdb_unzip:
 	  [ ! -t 2 ] && WGET_OPTS="--progress=dot:mega"; \
 	  wget $$WGET_OPTS http://ftp.gnu.org/gnu/gdb/${GDB}.tar.gz; fi
 	@tar --exclude-from gdb.files -xzmf ${GDB}.tar.gz
-	@make --no-print-directory gdb_patch
+	@$(MAKE) gdb_patch
 
 gdb_patch:
 	if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ]; then \
@@ -284,7 +285,7 @@ library: make_build_data ${OBJECT_FILES}
 
 gdb: force
 	rm -f ${GDB_OFILES}
-	@make --no-print-directory all
+	@$(MAKE) all
 
 force:
 	
@@ -295,12 +296,12 @@ make_configure: force
 
 clean: make_configure
 	@./configure ${CONF_TARGET_FLAG} -q -b
-	@make --no-print-directory do_clean
+	@$(MAKE) do_clean
 
 do_clean:
 	rm -f ${OBJECT_FILES} ${DAEMON_OBJECT_FILES} ${PROGRAM} ${PROGRAM}lib.a ${GDB_OFILES}
-	@(cd extensions; make --no-print-directory -i clean)
-	@(cd memory_driver; make --no-print-directory -i clean)
+	@$(MAKE) -C extensions -i clean
+	@$(MAKE) -C memory_driver -i clean
 
 make_build_data: force
 	${CC} -c ${CRASH_CFLAGS} build_data.c ${WARNING_OPTIONS} ${WARNING_ERROR}
@@ -315,31 +316,31 @@ unconfig: make_configure
 
 warn: make_configure
 	@./configure ${CONF_TARGET_FLAG} -w -b
-	@make --no-print-directory gdb_merge
+	@$(MAKE) gdb_merge
 
 Warn: make_configure
 	@./configure ${CONF_TARGET_FLAG} -W -b
-	@make --no-print-directory gdb_merge
+	@$(MAKE) gdb_merge
 
 nowarn: make_configure
 	@./configure ${CONF_TARGET_FLAG} -n -b
-	@make --no-print-directory gdb_merge
+	@$(MAKE) gdb_merge
 
 lzo: make_configure
 	@./configure -x lzo ${CONF_TARGET_FLAG} -w -b
-	@make --no-print-directory gdb_merge
+	@$(MAKE) gdb_merge
 
 snappy: make_configure
 	@./configure -x snappy ${CONF_TARGET_FLAG} -w -b
-	@make --no-print-directory gdb_merge
+	@$(MAKE) gdb_merge
 
 zstd: make_configure
 	@./configure -x zstd ${CONF_TARGET_FLAG} -w -b
-	@make --no-print-directory gdb_merge
+	@$(MAKE) gdb_merge
 
 valgrind: make_configure
 	@./configure -x valgrind ${CONF_TARGET_FLAG} -w -b
-	@make --no-print-directory gdb_merge
+	@$(MAKE) gdb_merge
 
 main.o: ${GENERIC_HFILES} main.c
 	${CC} -c ${CRASH_CFLAGS} main.c ${WARNING_OPTIONS} ${WARNING_ERROR} 
@@ -545,7 +546,7 @@ bpf.o: ${GENERIC_HFILES} bpf.c
 	${CC} -c ${CRASH_CFLAGS} bpf.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 ${PROGRAM}: force
-	@make --no-print-directory all
+	@$(MAKE) all
 
 # Remote daemon functionality has been deprecated.
 daemon_deprecated: force
@@ -554,15 +555,15 @@ daemon_deprecated: force
 
 ${PROGRAM}d: daemon_deprecated make_configure
 	@./configure -d
-	@make --no-print-directory make_build_data
-	@make --no-print-directory daemon 
+	@$(MAKE) make_build_data
+	@$(MAKE) daemon
 
 daemon: ${DAEMON_OBJECT_FILES}
 	${CC} ${LDFLAGS} -o ${PROGRAM}d ${DAEMON_OBJECT_FILES} build_data.o -lz 
 
 files: make_configure
 	@./configure -q -b
-	@make --no-print-directory show_files
+	@$(MAKE) show_files
 
 gdb_files: make_configure
 	@./configure -q -b
@@ -579,7 +580,7 @@ ctags:
 
 tar: make_configure
 	@./configure -q -b
-	@make --no-print-directory do_tar
+	@$(MAKE) do_tar
 
 do_tar:
 	@if [ -f ${PROGRAM}  ]; then \
@@ -594,7 +595,7 @@ release: make_configure
 	@if [ "`id --user`" != "0" ]; then \
 		echo "make release: must be super-user"; exit 1; fi
 	@./configure -P "RPMPKG=${RPMPKG}" -u -g
-	@make --no-print-directory release_configure
+	@$(MAKE) release_configure
 	@echo 
 	@echo "cvs tag this release if necessary"
 
@@ -602,7 +603,7 @@ release_configure: make_configure
 	@if [ "${GDB}" = "" ] ; then \
 		echo "make release: GDB not defined: append GDB=gdb-x.x to make command line"; echo; exit 1; fi 
 	@./configure -r ${GDB}
-	@make --no-print-directory do_release
+	@$(MAKE) do_release
 
 do_release:
 	@echo "CRASH VERSION: ${VERSION}  GDB VERSION: ${GDB}"
@@ -644,7 +645,7 @@ do_release:
 	fi
 
 ref:
-	make ctags cscope
+	$(MAKE) ctags cscope
 
 cscope:
 	rm -f cscope.files cscope_out
@@ -666,10 +667,10 @@ dis:
 
 extensions: make_configure
 	@./configure ${CONF_TARGET_FLAG} -q -b
-	@make --no-print-directory do_extensions
+	@$(MAKE) do_extensions
 
 do_extensions:
-	@(cd extensions; make -i TARGET=$(TARGET) TARGET_CFLAGS="$(TARGET_CFLAGS)" GDB=$(GDB) GDB_FLAGS=$(GDB_FLAGS))
+	@$(MAKE) -C extensions -i TARGET=$(TARGET) TARGET_CFLAGS="$(TARGET_CFLAGS)" GDB=$(GDB) GDB_FLAGS=$(GDB_FLAGS)
 
 memory_driver: make_configure 
-	@(cd memory_driver; make --no-print-directory -i)
+	@$(MAKE) -C memory_driver -i
