@@ -10757,11 +10757,21 @@ is_pvops_xen(void)
 	     STREQ(sym, "paravirt_patch_default")))
 		return TRUE;
 
-	if (symbol_exists("xen_start_info") &&
-	    readmem(symbol_value("xen_start_info"), KVADDR, &addr,
-	    sizeof(void *), "xen_start_info", RETURN_ON_ERROR) &&
-	    addr != 0)
-		return TRUE;
+	if (machine_type("X86") || machine_type("X86_64")) {
+		if (symbol_exists("xen_start_info") &&
+		    readmem(symbol_value("xen_start_info"), KVADDR, &addr,
+		    sizeof(void *), "xen_start_info", RETURN_ON_ERROR) &&
+		    addr != 0)
+			return TRUE;
+	}
+
+	if (machine_type("ARM") || machine_type("ARM64")) {
+		if (symbol_exists("xen_vcpu_info") &&
+		    readmem(symbol_value("xen_vcpu_info"), KVADDR, &addr,
+		    sizeof(void *), "xen_vcpu_info", RETURN_ON_ERROR) &&
+		    addr != 0)
+			return TRUE;
+	}
 
 	return FALSE;
 }
