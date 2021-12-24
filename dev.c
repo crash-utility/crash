@@ -4246,6 +4246,10 @@ get_mq_diskio(unsigned long q, unsigned long *mq_count)
 	unsigned long mctx_addr;
 	struct diskio tmp;
 
+	if (INVALID_MEMBER(blk_mq_ctx_rq_dispatched) ||
+	    INVALID_MEMBER(blk_mq_ctx_rq_completed))
+		return;
+
 	memset(&tmp, 0x00, sizeof(struct diskio));
 
 	readmem(q + OFFSET(request_queue_queue_ctx), KVADDR, &queue_ctx,
@@ -4475,24 +4479,41 @@ display_one_diskio(struct iter *i, unsigned long gendisk, ulong flags)
 		&& (io.read + io.write == 0))
 		return;
 
-	fprintf(fp, "%s%s%s  %s%s%s%s  %s%5d%s%s%s%s%s",
-		mkstring(buf0, 5, RJUST|INT_DEC, (char *)(unsigned long)major),
-		space(MINSPACE),
-		mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, (char *)gendisk),
-		space(MINSPACE),
-		mkstring(buf2, 10, LJUST, disk_name),
-		space(MINSPACE),
-		mkstring(buf3, VADDR_PRLEN <= 11 ? 11 : VADDR_PRLEN,
-			 LJUST|LONG_HEX, (char *)queue_addr),
-		space(MINSPACE),
-		io.read + io.write,
-		space(MINSPACE),
-		mkstring(buf4, 5, RJUST|INT_DEC,
-			(char *)(unsigned long)io.read),
-		space(MINSPACE),
-		mkstring(buf5, 5, RJUST|INT_DEC,
-			(char *)(unsigned long)io.write),
-		space(MINSPACE));
+	if (use_mq_interface(queue_addr) &&
+	    (INVALID_MEMBER(blk_mq_ctx_rq_dispatched) ||
+	     INVALID_MEMBER(blk_mq_ctx_rq_completed)))
+		fprintf(fp, "%s%s%s  %s%s%s%s  %s%s%s",
+			mkstring(buf0, 5, RJUST|INT_DEC, (char *)(unsigned long)major),
+			space(MINSPACE),
+			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, (char *)gendisk),
+			space(MINSPACE),
+			mkstring(buf2, 10, LJUST, disk_name),
+			space(MINSPACE),
+			mkstring(buf3, VADDR_PRLEN <= 11 ? 11 : VADDR_PRLEN,
+				 LJUST|LONG_HEX, (char *)queue_addr),
+			space(MINSPACE),
+			mkstring(buf4, 17, RJUST, "(not supported)"),
+			space(MINSPACE));
+
+	else
+		fprintf(fp, "%s%s%s  %s%s%s%s  %s%5d%s%s%s%s%s",
+			mkstring(buf0, 5, RJUST|INT_DEC, (char *)(unsigned long)major),
+			space(MINSPACE),
+			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, (char *)gendisk),
+			space(MINSPACE),
+			mkstring(buf2, 10, LJUST, disk_name),
+			space(MINSPACE),
+			mkstring(buf3, VADDR_PRLEN <= 11 ? 11 : VADDR_PRLEN,
+				 LJUST|LONG_HEX, (char *)queue_addr),
+			space(MINSPACE),
+			io.read + io.write,
+			space(MINSPACE),
+			mkstring(buf4, 5, RJUST|INT_DEC,
+				(char *)(unsigned long)io.read),
+			space(MINSPACE),
+			mkstring(buf5, 5, RJUST|INT_DEC,
+				(char *)(unsigned long)io.write),
+			space(MINSPACE));
 
 	if (VALID_MEMBER(request_queue_in_flight)) {
 		if (!use_mq_interface(queue_addr)) {
