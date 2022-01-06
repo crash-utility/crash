@@ -7675,7 +7675,8 @@ dump_hrtimer_data(const ulong *cpus)
 	if (VALID_STRUCT(hrtimer_clock_base)) {
 		hrtimer_max_clock_bases = 2;
 		if (symbol_exists("ktime_get_boottime"))
-			hrtimer_max_clock_bases = 3;
+			hrtimer_max_clock_bases = MEMBER_SIZE("hrtimer_cpu_base", "clock_base") /
+							SIZE(hrtimer_clock_base);
 	} else if (VALID_STRUCT(hrtimer_base)) {
 		max_hrtimer_bases = 2;
 	} else
