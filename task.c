@@ -11202,7 +11202,7 @@ check_stack_overflow(void)
 {
 	int i, overflow, cpu_size, cpu, total;
 	char buf[BUFSIZE];
-	ulong magic, task, stackbase;
+	ulong magic, task, stackbase, location;
 	struct task_context *tc;
 
 	if (!tt->stack_end_magic && 
@@ -11286,9 +11286,15 @@ check_stack_end_magic:
 		if (magic != STACK_END_MAGIC) {
 			if (!overflow)
 				print_task_header(fp, tc, 0);
+
+			if (tt->flags & THREAD_INFO_IN_TASK)
+				location = task_to_stackbase(tc->task);
+			else
+				location = tc->thread_info + SIZE(thread_info);
+
 			fprintf(fp, 
 			    "  possible stack overflow: %lx: %lx != STACK_END_MAGIC\n",
-				tc->thread_info + SIZE(thread_info), magic);
+				location, magic);
 			overflow++, total++;
 		}
 
