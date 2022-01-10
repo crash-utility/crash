@@ -440,6 +440,8 @@ task_init(void)
 		}
 	} else if ((symbol_exists("dd_init_queue") &&
 	    gdb_set_crash_scope(symbol_value("dd_init_queue"), "dd_init_queue")) ||
+	    (symbol_exists("dd_init_sched") &&
+	    gdb_set_crash_scope(symbol_value("dd_init_sched"), "dd_init_sched")) ||
 	    (symbol_exists("deadline_init_queue") &&
 	    gdb_set_crash_scope(symbol_value("deadline_init_queue"), "deadline_init_queue"))) {
 		char buf[BUFSIZE];
