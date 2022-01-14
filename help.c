@@ -3907,6 +3907,7 @@ char *help_log[] = {
 "        shown with 'set debug 1'.",
 "    -a  Dump the audit logs remaining in kernel audit buffers that have not",
 "        been copied out to the user-space audit daemon.",
+"    -C  Display the message text with the processor_id.",
 " ",        
 "\nEXAMPLES",
 "  Dump the kernel message buffer:\n",
@@ -4053,6 +4054,11 @@ char *help_log[] = {
 "    [Sat Apr  4 07:41:09 2020] last_pfn = 0x120000 max_arch_pfn = 0x400000000",
 "    [Sat Apr  4 07:41:09 2020] MTRR default type: uncachable",
 "    [Sat Apr  4 07:41:09 2020] MTRR variable ranges disabled:",
+"    ...",
+" ",
+" Display the message text with processor id:\n",
+"    %s> log -C",
+"    [    0.467730] c0 pci 0000:ff:02.0: [8086:2c10] type 00 class 0x060000",
 "    ...",
 NULL               
 };

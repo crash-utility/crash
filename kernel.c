@@ -4998,7 +4998,7 @@ cmd_log(void)
 
 	msg_flags = 0;
 
-        while ((c = getopt(argcnt, args, "Ttdma")) != EOF) {
+        while ((c = getopt(argcnt, args, "TtdmaC")) != EOF) {
                 switch(c)
                 {
 		case 'T':
@@ -5015,6 +5015,9 @@ cmd_log(void)
                         break;
 		case 'a':
 			msg_flags |= SHOW_LOG_AUDIT;
+			break;
+		case 'C':
+			msg_flags |= SHOW_LOG_CPU;
 			break;
                 default:
                         argerrs++;
@@ -5233,7 +5236,7 @@ dump_log_entry(char *logptr, int msg_flags)
 {
 	int indent;
 	char *msg, *p;
-	uint16_t i, text_len, dict_len, level;
+	uint16_t i, text_len, dict_len, level, cpu;
 	uint64_t ts_nsec;
 	ulonglong nanos; 
 	ulong rem;
@@ -5278,6 +5281,14 @@ dump_log_entry(char *logptr, int msg_flags)
 		else
 			sprintf(buf, "[%5lld.%06ld] ", nanos, rem/1000);
 		ilen = strlen(buf);
+		fprintf(fp, "%s", buf);
+	}
+
+	cpu = USHORT(logptr + OFFSET(cpu_id));
+
+	if (msg_flags & SHOW_LOG_CPU) {
+		sprintf(buf, "c%d ", cpu);
+		ilen += strlen(buf);
 		fprintf(fp, "%s", buf);
 	}
 
@@ -5347,6 +5358,7 @@ dump_variable_length_record_log(int msg_flags)
 		MEMBER_OFFSET_INIT(log_level, log_struct_name, "level");
 		MEMBER_SIZE_INIT(log_level, log_struct_name, "level");
 		MEMBER_OFFSET_INIT(log_flags_level, log_struct_name, "flags_level");
+		MEMBER_OFFSET_INIT(cpu_id, log_struct_name, "cpu");
 			
 		/*
 		 * If things change, don't kill a dumpfile session 

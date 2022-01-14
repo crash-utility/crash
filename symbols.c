@@ -10500,6 +10500,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(log_level));
 	fprintf(fp, "               log_flags_level: %ld\n",
 		OFFSET(log_flags_level));
+	fprintf(fp, "                        cpu_id: %ld\n",
+		OFFSET(cpu_id));
 
 	fprintf(fp, "               printk_info_seq: %ld\n", OFFSET(printk_info_seq));
 	fprintf(fp, "           printk_info_ts_nseq: %ld\n", OFFSET(printk_info_ts_nsec));
@@ -10913,6 +10915,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(log));
 	fprintf(fp, "                     log_level: %ld\n",
 		SIZE(log_level));
+	fprintf(fp, "                        cpu_id: %ld\n",
+		SIZE(cpu_id));
 	fprintf(fp, "                         rt_rq: %ld\n",
 		SIZE(rt_rq));
 	fprintf(fp, "                    task_group: %ld\n",
