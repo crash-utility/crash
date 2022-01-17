@@ -692,6 +692,16 @@ task_init(void)
 
 	stack_overflow_check_init();
 
+	if (machdep->hz) {
+		ulonglong uptime_jiffies;
+		ulong  uptime_sec;
+
+		get_uptime(NULL, &uptime_jiffies);
+		uptime_sec = (uptime_jiffies)/(ulonglong)machdep->hz;
+		kt->boot_date.tv_sec = kt->date.tv_sec - uptime_sec;
+		kt->boot_date.tv_nsec = 0;
+	}
+
 	tt->flags |= TASK_INIT_DONE;
 }
 
