@@ -4662,8 +4662,6 @@ show_task_times(struct task_context *tcp, ulong flags)
 static int
 start_time_timespec(void)
 {
-        char buf[BUFSIZE];
-
 	switch(tt->flags & (TIMESPEC | NO_TIMESPEC | START_TIME_NSECS))
 	{
 	case TIMESPEC:
@@ -4677,24 +4675,11 @@ start_time_timespec(void)
 
 	tt->flags |= NO_TIMESPEC;
 
-        open_tmpfile();
-        sprintf(buf, "ptype struct task_struct");
-        if (!gdb_pass_through(buf, NULL, GNU_RETURN_ON_ERROR)) {
-                close_tmpfile();
-                return FALSE;
-        }
-
-        rewind(pc->tmpfile);
-        while (fgets(buf, BUFSIZE, pc->tmpfile)) {
-                if (strstr(buf, "start_time;")) {
-			if (strstr(buf, "struct timespec")) {
-				tt->flags &= ~NO_TIMESPEC;
-				tt->flags |= TIMESPEC;
-			}
-		}
-        }
-
-        close_tmpfile();
+	if (VALID_MEMBER(task_struct_start_time) &&
+	    STREQ(MEMBER_TYPE_NAME("task_struct", "start_time"), "timespec")) {
+			tt->flags &= ~NO_TIMESPEC;
+			tt->flags |= TIMESPEC;
+	}
 
 	if ((tt->flags & NO_TIMESPEC) && (SIZE(task_struct_start_time) == 8)) {
 		tt->flags &= ~NO_TIMESPEC;
