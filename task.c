@@ -2947,6 +2947,7 @@ add_context(ulong task, char *tp)
 	tg = tt->tgid_array + tt->running_tasks;
 	tg->tgid = *tgid_addr;
 	tg->task = task;
+	tg->rss_cache = UNINITIALIZED;
 
         if (do_verify && !verify_task(tc, do_verify)) {
 		error(INFO, "invalid task address: %lx\n", tc->task);

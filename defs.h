@@ -829,6 +829,7 @@ struct task_context {                     /* context stored for each task */
 struct tgid_context {               /* tgid and task stored for each task */
 	ulong tgid;
 	ulong task;
+	long rss_cache;
 };
 
 struct task_table {                      /* kernel/local task table data */
