@@ -4665,7 +4665,7 @@ void
 get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 {
 	struct task_context *tc;
-	long rss = 0;
+	long rss = 0, rss_cache = 0;
 
 	BZERO(tm, sizeof(struct task_mem_usage));
 
@@ -4730,38 +4730,46 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 					(last->tgid == (last + 1)->tgid))
 					last++;
 
-				while (first <= last)
-				{
-					/* count 0 -> filepages */
-					if (!readmem(first->task +
-						OFFSET(task_struct_rss_stat) +
-						OFFSET(task_rss_stat_count), KVADDR,
-						&sync_rss,
-						sizeof(int),
-						"task_struct rss_stat MM_FILEPAGES",
-						RETURN_ON_ERROR))
-							continue;
+				/*
+				 * Using rss cache for dumpfile is more beneficial than live debug
+				 * because its value never changes in dumpfile.
+				 */
+				if (ACTIVE() || last->rss_cache == UNINITIALIZED) {
+					while (first <= last)
+					{
+						/* count 0 -> filepages */
+						if (!readmem(first->task +
+							OFFSET(task_struct_rss_stat) +
+							OFFSET(task_rss_stat_count), KVADDR,
+							&sync_rss,
+							sizeof(int),
+							"task_struct rss_stat MM_FILEPAGES",
+							RETURN_ON_ERROR))
+								continue;
 
-					rss += sync_rss;
+						rss_cache += sync_rss;
 
-					/* count 1 -> anonpages */
-					if (!readmem(first->task +
-						OFFSET(task_struct_rss_stat) +
-						OFFSET(task_rss_stat_count) +
-						sizeof(int),
-						KVADDR, &sync_rss,
-						sizeof(int),
-						"task_struct rss_stat MM_ANONPAGES",
-						RETURN_ON_ERROR))
-							continue;
+						/* count 1 -> anonpages */
+						if (!readmem(first->task +
+							OFFSET(task_struct_rss_stat) +
+							OFFSET(task_rss_stat_count) +
+							sizeof(int),
+							KVADDR, &sync_rss,
+							sizeof(int),
+							"task_struct rss_stat MM_ANONPAGES",
+							RETURN_ON_ERROR))
+								continue;
 
-					rss += sync_rss;
+						rss_cache += sync_rss;
 
-					if (first == last)
-						break;
-					first++;
+						if (first == last)
+							break;
+						first++;
+					}
+					last->rss_cache = rss_cache;
 				}
 
+				rss += last->rss_cache;
 				tt->last_tgid = last;
 			}
 		}
