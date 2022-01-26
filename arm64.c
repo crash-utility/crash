@@ -472,7 +472,7 @@ arm64_init(int when)
 		arm64_stackframe_init();
 		break;
 
-	case POST_VM:
+	case POST_INIT:
 		/*
 		 * crash_notes contains machine specific information about the
 		 * crash. In particular, it contains CPU registers at the time

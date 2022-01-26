@@ -111,8 +111,7 @@ map_cpus_to_prstatus_kdump_cmprs(void)
 	if (pc->flags2 & QEMU_MEM_DUMP_COMPRESSED)  /* notes exist for all cpus */
 		goto resize_note_pointers;
 
-	if (!(online = get_cpus_online()) || (online == kt->cpus) || 
-	    machine_type("ARM64"))
+	if (!(online = get_cpus_online()) || (online == kt->cpus))
 		goto resize_note_pointers;
 
 	if (CRASHDEBUG(1))
