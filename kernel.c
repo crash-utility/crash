@@ -11593,8 +11593,14 @@ __dump_printk_safe_seq_buf(char *buf_name, int msg_flags)
 			if (show_header) {
 				ilen = PRINTK_SAFE_SEQ_BUF_INDENT;
 			} else {
-				ilen = strlen(buf_name) + 3; // "[%s] "
+				if (msg_flags & SHOW_LOG_TEXT)
+					ilen = 0;
+				else
+					ilen = strlen(buf_name) + 3; // "[%s] "
 			}
+			if (msg_flags & SHOW_LOG_LEVEL)
+				ilen += 3; // "<%c>"
+
 			readmem(buffer_addr + per_cpu_offset, KVADDR,
 				buffer, buffer_size,
 				"printk_safe_seq_buf buffer", FAULT_ON_ERROR);
@@ -11612,8 +11618,16 @@ __dump_printk_safe_seq_buf(char *buf_name, int msg_flags)
 
 					if (show_header)
 						fprintf(fp, "%s", space(PRINTK_SAFE_SEQ_BUF_INDENT));
-					else
+					else if (!(msg_flags & SHOW_LOG_TEXT))
 						fprintf(fp, "[%s] ", buf_name);
+
+					if ((msg_flags & SHOW_LOG_LEVEL) && (i < n)) {
+						switch (*p) {
+						case '0' ... '7':
+						case 'c':
+							fprintf(fp, "<%c>", *p);
+						}
+					}
 
 					continue;
 				} else {
