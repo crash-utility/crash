@@ -10523,6 +10523,10 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "       prb_data_ring_size_bits: %ld\n", OFFSET(prb_data_ring_size_bits));
 	fprintf(fp, "            prb_data_ring_data: %ld\n", OFFSET(prb_data_ring_data));
 	fprintf(fp, "         atomit_long_t_counter: %ld\n", OFFSET(atomic_long_t_counter));
+	fprintf(fp, "       printk_safe_seq_buf_len: %ld\n", OFFSET(printk_safe_seq_buf_len));
+	fprintf(fp, "printk_safe_seq_buf_message_lost: %ld\n",
+		OFFSET(printk_safe_seq_buf_message_lost));
+	fprintf(fp, "    printk_safe_seq_buf_buffer: %ld\n", OFFSET(printk_safe_seq_buf_buffer));
 
 	fprintf(fp, "          sched_rt_entity_my_q: %ld\n",
 		OFFSET(sched_rt_entity_my_q));
@@ -10954,6 +10958,7 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "                   printk_info: %ld\n", SIZE(printk_info));
 	fprintf(fp, "             printk_ringbuffer: %ld\n", SIZE(printk_ringbuffer));
 	fprintf(fp, "                      prb_desc: %ld\n", SIZE(prb_desc));
+	fprintf(fp, "    printk_safe_seq_buf_buffer: %ld\n", SIZE(printk_safe_seq_buf_buffer));
 
 
         fprintf(fp, "\n                   array_table:\n");
