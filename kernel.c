@@ -93,6 +93,7 @@ static void source_tree_init(void);
 static ulong dump_audit_skb_queue(ulong);
 static ulong __dump_audit(char *);
 static void dump_audit(void);
+static void dump_printk_safe_seq_buf(int);
 static char *vmcoreinfo_read_string(const char *);
 static void check_vmcoreinfo(void);
 static int is_pvops_xen(void);
@@ -4999,7 +5000,7 @@ cmd_log(void)
 
 	msg_flags = 0;
 
-        while ((c = getopt(argcnt, args, "Ttdma")) != EOF) {
+        while ((c = getopt(argcnt, args, "Ttdmas")) != EOF) {
                 switch(c)
                 {
 		case 'T':
@@ -5016,6 +5017,9 @@ cmd_log(void)
                         break;
 		case 'a':
 			msg_flags |= SHOW_LOG_AUDIT;
+			break;
+		case 's':
+			msg_flags |= SHOW_LOG_SAFE;
 			break;
                 default:
                         argerrs++;
@@ -5036,7 +5040,13 @@ cmd_log(void)
 		return;
 	}
 
+	if (msg_flags & SHOW_LOG_SAFE) {
+		dump_printk_safe_seq_buf(msg_flags);
+		return;
+	}
+
 	dump_log(msg_flags);
+	dump_printk_safe_seq_buf(msg_flags);
 }
 
 
@@ -11528,6 +11538,139 @@ dump_audit(void)
 
 	if (!qlen)
 		error(INFO, "kernel audit log is empty\n");
+}
+
+#define PRINTK_SAFE_SEQ_BUF_INDENT 2
+
+static void
+__dump_printk_safe_seq_buf(char *buf_name, int msg_flags)
+{
+	int cpu, buffer_size;
+	char *buffer;
+	ulong base_addr, len_addr, message_lost_addr, buffer_addr;
+	bool show_header;
+
+	show_header = msg_flags & SHOW_LOG_SAFE;
+
+	if (!symbol_exists(buf_name)) {
+		return;
+	}
+
+	base_addr = symbol_value(buf_name);
+	len_addr = base_addr + OFFSET(printk_safe_seq_buf_len)
+			+ OFFSET(atomic_t_counter);
+	message_lost_addr = base_addr
+			+ OFFSET(printk_safe_seq_buf_message_lost)
+			+ OFFSET(atomic_t_counter);
+	buffer_addr = base_addr + OFFSET(printk_safe_seq_buf_buffer);
+	buffer_size = SIZE(printk_safe_seq_buf_buffer);
+	buffer = GETBUF(buffer_size);
+
+	if (show_header)
+		fprintf(fp, "PRINTK_SAFE_SEQ_BUF: %s\n", buf_name);
+	for (cpu = 0; cpu < kt->cpus; cpu++) {
+		int len, message_lost;
+		ulong per_cpu_offset;
+		per_cpu_offset = kt->__per_cpu_offset[cpu];
+
+		readmem(len_addr + per_cpu_offset, KVADDR, &len, sizeof(int),
+			"printk_safe_seq_buf len", FAULT_ON_ERROR);
+
+		if (show_header) {
+			readmem(message_lost_addr + per_cpu_offset, KVADDR,
+				&message_lost, sizeof(int),
+				"printk_safe_seq_buf message_lost", FAULT_ON_ERROR);
+			fprintf(fp, "CPU: %d  ADDR: %lx LEN: %d  MESSAGE_LOST: %d\n",
+				cpu, base_addr + per_cpu_offset, len, message_lost);
+		}
+
+		if (len > 0) {
+			int i, n, ilen;
+			char *p;
+			bool start_of_line;
+
+			ilen = 0;
+			if (show_header) {
+				ilen = PRINTK_SAFE_SEQ_BUF_INDENT;
+			} else {
+				ilen = strlen(buf_name) + 3; // "[%s] "
+			}
+			readmem(buffer_addr + per_cpu_offset, KVADDR,
+				buffer, buffer_size,
+				"printk_safe_seq_buf buffer", FAULT_ON_ERROR);
+
+			start_of_line = true;
+			n = (len <= buffer_size) ? len : buffer_size;
+			for (i = 0, p = buffer; i < n; i++, p++) {
+				bool sol = start_of_line;
+				start_of_line = false;
+				if (*p == 0x1) { //SOH
+					i++; p++;
+
+					if (!sol)
+						fprintf(fp, "\n");
+
+					if (show_header)
+						fprintf(fp, "%s", space(PRINTK_SAFE_SEQ_BUF_INDENT));
+					else
+						fprintf(fp, "[%s] ", buf_name);
+
+					continue;
+				} else {
+					if (sol)
+						fprintf(fp, "%s", space(ilen));
+
+					if (isprint(*p) || isspace(*p)) {
+						fputc(*p, fp);
+						if (*p == '\n')
+							start_of_line = true;
+					} else {
+						fputc('.', fp);
+					}
+				}
+			}
+			if (!start_of_line)
+				fputc('\n', fp);
+			if (show_header)
+				fputc('\n', fp);
+		} else if (show_header) {
+			fprintf(fp, "%s(empty)\n\n", space(PRINTK_SAFE_SEQ_BUF_INDENT));
+		}
+	}
+	FREEBUF(buffer);
+}
+
+static void
+dump_printk_safe_seq_buf(int msg_flags)
+{
+	if (!STRUCT_EXISTS("printk_safe_seq_buf"))
+		return;
+
+	if (INVALID_SIZE(printk_safe_seq_buf_buffer)) {
+		MEMBER_OFFSET_INIT(printk_safe_seq_buf_len,
+			"printk_safe_seq_buf", "len");
+		MEMBER_OFFSET_INIT(printk_safe_seq_buf_message_lost,
+			"printk_safe_seq_buf", "message_lost");
+		MEMBER_OFFSET_INIT(printk_safe_seq_buf_buffer,
+			"printk_safe_seq_buf", "buffer");
+
+		if (!INVALID_MEMBER(printk_safe_seq_buf_buffer)) {
+			MEMBER_SIZE_INIT(printk_safe_seq_buf_buffer,
+				"printk_safe_seq_buf", "buffer");
+		}
+	}
+
+	if (INVALID_MEMBER(printk_safe_seq_buf_len) ||
+	    INVALID_MEMBER(printk_safe_seq_buf_message_lost) ||
+	    INVALID_MEMBER(printk_safe_seq_buf_buffer) ||
+	    INVALID_SIZE(printk_safe_seq_buf_buffer)) {
+		if (msg_flags & SHOW_LOG_SAFE)
+			error(INFO, "-s not supported with this kernel version\n");
+		return;
+	}
+
+	__dump_printk_safe_seq_buf("nmi_print_seq", msg_flags);
+	__dump_printk_safe_seq_buf("safe_print_seq", msg_flags);
 }
 
 /*

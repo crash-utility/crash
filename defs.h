@@ -2147,6 +2147,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long wait_queue_entry_private;
 	long wait_queue_head_head;
 	long wait_queue_entry_entry;
+	long printk_safe_seq_buf_len;
+	long printk_safe_seq_buf_message_lost;
+	long printk_safe_seq_buf_buffer;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2311,6 +2314,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long prb_desc;
 	long wait_queue_entry;
 	long task_struct_state;
+	long printk_safe_seq_buf_buffer;
 };
 
 struct array_table {
@@ -5708,6 +5712,7 @@ void dump_log(int);
 #define SHOW_LOG_TEXT  (0x4)
 #define SHOW_LOG_AUDIT (0x8)
 #define SHOW_LOG_CTIME (0x10)
+#define SHOW_LOG_SAFE  (0x20)
 void set_cpu(int);
 void clear_machdep_cache(void);
 struct stack_hook *gather_text_list(struct bt_info *);
