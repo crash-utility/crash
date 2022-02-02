@@ -421,6 +421,8 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(page_prev, "page", "prev");
 	if (INVALID_MEMBER(page_next))
 		ANON_MEMBER_OFFSET_INIT(page_next, "page", "next");
+	if (INVALID_MEMBER(page_next))
+		MEMBER_OFFSET_INIT(page_next, "slab", "next");
 
 	MEMBER_OFFSET_INIT(page_list, "page", "list");
 	if (VALID_MEMBER(page_list)) {
@@ -747,11 +749,15 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(kmem_cache_random, "kmem_cache", "random");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_freelist, "kmem_cache_cpu", "freelist");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_page, "kmem_cache_cpu", "page");
+		if (INVALID_MEMBER(kmem_cache_cpu_page))
+			MEMBER_OFFSET_INIT(kmem_cache_cpu_page, "kmem_cache_cpu", "slab");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_node, "kmem_cache_cpu", "node");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_partial, "kmem_cache_cpu", "partial");
 		MEMBER_OFFSET_INIT(page_inuse, "page", "inuse");
 		if (INVALID_MEMBER(page_inuse))
 			ANON_MEMBER_OFFSET_INIT(page_inuse, "page", "inuse");
+		if (INVALID_MEMBER(page_inuse))
+			MEMBER_OFFSET_INIT(page_inuse, "slab", "inuse");
 		MEMBER_OFFSET_INIT(page_offset, "page", "offset");
 		if (INVALID_MEMBER(page_offset))
 			ANON_MEMBER_OFFSET_INIT(page_offset, "page", "offset");
@@ -763,6 +769,9 @@ vm_init(void)
 			if (INVALID_MEMBER(page_slab))
 				ANON_MEMBER_OFFSET_INIT(page_slab, "page", "slab_cache");
 		}
+		if (INVALID_MEMBER(page_slab))
+			MEMBER_OFFSET_INIT(page_slab, "slab", "slab_cache");
+
 		MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
 		if (INVALID_MEMBER(page_slab_page))
 			ANON_MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
@@ -772,10 +781,14 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(page_freelist, "page", "freelist");
 		if (INVALID_MEMBER(page_freelist))
 			ANON_MEMBER_OFFSET_INIT(page_freelist, "page", "freelist");
+		if (INVALID_MEMBER(page_freelist))
+			MEMBER_OFFSET_INIT(page_freelist, "slab", "freelist");
 		if (INVALID_MEMBER(kmem_cache_objects)) {
 			MEMBER_OFFSET_INIT(kmem_cache_oo, "kmem_cache", "oo");
 			/* NOTE: returns offset of containing bitfield */
 			ANON_MEMBER_OFFSET_INIT(page_objects, "page", "objects");
+			if (INVALID_MEMBER(page_objects))
+				ANON_MEMBER_OFFSET_INIT(page_objects, "slab", "objects");
 		}
 		if (VALID_MEMBER(kmem_cache_node)) {
                 	ARRAY_LENGTH_INIT(len, NULL, "kmem_cache.node", NULL, 0);
