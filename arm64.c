@@ -4170,6 +4170,11 @@ arm64_calc_VA_BITS(void)
 			} else if (machdep->machspec->VA_BITS_ACTUAL) {
 				machdep->machspec->VA_BITS = machdep->machspec->VA_BITS_ACTUAL;
 				machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
+			} else if (machdep->machspec->CONFIG_ARM64_VA_BITS) {
+				/* guess */
+				machdep->machspec->VA_BITS_ACTUAL = machdep->machspec->CONFIG_ARM64_VA_BITS;
+				machdep->machspec->VA_BITS = machdep->machspec->CONFIG_ARM64_VA_BITS;
+				machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
 			} else
 				error(FATAL, "cannot determine VA_BITS_ACTUAL\n");
 		}
