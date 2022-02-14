@@ -970,7 +970,7 @@ NULL
 char *help_sbitmapq[] = {
 "sbitmapq",
 "sbitmap_queue struct contents",
-"[-s struct[.member[,member]] -a address [-v]] -[x|d] address",
+"[-s struct[.member[,member]] -a address [-p] [-v]] -[x|d] address",
 "  The command dumps the contents of the sbitmap_queue structure and",
 "  the used bits in the bitmap. Also, it shows the dump of a structure",
 "  array associated with the sbitmap_queue.",
@@ -984,6 +984,8 @@ char *help_sbitmapq[] = {
 "  -a address  address of a structure array associated with sbitmap_queue",
 "              structure. The set bits in sbitmap are used for the index",
 "              in an associated array.",
+"          -p  associated with sbitmap_queue array contains the points of",
+"              structure."
 "          -x  override default output format with hexadecimal format.",
 "          -d  override default output format with decimal format.",
 "          -v  By default, the sbitmap command shows only a used sbitmap",
