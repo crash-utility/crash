@@ -73,7 +73,7 @@ CFILES=main.c tools.c global_data.c memory.c filesys.c help.c task.c \
 	xen_hyper.c xen_hyper_command.c xen_hyper_global_data.c \
 	xen_hyper_dump_tables.c kvmdump.c qemu.c qemu-load.c sadump.c ipcs.c \
 	ramdump.c vmware_vmss.c vmware_guestdump.c \
-	xen_dom0.c kaslr_helper.c
+	xen_dom0.c kaslr_helper.c sbitmap.c
 
 SOURCE_FILES=${CFILES} ${GENERIC_HFILES} ${MCORE_HFILES} \
 	${REDHAT_CFILES} ${REDHAT_HFILES} ${UNWIND_HFILES} \
@@ -93,7 +93,7 @@ OBJECT_FILES=main.o tools.o global_data.o memory.o filesys.o help.o task.o \
 	xen_hyper.o xen_hyper_command.o xen_hyper_global_data.o \
 	xen_hyper_dump_tables.o kvmdump.o qemu.o qemu-load.o sadump.o ipcs.o \
 	ramdump.o vmware_vmss.o vmware_guestdump.o \
-	xen_dom0.o kaslr_helper.o
+	xen_dom0.o kaslr_helper.o sbitmap.o
 
 MEMORY_DRIVER_FILES=memory_driver/Makefile memory_driver/crash.c memory_driver/README
 
@@ -350,6 +350,9 @@ cmdline.o: ${GENERIC_HFILES} cmdline.c
 
 tools.o: ${GENERIC_HFILES} tools.c
 	${CC} -c ${CRASH_CFLAGS} tools.c ${WARNING_OPTIONS} ${WARNING_ERROR}
+
+sbitmap.o: ${GENERIC_HFILES} sbitmap.c
+	${CC} -c ${CRASH_CFLAGS} sbitmap.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 global_data.o: ${GENERIC_HFILES} global_data.c
 	${CC} -c ${CRASH_CFLAGS} global_data.c ${WARNING_OPTIONS} ${WARNING_ERROR}

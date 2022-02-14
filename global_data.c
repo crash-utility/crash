@@ -105,6 +105,7 @@ struct command_table_entry linux_command_table[] = {
         {"rd",      cmd_rd,      help_rd,      MINIMAL},
 	{"repeat",  cmd_repeat,  help_repeat,  0},
 	{"runq",    cmd_runq,    help_runq,    REFRESH_TASK_TABLE},
+	{"sbitmapq", cmd_sbitmapq, help_sbitmapq, 0},
         {"search",  cmd_search,  help_search,  0},
         {"set",     cmd_set,     help_set,     REFRESH_TASK_TABLE | MINIMAL},
         {"sig",     cmd_sig,     help_sig,     REFRESH_TASK_TABLE},
