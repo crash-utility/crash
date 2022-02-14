@@ -486,6 +486,10 @@ command, search for their object files in
 .I directory
 instead of in the standard location.
 .TP
+.BI --src \ directory
+Search for the kernel source code in directory instead of in the
+standard location that is compiled into the debuginfo data.
+.TP
 .BI --kaslr \ offset | auto
 If an x86_64 kernel was configured with 
 .B CONFIG_RANDOMIZE_BASE,
