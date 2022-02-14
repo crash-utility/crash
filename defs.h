@@ -18,6 +18,7 @@
 
 #ifndef GDB_COMMON
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -2150,6 +2151,23 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long printk_safe_seq_buf_len;
 	long printk_safe_seq_buf_message_lost;
 	long printk_safe_seq_buf_buffer;
+	long sbitmap_word_depth;
+	long sbitmap_word_word;
+	long sbitmap_word_cleared;
+	long sbitmap_depth;
+	long sbitmap_shift;
+	long sbitmap_map_nr;
+	long sbitmap_map;
+	long sbitmap_queue_sb;
+	long sbitmap_queue_alloc_hint;
+	long sbitmap_queue_wake_batch;
+	long sbitmap_queue_wake_index;
+	long sbitmap_queue_ws;
+	long sbitmap_queue_ws_active;
+	long sbitmap_queue_round_robin;
+	long sbitmap_queue_min_shallow_depth;
+	long sbq_wait_state_wait_cnt;
+	long sbq_wait_state_wait;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2315,6 +2333,10 @@ struct size_table {         /* stash of commonly-used sizes */
 	long wait_queue_entry;
 	long task_struct_state;
 	long printk_safe_seq_buf_buffer;
+	long sbitmap_word;
+	long sbitmap;
+	long sbitmap_queue;
+	long sbq_wait_state;
 };
 
 struct array_table {
@@ -2441,6 +2463,7 @@ DEF_LOADER(ushort);
 DEF_LOADER(short);
 typedef void *pointer_t;
 DEF_LOADER(pointer_t);
+DEF_LOADER(bool);
 
 #define LOADER(TYPE) load_##TYPE
 
@@ -2454,6 +2477,7 @@ DEF_LOADER(pointer_t);
 #define SHORT(ADDR)     LOADER(short) ((char *)(ADDR))
 #define UCHAR(ADDR)     *((unsigned char *)((char *)(ADDR)))
 #define VOID_PTR(ADDR)  ((void *) (LOADER(pointer_t) ((char *)(ADDR))))
+#define BOOL(ADDR)      LOADER(bool) ((char *)(ADDR)))
 
 #else
 
@@ -2467,6 +2491,7 @@ DEF_LOADER(pointer_t);
 #define SHORT(ADDR)     *((short *)((char *)(ADDR)))
 #define UCHAR(ADDR)     *((unsigned char *)((char *)(ADDR)))
 #define VOID_PTR(ADDR)  *((void **)((char *)(ADDR)))
+#define BOOL(ADDR)      *((bool *)((char *)(ADDR)))
 
 #endif /* NEED_ALIGNED_MEM_ACCESS */
 
@@ -4967,6 +4992,7 @@ void cmd_mach(void);         /* main.c */
 void cmd_help(void);         /* help.c */
 void cmd_test(void);         /* test.c */
 void cmd_ascii(void);        /* tools.c */
+void cmd_sbitmapq(void);     /* sbitmap.c */
 void cmd_bpf(void);          /* bfp.c */
 void cmd_set(void);          /* tools.c */
 void cmd_eval(void);         /* tools.c */
@@ -5580,6 +5606,7 @@ extern char *help_rd[];
 extern char *help_repeat[];
 extern char *help_runq[];
 extern char *help_ipcs[];
+extern char *help_sbitmapq[];
 extern char *help_search[];
 extern char *help_set[];
 extern char *help_sig[];
@@ -5849,6 +5876,38 @@ void devdump_info(void *, ulonglong, FILE *);
  */
 void ipcs_init(void);
 ulong idr_find(ulong, int);
+
+/*
+ * sbitmap.c
+ */
+/* sbitmap helpers */
+struct sbitmap_context {
+	unsigned depth;
+	unsigned shift;
+	unsigned map_nr;
+	ulong map_addr;
+};
+
+typedef bool (*sbitmap_for_each_fn)(unsigned int idx, void *p);
+
+void sbitmap_for_each_set(const struct sbitmap_context *sc,
+	sbitmap_for_each_fn fn, void *data);
+void sbitmap_context_load(ulong addr, struct sbitmap_context *sc);
+
+/* sbitmap_queue helpers */
+typedef bool (*sbitmapq_for_each_fn)(unsigned int idx, ulong addr, void *p);
+
+struct sbitmapq_ops {
+	/* array params associated with the bitmap */
+	ulong addr;
+	ulong size;
+	/* callback params */
+	sbitmapq_for_each_fn fn;
+	void *p;
+};
+
+void sbitmapq_init(void);
+void sbitmapq_for_each_set(ulong addr, struct sbitmapq_ops *ops);
 
 #ifdef ARM
 void arm_init(int);

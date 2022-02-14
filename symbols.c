@@ -10694,6 +10694,41 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "            uts_namespace_name: %ld\n",
 		OFFSET(uts_namespace_name));
 
+	fprintf(fp, "            sbitmap_word_depth: %ld\n",
+		OFFSET(sbitmap_word_depth));
+	fprintf(fp, "             sbitmap_word_word: %ld\n",
+		OFFSET(sbitmap_word_word));
+	fprintf(fp, "          sbitmap_word_cleared: %ld\n",
+		OFFSET(sbitmap_word_cleared));
+	fprintf(fp, "                 sbitmap_depth: %ld\n",
+		OFFSET(sbitmap_depth));
+	fprintf(fp, "                 sbitmap_shift: %ld\n",
+		OFFSET(sbitmap_shift));
+	fprintf(fp, "                sbitmap_map_nr: %ld\n",
+		OFFSET(sbitmap_map_nr));
+	fprintf(fp, "                   sbitmap_map: %ld\n",
+		OFFSET(sbitmap_map));
+	fprintf(fp, "              sbitmap_queue_sb: %ld\n",
+		OFFSET(sbitmap_queue_sb));
+	fprintf(fp, "      sbitmap_queue_alloc_hint: %ld\n",
+		OFFSET(sbitmap_queue_alloc_hint));
+	fprintf(fp, "      sbitmap_queue_wake_batch: %ld\n",
+		OFFSET(sbitmap_queue_wake_batch));
+	fprintf(fp, "      sbitmap_queue_wake_index: %ld\n",
+		OFFSET(sbitmap_queue_wake_index));
+	fprintf(fp, "              sbitmap_queue_ws: %ld\n",
+		OFFSET(sbitmap_queue_ws));
+	fprintf(fp, "       sbitmap_queue_ws_active: %ld\n",
+		OFFSET(sbitmap_queue_ws_active));
+	fprintf(fp, "     sbitmap_queue_round_robin: %ld\n",
+		OFFSET(sbitmap_queue_round_robin));
+	fprintf(fp, "sbitmap_queue_min_shallow_depth: %ld\n",
+		OFFSET(sbitmap_queue_min_shallow_depth));
+	fprintf(fp, "       sbq_wait_state_wait_cnt: %ld\n",
+		OFFSET(sbq_wait_state_wait_cnt));
+	fprintf(fp, "           sbq_wait_state_wait: %ld\n",
+		OFFSET(sbq_wait_state_wait));
+
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
 	fprintf(fp, "                    page_flags: %ld\n", SIZE(page_flags));
@@ -10960,6 +10995,10 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "                      prb_desc: %ld\n", SIZE(prb_desc));
 	fprintf(fp, "    printk_safe_seq_buf_buffer: %ld\n", SIZE(printk_safe_seq_buf_buffer));
 
+	fprintf(fp, "                  sbitmap_word: %ld\n", SIZE(sbitmap_word));
+	fprintf(fp, "                       sbitmap: %ld\n", SIZE(sbitmap));
+	fprintf(fp, "                 sbitmap_queue: %ld\n", SIZE(sbitmap_queue));
+	fprintf(fp, "                sbq_wait_state: %ld\n", SIZE(sbq_wait_state));
 
         fprintf(fp, "\n                   array_table:\n");
 	/*
