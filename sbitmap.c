@@ -34,6 +34,7 @@ struct sbitmapq_data {
 #define SBITMAPQ_DATA_FLAG_STRUCT_NAME    (VERBOSE << 1)
 #define SBITMAPQ_DATA_FLAG_STRUCT_MEMBER  (VERBOSE << 2)
 #define SBITMAPQ_DATA_FLAG_ARRAY_ADDR     (VERBOSE << 3)
+#define SBITMAPQ_DATA_FLAG_ARRAY_OF_POINTS (VERBOSE << 4)
 	ulong flags;
 	int radix;
 	/* sbitmap_queue info */
@@ -442,9 +443,22 @@ static bool sbitmap_data_print(unsigned int idx, ulong addr, void *p)
 	const struct sbitmapq_data *sd = p;
 	bool verbose = !!(sd->flags & VERBOSE);
 	bool members = !!(sd->flags & SBITMAPQ_DATA_FLAG_STRUCT_MEMBER);
+	bool points = !!(sd->flags & SBITMAPQ_DATA_FLAG_ARRAY_OF_POINTS);
 
 	if (verbose) {
 		fprintf(fp, "%d (0x%08lx):\n", idx, addr);
+
+		if (points) {
+			ulong p_addr;
+
+			if (!readmem(addr, KVADDR, &p_addr, sizeof(void *),
+					"read point of data", RETURN_ON_ERROR)) {
+				error(INFO, "Failed to read the point of data: 0x%08lx\n", addr);
+				return false;
+			}
+			addr = p_addr;
+		}
+
 		if (members)
 			dump_struct_members(sd->data_name, addr, sd->radix);
 		else
@@ -459,7 +473,7 @@ static void sbitmap_queue_data_dump(struct sbitmapq_data *sd)
 {
 	struct sbitmapq_ops ops = {
 		.addr = sd->data_addr,
-		.size = sd->data_size,
+		.size = (sd->flags & SBITMAPQ_DATA_FLAG_ARRAY_OF_POINTS) ? sizeof(void *) : sd->data_size,
 		.fn = sbitmap_data_print,
 		.p = sd
 	};
@@ -556,7 +570,7 @@ void cmd_sbitmapq(void)
 	struct sbitmapq_data sd = {0};
 	int c;
 
-	while ((c = getopt(argcnt, args, "s:a:xdv")) != EOF) {
+	while ((c = getopt(argcnt, args, "s:a:pxdv")) != EOF) {
 		switch (c) {
 		case 's':
 			if (sd.flags & SBITMAPQ_DATA_FLAG_STRUCT_NAME)
@@ -578,6 +592,10 @@ void cmd_sbitmapq(void)
 				error(FATAL, "invalid kernel virtual address: %s\n", optarg);
 			sd.flags |= SBITMAPQ_DATA_FLAG_ARRAY_ADDR;
 
+			break;
+
+		case 'p':
+			sd.flags |= SBITMAPQ_DATA_FLAG_ARRAY_OF_POINTS;
 			break;
 
 		case 'v':
@@ -626,6 +644,12 @@ void cmd_sbitmapq(void)
 	} else if ((sd.flags & SBITMAPQ_DATA_FLAG_ARRAY_ADDR) &&
 			!(sd.flags & SBITMAPQ_DATA_FLAG_STRUCT_NAME)) {
 		error(INFO, "-a option is used with -s option only\n");
+		cmd_usage(pc->curcmd, SYNOPSIS);
+	}
+
+	if ((sd.flags & SBITMAPQ_DATA_FLAG_ARRAY_OF_POINTS) &&
+			!(sd.flags & SBITMAPQ_DATA_FLAG_ARRAY_ADDR)) {
+		error(INFO, "-p option requires -a option\n");
 		cmd_usage(pc->curcmd, SYNOPSIS);
 	}
 
