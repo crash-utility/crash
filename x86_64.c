@@ -372,9 +372,8 @@ x86_64_init(int when)
 		}
 
 		/*
-		 *  Check for CONFIG_RANDOMIZE_MEMORY, and set page_offset here.
-		 *  The remainder of the virtual address range setups will get
-		 *  done below in POST_GDB.
+		 *  Check for CONFIG_RANDOMIZE_MEMORY, and set page_offset and
+		 *  the virtual address ranges.
 		 */
 		if (kernel_symbol_exists("page_offset_base") &&
 		    kernel_symbol_exists("vmalloc_base")) {
@@ -384,6 +383,31 @@ x86_64_init(int when)
 				"page_offset_base", QUIET|FAULT_ON_ERROR);
 			machdep->kvbase = machdep->machspec->page_offset;
 			machdep->identity_map_base = machdep->machspec->page_offset;
+
+			readmem(symbol_value("vmalloc_base"), KVADDR,
+					&machdep->machspec->vmalloc_start_addr,
+					sizeof(ulong), "vmalloc_base", FAULT_ON_ERROR);
+			if (machdep->flags & VM_5LEVEL)
+				machdep->machspec->vmalloc_end =
+					machdep->machspec->vmalloc_start_addr + TERABYTES(1280) - 1;
+			else
+				machdep->machspec->vmalloc_end =
+					machdep->machspec->vmalloc_start_addr + TERABYTES(32) - 1;
+			if (kernel_symbol_exists("vmemmap_base")) {
+				readmem(symbol_value("vmemmap_base"), KVADDR,
+					&machdep->machspec->vmemmap_vaddr, sizeof(ulong),
+					"vmemmap_base", FAULT_ON_ERROR);
+				machdep->machspec->vmemmap_end =
+					machdep->machspec->vmemmap_vaddr +
+					TERABYTES(1) - 1;
+			} else {
+				machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
+				machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
+			}
+			machdep->machspec->modules_vaddr = __START_KERNEL_map +
+				(machdep->machspec->kernel_image_size ?
+				machdep->machspec->kernel_image_size : GIGABYTES(1));
+			machdep->machspec->modules_end = MODULES_END_2_6_31;
 		}
 		break;
 
@@ -414,32 +438,7 @@ x86_64_init(int when)
 			machdep->machspec->modules_end = MODULES_END_2_6_27;
 		}
 		if (THIS_KERNEL_VERSION >= LINUX(2,6,31)) {
-			if (machdep->flags & RANDOMIZED) {
-				readmem(symbol_value("vmalloc_base"), KVADDR,
-					&machdep->machspec->vmalloc_start_addr,
-					sizeof(ulong), "vmalloc_base", FAULT_ON_ERROR);
-				if (machdep->flags & VM_5LEVEL)
-					machdep->machspec->vmalloc_end =
-						machdep->machspec->vmalloc_start_addr + TERABYTES(1280) - 1;
-				else
-					machdep->machspec->vmalloc_end =
-						machdep->machspec->vmalloc_start_addr + TERABYTES(32) - 1;
-				if (kernel_symbol_exists("vmemmap_base")) {
-					readmem(symbol_value("vmemmap_base"), KVADDR,
-						&machdep->machspec->vmemmap_vaddr, sizeof(ulong),
-						"vmemmap_base", FAULT_ON_ERROR);
-					machdep->machspec->vmemmap_end = 
-						machdep->machspec->vmemmap_vaddr +
-						TERABYTES(1) - 1;
-				} else {
-					machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
-					machdep->machspec->vmemmap_end = VMEMMAP_END_2_6_31;
-				}
-				machdep->machspec->modules_vaddr = __START_KERNEL_map + 
-					(machdep->machspec->kernel_image_size ?
-					machdep->machspec->kernel_image_size : GIGABYTES(1));
-				machdep->machspec->modules_end = MODULES_END_2_6_31;
-			} else {
+			if (!(machdep->flags & RANDOMIZED)) {
 				machdep->machspec->vmalloc_start_addr = VMALLOC_START_ADDR_2_6_31;
 				machdep->machspec->vmalloc_end = VMALLOC_END_2_6_31;
 				machdep->machspec->vmemmap_vaddr = VMEMMAP_VADDR_2_6_31;
