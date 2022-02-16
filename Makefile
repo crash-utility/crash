@@ -280,7 +280,7 @@ gdb_patch:
 		fi; \
 	fi
 
-library: make_build_data ${OBJECT_FILES}
+library: ${OBJECT_FILES}
 	ar -rs ${PROGRAM}lib.a ${OBJECT_FILES}
 
 gdb: force
@@ -303,7 +303,7 @@ do_clean:
 	@$(MAKE) -C extensions -i clean
 	@$(MAKE) -C memory_driver -i clean
 
-make_build_data: force
+build_data.o: force
 	${CC} -c ${CRASH_CFLAGS} build_data.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 install:
@@ -555,7 +555,7 @@ daemon_deprecated: force
 
 ${PROGRAM}d: daemon_deprecated make_configure
 	@./configure -d
-	@$(MAKE) make_build_data
+	@$(MAKE) build_data.o
 	@$(MAKE) daemon
 
 daemon: ${DAEMON_OBJECT_FILES}
