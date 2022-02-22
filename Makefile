@@ -223,6 +223,28 @@ ifneq ($(target),)
 CONF_TARGET_FLAG="-t$(target)"
 endif
 
+ifeq ($(findstring warn,$(MAKECMDGOALS)),warn)
+CONF_TARGET_FLAG += -w
+endif
+ifeq ($(findstring Warn,$(MAKECMDGOALS)),Warn)
+CONF_TARGET_FLAG += -W
+endif
+ifeq ($(findstring nowarn,$(MAKECMDGOALS)),nowarn)
+CONF_TARGET_FLAG += -n
+endif
+ifeq ($(findstring lzo,$(MAKECMDGOALS)),lzo)
+CONF_TARGET_FLAG += -x lzo
+endif
+ifeq ($(findstring snappy,$(MAKECMDGOALS)),snappy)
+CONF_TARGET_FLAG += -x snappy
+endif
+ifeq ($(findstring zstd,$(MAKECMDGOALS)),zstd)
+CONF_TARGET_FLAG += -x zstd
+endif
+ifeq ($(findstring valgrind,$(MAKECMDGOALS)),valgrind)
+CONF_TARGET_FLAG += -x valgrind
+endif
+
 # To build the extensions library by default, uncomment the third command
 # line below.  Otherwise they can be built by entering "make extensions".
 
@@ -305,33 +327,8 @@ install:
 unconfig: make_configure
 	@./configure -u
 
-warn: make_configure
-	@./configure ${CONF_TARGET_FLAG} -w -b
-	@$(MAKE) gdb_merge
-
-Warn: make_configure
-	@./configure ${CONF_TARGET_FLAG} -W -b
-	@$(MAKE) gdb_merge
-
-nowarn: make_configure
-	@./configure ${CONF_TARGET_FLAG} -n -b
-	@$(MAKE) gdb_merge
-
-lzo: make_configure
-	@./configure -x lzo ${CONF_TARGET_FLAG} -w -b
-	@$(MAKE) gdb_merge
-
-snappy: make_configure
-	@./configure -x snappy ${CONF_TARGET_FLAG} -w -b
-	@$(MAKE) gdb_merge
-
-zstd: make_configure
-	@./configure -x zstd ${CONF_TARGET_FLAG} -w -b
-	@$(MAKE) gdb_merge
-
-valgrind: make_configure
-	@./configure -x valgrind ${CONF_TARGET_FLAG} -w -b
-	@$(MAKE) gdb_merge
+warn Warn nowarn lzo snappy zstd valgrind: all
+	@true  #dummy
 
 main.o: ${GENERIC_HFILES} main.c
 	${CC} -c ${CRASH_CFLAGS} main.c ${WARNING_OPTIONS} ${WARNING_ERROR} 
