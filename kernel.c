@@ -5476,7 +5476,7 @@ cmd_sys(void)
 		else if (STREQ(args[optind], "config"))
 			read_in_kernel_config(IKCFG_READ);
                 else
-                        cmd_usage(args[optind], COMPLETE_HELP);
+                        cmd_usage(pc->curcmd, SYNOPSIS);
                 optind++;
         } while (args[optind]);
 }
