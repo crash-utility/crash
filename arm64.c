@@ -92,6 +92,20 @@ static void arm64_calc_VA_BITS(void);
 static int arm64_is_uvaddr(ulong, struct task_context *);
 static void arm64_calc_KERNELPACMASK(void);
 
+static void arm64_calc_kernel_start(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	struct syment *sp;
+
+	if (THIS_KERNEL_VERSION >= LINUX(5,11,0))
+		sp = kernel_symbol_search("_stext");
+	else
+		sp = kernel_symbol_search("_text");
+
+	ms->kimage_text = (sp ? sp->value : 0);
+	sp = kernel_symbol_search("_end");
+	ms->kimage_end = (sp ? sp->value : 0);
+}
 
 /*
  * Do all necessary machine-specific setup here. This is called several times
@@ -241,6 +255,7 @@ arm64_init(int when)
 		if (machdep->flags & NEW_VMEMMAP) {
 			struct syment *sp;
 
+			/* It is finally decided in arm64_calc_kernel_start() */
 			sp = kernel_symbol_search("_text");
 			ms->kimage_text = (sp ? sp->value : 0);
 			sp = kernel_symbol_search("_end");
@@ -387,6 +402,8 @@ arm64_init(int when)
 		break;
 
 	case POST_GDB:
+		/* Rely on kernel version to decide the kernel start address */
+		arm64_calc_kernel_start();
 		arm64_calc_virtual_memory_ranges();
 		arm64_get_section_size_bits();
 
