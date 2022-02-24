@@ -639,10 +639,10 @@ ref:
 	$(MAKE) ctags cscope
 
 cscope:
-	rm -f cscope.files cscope_out
+	rm -f cscope.files cscope.out
 	for FILE in ${SOURCE_FILES}; do \
 	echo $$FILE >> cscope.files; done
-	cscope
+	cscope -b -f cscope.out
 
 glink: make_configure
 	@./configure -q -b
