@@ -985,7 +985,7 @@ char *help_sbitmapq[] = {
 "              structure. The set bits in sbitmap are used for the index",
 "              in an associated array.",
 "          -p  associated with sbitmap_queue array contains the points of",
-"              structure."
+"              structure.",
 "          -x  override default output format with hexadecimal format.",
 "          -d  override default output format with decimal format.",
 "          -v  By default, the sbitmap command shows only a used sbitmap",
