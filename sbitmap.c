@@ -113,7 +113,10 @@ static unsigned int __sbitmap_weight(const struct sbitmap_context *sc, bool set)
 	sbitmap_word_buf = GETBUF(sbitmap_word_size);
 
 	for (i = 0; i < sc->map_nr; i++) {
-		readmem(addr, KVADDR, sbitmap_word_buf, sbitmap_word_size, "sbitmap_word", FAULT_ON_ERROR);
+		if (!readmem(addr, KVADDR, sbitmap_word_buf, sbitmap_word_size, "sbitmap_word", RETURN_ON_ERROR)) {
+			FREEBUF(sbitmap_word_buf);
+			error(FATAL, "cannot read sbitmap_word\n");
+		}
 
 		depth = ULONG(sbitmap_word_buf + w_depth_off);
 
@@ -174,7 +177,10 @@ static void sbitmap_bitmap_show(const struct sbitmap_context *sc)
 	for (i = 0; i < sc->map_nr; i++) {
 		unsigned long word, cleared, word_bits;
 
-		readmem(addr, KVADDR, sbitmap_word_buf, sbitmap_word_size, "sbitmap_word", FAULT_ON_ERROR);
+		if (!readmem(addr, KVADDR, sbitmap_word_buf, sbitmap_word_size, "sbitmap_word", RETURN_ON_ERROR)) {
+			FREEBUF(sbitmap_word_buf);
+			error(FATAL, "cannot read sbitmap_word\n");
+		}
 
 		word = ULONG(sbitmap_word_buf + w_word_off);
 		cleared = ULONG(sbitmap_word_buf + w_cleared_off);
@@ -248,7 +254,10 @@ static void __sbitmap_for_each_set(const struct sbitmap_context *sc,
 		unsigned long w_depth, w_word, w_cleared;
 		unsigned long word, depth;
 
-		readmem(w_addr, KVADDR, sbitmap_word_buf, sbitmap_word_size, "sbitmap_word", FAULT_ON_ERROR);
+		if (!readmem(w_addr, KVADDR, sbitmap_word_buf, sbitmap_word_size, "sbitmap_word", RETURN_ON_ERROR)) {
+			FREEBUF(sbitmap_word_buf);
+			error(FATAL, "cannot read sbitmap_word\n");
+		}
 
 		w_depth = ULONG(sbitmap_word_buf + w_depth_off);
 		w_word = ULONG(sbitmap_word_buf + w_word_off);
@@ -341,7 +350,10 @@ static void sbitmap_queue_show(const struct sbitmap_queue_context *sqc,
 		struct kernel_list_head *lh;
 		ulong wait_cnt;
 
-		readmem(ws_addr, KVADDR, sbq_wait_state_buf, sbq_wait_state_size, "sbq_wait_state", FAULT_ON_ERROR);
+		if (!readmem(ws_addr, KVADDR, sbq_wait_state_buf, sbq_wait_state_size, "sbq_wait_state", RETURN_ON_ERROR)) {
+			FREEBUF(sbq_wait_state_buf);
+			error(FATAL, "cannot read sbq_wait_state\n");
+		}
 
 		wait_cnt = INT(sbq_wait_state_buf + wait_cnt_off);
 		lh = (struct kernel_list_head *)(sbq_wait_state_buf + wait_off + list_head_off);
@@ -364,7 +376,10 @@ static void sbitmap_queue_context_load(ulong addr, struct sbitmap_queue_context 
 	sqc->sb_addr = addr + OFFSET(sbitmap_queue_sb);
 
 	sbitmap_queue_buf = GETBUF(SIZE(sbitmap_queue));
-	readmem(addr, KVADDR, sbitmap_queue_buf, SIZE(sbitmap_queue), "sbitmap_queue", FAULT_ON_ERROR);
+	if (!readmem(addr, KVADDR, sbitmap_queue_buf, SIZE(sbitmap_queue), "sbitmap_queue", RETURN_ON_ERROR)) {
+		FREEBUF(sbitmap_queue_buf);
+		error(FATAL, "cannot read sbitmap_queue\n");
+	}
 
 	sqc->alloc_hint = ULONG(sbitmap_queue_buf + OFFSET(sbitmap_queue_alloc_hint));
 	sqc->wake_batch = UINT(sbitmap_queue_buf + OFFSET(sbitmap_queue_wake_batch));
@@ -382,7 +397,10 @@ void sbitmap_context_load(ulong addr, struct sbitmap_context *sc)
 	char *sbitmap_buf;
 
 	sbitmap_buf = GETBUF(SIZE(sbitmap));
-	readmem(addr, KVADDR, sbitmap_buf, SIZE(sbitmap), "sbitmap", FAULT_ON_ERROR);
+	if (!readmem(addr, KVADDR, sbitmap_buf, SIZE(sbitmap), "sbitmap", RETURN_ON_ERROR)) {
+		FREEBUF(sbitmap_buf);
+		error(FATAL, "cannot read sbitmap\n");
+	}
 
 	sc->depth = UINT(sbitmap_buf + OFFSET(sbitmap_depth));
 	sc->shift = UINT(sbitmap_buf + OFFSET(sbitmap_shift));
