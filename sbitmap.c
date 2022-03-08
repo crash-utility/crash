@@ -272,7 +272,7 @@ static void __sbitmap_for_each_set(const struct sbitmap_context *sc,
 			if (nr >= depth)
 				break;
 			if (!fn((index << sc->shift) + nr, data))
-				return;
+				goto exit;
 
 			nr++;
 		}
@@ -282,6 +282,7 @@ next:
 			index = 0;
 	}
 
+exit:
 	FREEBUF(sbitmap_word_buf);
 }
 
