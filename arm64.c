@@ -20,6 +20,7 @@
 #include "defs.h"
 #include <elf.h>
 #include <endian.h>
+#include <math.h>
 #include <sys/ioctl.h>
 
 #define NOT_IMPLEMENTED(X) error((X), "%s: function not implemented\n", __func__)
@@ -91,6 +92,14 @@ static void arm64_get_crash_notes(void);
 static void arm64_calc_VA_BITS(void);
 static int arm64_is_uvaddr(ulong, struct task_context *);
 static void arm64_calc_KERNELPACMASK(void);
+
+struct kernel_range {
+	unsigned long modules_vaddr, modules_end;
+	unsigned long vmalloc_start_addr, vmalloc_end;
+	unsigned long vmemmap_vaddr, vmemmap_end;
+};
+static struct kernel_range *arm64_get_va_range(struct machine_specific *ms);
+static void arm64_get_struct_page_size(struct machine_specific *ms);
 
 static void arm64_calc_kernel_start(void)
 {
@@ -233,9 +242,10 @@ arm64_init(int when)
 		machdep->pageoffset = machdep->pagesize - 1;
 		machdep->pagemask = ~((ulonglong)machdep->pageoffset);
 
+		ms = machdep->machspec;
+		arm64_get_struct_page_size(ms);
 		arm64_calc_VA_BITS();
 		arm64_calc_KERNELPACMASK();
-		ms = machdep->machspec;
 
 		/* vabits_actual introduced after mm flip, so it should be flipped layout */
 		if (ms->VA_BITS_ACTUAL) {
@@ -252,8 +262,15 @@ arm64_init(int when)
 		}
 		machdep->is_kvaddr = generic_is_kvaddr;
 		machdep->kvtop = arm64_kvtop;
+
+		/* The defaults */
+		ms->vmalloc_end = ARM64_VMALLOC_END;
+		ms->vmemmap_vaddr = ARM64_VMEMMAP_VADDR;
+		ms->vmemmap_end = ARM64_VMEMMAP_END;
+
 		if (machdep->flags & NEW_VMEMMAP) {
 			struct syment *sp;
+			struct kernel_range *r;
 
 			/* It is finally decided in arm64_calc_kernel_start() */
 			sp = kernel_symbol_search("_text");
@@ -261,17 +278,29 @@ arm64_init(int when)
 			sp = kernel_symbol_search("_end");
 			ms->kimage_end = (sp ? sp->value : 0);
 
-			if (ms->VA_BITS_ACTUAL) {
+			if (ms->struct_page_size && (r = arm64_get_va_range(ms))) {
+				/* We can get all the MODULES/VMALLOC/VMEMMAP ranges now.*/
+				ms->modules_vaddr	= r->modules_vaddr;
+				ms->modules_end		= r->modules_end - 1;
+				ms->vmalloc_start_addr	= r->vmalloc_start_addr;
+				ms->vmalloc_end		= r->vmalloc_end - 1;
+				ms->vmemmap_vaddr	= r->vmemmap_vaddr;
+				if (THIS_KERNEL_VERSION >= LINUX(5, 7, 0))
+					ms->vmemmap_end		= r->vmemmap_end - 1;
+				else
+					ms->vmemmap_end		= -1;
+
+			} else if (ms->VA_BITS_ACTUAL) {
 				ms->modules_vaddr = (st->_stext_vmlinux & TEXT_OFFSET_MASK) - ARM64_MODULES_VSIZE;
 				ms->modules_end = ms->modules_vaddr + ARM64_MODULES_VSIZE -1;
+				ms->vmalloc_start_addr = ms->modules_end + 1;
 			} else {
 				ms->modules_vaddr = ARM64_VA_START;
 				if (kernel_symbol_exists("kasan_init"))
 					ms->modules_vaddr += ARM64_KASAN_SHADOW_SIZE;
 				ms->modules_end = ms->modules_vaddr + ARM64_MODULES_VSIZE -1;
+				ms->vmalloc_start_addr = ms->modules_end + 1;
 			}
-
-			ms->vmalloc_start_addr = ms->modules_end + 1;
 
 			arm64_calc_kimage_voffset();
 		} else {
@@ -279,9 +308,6 @@ arm64_init(int when)
 			ms->modules_end = ARM64_PAGE_OFFSET - 1;
 			ms->vmalloc_start_addr = ARM64_VA_START;
 		}
-		ms->vmalloc_end = ARM64_VMALLOC_END;
-		ms->vmemmap_vaddr = ARM64_VMEMMAP_VADDR;
-		ms->vmemmap_end = ARM64_VMEMMAP_END;
 
 		switch (machdep->pagesize)
 		{
@@ -404,7 +430,12 @@ arm64_init(int when)
 	case POST_GDB:
 		/* Rely on kernel version to decide the kernel start address */
 		arm64_calc_kernel_start();
-		arm64_calc_virtual_memory_ranges();
+
+		/*  Can we get the size of struct page before POST_GDB */
+		ms = machdep->machspec;
+		if (!ms->struct_page_size)
+			arm64_calc_virtual_memory_ranges();
+
 		arm64_get_section_size_bits();
 
 		if (!machdep->max_physmem_bits) {
@@ -418,8 +449,6 @@ arm64_init(int when)
 			else
 				machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
 		}
-
-		ms = machdep->machspec;
 
 		if (CRASHDEBUG(1)) {
 			if (ms->VA_BITS_ACTUAL) {
@@ -511,6 +540,326 @@ arm64_init(int when)
 	}
 }
 
+struct kernel_va_range_handler {
+	unsigned long kernel_versions_start; /* include */
+	unsigned long kernel_versions_end;   /* exclude */
+	struct kernel_range *(*get_range)(struct machine_specific *);
+};
+
+static struct kernel_range tmp_range;
+#define _PAGE_END(va)		(-(1UL << ((va) - 1)))
+#define SZ_64K                          0x00010000
+#define SZ_2M				0x00200000
+
+/*
+ * Get the max shift of the size of struct page.
+ * Most of the time, it is 64 bytes, but not sure.
+ */
+static int arm64_get_struct_page_max_shift(struct machine_specific *ms)
+{
+	return (int)ceil(log2(ms->struct_page_size));
+}
+
+/*
+ *  The change is caused by the kernel patch since v5.17-rc1:
+ *    "b89ddf4cca43 arm64/bpf: Remove 128MB limit for BPF JIT programs"
+ */
+static struct kernel_range *arm64_get_range_v5_17(struct machine_specific *ms)
+{
+	struct kernel_range *r = &tmp_range;
+	unsigned long v = ms->CONFIG_ARM64_VA_BITS;
+	unsigned long vmem_shift, vmemmap_size;
+
+	/* Not initialized yet */
+	if (v == 0)
+		return NULL;
+
+	if (v > 48)
+		v = 48;
+
+	/* Get the MODULES_VADDR ~ MODULES_END */
+	r->modules_vaddr = _PAGE_END(v);
+	r->modules_end = r->modules_vaddr + MEGABYTES(128);
+
+	/* Get the VMEMMAP_START ~ VMEMMAP_END */
+	vmem_shift = machdep->pageshift - arm64_get_struct_page_max_shift(ms);
+	vmemmap_size = (_PAGE_END(v) - PAGE_OFFSET) >> vmem_shift;
+
+	r->vmemmap_vaddr = (-(1UL << (ms->CONFIG_ARM64_VA_BITS - vmem_shift)));
+	r->vmemmap_end = r->vmemmap_vaddr + vmemmap_size;
+
+	/* Get the VMALLOC_START ~ VMALLOC_END */
+	r->vmalloc_start_addr = r->modules_end;
+	r->vmalloc_end = r->vmemmap_vaddr - MEGABYTES(256);
+	return r;
+}
+
+/*
+ *  The change is caused by the kernel patch since v5.11:
+ *    "9ad7c6d5e75b arm64: mm: tidy up top of kernel VA space"
+ */
+static struct kernel_range *arm64_get_range_v5_11(struct machine_specific *ms)
+{
+	struct kernel_range *r = &tmp_range;
+	unsigned long v = ms->CONFIG_ARM64_VA_BITS;
+	unsigned long vmem_shift, vmemmap_size, bpf_jit_size = MEGABYTES(128);
+
+	/* Not initialized yet */
+	if (v == 0)
+		return NULL;
+
+	if (v > 48)
+		v = 48;
+
+	/* Get the MODULES_VADDR ~ MODULES_END */
+	r->modules_vaddr = _PAGE_END(v) + bpf_jit_size;
+	r->modules_end = r->modules_vaddr + MEGABYTES(128);
+
+	/* Get the VMEMMAP_START ~ VMEMMAP_END */
+	vmem_shift = machdep->pageshift - arm64_get_struct_page_max_shift(ms);
+	vmemmap_size = (_PAGE_END(v) - PAGE_OFFSET) >> vmem_shift;
+
+	r->vmemmap_vaddr = (-(1UL << (ms->CONFIG_ARM64_VA_BITS - vmem_shift)));
+	r->vmemmap_end = r->vmemmap_vaddr + vmemmap_size;
+
+	/* Get the VMALLOC_START ~ VMALLOC_END */
+	r->vmalloc_start_addr = r->modules_end;
+	r->vmalloc_end = r->vmemmap_vaddr - MEGABYTES(256);
+	return r;
+}
+
+static unsigned long arm64_get_pud_size(void)
+{
+	unsigned long PUD_SIZE = 0;
+
+	switch (machdep->pagesize) {
+	case 4096:
+		if (machdep->machspec->VA_BITS > PGDIR_SHIFT_L4_4K) {
+			PUD_SIZE = PUD_SIZE_L4_4K;
+		} else {
+			PUD_SIZE = PGDIR_SIZE_L3_4K;
+		}
+		break;
+
+	case 65536:
+		PUD_SIZE = PGDIR_SIZE_L2_64K;
+	default:
+		break;
+	}
+	return PUD_SIZE;
+}
+
+/*
+ *  The change is caused by the kernel patches since v5.4, such as:
+ *     "ce3aaed87344 arm64: mm: Modify calculation of VMEMMAP_SIZE"
+ *     "14c127c957c1 arm64: mm: Flip kernel VA space"
+ */
+static struct kernel_range *arm64_get_range_v5_4(struct machine_specific *ms)
+{
+	struct kernel_range *r = &tmp_range;
+	unsigned long v = ms->CONFIG_ARM64_VA_BITS;
+	unsigned long kasan_shadow_shift, kasan_shadow_offset, PUD_SIZE;
+	unsigned long vmem_shift, vmemmap_size, bpf_jit_size = MEGABYTES(128);
+	char *string;
+	int ret;
+
+	/* Not initialized yet */
+	if (v == 0)
+		return NULL;
+
+	if (v > 48)
+		v = 48;
+
+	/* Get the MODULES_VADDR ~ MODULES_END */
+	if (kernel_symbol_exists("kasan_init")) {
+		/* See the arch/arm64/Makefile */
+		ret = get_kernel_config("CONFIG_KASAN_SW_TAGS", NULL);
+		if (ret == IKCONFIG_N)
+			return NULL;
+		kasan_shadow_shift = (ret == IKCONFIG_Y) ? 4: 3;
+
+		/* See the arch/arm64/Kconfig*/
+		ret = get_kernel_config("CONFIG_KASAN_SHADOW_OFFSET", &string);
+		if (ret != IKCONFIG_STR)
+			return NULL;
+		kasan_shadow_offset = atol(string);
+
+		r->modules_vaddr = (1UL << (64 - kasan_shadow_shift)) + kasan_shadow_offset
+				+ bpf_jit_size;
+	} else {
+		r->modules_vaddr = _PAGE_END(v) + bpf_jit_size;
+	}
+
+	r->modules_end = r->modules_vaddr + MEGABYTES(128);
+
+	/* Get the VMEMMAP_START ~ VMEMMAP_END */
+	vmem_shift = machdep->pageshift - arm64_get_struct_page_max_shift(ms);
+	vmemmap_size = (_PAGE_END(v) - PAGE_OFFSET) >> vmem_shift;
+
+	r->vmemmap_vaddr = (-vmemmap_size - SZ_2M);
+	if (THIS_KERNEL_VERSION >= LINUX(5, 7, 0)) {
+		/*
+		 *  In the v5.7, the patch: "bbd6ec605c arm64/mm: Enable memory hot remove"
+		 *      adds the VMEMMAP_END.
+		 */
+		r->vmemmap_end = r->vmemmap_vaddr + vmemmap_size;
+	} else {
+		r->vmemmap_end = 0xffffffffffffffffUL;
+	}
+
+	/* Get the VMALLOC_START ~ VMALLOC_END */
+	PUD_SIZE = arm64_get_pud_size();
+	r->vmalloc_start_addr = r->modules_end;
+	r->vmalloc_end = (-PUD_SIZE - vmemmap_size - SZ_64K);
+	return r;
+}
+
+/*
+ *  The change is caused by the kernel patches since v5.0, such as:
+ *    "91fc957c9b1d arm64/bpf: don't allocate BPF JIT programs in module memory"
+ */
+static struct kernel_range *arm64_get_range_v5_0(struct machine_specific *ms)
+{
+	struct kernel_range *r = &tmp_range;
+	unsigned long v = ms->CONFIG_ARM64_VA_BITS;
+	unsigned long kasan_shadow_shift, PUD_SIZE;
+	unsigned long vmemmap_size, bpf_jit_size = MEGABYTES(128);
+	unsigned long va_start, page_offset;
+	int ret;
+
+	/* Not initialized yet */
+	if (v == 0)
+		return NULL;
+
+	va_start = (0xffffffffffffffffUL - (1UL << v) + 1);
+	page_offset = (0xffffffffffffffffUL - (1UL << (v - 1)) + 1);
+
+	/* Get the MODULES_VADDR ~ MODULES_END */
+	if (kernel_symbol_exists("kasan_init")) {
+		/* See the arch/arm64/Makefile */
+		ret = get_kernel_config("CONFIG_KASAN_SW_TAGS", NULL);
+		if (ret == IKCONFIG_N)
+			return NULL;
+		kasan_shadow_shift = (ret == IKCONFIG_Y) ? 4: 3;
+
+		r->modules_vaddr = va_start + (1UL << (v - kasan_shadow_shift)) + bpf_jit_size;
+	} else {
+		r->modules_vaddr = va_start  + bpf_jit_size;
+	}
+
+	r->modules_end = r->modules_vaddr + MEGABYTES(128);
+
+	/* Get the VMEMMAP_START ~ VMEMMAP_END */
+	vmemmap_size = (1UL << (v - machdep->pageshift - 1 + arm64_get_struct_page_max_shift(ms)));
+
+	r->vmemmap_vaddr = page_offset - vmemmap_size;
+	r->vmemmap_end = 0xffffffffffffffffUL;  /* this kernel does not have VMEMMAP_END */
+
+	/* Get the VMALLOC_START ~ VMALLOC_END */
+	PUD_SIZE = arm64_get_pud_size();
+
+	r->vmalloc_start_addr = r->modules_end;
+	r->vmalloc_end = page_offset - PUD_SIZE - vmemmap_size - SZ_64K;
+	return r;
+}
+
+static struct kernel_va_range_handler kernel_va_range_handlers[] = {
+	{
+		LINUX(5,17,0),
+		LINUX(99,0,0), /* Just a boundary, Change it later */
+		get_range: arm64_get_range_v5_17,
+	}, {
+		LINUX(5,11,0), LINUX(5,17,0),
+		get_range: arm64_get_range_v5_11,
+	}, {
+		LINUX(5,4,0), LINUX(5,11,0),
+		get_range: arm64_get_range_v5_4,
+	}, {
+		LINUX(5,0,0), LINUX(5,4,0),
+		get_range: arm64_get_range_v5_0,
+	},
+};
+
+#define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
+
+static unsigned long arm64_get_kernel_version(void)
+{
+	char *string;
+	char buf[BUFSIZE];
+	char *p1, *p2;
+
+	if (THIS_KERNEL_VERSION)
+		return THIS_KERNEL_VERSION;
+
+	string = pc->read_vmcoreinfo("OSRELEASE");
+	if (string) {
+		strcpy(buf, string);
+
+		p1 = p2 = buf;
+		while (*p2 != '.')
+			p2++;
+		*p2 = NULLCHAR;
+		kt->kernel_version[0] = atoi(p1);
+
+		p1 = ++p2;
+		while (*p2 != '.')
+			p2++;
+		*p2 = NULLCHAR;
+		kt->kernel_version[1] = atoi(p1);
+
+		p1 = ++p2;
+		while ((*p2 >= '0') && (*p2 <= '9'))
+			p2++;
+		*p2 = NULLCHAR;
+		kt->kernel_version[2] = atoi(p1);
+	}
+	free(string);
+	return THIS_KERNEL_VERSION;
+}
+
+/* Return NULL if we fail. */
+static struct kernel_range *arm64_get_va_range(struct machine_specific *ms)
+{
+	struct kernel_va_range_handler *h;
+	unsigned long kernel_version = arm64_get_kernel_version();
+	struct kernel_range *r = NULL;
+	int i;
+
+	if (!kernel_version)
+		goto range_failed;
+
+	for (i = 0; i < ARRAY_SIZE(kernel_va_range_handlers); i++) {
+		h = kernel_va_range_handlers + i;
+
+		/* Get the right hook for this kernel version */
+		if (h->kernel_versions_start <= kernel_version &&
+			kernel_version < h->kernel_versions_end) {
+
+			/* Get the correct virtual address ranges */
+			r = h->get_range(ms);
+			if (!r)
+				goto range_failed;
+			return r;
+		}
+	}
+
+range_failed:
+	/* Reset ms->struct_page_size to 0 for arm64_calc_virtual_memory_ranges() */
+	ms->struct_page_size = 0;
+	return NULL;
+}
+
+/* Get the size of struct page {} */
+static void arm64_get_struct_page_size(struct machine_specific *ms)
+{
+	char *string;
+
+	string = pc->read_vmcoreinfo("SIZE(page)");
+	if (string)
+		ms->struct_page_size = atol(string);
+	free(string);
+}
+
 /*
  * Accept or reject a symbol from the kernel namelist.
  */
@@ -557,7 +906,7 @@ arm64_verify_symbol(const char *name, ulong value, char type)
 void
 arm64_dump_machdep_table(ulong arg)
 {
-	const struct machine_specific *ms;
+	const struct machine_specific *ms = machdep->machspec;
 	int others, i;
 
 	others = 0;
@@ -683,9 +1032,8 @@ arm64_dump_machdep_table(ulong arg)
 			machdep->cmdline_args[i] : "(unused)");
 	}
 
-	ms = machdep->machspec;
-
 	fprintf(fp, "            machspec: %lx\n", (ulong)ms);
+	fprintf(fp, "      struct_page_size: %ld\n", ms->struct_page_size);
 	fprintf(fp, "               VA_BITS: %ld\n", ms->VA_BITS);
 	fprintf(fp, "  CONFIG_ARM64_VA_BITS: %ld\n", ms->CONFIG_ARM64_VA_BITS);
 	fprintf(fp, "              VA_START: ");
@@ -4272,7 +4620,6 @@ arm64_calc_VA_BITS(void)
 #define ALIGN(x, a) __ALIGN_KERNEL((x), (a))
 #define __ALIGN_KERNEL(x, a)            __ALIGN_KERNEL_MASK(x, (typeof(x))(a) - 1)
 #define __ALIGN_KERNEL_MASK(x, mask)    (((x) + (mask)) & ~(mask))
-#define SZ_64K                          0x00010000
 
 static void
 arm64_calc_virtual_memory_ranges(void)

@@ -3386,6 +3386,7 @@ struct machine_specific {
 	ulong VA_START;
 	ulong CONFIG_ARM64_KERNELPACMASK;
 	ulong physvirt_offset;
+	ulong struct_page_size;
 };
 
 struct arm64_stackframe {
