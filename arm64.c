@@ -560,6 +560,48 @@ static int arm64_get_struct_page_max_shift(struct machine_specific *ms)
 	return (int)ceil(log2(ms->struct_page_size));
 }
 
+/* Return TRUE if we succeed, return FALSE on failure. */
+static int arm64_get_vmcoreinfo_ul(unsigned long *vaddr, const char* label)
+{
+	char *string = pc->read_vmcoreinfo(label);
+
+	if (!string)
+		return FALSE;
+
+	*vaddr  = strtoul(string, NULL, 0);
+	free(string);
+	return TRUE;
+}
+
+/*
+ *  The change is caused by the kernel patch since v5.18-rc1:
+ *    "arm64: crash_core: Export MODULES, VMALLOC, and VMEMMAP ranges"
+ */
+static struct kernel_range *arm64_get_range_v5_18(struct machine_specific *ms)
+{
+	struct kernel_range *r = &tmp_range;
+
+	/* Get the MODULES_VADDR ~ MODULES_END */
+	if (!arm64_get_vmcoreinfo_ul(&r->modules_vaddr, "NUMBER(MODULES_VADDR)"))
+		return NULL;
+	if (!arm64_get_vmcoreinfo_ul(&r->modules_end, "NUMBER(MODULES_END)"))
+		return NULL;
+
+	/* Get the VMEMMAP_START ~ VMEMMAP_END */
+	if (!arm64_get_vmcoreinfo_ul(&r->vmemmap_vaddr, "NUMBER(VMEMMAP_START)"))
+		return NULL;
+	if (!arm64_get_vmcoreinfo_ul(&r->vmemmap_end, "NUMBER(VMEMMAP_END)"))
+		return NULL;
+
+	/* Get the VMALLOC_START ~ VMALLOC_END */
+	if (!arm64_get_vmcoreinfo_ul(&r->vmalloc_start_addr, "NUMBER(VMALLOC_START)"))
+		return NULL;
+	if (!arm64_get_vmcoreinfo_ul(&r->vmalloc_end, "NUMBER(VMALLOC_END)"))
+		return NULL;
+
+	return r;
+}
+
 /*
  *  The change is caused by the kernel patch since v5.17-rc1:
  *    "b89ddf4cca43 arm64/bpf: Remove 128MB limit for BPF JIT programs"
@@ -765,8 +807,11 @@ static struct kernel_range *arm64_get_range_v5_0(struct machine_specific *ms)
 
 static struct kernel_va_range_handler kernel_va_range_handlers[] = {
 	{
-		LINUX(5,17,0),
-		LINUX(99,0,0), /* Just a boundary, Change it later */
+		LINUX(5,18,0),
+		LINUX(999,0,0), /* Just a boundary */
+		get_range: arm64_get_range_v5_18,
+	}, {
+		LINUX(5,17,0), LINUX(5,18,0),
 		get_range: arm64_get_range_v5_17,
 	}, {
 		LINUX(5,11,0), LINUX(5,17,0),
