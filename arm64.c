@@ -285,11 +285,7 @@ arm64_init(int when)
 				ms->vmalloc_start_addr	= r->vmalloc_start_addr;
 				ms->vmalloc_end		= r->vmalloc_end - 1;
 				ms->vmemmap_vaddr	= r->vmemmap_vaddr;
-				if (THIS_KERNEL_VERSION >= LINUX(5, 7, 0))
-					ms->vmemmap_end		= r->vmemmap_end - 1;
-				else
-					ms->vmemmap_end		= -1;
-
+				ms->vmemmap_end		= r->vmemmap_end - 1;
 			} else if (ms->VA_BITS_ACTUAL) {
 				ms->modules_vaddr = (st->_stext_vmlinux & TEXT_OFFSET_MASK) - ARM64_MODULES_VSIZE;
 				ms->modules_end = ms->modules_vaddr + ARM64_MODULES_VSIZE -1;
@@ -739,15 +735,15 @@ static struct kernel_range *arm64_get_range_v5_4(struct machine_specific *ms)
 	vmemmap_size = (_PAGE_END(v) - PAGE_OFFSET) >> vmem_shift;
 
 	r->vmemmap_vaddr = (-vmemmap_size - SZ_2M);
-	if (THIS_KERNEL_VERSION >= LINUX(5, 7, 0)) {
-		/*
-		 *  In the v5.7, the patch: "bbd6ec605c arm64/mm: Enable memory hot remove"
-		 *      adds the VMEMMAP_END.
-		 */
-		r->vmemmap_end = r->vmemmap_vaddr + vmemmap_size;
-	} else {
-		r->vmemmap_end = 0xffffffffffffffffUL;
-	}
+	/*
+	 *  In the v5.7, the patch: "bbd6ec605c arm64/mm: Enable memory hot remove"
+	 *      adds the VMEMMAP_END.
+	 *
+	 *  But before the VMEMMAP_END was added to kernel, we can also see
+	 *  the following in arch/arm64/mm/dump.c:
+	 *   { VMEMMAP_START + VMEMMAP_SIZE,	"vmemmap end" },
+	 */
+	r->vmemmap_end = r->vmemmap_vaddr + vmemmap_size;
 
 	/* Get the VMALLOC_START ~ VMALLOC_END */
 	PUD_SIZE = arm64_get_pud_size();
@@ -795,7 +791,7 @@ static struct kernel_range *arm64_get_range_v5_0(struct machine_specific *ms)
 	vmemmap_size = (1UL << (v - machdep->pageshift - 1 + arm64_get_struct_page_max_shift(ms)));
 
 	r->vmemmap_vaddr = page_offset - vmemmap_size;
-	r->vmemmap_end = 0xffffffffffffffffUL;  /* this kernel does not have VMEMMAP_END */
+	r->vmemmap_end = r->vmemmap_vaddr + vmemmap_size; /* See the arch/arm64/mm/dump.c */
 
 	/* Get the VMALLOC_START ~ VMALLOC_END */
 	PUD_SIZE = arm64_get_pud_size();
