@@ -1106,6 +1106,7 @@ arm64_dump_machdep_table(ulong arg)
 		fprintf(fp, "        kimage_voffset: %016lx\n", ms->kimage_voffset);
 	}
 	fprintf(fp, "           phys_offset: %lx\n", ms->phys_offset);
+	fprintf(fp, "       physvirt_offset: %lx\n", ms->physvirt_offset);
 	fprintf(fp, "__exception_text_start: %lx\n", ms->__exception_text_start);
 	fprintf(fp, "  __exception_text_end: %lx\n", ms->__exception_text_end);
 	fprintf(fp, " __irqentry_text_start: %lx\n", ms->__irqentry_text_start);
@@ -1399,15 +1400,43 @@ arm64_calc_kimage_voffset(void)
 		ms->kimage_voffset += (kt->relocate * -1);
 }
 
+/*
+ * The physvirt_offset only exits in kernel [5.4, 5.10)
+ *
+ *   1) In kernel v5.4, the patch:
+ *        "5383cc6efed137 arm64: mm: Introduce vabits_actual"
+ *
+ *      introduced the physvirt_offset.
+ *
+ *   2) In kernel v5.10, the patch:
+ *          "7bc1a0f9e17658 arm64: mm: use single quantity
+ *                           to represent the PA to VA translation"
+ *      removed the physvirt_offset.
+ */
 static void
 arm64_calc_physvirt_offset(void)
 {
 	struct machine_specific *ms = machdep->machspec;
 	ulong physvirt_offset;
 	struct syment *sp;
+	ulong value;
 
 	if ((sp = kernel_symbol_search("physvirt_offset")) &&
 			machdep->machspec->kimage_voffset) {
+		if (pc->flags & PROC_KCORE) {
+			value = symbol_value_from_proc_kallsyms("physvirt_offset");
+			if ((value != BADVAL) &&
+				(READMEM(pc->mfd, &physvirt_offset, sizeof(ulong),
+					   value, KCORE_USE_VADDR) > 0)) {
+				machdep->flags |= HAS_PHYSVIRT_OFFSET;
+				ms->physvirt_offset = physvirt_offset;
+
+				/* Update the ms->phys_offset which is wrong */
+				ms->phys_offset = ms->physvirt_offset + ms->page_offset;
+				return;
+			}
+		}
+
 		if (READMEM(pc->mfd, &physvirt_offset, sizeof(physvirt_offset),
 			sp->value, sp->value -
 			machdep->machspec->kimage_voffset) > 0) {
