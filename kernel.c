@@ -23,6 +23,11 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include "xendump.h"
+#if defined(GDB_7_6) || defined(GDB_10_2)
+#define __CONFIG_H__ 1
+#include "config.h"
+#endif
+#include "bfd.h"
 
 static void do_module_cmd(ulong, char *, ulong, char *, char *);
 static void show_module_taint(void);
@@ -97,6 +102,7 @@ static void dump_printk_safe_seq_buf(int);
 static char *vmcoreinfo_read_string(const char *);
 static void check_vmcoreinfo(void);
 static int is_pvops_xen(void);
+static int get_linux_banner_from_vmlinux(char *, size_t);
 
 
 /*
@@ -1323,6 +1329,12 @@ verify_namelist()
 	target_smp = strstr(kt->utsname.version, " SMP ") ? TRUE : FALSE;
 	namelist_smp = FALSE;
 
+	if (get_linux_banner_from_vmlinux(buffer, sizeof(buffer)) &&
+	    strstr(buffer, kt->proc_version)) {
+		found = TRUE;
+		goto found;
+	}
+
         sprintf(command, "/usr/bin/strings %s", namelist);
         if ((pipe = popen(command, "r")) == NULL) {
                 error(INFO, "%s: %s\n", namelist, strerror(errno));
@@ -1383,6 +1395,7 @@ verify_namelist()
 		}
 	}
 
+found:
 	if (found) {
                 if (CRASHDEBUG(1)) {
                 	fprintf(fp, "verify_namelist:\n");
@@ -11766,4 +11779,32 @@ check_vmcoreinfo(void)
 			break;
 		}
 	}
+}
+
+static
+int get_linux_banner_from_vmlinux(char *buf, size_t size)
+{
+	struct bfd_section *sect;
+	long offset;
+
+	sect = bfd_get_section_by_name(st->bfd, ".rodata");
+	if (!sect)
+		return FALSE;
+
+	/*
+	 * Although symbol_value() returns dynamic symbol value that
+	 * is affected by kaslr, which is different from static symbol
+	 * value in vmlinux file, but relative offset to linux_banner
+	 * object in .rodata section is idential.
+	 */
+	offset = symbol_value("linux_banner") - symbol_value(".rodata");
+
+	if (!bfd_get_section_contents(st->bfd,
+				      sect,
+				      buf,
+				      offset,
+				      size))
+		return FALSE;
+
+	return TRUE;
 }
