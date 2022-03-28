@@ -1087,6 +1087,9 @@ s390x_verify_symbol(const char *name, ulong value, char type)
 	if (strstr(name, "L2\002") == name)
 	    	return FALSE;
 
+	if (STREQ(name, ".rodata"))
+		return TRUE;
+
 	/* throw away all symbols containing a '.' */
 	for(i = 0; i < strlen(name);i++){
 		if(name[i] == '.')
