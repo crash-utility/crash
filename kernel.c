@@ -11787,6 +11787,9 @@ int get_linux_banner_from_vmlinux(char *buf, size_t size)
 	struct bfd_section *sect;
 	long offset;
 
+	if (!kernel_symbol_exists(".rodata"))
+		return FALSE;
+
 	sect = bfd_get_section_by_name(st->bfd, ".rodata");
 	if (!sect)
 		return FALSE;
