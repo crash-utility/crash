@@ -544,6 +544,7 @@ read_dump_header(char *file)
 	ulong pfn;
 	int i, j, max_sect_len;
 	int is_split = 0;
+	ulonglong tmp, *bitmap;
 
 	if (block_size < 0)
 		return FALSE;
@@ -885,11 +886,16 @@ restart:
 
 	dd->valid_pages = calloc(sizeof(ulong), max_sect_len + 1);
 	dd->max_sect_len = max_sect_len;
+
+	/* It is safe to convert it to (ulonglong *). */
+	bitmap = (ulonglong *)dd->dumpable_bitmap;
 	for (i = 1; i < max_sect_len + 1; i++) {
 		dd->valid_pages[i] = dd->valid_pages[i - 1];
-		for (j = 0; j < BITMAP_SECT_LEN; j++, pfn++)
-			if (page_is_dumpable(pfn))
-				dd->valid_pages[i]++;
+		for (j = 0; j < BITMAP_SECT_LEN; j += 64, pfn += 64) {
+			tmp = bitmap[pfn >> 6];
+			if (tmp)
+				dd->valid_pages[i] += hweight64(tmp);
+		}
 	}
 
         return TRUE;
