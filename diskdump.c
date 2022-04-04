@@ -538,9 +538,6 @@ read_dump_header(char *file)
 	struct kdump_sub_header *sub_header_kdump = NULL;
 	size_t size;
 	off_t bitmap_len;
-	char *bufptr;
-	size_t len;
-	ssize_t bytes_read;
 	int block_size = (int)sysconf(_SC_PAGESIZE);
 	off_t offset;
 	const off_t failed = (off_t)-1;
@@ -723,10 +720,6 @@ restart:
 
 	offset = (off_t)block_size * (1 + header->sub_hdr_size);
 
-	if ((dd->bitmap = malloc(bitmap_len)) == NULL)
-		error(FATAL, "%s: cannot malloc bitmap buffer\n",
-			DISKDUMP_VALID() ? "diskdump" : "compressed kdump");
-
 	dd->dumpable_bitmap = calloc(bitmap_len, 1);
 
 	if (CRASHDEBUG(8))
@@ -735,30 +728,23 @@ restart:
 			(ulonglong)offset);
 
 	if (FLAT_FORMAT()) {
+		if ((dd->bitmap = malloc(bitmap_len)) == NULL)
+			error(FATAL, "%s: cannot malloc bitmap buffer\n",
+				DISKDUMP_VALID() ? "diskdump" : "compressed kdump");
+
 		if (!read_flattened_format(dd->dfd, offset, dd->bitmap, bitmap_len)) {
 			error(INFO, "%s: cannot read memory bitmap\n",
 				DISKDUMP_VALID() ? "diskdump" : "compressed kdump");
 			goto err;
 		}
 	} else {
-		if (lseek(dd->dfd, offset, SEEK_SET) == failed) {
-			error(INFO, "%s: cannot lseek memory bitmap\n",
+		dd->bitmap = mmap(NULL, bitmap_len, PROT_READ,
+					MAP_SHARED, dd->dfd, offset);
+		if (dd->bitmap == MAP_FAILED)
+			error(FATAL, "%s: cannot mmap bitmap buffer\n",
 				DISKDUMP_VALID() ? "diskdump" : "compressed kdump");
-			goto err;
-		}
-		bufptr = dd->bitmap;
-		len = bitmap_len;
-		while (len) {
-			bytes_read = read(dd->dfd, bufptr, len);
-			if (bytes_read <= 0) {
-				error(INFO, "%s: cannot read memory bitmap\n",
-					DISKDUMP_VALID() ? "diskdump"
-					: "compressed kdump");
-				goto err;
-			}
-			len -= bytes_read;
-			bufptr += bytes_read;
-		}
+
+		madvise(dd->bitmap, bitmap_len, MADV_WILLNEED);
 	}
 
 	if (dump_is_partial(header))
@@ -914,8 +900,12 @@ err:
 		free(sub_header);
 	if (sub_header_kdump)
 		free(sub_header_kdump);
-	if (dd->bitmap)
-		free(dd->bitmap);
+	if (dd->bitmap) {
+		if (FLAT_FORMAT())
+			free(dd->bitmap);
+		else
+			munmap(dd->bitmap, dd->bitmap_len);
+	}
 	if (dd->dumpable_bitmap)
 		free(dd->dumpable_bitmap);
 	if (dd->notes_buf)
