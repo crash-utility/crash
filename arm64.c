@@ -1999,6 +1999,16 @@ arm64_vtop_4level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if (!pud_val)
 		goto no_page;
 
+	if ((pud_val & PUD_TYPE_MASK) == PUD_TYPE_SECT) {
+		ulong sectionbase = (pud_val & SECTION_PAGE_MASK_1GB) & PHYS_MASK;
+		if (verbose) {
+			fprintf(fp, "  PAGE: %lx  (1GB)\n\n", sectionbase);
+			arm64_translate_pte(pud_val, 0, 0);
+		}
+		*paddr = sectionbase + (vaddr & ~SECTION_PAGE_MASK_1GB);
+		return TRUE;
+	}
+
 	pmd_base = (ulong *)PTOV(pud_val & PHYS_MASK & (s32)machdep->pagemask);
 	FILL_PMD(pmd_base, KVADDR, PTRS_PER_PMD_L4_4K * sizeof(ulong));
 	pmd_ptr = pmd_base + (((vaddr) >> PMD_SHIFT_L4_4K) & (PTRS_PER_PMD_L4_4K - 1));
