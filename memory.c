@@ -541,6 +541,15 @@ vm_init(void)
 		ANON_MEMBER_OFFSET_INIT(page_s_mem, "page", "s_mem");
 		ANON_MEMBER_OFFSET_INIT(page_freelist, "page", "freelist");
 		ANON_MEMBER_OFFSET_INIT(page_active, "page", "active");
+		/*
+		 * Moved to struct slab in Linux 5.17
+		 */
+		if (INVALID_MEMBER(page_s_mem))
+			MEMBER_OFFSET_INIT(page_s_mem, "slab", "s_mem");
+		if (INVALID_MEMBER(page_freelist))
+			MEMBER_OFFSET_INIT(page_freelist, "slab", "freelist");
+		if (INVALID_MEMBER(page_active))
+			MEMBER_OFFSET_INIT(page_active, "slab", "active");
 	}
 
         if (!VALID_STRUCT(kmem_slab_s) && VALID_STRUCT(slab_s)) {
