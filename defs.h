@@ -136,7 +136,7 @@
 #define NR_CPUS  (4096)
 #endif
 #ifdef PPC64
-#define NR_CPUS  (2048)
+#define NR_CPUS  (8192)
 #endif
 #ifdef S390
 #define NR_CPUS  (512)
