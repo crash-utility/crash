@@ -78,10 +78,16 @@ static unsigned long bitmap_weight(unsigned long bitmap, unsigned int bits)
 	return w;
 }
 
+static inline unsigned int __map_depth(const struct sbitmap_context *sc, int index)
+{
+       if (index == sc->map_nr - 1)
+               return sc->depth - (index << sc->shift);
+       return 1U << sc->shift;
+}
+
 static unsigned int __sbitmap_weight(const struct sbitmap_context *sc, bool set)
 {
 	const ulong sbitmap_word_size = SIZE(sbitmap_word);
-	const ulong w_depth_off = OFFSET(sbitmap_word_depth);
 	const ulong w_word_off = OFFSET(sbitmap_word_word);
 	const ulong w_cleared_off = OFFSET(sbitmap_word_cleared);
 
@@ -99,7 +105,7 @@ static unsigned int __sbitmap_weight(const struct sbitmap_context *sc, bool set)
 			error(FATAL, "cannot read sbitmap_word\n");
 		}
 
-		depth = ULONG(sbitmap_word_buf + w_depth_off);
+		depth = __map_depth(sc, i);
 
 		if (set) {
 			word = ULONG(sbitmap_word_buf + w_word_off);
@@ -142,7 +148,6 @@ static void sbitmap_emit_byte(unsigned int offset, uint8_t byte)
 static void sbitmap_bitmap_show(const struct sbitmap_context *sc)
 {
 	const ulong sbitmap_word_size = SIZE(sbitmap_word);
-	const ulong w_depth_off = OFFSET(sbitmap_word_depth);
 	const ulong w_word_off = OFFSET(sbitmap_word_word);
 	const ulong w_cleared_off = OFFSET(sbitmap_word_cleared);
 
@@ -165,7 +170,7 @@ static void sbitmap_bitmap_show(const struct sbitmap_context *sc)
 
 		word = ULONG(sbitmap_word_buf + w_word_off);
 		cleared = ULONG(sbitmap_word_buf + w_cleared_off);
-		word_bits = ULONG(sbitmap_word_buf + w_depth_off);
+		word_bits = __map_depth(sc, i);
 
 		word &= ~cleared;
 
@@ -213,7 +218,6 @@ static void __sbitmap_for_each_set(const struct sbitmap_context *sc,
 		unsigned int start, sbitmap_for_each_fn fn, void *data)
 {
 	const ulong sbitmap_word_size = SIZE(sbitmap_word);
-	const ulong w_depth_off = OFFSET(sbitmap_word_depth);
 	const ulong w_word_off = OFFSET(sbitmap_word_word);
 	const ulong w_cleared_off = OFFSET(sbitmap_word_cleared);
 
@@ -232,7 +236,7 @@ static void __sbitmap_for_each_set(const struct sbitmap_context *sc,
 
 	while (scanned < sc->depth) {
 		unsigned long w_addr = sc->map_addr + (sbitmap_word_size * index);
-		unsigned long w_depth, w_word, w_cleared;
+		unsigned long w_word, w_cleared;
 		unsigned long word, depth;
 
 		if (!readmem(w_addr, KVADDR, sbitmap_word_buf, sbitmap_word_size, "sbitmap_word", RETURN_ON_ERROR)) {
@@ -240,11 +244,10 @@ static void __sbitmap_for_each_set(const struct sbitmap_context *sc,
 			error(FATAL, "cannot read sbitmap_word\n");
 		}
 
-		w_depth = ULONG(sbitmap_word_buf + w_depth_off);
 		w_word = ULONG(sbitmap_word_buf + w_word_off);
 		w_cleared = ULONG(sbitmap_word_buf + w_cleared_off);
 
-		depth = min(w_depth - nr, sc->depth - scanned);
+		depth = min(__map_depth(sc, index) - nr, sc->depth - scanned);
 
 		scanned += depth;
 		word = w_word & ~w_cleared;
