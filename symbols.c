@@ -10708,6 +10708,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(sbitmap_map_nr));
 	fprintf(fp, "                   sbitmap_map: %ld\n",
 		OFFSET(sbitmap_map));
+	fprintf(fp, "            sbitmap_alloc_hint: %ld\n",
+		OFFSET(sbitmap_alloc_hint));
 	fprintf(fp, "              sbitmap_queue_sb: %ld\n",
 		OFFSET(sbitmap_queue_sb));
 	fprintf(fp, "      sbitmap_queue_alloc_hint: %ld\n",

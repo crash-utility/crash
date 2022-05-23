@@ -285,6 +285,7 @@ void sbitmap_for_each_set(const struct sbitmap_context *sc,
 static void sbitmap_queue_show(const struct sbitmap_queue_context *sqc,
 		const struct sbitmap_context *sc)
 {
+	ulong alloc_hint_addr = 0;
 	int cpus = get_cpus_possible();
 	int sbq_wait_state_size, wait_cnt_off, wait_off, list_head_off;
 	char *sbq_wait_state_buf;
@@ -297,6 +298,11 @@ static void sbitmap_queue_show(const struct sbitmap_queue_context *sqc,
 	fprintf(fp, "bits_per_word = %u\n", 1U << sc->shift);
 	fprintf(fp, "map_nr = %u\n", sc->map_nr);
 
+	if (VALID_MEMBER(sbitmap_queue_alloc_hint))
+		alloc_hint_addr = sqc->alloc_hint;
+	else if (VALID_MEMBER(sbitmap_alloc_hint)) /* 5.13 and later */
+		alloc_hint_addr = sc->alloc_hint;
+
 	fputs("alloc_hint = {", fp);
 	first = true;
 	for (i = 0; i < cpus; i++) {
@@ -307,7 +313,7 @@ static void sbitmap_queue_show(const struct sbitmap_queue_context *sqc,
 			fprintf(fp, ", ");
 		first = false;
 
-		ptr = kt->__per_cpu_offset[i] + sqc->alloc_hint;
+		ptr = kt->__per_cpu_offset[i] + alloc_hint_addr;
 		readmem(ptr, KVADDR, &val, sizeof(val), "alloc_hint", FAULT_ON_ERROR);
 
 		fprintf(fp, "%u", val);
@@ -362,7 +368,8 @@ static void sbitmap_queue_context_load(ulong addr, struct sbitmap_queue_context 
 		error(FATAL, "cannot read sbitmap_queue\n");
 	}
 
-	sqc->alloc_hint = ULONG(sbitmap_queue_buf + OFFSET(sbitmap_queue_alloc_hint));
+	if (VALID_MEMBER(sbitmap_queue_alloc_hint))
+		sqc->alloc_hint = ULONG(sbitmap_queue_buf + OFFSET(sbitmap_queue_alloc_hint));
 	sqc->wake_batch = UINT(sbitmap_queue_buf + OFFSET(sbitmap_queue_wake_batch));
 	sqc->wake_index = INT(sbitmap_queue_buf + OFFSET(sbitmap_queue_wake_index));
 	sqc->ws_addr = ULONG(sbitmap_queue_buf + OFFSET(sbitmap_queue_ws));
@@ -387,6 +394,8 @@ void sbitmap_context_load(ulong addr, struct sbitmap_context *sc)
 	sc->shift = UINT(sbitmap_buf + OFFSET(sbitmap_shift));
 	sc->map_nr = UINT(sbitmap_buf + OFFSET(sbitmap_map_nr));
 	sc->map_addr = ULONG(sbitmap_buf + OFFSET(sbitmap_map));
+	if (VALID_MEMBER(sbitmap_alloc_hint))
+		sc->alloc_hint = ULONG(sbitmap_buf + OFFSET(sbitmap_alloc_hint));
 
 	FREEBUF(sbitmap_buf);
 }
@@ -512,6 +521,7 @@ void sbitmapq_init(void)
 	MEMBER_OFFSET_INIT(sbitmap_shift, "sbitmap", "shift");
 	MEMBER_OFFSET_INIT(sbitmap_map_nr, "sbitmap", "map_nr");
 	MEMBER_OFFSET_INIT(sbitmap_map, "sbitmap", "map");
+	MEMBER_OFFSET_INIT(sbitmap_alloc_hint, "sbitmap", "alloc_hint");
 
 	MEMBER_OFFSET_INIT(sbitmap_queue_sb, "sbitmap_queue", "sb");
 	MEMBER_OFFSET_INIT(sbitmap_queue_alloc_hint, "sbitmap_queue", "alloc_hint");
