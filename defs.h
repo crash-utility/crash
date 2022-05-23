@@ -2169,6 +2169,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long sbq_wait_state_wait_cnt;
 	long sbq_wait_state_wait;
 	long sbitmap_alloc_hint;
+	long sbitmap_round_robin;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -5909,6 +5910,7 @@ struct sbitmap_context {
 	unsigned map_nr;
 	ulong map_addr;
 	ulong alloc_hint;
+	bool round_robin;
 };
 
 typedef bool (*sbitmap_for_each_fn)(unsigned int idx, void *p);
