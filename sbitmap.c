@@ -525,30 +525,6 @@ void sbitmapq_init(void)
 	MEMBER_OFFSET_INIT(sbq_wait_state_wait_cnt, "sbq_wait_state", "wait_cnt");
 	MEMBER_OFFSET_INIT(sbq_wait_state_wait, "sbq_wait_state", "wait");
 
-	if (!VALID_SIZE(sbitmap_word) ||
-			!VALID_SIZE(sbitmap) ||
-			!VALID_SIZE(sbitmap_queue) ||
-			!VALID_SIZE(sbq_wait_state) ||
-			INVALID_MEMBER(sbitmap_word_depth) ||
-			INVALID_MEMBER(sbitmap_word_word) ||
-			INVALID_MEMBER(sbitmap_word_cleared) ||
-			INVALID_MEMBER(sbitmap_depth) ||
-			INVALID_MEMBER(sbitmap_shift) ||
-			INVALID_MEMBER(sbitmap_map_nr) ||
-			INVALID_MEMBER(sbitmap_map) ||
-			INVALID_MEMBER(sbitmap_queue_sb) ||
-			INVALID_MEMBER(sbitmap_queue_alloc_hint) ||
-			INVALID_MEMBER(sbitmap_queue_wake_batch) ||
-			INVALID_MEMBER(sbitmap_queue_wake_index) ||
-			INVALID_MEMBER(sbitmap_queue_ws) ||
-			INVALID_MEMBER(sbitmap_queue_ws_active) ||
-			INVALID_MEMBER(sbitmap_queue_round_robin) ||
-			INVALID_MEMBER(sbitmap_queue_min_shallow_depth) ||
-			INVALID_MEMBER(sbq_wait_state_wait_cnt) ||
-			INVALID_MEMBER(sbq_wait_state_wait)) {
-		command_not_supported();
-	}
-
 	sb_flags |= SB_FLAG_INIT;
 }
 
