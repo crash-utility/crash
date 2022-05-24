@@ -2673,7 +2673,8 @@ cmd_bt(void)
 			break;
 
 		case 'n':
-			if (machine_type("X86_64") && STREQ(optarg, "idle"))
+			if ((machine_type("X86_64") || machine_type("ARM64")) &&
+			    STREQ(optarg, "idle"))
 				bt->flags |= BT_SKIP_IDLE;
 			else
 				option_not_supported(c);

@@ -3681,6 +3681,12 @@ arm64_get_dumpfile_stackframe(struct bt_info *bt, struct arm64_stackframe *frame
 {
 	struct machine_specific *ms = machdep->machspec;
 	struct arm64_pt_regs *ptregs;
+	bool skip = false;
+
+	if (bt->flags & BT_SKIP_IDLE) {
+		skip = true;
+		bt->flags &= ~BT_SKIP_IDLE;
+	}
 
 	if (!ms->panic_task_regs ||
 	    (!ms->panic_task_regs[bt->tc->processor].sp && 
@@ -3713,8 +3719,11 @@ try_kernel:
 	}
 
 	if (arm64_in_kdump_text(bt, frame) || 
-	    arm64_in_kdump_text_on_irq_stack(bt))
+	    arm64_in_kdump_text_on_irq_stack(bt)) {
 		bt->flags |= BT_KDUMP_ADJUST;
+		if (skip && is_idle_thread(bt->task))
+			bt->flags |= BT_SKIP_IDLE;
+	}
 
 	return TRUE;
 }
@@ -3738,10 +3747,14 @@ arm64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 	int ret;
 	struct arm64_stackframe stackframe = { 0 };
 
-	if (DUMPFILE() && is_task_active(bt->task))
+	if (DUMPFILE() && is_task_active(bt->task)) {
 		ret = arm64_get_dumpfile_stackframe(bt, &stackframe);
-	else
+	} else {
+		if (bt->flags & BT_SKIP_IDLE)
+			bt->flags &= ~BT_SKIP_IDLE;
+
 		ret = arm64_get_stackframe(bt, &stackframe);
+	}
 
 	if (!ret)
 		error(WARNING, 

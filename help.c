@@ -1915,7 +1915,7 @@ char *help_bt[] = {
 "       -a  displays the stack traces of the active task on each CPU.",
 "           (only applicable to crash dumps)",
 "       -A  same as -a, but also displays vector registers (S390X only).",
-"  -n idle  filter the stack of idle tasks (x86_64).",
+"  -n idle  filter the stack of idle tasks (x86_64, arm64).",
 "           (only applicable to crash dumps)",
 "       -p  display the stack trace of the panic task only.",
 "           (only applicable to crash dumps)",
