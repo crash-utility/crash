@@ -2503,7 +2503,7 @@ cmd_bt(void)
 	if (kt->flags & USE_OPT_BT)
 		bt->flags |= BT_OPT_BACK_TRACE;
 
-	while ((c = getopt(argcnt, args, "D:fFI:S:c:aAloreEgstTdxR:Ovp")) != EOF) {
+	while ((c = getopt(argcnt, args, "D:fFI:S:c:n:aAloreEgstTdxR:Ovp")) != EOF) {
                 switch (c)
 		{
 		case 'f':
@@ -2670,6 +2670,13 @@ cmd_bt(void)
 			bt->flags |= BT_SHOW_ALL_REGS; /* FALLTHROUGH */
 		case 'a':
 			active++;
+			break;
+
+		case 'n':
+			if (machine_type("X86_64") && STREQ(optarg, "idle"))
+				bt->flags |= BT_SKIP_IDLE;
+			else
+				option_not_supported(c);
 			break;
 
 		case 'r':
@@ -3091,6 +3098,10 @@ back_trace(struct bt_info *bt)
 			machdep->get_stack_frame(bt, &eip, &esp);
 	} else
                 machdep->get_stack_frame(bt, &eip, &esp);
+
+	/* skip idle task stack */
+	if (bt->flags & BT_SKIP_IDLE)
+		return;
 
 	if (bt->flags & BT_KSTACKP) {
 		bt->stkptr = esp;

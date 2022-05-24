@@ -4918,6 +4918,9 @@ x86_64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 	if (bt->flags & BT_DUMPFILE_SEARCH)
 		return x86_64_get_dumpfile_stack_frame(bt, pcp, spp);
 
+	if (bt->flags & BT_SKIP_IDLE)
+		bt->flags &= ~BT_SKIP_IDLE;
+
         if (pcp)
                 *pcp = x86_64_get_pc(bt);
         if (spp)
@@ -4959,6 +4962,9 @@ x86_64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *rip, ulong *rsp)
 	in_nmi_stack = stage = 0;
 	estack = -1;
 	panic = FALSE;
+
+	if (bt_in->flags & BT_SKIP_IDLE)
+		bt_in->flags &= ~BT_SKIP_IDLE;
 
 	panic_task = tt->panic_task == bt->task ? TRUE : FALSE;
 
@@ -5098,6 +5104,8 @@ next_sysrq:
                 if (!panic_task && STREQ(sym, "crash_nmi_callback")) {
                         *rip = *up;
                         *rsp = bt->stackbase + ((char *)(up) - bt->stackbuf);
+			if ((bt->flags & BT_SKIP_IDLE) && is_idle_thread(bt->task))
+				bt_in->flags |= BT_SKIP_IDLE;
                         return;
                 }
 
