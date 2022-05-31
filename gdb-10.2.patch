@@ -1638,3 +1638,15 @@ exit 0
  	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
                  -o $(shell /bin/cat mergeobj) $(LIBGDB_OBS) \
                  $(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES) $(shell /bin/cat mergelibs)
+--- gdb-10.2/gdb/c-typeprint.c.orig
++++ gdb-10.2/gdb/c-typeprint.c
+@@ -1202,6 +1202,9 @@ c_type_print_base_struct_union (struct t
+ 		= podata->end_bitpos
+ 		  - TYPE_LENGTH (type->field (i).type ()) * TARGET_CHAR_BIT;
+ 	    }
++	  else if (strlen(TYPE_FIELD_NAME (type, i)) == 0)
++	    /* crash: Print details for unnamed struct and union. */
++	    newshow = show;
+
+ 	  c_print_type_1 (type->field (i).type (),
+ 			  TYPE_FIELD_NAME (type, i),
