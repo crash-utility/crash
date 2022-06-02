@@ -10385,6 +10385,12 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(kset_list));
 	fprintf(fp, "            request_list_count: %ld\n",
 		OFFSET(request_list_count));
+	fprintf(fp, "             request_cmd_flags: %ld\n",
+		OFFSET(request_cmd_flags));
+	fprintf(fp, "                     request_q: %ld\n",
+		OFFSET(request_q));
+	fprintf(fp, "                 request_state: %ld\n",
+		OFFSET(request_state));
 	fprintf(fp, "       request_queue_in_flight: %ld\n",
 		OFFSET(request_queue_in_flight));
 	fprintf(fp, "              request_queue_rq: %ld\n",
@@ -10393,10 +10399,25 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(request_queue_mq_ops));
 	fprintf(fp, "       request_queue_queue_ctx: %ld\n",
 		OFFSET(request_queue_queue_ctx));
+	fprintf(fp, "    request_queue_queue_hw_ctx: %ld\n",
+		OFFSET(request_queue_queue_hw_ctx));
+	fprintf(fp, "    request_queue_nr_hw_queues: %ld\n",
+		OFFSET(request_queue_nr_hw_queues));
 	fprintf(fp, "      blk_mq_ctx_rq_dispatched: %ld\n",
 		OFFSET(blk_mq_ctx_rq_dispatched));
 	fprintf(fp, "       blk_mq_ctx_rq_completed: %ld\n",
 		OFFSET(blk_mq_ctx_rq_completed));
+	fprintf(fp, "            blk_mq_hw_ctx_tags: %ld\n",
+		OFFSET(blk_mq_hw_ctx_tags));
+	fprintf(fp, "       blk_mq_tags_bitmap_tags: %ld\n",
+		OFFSET(blk_mq_tags_bitmap_tags));
+	fprintf(fp, "    blk_mq_tags_breserved_tags: %ld\n",
+		OFFSET(blk_mq_tags_breserved_tags));
+	fprintf(fp, "  blk_mq_tags_nr_reserved_tags: %ld\n",
+		OFFSET(blk_mq_tags_nr_reserved_tags));
+	fprintf(fp, "               blk_mq_tags_rqs: %ld\n",
+		OFFSET(blk_mq_tags_rqs));
+
 	fprintf(fp, "  subsys_private_klist_devices: %ld\n",
 		OFFSET(subsys_private_klist_devices));
 	fprintf(fp, "                subsystem_kset: %ld\n",
@@ -11003,6 +11024,7 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "                       sbitmap: %ld\n", SIZE(sbitmap));
 	fprintf(fp, "                 sbitmap_queue: %ld\n", SIZE(sbitmap_queue));
 	fprintf(fp, "                sbq_wait_state: %ld\n", SIZE(sbq_wait_state));
+	fprintf(fp, "                   blk_mq_tags: %ld\n", SIZE(blk_mq_tags));
 
         fprintf(fp, "\n                   array_table:\n");
 	/*

@@ -4238,19 +4238,176 @@ get_one_mctx_diskio(unsigned long mctx, struct diskio *io)
 	io->write = (dispatch[1] - comp[1]);
 }
 
+typedef bool (busy_tag_iter_fn)(ulong rq, void *data);
+
+struct mq_inflight {
+	ulong q;
+	struct diskio *dio;
+};
+
+struct bt_iter_data {
+	ulong tags;
+	uint reserved;
+	uint nr_reserved_tags;
+	busy_tag_iter_fn *fn;
+	void *data;
+};
+
+/*
+ * See the include/linux/blk_types.h and include/linux/blk-mq.h
+ */
+#define MQ_RQ_IN_FLIGHT 1
+#define REQ_OP_BITS     8
+#define REQ_OP_MASK     ((1 << REQ_OP_BITS) - 1)
+
+static uint op_is_write(uint op)
+{
+	return (op & REQ_OP_MASK) & 1;
+}
+
+static bool mq_check_inflight(ulong rq, void *data)
+{
+	uint cmd_flags = 0, state = 0;
+	ulong addr = 0, queue = 0;
+	struct mq_inflight *mi = data;
+
+	if (!IS_KVADDR(rq))
+		return TRUE;
+
+	addr = rq + OFFSET(request_q);
+	if (!readmem(addr, KVADDR, &queue, sizeof(ulong), "request.q", RETURN_ON_ERROR))
+		return FALSE;
+
+	addr = rq + OFFSET(request_cmd_flags);
+	if (!readmem(addr, KVADDR, &cmd_flags, sizeof(uint), "request.cmd_flags", RETURN_ON_ERROR))
+		return FALSE;
+
+	addr = rq + OFFSET(request_state);
+	if (!readmem(addr, KVADDR, &state, sizeof(uint), "request.state", RETURN_ON_ERROR))
+		return FALSE;
+
+	if (queue == mi->q && state == MQ_RQ_IN_FLIGHT) {
+		if (op_is_write(cmd_flags))
+			mi->dio->write++;
+		else
+			mi->dio->read++;
+	}
+
+	return TRUE;
+}
+
+static bool bt_iter(uint bitnr, void *data)
+{
+	ulong addr = 0, rqs_addr = 0, rq = 0;
+	struct bt_iter_data *iter_data = data;
+	ulong tag = iter_data->tags;
+
+	if (!iter_data->reserved)
+		bitnr += iter_data->nr_reserved_tags;
+
+	/* rqs */
+	addr = tag + OFFSET(blk_mq_tags_rqs);
+	if (!readmem(addr, KVADDR, &rqs_addr, sizeof(void *), "blk_mq_tags.rqs", RETURN_ON_ERROR))
+		return FALSE;
+
+	addr = rqs_addr + bitnr * sizeof(ulong); /* rqs[bitnr] */
+	if (!readmem(addr, KVADDR, &rq, sizeof(ulong), "blk_mq_tags.rqs[]", RETURN_ON_ERROR))
+		return FALSE;
+
+	return iter_data->fn(rq, iter_data->data);
+}
+
+static void bt_for_each(ulong q, ulong tags, ulong sbq, uint reserved, uint nr_resvd_tags, struct diskio *dio)
+{
+	struct sbitmap_context sc = {0};
+	struct mq_inflight mi = {
+		.q = q,
+		.dio = dio,
+	};
+	struct bt_iter_data iter_data = {
+		.tags = tags,
+		.reserved = reserved,
+		.nr_reserved_tags = nr_resvd_tags,
+		.fn = mq_check_inflight,
+		.data = &mi,
+	};
+
+	sbitmap_context_load(sbq + OFFSET(sbitmap_queue_sb), &sc);
+	sbitmap_for_each_set(&sc, bt_iter, &iter_data);
+}
+
+static void queue_for_each_hw_ctx(ulong q, ulong *hctx, uint cnt, struct diskio *dio)
+{
+	uint i;
+
+	for (i = 0; i < cnt; i++) {
+		ulong addr = 0, tags = 0;
+		uint nr_reserved_tags = 0;
+
+		/* Tags owned by the block driver */
+		addr = hctx[i] + OFFSET(blk_mq_hw_ctx_tags);
+		if (!readmem(addr, KVADDR, &tags, sizeof(ulong),
+				"blk_mq_hw_ctx.tags", RETURN_ON_ERROR))
+			break;
+
+		addr = tags + OFFSET(blk_mq_tags_nr_reserved_tags);
+		if (!readmem(addr, KVADDR, &nr_reserved_tags, sizeof(uint),
+				"blk_mq_tags_nr_reserved_tags", RETURN_ON_ERROR))
+			break;
+
+		if (nr_reserved_tags) {
+			addr = tags + OFFSET(blk_mq_tags_breserved_tags);
+			bt_for_each(q, tags, addr, 1, nr_reserved_tags, dio);
+		}
+		addr = tags + OFFSET(blk_mq_tags_bitmap_tags);
+		bt_for_each(q, tags, addr, 0, nr_reserved_tags, dio);
+	}
+}
+
+static void get_mq_diskio_from_hw_queues(ulong q, struct diskio *dio)
+{
+	uint cnt = 0;
+	ulong addr = 0, hctx_addr = 0;
+	ulong *hctx_array = NULL;
+
+	addr = q + OFFSET(request_queue_nr_hw_queues);
+	readmem(addr, KVADDR, &cnt, sizeof(uint),
+		"request_queue.nr_hw_queues", FAULT_ON_ERROR);
+
+	addr = q + OFFSET(request_queue_queue_hw_ctx);
+	readmem(addr, KVADDR, &hctx_addr, sizeof(void *),
+		"request_queue.queue_hw_ctx", FAULT_ON_ERROR);
+
+	hctx_array = (ulong *)GETBUF(sizeof(void *) * cnt);
+	if (!hctx_array)
+		error(FATAL, "fail to get memory for the hctx_array\n");
+
+	if (!readmem(hctx_addr, KVADDR, hctx_array, sizeof(void *) * cnt,
+			"request_queue.queue_hw_ctx[]", RETURN_ON_ERROR)) {
+		FREEBUF(hctx_array);
+		return;
+	}
+
+	queue_for_each_hw_ctx(q, hctx_array, cnt, dio);
+
+	FREEBUF(hctx_array);
+}
+
 static void
 get_mq_diskio(unsigned long q, unsigned long *mq_count)
 {
 	int cpu;
 	unsigned long queue_ctx;
 	unsigned long mctx_addr;
-	struct diskio tmp;
+	struct diskio tmp = {0};
 
 	if (INVALID_MEMBER(blk_mq_ctx_rq_dispatched) ||
-	    INVALID_MEMBER(blk_mq_ctx_rq_completed))
+	    INVALID_MEMBER(blk_mq_ctx_rq_completed)) {
+		get_mq_diskio_from_hw_queues(q, &tmp);
+		mq_count[0] = tmp.read;
+		mq_count[1] = tmp.write;
 		return;
-
-	memset(&tmp, 0x00, sizeof(struct diskio));
+	}
 
 	readmem(q + OFFSET(request_queue_queue_ctx), KVADDR, &queue_ctx,
 		sizeof(ulong), "request_queue.queue_ctx",
@@ -4479,41 +4636,24 @@ display_one_diskio(struct iter *i, unsigned long gendisk, ulong flags)
 		&& (io.read + io.write == 0))
 		return;
 
-	if (use_mq_interface(queue_addr) &&
-	    (INVALID_MEMBER(blk_mq_ctx_rq_dispatched) ||
-	     INVALID_MEMBER(blk_mq_ctx_rq_completed)))
-		fprintf(fp, "%s%s%s  %s%s%s%s  %s%s%s",
-			mkstring(buf0, 5, RJUST|INT_DEC, (char *)(unsigned long)major),
-			space(MINSPACE),
-			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, (char *)gendisk),
-			space(MINSPACE),
-			mkstring(buf2, 10, LJUST, disk_name),
-			space(MINSPACE),
-			mkstring(buf3, VADDR_PRLEN <= 11 ? 11 : VADDR_PRLEN,
-				 LJUST|LONG_HEX, (char *)queue_addr),
-			space(MINSPACE),
-			mkstring(buf4, 17, RJUST, "(not supported)"),
-			space(MINSPACE));
-
-	else
-		fprintf(fp, "%s%s%s  %s%s%s%s  %s%5d%s%s%s%s%s",
-			mkstring(buf0, 5, RJUST|INT_DEC, (char *)(unsigned long)major),
-			space(MINSPACE),
-			mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, (char *)gendisk),
-			space(MINSPACE),
-			mkstring(buf2, 10, LJUST, disk_name),
-			space(MINSPACE),
-			mkstring(buf3, VADDR_PRLEN <= 11 ? 11 : VADDR_PRLEN,
-				 LJUST|LONG_HEX, (char *)queue_addr),
-			space(MINSPACE),
-			io.read + io.write,
-			space(MINSPACE),
-			mkstring(buf4, 5, RJUST|INT_DEC,
-				(char *)(unsigned long)io.read),
-			space(MINSPACE),
-			mkstring(buf5, 5, RJUST|INT_DEC,
-				(char *)(unsigned long)io.write),
-			space(MINSPACE));
+	fprintf(fp, "%s%s%s  %s%s%s%s  %s%5d%s%s%s%s%s",
+		mkstring(buf0, 5, RJUST|INT_DEC, (char *)(unsigned long)major),
+		space(MINSPACE),
+		mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, (char *)gendisk),
+		space(MINSPACE),
+		mkstring(buf2, 10, LJUST, disk_name),
+		space(MINSPACE),
+		mkstring(buf3, VADDR_PRLEN <= 11 ? 11 : VADDR_PRLEN,
+			 LJUST|LONG_HEX, (char *)queue_addr),
+		space(MINSPACE),
+		io.read + io.write,
+		space(MINSPACE),
+		mkstring(buf4, 5, RJUST|INT_DEC,
+			(char *)(unsigned long)io.read),
+		space(MINSPACE),
+		mkstring(buf5, 5, RJUST|INT_DEC,
+			(char *)(unsigned long)io.write),
+		space(MINSPACE));
 
 	if (VALID_MEMBER(request_queue_in_flight)) {
 		if (!use_mq_interface(queue_addr)) {
@@ -4597,6 +4737,9 @@ void diskio_init(void)
 	MEMBER_OFFSET_INIT(kobject_entry, "kobject", "entry");
 	MEMBER_OFFSET_INIT(kset_list, "kset", "list");
 	MEMBER_OFFSET_INIT(request_list_count, "request_list", "count");
+	MEMBER_OFFSET_INIT(request_cmd_flags, "request", "cmd_flags");
+	MEMBER_OFFSET_INIT(request_q, "request", "q");
+	MEMBER_OFFSET_INIT(request_state, "request", "state");
 	MEMBER_OFFSET_INIT(request_queue_in_flight, "request_queue",
 		"in_flight");
 	if (MEMBER_EXISTS("request_queue", "rq"))
@@ -4608,10 +4751,33 @@ void diskio_init(void)
 			"mq_ops");
 		ANON_MEMBER_OFFSET_INIT(request_queue_queue_ctx,
 			"request_queue", "queue_ctx");
+		MEMBER_OFFSET_INIT(request_queue_queue_hw_ctx,
+			"request_queue", "queue_hw_ctx");
+		MEMBER_OFFSET_INIT(request_queue_nr_hw_queues,
+			"request_queue", "nr_hw_queues");
 		MEMBER_OFFSET_INIT(blk_mq_ctx_rq_dispatched, "blk_mq_ctx",
 			"rq_dispatched");
 		MEMBER_OFFSET_INIT(blk_mq_ctx_rq_completed, "blk_mq_ctx",
 			"rq_completed");
+		MEMBER_OFFSET_INIT(blk_mq_hw_ctx_tags, "blk_mq_hw_ctx", "tags");
+		MEMBER_OFFSET_INIT(blk_mq_tags_bitmap_tags, "blk_mq_tags",
+			"bitmap_tags");
+		MEMBER_OFFSET_INIT(blk_mq_tags_breserved_tags, "blk_mq_tags",
+			"breserved_tags");
+		MEMBER_OFFSET_INIT(blk_mq_tags_nr_reserved_tags, "blk_mq_tags",
+			"nr_reserved_tags");
+		MEMBER_OFFSET_INIT(blk_mq_tags_rqs, "blk_mq_tags", "rqs");
+		STRUCT_SIZE_INIT(blk_mq_tags, "blk_mq_tags");
+		STRUCT_SIZE_INIT(sbitmap, "sbitmap");
+		STRUCT_SIZE_INIT(sbitmap_word, "sbitmap_word");
+		MEMBER_OFFSET_INIT(sbitmap_word_word, "sbitmap_word", "word");
+		MEMBER_OFFSET_INIT(sbitmap_word_cleared, "sbitmap_word", "cleared");
+		MEMBER_OFFSET_INIT(sbitmap_depth, "sbitmap", "depth");
+		MEMBER_OFFSET_INIT(sbitmap_shift, "sbitmap", "shift");
+		MEMBER_OFFSET_INIT(sbitmap_map_nr, "sbitmap", "map_nr");
+		MEMBER_OFFSET_INIT(sbitmap_map, "sbitmap", "map");
+		MEMBER_OFFSET_INIT(sbitmap_queue_sb, "sbitmap_queue", "sb");
+
 	}
 	MEMBER_OFFSET_INIT(subsys_private_klist_devices, "subsys_private",
 		"klist_devices");

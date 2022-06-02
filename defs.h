@@ -2170,6 +2170,16 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long sbq_wait_state_wait;
 	long sbitmap_alloc_hint;
 	long sbitmap_round_robin;
+	long request_cmd_flags;
+	long request_q;
+	long request_state;
+	long request_queue_queue_hw_ctx;
+	long request_queue_nr_hw_queues;
+	long blk_mq_hw_ctx_tags;
+	long blk_mq_tags_bitmap_tags;
+	long blk_mq_tags_breserved_tags;
+	long blk_mq_tags_nr_reserved_tags;
+	long blk_mq_tags_rqs;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2339,6 +2349,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long sbitmap;
 	long sbitmap_queue;
 	long sbq_wait_state;
+	long blk_mq_tags;
 };
 
 struct array_table {
