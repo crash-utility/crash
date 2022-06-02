@@ -2180,6 +2180,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long blk_mq_tags_breserved_tags;
 	long blk_mq_tags_nr_reserved_tags;
 	long blk_mq_tags_rqs;
+	long request_queue_hctx_table;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

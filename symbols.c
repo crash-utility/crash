@@ -10403,6 +10403,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(request_queue_queue_hw_ctx));
 	fprintf(fp, "    request_queue_nr_hw_queues: %ld\n",
 		OFFSET(request_queue_nr_hw_queues));
+	fprintf(fp, "      request_queue_hctx_table: %ld\n",
+		OFFSET(request_queue_hctx_table));
 	fprintf(fp, "      blk_mq_ctx_rq_dispatched: %ld\n",
 		OFFSET(blk_mq_ctx_rq_dispatched));
 	fprintf(fp, "       blk_mq_ctx_rq_completed: %ld\n",

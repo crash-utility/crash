@@ -4369,20 +4369,42 @@ static void get_mq_diskio_from_hw_queues(ulong q, struct diskio *dio)
 	uint cnt = 0;
 	ulong addr = 0, hctx_addr = 0;
 	ulong *hctx_array = NULL;
+	struct list_pair *lp = NULL;
 
-	addr = q + OFFSET(request_queue_nr_hw_queues);
-	readmem(addr, KVADDR, &cnt, sizeof(uint),
-		"request_queue.nr_hw_queues", FAULT_ON_ERROR);
+	if (VALID_MEMBER(request_queue_hctx_table)) {
+		addr = q + OFFSET(request_queue_hctx_table);
+		cnt = do_xarray(addr, XARRAY_COUNT, NULL);
+		lp = (struct list_pair *)GETBUF(sizeof(struct list_pair) * (cnt + 1));
+		if (!lp)
+			error(FATAL, "fail to get memory for list_pair.\n");
+		lp[0].index = cnt;
+		cnt = do_xarray(addr, XARRAY_GATHER, lp);
+	} else {
+		addr = q + OFFSET(request_queue_nr_hw_queues);
+		readmem(addr, KVADDR, &cnt, sizeof(uint),
+			"request_queue.nr_hw_queues", FAULT_ON_ERROR);
 
-	addr = q + OFFSET(request_queue_queue_hw_ctx);
-	readmem(addr, KVADDR, &hctx_addr, sizeof(void *),
-		"request_queue.queue_hw_ctx", FAULT_ON_ERROR);
+		addr = q + OFFSET(request_queue_queue_hw_ctx);
+		readmem(addr, KVADDR, &hctx_addr, sizeof(void *),
+			"request_queue.queue_hw_ctx", FAULT_ON_ERROR);
+	}
 
 	hctx_array = (ulong *)GETBUF(sizeof(void *) * cnt);
-	if (!hctx_array)
+	if (!hctx_array) {
+		if (lp)
+			FREEBUF(lp);
 		error(FATAL, "fail to get memory for the hctx_array\n");
+	}
 
-	if (!readmem(hctx_addr, KVADDR, hctx_array, sizeof(void *) * cnt,
+	if (lp && hctx_array) {
+		uint i;
+
+		/* copy it from list_pair to hctx_array */
+		for (i = 0; i < cnt; i++)
+			hctx_array[i] = (ulong)lp[i].value;
+
+		FREEBUF(lp);
+	} else if (!readmem(hctx_addr, KVADDR, hctx_array, sizeof(void *) * cnt,
 			"request_queue.queue_hw_ctx[]", RETURN_ON_ERROR)) {
 		FREEBUF(hctx_array);
 		return;
@@ -4755,6 +4777,8 @@ void diskio_init(void)
 			"request_queue", "queue_hw_ctx");
 		MEMBER_OFFSET_INIT(request_queue_nr_hw_queues,
 			"request_queue", "nr_hw_queues");
+		MEMBER_OFFSET_INIT(request_queue_hctx_table,
+			"request_queue", "hctx_table");
 		MEMBER_OFFSET_INIT(blk_mq_ctx_rq_dispatched, "blk_mq_ctx",
 			"rq_dispatched");
 		MEMBER_OFFSET_INIT(blk_mq_ctx_rq_completed, "blk_mq_ctx",
