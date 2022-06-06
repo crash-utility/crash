@@ -584,6 +584,9 @@ creates a single-word alias for a command.
 .I ascii
 displays an ascii chart or translates a numeric value into its ascii components.
 .TP
+.I bpf
+provides information on currently-loaded eBPF programs and maps.
+.TP
 .I bt
 displays a task's kernel-stack backtrace.  If it is given the
 .I \-a
@@ -705,6 +708,11 @@ number of seconds between each command execution.
 .TP
 .I runq
 displays the tasks on the run queue.
+.TP
+.I sbitmapq
+dumps the contents of the sbitmap_queue structure and the used
+bits in the bitmap. Also, it shows the dump of a structure array
+associated with the sbitmap_queue.
 .TP
 .I search
 searches a range of user or kernel memory space for given value.
