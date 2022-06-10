@@ -325,7 +325,8 @@ static void sbitmap_queue_show(const struct sbitmap_queue_context *sqc,
 
 	fprintf(fp, "wake_batch = %u\n", sqc->wake_batch);
 	fprintf(fp, "wake_index = %d\n", sqc->wake_index);
-	fprintf(fp, "ws_active = %d\n", sqc->ws_active);
+	if (VALID_MEMBER(sbitmap_queue_ws_active)) /* 5.0 and later */
+		fprintf(fp, "ws_active = %d\n", sqc->ws_active);
 
 	sbq_wait_state_size = SIZE(sbq_wait_state);
 	wait_cnt_off = OFFSET(sbq_wait_state_wait_cnt);
@@ -380,7 +381,8 @@ static void sbitmap_queue_context_load(ulong addr, struct sbitmap_queue_context 
 	sqc->wake_batch = UINT(sbitmap_queue_buf + OFFSET(sbitmap_queue_wake_batch));
 	sqc->wake_index = INT(sbitmap_queue_buf + OFFSET(sbitmap_queue_wake_index));
 	sqc->ws_addr = ULONG(sbitmap_queue_buf + OFFSET(sbitmap_queue_ws));
-	sqc->ws_active = INT(sbitmap_queue_buf + OFFSET(sbitmap_queue_ws_active));
+	if (VALID_MEMBER(sbitmap_queue_ws_active))
+		sqc->ws_active = INT(sbitmap_queue_buf + OFFSET(sbitmap_queue_ws_active));
 	if (VALID_MEMBER(sbitmap_queue_round_robin))
 		sqc->round_robin = BOOL(sbitmap_queue_buf + OFFSET(sbitmap_queue_round_robin));
 	sqc->min_shallow_depth = UINT(sbitmap_queue_buf + OFFSET(sbitmap_queue_min_shallow_depth));
