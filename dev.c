@@ -4339,6 +4339,10 @@ static void bt_for_each(ulong q, ulong tags, ulong sbq, uint reserved, uint nr_r
 static void queue_for_each_hw_ctx(ulong q, ulong *hctx, uint cnt, struct diskio *dio)
 {
 	uint i;
+	int bitmap_tags_is_ptr = 0;
+
+	if (MEMBER_TYPE("blk_mq_tags", "bitmap_tags") == TYPE_CODE_PTR)
+		bitmap_tags_is_ptr = 1;
 
 	for (i = 0; i < cnt; i++) {
 		ulong addr = 0, tags = 0;
@@ -4357,9 +4361,17 @@ static void queue_for_each_hw_ctx(ulong q, ulong *hctx, uint cnt, struct diskio 
 
 		if (nr_reserved_tags) {
 			addr = tags + OFFSET(blk_mq_tags_breserved_tags);
+			if (bitmap_tags_is_ptr &&
+			    !readmem(addr, KVADDR, &addr, sizeof(ulong),
+					"blk_mq_tags.bitmap_tags", RETURN_ON_ERROR))
+				break;
 			bt_for_each(q, tags, addr, 1, nr_reserved_tags, dio);
 		}
 		addr = tags + OFFSET(blk_mq_tags_bitmap_tags);
+		if (bitmap_tags_is_ptr &&
+		    !readmem(addr, KVADDR, &addr, sizeof(ulong),
+				"blk_mq_tags.bitmap_tags", RETURN_ON_ERROR))
+			break;
 		bt_for_each(q, tags, addr, 0, nr_reserved_tags, dio);
 	}
 }
@@ -4423,13 +4435,22 @@ get_mq_diskio(unsigned long q, unsigned long *mq_count)
 	unsigned long mctx_addr;
 	struct diskio tmp = {0};
 
-	if (INVALID_MEMBER(blk_mq_ctx_rq_dispatched) ||
-	    INVALID_MEMBER(blk_mq_ctx_rq_completed)) {
+	/*
+	 * Currently this function does not support old blk-mq implementation
+	 * before 12f5b9314545 ("blk-mq: Remove generation seqeunce"), so
+	 * filter them out.
+	 */
+	if (VALID_MEMBER(request_state)) {
+		if (CRASHDEBUG(1))
+			fprintf(fp, "mq: using sbitmap\n");
 		get_mq_diskio_from_hw_queues(q, &tmp);
 		mq_count[0] = tmp.read;
 		mq_count[1] = tmp.write;
 		return;
 	}
+
+	if (CRASHDEBUG(1))
+		fprintf(fp, "mq: using blk_mq_ctx.rq_{completed,dispatched} counters\n");
 
 	readmem(q + OFFSET(request_queue_queue_ctx), KVADDR, &queue_ctx,
 		sizeof(ulong), "request_queue.queue_ctx",
