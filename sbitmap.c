@@ -540,6 +540,10 @@ void sbitmapq_init(void)
 	STRUCT_SIZE_INIT(sbitmap_queue, "sbitmap_queue");
 	STRUCT_SIZE_INIT(sbq_wait_state, "sbq_wait_state");
 
+	/* sbitmap was abstracted out by commit 88459642cba4 on Linux 4.9. */
+	if (INVALID_SIZE(sbitmap))
+		command_not_supported();
+
 	MEMBER_OFFSET_INIT(sbitmap_word_depth, "sbitmap_word", "depth");
 	MEMBER_OFFSET_INIT(sbitmap_word_word, "sbitmap_word", "word");
 	MEMBER_OFFSET_INIT(sbitmap_word_cleared, "sbitmap_word", "cleared");
