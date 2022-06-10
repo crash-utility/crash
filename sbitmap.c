@@ -371,7 +371,8 @@ static void sbitmap_queue_show(const struct sbitmap_queue_context *sqc,
 	else if (VALID_MEMBER(sbitmap_round_robin)) /* 5.13 and later */
 		fprintf(fp, "round_robin = %d\n", sc->round_robin);
 
-	fprintf(fp, "min_shallow_depth = %u\n", sqc->min_shallow_depth);
+	if (VALID_MEMBER(sbitmap_queue_min_shallow_depth)) /* 4.18 and later */
+		fprintf(fp, "min_shallow_depth = %u\n", sqc->min_shallow_depth);
 }
 
 static void sbitmap_queue_context_load(ulong addr, struct sbitmap_queue_context *sqc)
@@ -395,7 +396,8 @@ static void sbitmap_queue_context_load(ulong addr, struct sbitmap_queue_context 
 		sqc->ws_active = INT(sbitmap_queue_buf + OFFSET(sbitmap_queue_ws_active));
 	if (VALID_MEMBER(sbitmap_queue_round_robin))
 		sqc->round_robin = BOOL(sbitmap_queue_buf + OFFSET(sbitmap_queue_round_robin));
-	sqc->min_shallow_depth = UINT(sbitmap_queue_buf + OFFSET(sbitmap_queue_min_shallow_depth));
+	if (VALID_MEMBER(sbitmap_queue_min_shallow_depth))
+		sqc->min_shallow_depth = UINT(sbitmap_queue_buf + OFFSET(sbitmap_queue_min_shallow_depth));
 
 	FREEBUF(sbitmap_queue_buf);
 }
