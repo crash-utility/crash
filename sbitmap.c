@@ -341,7 +341,10 @@ static void sbitmap_queue_show(const struct sbitmap_queue_context *sqc,
 	sbq_wait_state_size = SIZE(sbq_wait_state);
 	wait_cnt_off = OFFSET(sbq_wait_state_wait_cnt);
 	wait_off = OFFSET(sbq_wait_state_wait);
-	list_head_off = OFFSET(wait_queue_head_head);
+	if (VALID_MEMBER(wait_queue_head_head)) /* 4.13 and later */
+		list_head_off = OFFSET(wait_queue_head_head);
+	else
+		list_head_off = OFFSET(__wait_queue_head_task_list);
 
 	sbq_wait_state_buf = GETBUF(sbq_wait_state_size);
 
