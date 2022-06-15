@@ -24,6 +24,7 @@ static void dump_blkdevs_v2(ulong);
 static void dump_blkdevs_v3(ulong);
 static ulong search_cdev_map_probes(char *, int, int, ulong *);
 static ulong search_bdev_map_probes(char *, int, int, ulong *);
+static ulong search_blockdev_inodes(int, ulong *);
 static void do_pci(void); 
 static void do_pci2(void);
 static void do_io(void);
@@ -493,9 +494,10 @@ dump_blkdevs(ulong flags)
                 ulong ops;
         } blkdevs[MAX_DEV], *bp;
 
-	if (kernel_symbol_exists("major_names") && 
-	    kernel_symbol_exists("bdev_map")) {
-                dump_blkdevs_v3(flags);
+	if (kernel_symbol_exists("major_names") &&
+	    (kernel_symbol_exists("bdev_map") ||
+	     kernel_symbol_exists("blockdev_superblock"))) {
+		dump_blkdevs_v3(flags);
 		return;
 	}
 
@@ -717,6 +719,7 @@ dump_blkdevs_v3(ulong flags)
 	char buf[BUFSIZE];
 	uint major;
 	ulong gendisk, addr, fops;
+	int use_bdev_map = kernel_symbol_exists("bdev_map");
 	
 	if (!(len = get_array_length("major_names", NULL, 0)))
 		len = MAX_DEV;
@@ -745,8 +748,11 @@ dump_blkdevs_v3(ulong flags)
 		strncpy(buf, blk_major_name_buf +  
 			OFFSET(blk_major_name_name), 16);
 
-		fops = search_bdev_map_probes(buf, major == i ? major : i, 
-			UNUSED, &gendisk);
+		if (use_bdev_map)
+			fops = search_bdev_map_probes(buf, major == i ? major : i,
+				UNUSED, &gendisk);
+		else /* v5.11 and later */
+			fops = search_blockdev_inodes(major, &gendisk);
 
 		if (CRASHDEBUG(1))
 			fprintf(fp, "blk_major_name: %lx block major: %d name: %s gendisk: %lx fops: %lx\n", 
@@ -825,6 +831,67 @@ search_bdev_map_probes(char *name, int major, int minor, ulong *gendisk)
 	}
 
 	FREEBUF(probe_buf);
+	FREEBUF(gendisk_buf);
+	return fops;
+}
+
+/* For bdev_inode.  See block/bdev.c */
+#define I_BDEV(inode) (inode - SIZE(block_device))
+
+static ulong
+search_blockdev_inodes(int major, ulong *gendisk)
+{
+	struct list_data list_data, *ld;
+	ulong addr, bd_sb, disk, fops = 0;
+	int i, inode_count, gendisk_major;
+	char *gendisk_buf;
+
+	ld = &list_data;
+	BZERO(ld, sizeof(struct list_data));
+
+	get_symbol_data("blockdev_superblock", sizeof(void *), &bd_sb);
+
+	addr = bd_sb + OFFSET(super_block_s_inodes);
+	if (!readmem(addr, KVADDR, &ld->start, sizeof(ulong),
+	    "blockdev_superblock.s_inodes", QUIET|RETURN_ON_ERROR))
+		return 0;
+
+	if (empty_list(ld->start))
+		return 0;
+
+	ld->flags |= LIST_ALLOCATE;
+	ld->end = bd_sb + OFFSET(super_block_s_inodes);
+	ld->list_head_offset = OFFSET(inode_i_sb_list);
+
+	inode_count = do_list(ld);
+
+	gendisk_buf = GETBUF(SIZE(gendisk));
+
+	for (i = 0; i < inode_count; i++) {
+		addr = I_BDEV(ld->list_ptr[i]) + OFFSET(block_device_bd_disk);
+		if (!readmem(addr, KVADDR, &disk, sizeof(ulong),
+		    "block_device.bd_disk", QUIET|RETURN_ON_ERROR))
+			continue;
+
+		if (!disk)
+			continue;
+
+		if (!readmem(disk, KVADDR, gendisk_buf, SIZE(gendisk),
+		    "gendisk buffer", QUIET|RETURN_ON_ERROR))
+			continue;
+
+		gendisk_major = INT(gendisk_buf + OFFSET(gendisk_major));
+		if (gendisk_major != major)
+			continue;
+
+		fops = ULONG(gendisk_buf + OFFSET(gendisk_fops));
+		if (fops) {
+			*gendisk = disk;
+			break;
+		}
+	}
+
+	FREEBUF(ld->list_ptr);
 	FREEBUF(gendisk_buf);
 	return fops;
 }
