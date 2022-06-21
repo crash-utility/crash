@@ -3828,7 +3828,7 @@ show_ps_data(ulong flag, struct task_context *tc, struct psinfo *psi)
 	} else
 		fprintf(fp, "  ");
 
-	fprintf(fp, "%5ld  %5ld  %2s  %s %3s",
+	fprintf(fp, "%7ld %7ld %3s  %s %3s",
 		tc->pid, task_to_pid(tc->ptask),
 		task_cpu(tc->processor, buf2, !VERBOSE),
 		task_pointer_string(tc, flag & PS_KSTACKP, buf3),
@@ -3838,8 +3838,8 @@ show_ps_data(ulong flag, struct task_context *tc, struct psinfo *psi)
 	if (strlen(buf1) == 3)
 		mkstring(buf1, 4, CENTER|RJUST, NULL);
 	fprintf(fp, "%s ", buf1);
-	fprintf(fp, "%7ld ", (tm->total_vm * PAGESIZE())/1024);
-	fprintf(fp, "%6ld  ", (tm->rss * PAGESIZE())/1024);
+	fprintf(fp, "%8ld ", (tm->total_vm * PAGESIZE())/1024);
+	fprintf(fp, "%8ld  ", (tm->rss * PAGESIZE())/1024);
 	if (is_kernel_thread(tc->task))
 		fprintf(fp, "[%s]\n", tc->comm);
 	else
@@ -3856,7 +3856,7 @@ show_ps(ulong flag, struct psinfo *psi)
 
 	if (!(flag & ((PS_EXCLUSIVE & ~PS_ACTIVE)|PS_NO_HEADER))) 
 		fprintf(fp, 
-		    "   PID    PPID  CPU %s  ST  %%MEM     VSZ    RSS  COMM\n",
+		    "      PID    PPID  CPU %s  ST  %%MEM      VSZ      RSS  COMM\n",
 			flag & PS_KSTACKP ?
 			mkstring(buf, VADDR_PRLEN, CENTER|RJUST, "KSTACKP") :
 			mkstring(buf, VADDR_PRLEN, CENTER, "TASK"));
@@ -7713,7 +7713,7 @@ print_task_header(FILE *out, struct task_context *tc, int newline)
 	char buf[BUFSIZE];
 	char buf1[BUFSIZE];
 
-        fprintf(out, "%sPID: %-5ld  TASK: %s  CPU: %-2s  COMMAND: \"%s\"\n",
+        fprintf(out, "%sPID: %-7ld  TASK: %s  CPU: %-3s  COMMAND: \"%s\"\n",
 		newline ? "\n" : "", tc->pid, 
 		mkstring(buf1, VADDR_PRLEN, LJUST|LONG_HEX, MKSTR(tc->task)),
 		task_cpu(tc->processor, buf, !VERBOSE), tc->comm);
