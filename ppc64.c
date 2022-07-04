@@ -52,7 +52,7 @@ static char * ppc64_check_eframe(struct ppc64_pt_regs *);
 static void ppc64_print_eframe(char *, struct ppc64_pt_regs *, 
 		struct bt_info *);
 static void parse_cmdline_args(void);
-static int ppc64_paca_init(int);
+static int ppc64_paca_percpu_offset_init(int);
 static void ppc64_init_cpu_info(void);
 static int ppc64_get_cpu_map(void);
 static void ppc64_clear_machdep_cache(void);
@@ -3285,7 +3285,7 @@ parse_cmdline_args(void)
  * Initialize the per cpu data_offset values from paca structure.
  */
 static int
-ppc64_paca_init(int map)
+ppc64_paca_percpu_offset_init(int map)
 {
 	int i, cpus, nr_paca;
 	char *cpu_paca_buf;
@@ -3387,10 +3387,11 @@ ppc64_init_cpu_info(void)
 	 * which was removed post v2.6.15 ppc64 and now we get the per cpu
 	 * data_offset from __per_cpu_offset symbol during kernel_init()
 	 * call. Hence for backward (pre-2.6.36) compatibility, call
-	 * ppc64_paca_init() only if symbol __per_cpu_offset does not exist.
+	 * ppc64_paca_percpu_offset_init() only if symbol __per_cpu_offset
+	 * does not exist.
 	 */
 	if (!symbol_exists("__per_cpu_offset"))
-		cpus = ppc64_paca_init(map);
+		cpus = ppc64_paca_percpu_offset_init(map);
 	else {
 		if (!(nr_cpus = get_array_length("__per_cpu_offset", NULL, 0)))
 			nr_cpus = (kt->kernel_NR_CPUS ? kt->kernel_NR_CPUS :
