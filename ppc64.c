@@ -2330,6 +2330,22 @@ ppc64_vmcore_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 
 	pt_regs = (struct ppc64_pt_regs *)bt_in->machdep;
 	if (!pt_regs || !pt_regs->gpr[1]) {
+		if (bt_in->hp) {
+			if (bt_in->hp->esp) {
+				*ksp = bt_in->hp->esp;
+				if (!bt_in->hp->eip) {
+					if (IS_KVADDR(*ksp)) {
+						readmem(*ksp+16, KVADDR, &unip, sizeof(ulong),
+							"Regs NIP value", FAULT_ON_ERROR);
+						*nip = unip;
+					}
+				} else
+					*nip = bt_in->hp->eip;
+
+			}
+			return TRUE;
+		}
+
 		/*
 		 * Not collected regs. May be the corresponding CPU not
 		 * responded to an IPI in case of KDump OR f/w has not
