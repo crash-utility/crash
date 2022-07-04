@@ -307,6 +307,8 @@ struct machine_specific book3e_machine_specific = {
 void
 ppc64_init(int when)
 {
+	struct machine_specific *ms;
+
 #if defined(__x86_64__)
         if (ACTIVE())
                 error(FATAL, "compiled for the PPC64 architecture\n");
@@ -416,16 +418,16 @@ ppc64_init(int when)
 		break;
 
 	case POST_GDB:
-		if (!(machdep->flags & BOOK3E)) {
-			struct machine_specific *m = machdep->machspec;
+		ms = machdep->machspec;
 
+		if (!(machdep->flags & BOOK3E)) {
 			/*
 			 * To determine if the kernel was running on OPAL based platform,
 			 * use struct opal, which is populated with relevant values.
 			 */
 			if (symbol_exists("opal")) {
-				get_symbol_data("opal", sizeof(struct ppc64_opal), &(m->opal));
-				if (m->opal.base == SKIBOOT_BASE)
+				get_symbol_data("opal", sizeof(struct ppc64_opal), &(ms->opal));
+				if (ms->opal.base == SKIBOOT_BASE)
 					machdep->flags |= OPAL_FW;
 			}
 
@@ -453,18 +455,18 @@ ppc64_init(int when)
 			 * _PAGE_WRITETHRU  can be used to infer it.
 			 */
 			if (THIS_KERNEL_VERSION >= LINUX(3,14,0))
-				m->_page_coherent = 0x0UL;
+				ms->_page_coherent = 0x0UL;
 
 			/*
 			 * In kernel v4.5, _PAGE_PTE bit is introduced to
 			 * distinguish PTEs from pointers.
 			 */
 			if (THIS_KERNEL_VERSION >= LINUX(4,5,0)) {
-				m->_page_pte = 0x1UL;
-				m->_page_present = 0x2UL;
-				m->_page_user = 0x4UL;
-				m->_page_rw = 0x8UL;
-				m->_page_guarded = 0x10UL;
+				ms->_page_pte = 0x1UL;
+				ms->_page_present = 0x2UL;
+				ms->_page_user = 0x4UL;
+				ms->_page_rw = 0x8UL;
+				ms->_page_guarded = 0x10UL;
 			}
 
 			/*
@@ -474,8 +476,8 @@ ppc64_init(int when)
 			 * Also, page table entries store physical addresses.
 			 */
 			if (THIS_KERNEL_VERSION >= LINUX(4,6,0)) {
-				m->_page_pte = 0x1UL << 62;
-				m->_page_present = 0x1UL << 63;
+				ms->_page_pte = 0x1UL << 62;
+				ms->_page_present = 0x1UL << 63;
 				machdep->flags |= PHYS_ENTRY_L4;
 			}
 
@@ -504,118 +506,117 @@ ppc64_init(int when)
 			machdep->ptrs_per_pgd = PTRS_PER_PGD;
 		} else {
 			/* 2.6.14 layout */
-			struct machine_specific *m = machdep->machspec;
 			if (machdep->pagesize == 65536) {
 				/* 64K pagesize */
 				if (machdep->flags & RADIX_MMU) {
-					m->l1_index_size = PTE_INDEX_SIZE_RADIX_64K;
-					m->l2_index_size = PMD_INDEX_SIZE_RADIX_64K;
-					m->l3_index_size = PUD_INDEX_SIZE_RADIX_64K;
-					m->l4_index_size = PGD_INDEX_SIZE_RADIX_64K;
+					ms->l1_index_size = PTE_INDEX_SIZE_RADIX_64K;
+					ms->l2_index_size = PMD_INDEX_SIZE_RADIX_64K;
+					ms->l3_index_size = PUD_INDEX_SIZE_RADIX_64K;
+					ms->l4_index_size = PGD_INDEX_SIZE_RADIX_64K;
 
 				} else if (!(machdep->flags & BOOK3E) &&
 				    (THIS_KERNEL_VERSION >= LINUX(4,6,0))) {
-					m->l1_index_size = PTE_INDEX_SIZE_L4_64K_3_10;
+					ms->l1_index_size = PTE_INDEX_SIZE_L4_64K_3_10;
 
 					if (THIS_KERNEL_VERSION >= LINUX(4,12,0)) {
-						m->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_12;
+						ms->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_12;
 						if (THIS_KERNEL_VERSION >= LINUX(4,17,0))
-							m->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_17;
+							ms->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_17;
 						else
-							m->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_12;
-						m->l4_index_size = PGD_INDEX_SIZE_L4_64K_4_12;
+							ms->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_12;
+						ms->l4_index_size = PGD_INDEX_SIZE_L4_64K_4_12;
 					} else {
-						m->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_6;
-						m->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_6;
-						m->l4_index_size = PGD_INDEX_SIZE_L4_64K_3_10;
+						ms->l2_index_size = PMD_INDEX_SIZE_L4_64K_4_6;
+						ms->l3_index_size = PUD_INDEX_SIZE_L4_64K_4_6;
+						ms->l4_index_size = PGD_INDEX_SIZE_L4_64K_3_10;
 					}
 				} else if (THIS_KERNEL_VERSION >= LINUX(3,10,0)) {
-					m->l1_index_size = PTE_INDEX_SIZE_L4_64K_3_10;
-					m->l2_index_size = PMD_INDEX_SIZE_L4_64K_3_10;
-					m->l3_index_size = PUD_INDEX_SIZE_L4_64K;
-					m->l4_index_size = PGD_INDEX_SIZE_L4_64K_3_10;
+					ms->l1_index_size = PTE_INDEX_SIZE_L4_64K_3_10;
+					ms->l2_index_size = PMD_INDEX_SIZE_L4_64K_3_10;
+					ms->l3_index_size = PUD_INDEX_SIZE_L4_64K;
+					ms->l4_index_size = PGD_INDEX_SIZE_L4_64K_3_10;
 
 				} else {
-					m->l1_index_size = PTE_INDEX_SIZE_L4_64K;
-					m->l2_index_size = PMD_INDEX_SIZE_L4_64K;
-					m->l3_index_size = PUD_INDEX_SIZE_L4_64K;
-					m->l4_index_size = PGD_INDEX_SIZE_L4_64K;
+					ms->l1_index_size = PTE_INDEX_SIZE_L4_64K;
+					ms->l2_index_size = PMD_INDEX_SIZE_L4_64K;
+					ms->l3_index_size = PUD_INDEX_SIZE_L4_64K;
+					ms->l4_index_size = PGD_INDEX_SIZE_L4_64K;
 				}
 
 				if (!(machdep->flags & BOOK3E))
-					m->pte_rpn_shift = symbol_exists("demote_segment_4k") ?
+					ms->pte_rpn_shift = symbol_exists("demote_segment_4k") ?
 						PTE_RPN_SHIFT_L4_64K_V2 : PTE_RPN_SHIFT_L4_64K_V1;
 
 				if (!(machdep->flags & BOOK3E) &&
 				    (THIS_KERNEL_VERSION >= LINUX(4,6,0))) {
-					m->pgd_masked_bits = PGD_MASKED_BITS_64K_4_6;
-					m->pud_masked_bits = PUD_MASKED_BITS_64K_4_6;
-					m->pmd_masked_bits = PMD_MASKED_BITS_64K_4_6;
+					ms->pgd_masked_bits = PGD_MASKED_BITS_64K_4_6;
+					ms->pud_masked_bits = PUD_MASKED_BITS_64K_4_6;
+					ms->pmd_masked_bits = PMD_MASKED_BITS_64K_4_6;
 				} else {
-					m->pgd_masked_bits = PGD_MASKED_BITS_64K;
-					m->pud_masked_bits = PUD_MASKED_BITS_64K;
+					ms->pgd_masked_bits = PGD_MASKED_BITS_64K;
+					ms->pud_masked_bits = PUD_MASKED_BITS_64K;
 					if ((machdep->flags & BOOK3E) &&
 					    (THIS_KERNEL_VERSION >= LINUX(4,5,0)))
-						m->pmd_masked_bits = PMD_MASKED_BITS_BOOK3E_64K_4_5;
+						ms->pmd_masked_bits = PMD_MASKED_BITS_BOOK3E_64K_4_5;
 					else if (THIS_KERNEL_VERSION >= LINUX(3,11,0))
-						m->pmd_masked_bits = PMD_MASKED_BITS_64K_3_11;
+						ms->pmd_masked_bits = PMD_MASKED_BITS_64K_3_11;
 					else
-						m->pmd_masked_bits = PMD_MASKED_BITS_64K;
+						ms->pmd_masked_bits = PMD_MASKED_BITS_64K;
 				}
 			} else {
 				/* 4K pagesize */
 				if (machdep->flags & RADIX_MMU) {
-					m->l1_index_size = PTE_INDEX_SIZE_RADIX_4K;
-					m->l2_index_size = PMD_INDEX_SIZE_RADIX_4K;
-					m->l3_index_size = PUD_INDEX_SIZE_RADIX_4K;
-					m->l4_index_size = PGD_INDEX_SIZE_RADIX_4K;
+					ms->l1_index_size = PTE_INDEX_SIZE_RADIX_4K;
+					ms->l2_index_size = PMD_INDEX_SIZE_RADIX_4K;
+					ms->l3_index_size = PUD_INDEX_SIZE_RADIX_4K;
+					ms->l4_index_size = PGD_INDEX_SIZE_RADIX_4K;
 
 				} else {
-					m->l1_index_size = PTE_INDEX_SIZE_L4_4K;
-					m->l2_index_size = PMD_INDEX_SIZE_L4_4K;
+					ms->l1_index_size = PTE_INDEX_SIZE_L4_4K;
+					ms->l2_index_size = PMD_INDEX_SIZE_L4_4K;
 					if (THIS_KERNEL_VERSION >= LINUX(3,7,0))
-						m->l3_index_size = PUD_INDEX_SIZE_L4_4K_3_7;
+						ms->l3_index_size = PUD_INDEX_SIZE_L4_4K_3_7;
 					else
-						m->l3_index_size = PUD_INDEX_SIZE_L4_4K;
-					m->l4_index_size = PGD_INDEX_SIZE_L4_4K;
+						ms->l3_index_size = PUD_INDEX_SIZE_L4_4K;
+					ms->l4_index_size = PGD_INDEX_SIZE_L4_4K;
 
 					if (machdep->flags & BOOK3E)
-						m->pte_rpn_shift = PTE_RPN_SHIFT_L4_BOOK3E_4K;
+						ms->pte_rpn_shift = PTE_RPN_SHIFT_L4_BOOK3E_4K;
 					else
-						m->pte_rpn_shift = THIS_KERNEL_VERSION >= LINUX(4,5,0) ?
+						ms->pte_rpn_shift = THIS_KERNEL_VERSION >= LINUX(4,5,0) ?
 							PTE_RPN_SHIFT_L4_4K_4_5 : PTE_RPN_SHIFT_L4_4K;
 				}
 
-				m->pgd_masked_bits = PGD_MASKED_BITS_4K;
-				m->pud_masked_bits = PUD_MASKED_BITS_4K;
-				m->pmd_masked_bits = PMD_MASKED_BITS_4K;
+				ms->pgd_masked_bits = PGD_MASKED_BITS_4K;
+				ms->pud_masked_bits = PUD_MASKED_BITS_4K;
+				ms->pmd_masked_bits = PMD_MASKED_BITS_4K;
 			}
 
-			m->pte_rpn_mask = PTE_RPN_MASK_DEFAULT;
+			ms->pte_rpn_mask = PTE_RPN_MASK_DEFAULT;
 			if (!(machdep->flags & BOOK3E)) {
 				if (THIS_KERNEL_VERSION >= LINUX(4,6,0)) {
-					m->pte_rpn_mask = PTE_RPN_MASK_L4_4_6;
-					m->pte_rpn_shift = PTE_RPN_SHIFT_L4_4_6;
+					ms->pte_rpn_mask = PTE_RPN_MASK_L4_4_6;
+					ms->pte_rpn_shift = PTE_RPN_SHIFT_L4_4_6;
 				}
 				if (THIS_KERNEL_VERSION >= LINUX(4,7,0)) {
-					m->pgd_masked_bits = PGD_MASKED_BITS_4_7;
-					m->pud_masked_bits = PUD_MASKED_BITS_4_7;
-					m->pmd_masked_bits = PMD_MASKED_BITS_4_7;
+					ms->pgd_masked_bits = PGD_MASKED_BITS_4_7;
+					ms->pud_masked_bits = PUD_MASKED_BITS_4_7;
+					ms->pmd_masked_bits = PMD_MASKED_BITS_4_7;
 				}
 			}
 
 			/* Compute ptrs per each level */
-			m->l1_shift = machdep->pageshift;
-			m->ptrs_per_l1 = (1 << m->l1_index_size);
-			m->ptrs_per_l2 = (1 << m->l2_index_size);
-			m->ptrs_per_l3 = (1 << m->l3_index_size);
-			m->ptrs_per_l4 = (1 << m->l4_index_size);
-			machdep->ptrs_per_pgd = m->ptrs_per_l4;
+			ms->l1_shift = machdep->pageshift;
+			ms->ptrs_per_l1 = (1 << ms->l1_index_size);
+			ms->ptrs_per_l2 = (1 << ms->l2_index_size);
+			ms->ptrs_per_l3 = (1 << ms->l3_index_size);
+			ms->ptrs_per_l4 = (1 << ms->l4_index_size);
+			machdep->ptrs_per_pgd = ms->ptrs_per_l4;
 
 			/* Compute shifts */
-			m->l2_shift = m->l1_shift + m->l1_index_size;
-			m->l3_shift = m->l2_shift + m->l2_index_size;
-			m->l4_shift = m->l3_shift + m->l3_index_size;
+			ms->l2_shift = ms->l1_shift + ms->l1_index_size;
+			ms->l3_shift = ms->l2_shift + ms->l2_index_size;
+			ms->l4_shift = ms->l3_shift + ms->l3_index_size;
 		}
 
 		if (machdep->flags & VMEMMAP)
@@ -681,19 +682,15 @@ ppc64_init(int when)
 			 */
 			offset = MEMBER_OFFSET("paca_struct", "xHrdIntStack");
 			paca_sym  = symbol_value("paca");
-			if (!(machdep->machspec->hwintrstack =
-			      (ulong *)calloc(NR_CPUS, sizeof(ulong))))
+			if (!(ms->hwintrstack = (ulong *)calloc(NR_CPUS, sizeof(ulong))))
 				error(FATAL, "cannot malloc hwintrstack space.");
 			for (cpu = 0; cpu < kt->cpus; cpu++)  {
-				readmem(paca_sym + (paca_size * cpu) + offset,
-					KVADDR, 
-					&machdep->machspec->hwintrstack[cpu],
-					sizeof(ulong), "PPC64 HW_intr_stack",
-					FAULT_ON_ERROR);
+				readmem(paca_sym + (paca_size * cpu) + offset, KVADDR,
+					&ms->hwintrstack[cpu], sizeof(ulong),
+					"PPC64 HW_intr_stack", FAULT_ON_ERROR);
 			}
-			machdep->machspec->hwstacksize = 8 * machdep->pagesize;
-			if ((machdep->machspec->hwstackbuf = (char *)
-				malloc(machdep->machspec->hwstacksize)) == NULL)
+			ms->hwstacksize = 8 * machdep->pagesize;
+			if ((ms->hwstackbuf = (char *)malloc(ms->hwstacksize)) == NULL)
 				error(FATAL, "cannot malloc hwirqstack buffer space.");
 		}
 
@@ -756,6 +753,7 @@ ppc64_get_stacktop(ulong task)
 void
 ppc64_dump_machdep_table(ulong arg)
 {
+	struct machine_specific *ms = machdep->machspec;
         int i, c, others; 
  
         others = 0;
@@ -844,57 +842,57 @@ ppc64_dump_machdep_table(ulong arg)
                         i, machdep->cmdline_args[i] ?
                         machdep->cmdline_args[i] : "(unused)");
         }
-	fprintf(fp, "           machspec: %lx\n", (ulong)machdep->machspec);
+	fprintf(fp, "           machspec: %lx\n", (ulong)ms);
 	fprintf(fp, "            is_kvaddr: %s\n", 
-		machdep->machspec->is_kvaddr == book3e_is_kvaddr ? 
+		ms->is_kvaddr == book3e_is_kvaddr ?
 		"book3e_is_kvaddr()" : "generic_is_kvaddr()");
 	fprintf(fp, "            is_vmaddr: %s\n", 
-		machdep->machspec->is_vmaddr == book3e_is_vmaddr ? 
+		ms->is_vmaddr == book3e_is_vmaddr ?
 		"book3e_is_vmaddr()" : "ppc64_is_vmaddr()");
-	if (machdep->machspec->hwintrstack) {
+	if (ms->hwintrstack) {
 		fprintf(fp, "    hwintrstack[%d]: ", NR_CPUS);
 		for (c = 0; c < NR_CPUS; c++) {
 			fprintf(fp, "%s%016lx ",
 				((c % 4) == 0) ? "\n  " : "",
-				machdep->machspec->hwintrstack[c]);
+				ms->hwintrstack[c]);
 		}
 	} else
 		fprintf(fp, "          hwintrstack: (unused)");
 	fprintf(fp, "\n");
-	fprintf(fp, "           hwstackbuf: %lx\n", (ulong)machdep->machspec->hwstackbuf);
-	fprintf(fp, "          hwstacksize: %d\n", machdep->machspec->hwstacksize);
-	fprintf(fp, "        l4_index_size: %d\n", machdep->machspec->l4_index_size);
-	fprintf(fp, "        l3_index_size: %d\n", machdep->machspec->l3_index_size);
-	fprintf(fp, "        l2_index_size: %d\n", machdep->machspec->l2_index_size);
-	fprintf(fp, "        l1_index_size: %d\n", machdep->machspec->l1_index_size);
-	fprintf(fp, "          ptrs_per_l4: %d\n", machdep->machspec->ptrs_per_l4);
-	fprintf(fp, "          ptrs_per_l3: %d\n", machdep->machspec->ptrs_per_l3);
-	fprintf(fp, "          ptrs_per_l2: %d\n", machdep->machspec->ptrs_per_l2);
-	fprintf(fp, "          ptrs_per_l1: %d\n", machdep->machspec->ptrs_per_l1);
-	fprintf(fp, "             l4_shift: %d\n", machdep->machspec->l4_shift);
-	fprintf(fp, "             l3_shift: %d\n", machdep->machspec->l3_shift);
-	fprintf(fp, "             l2_shift: %d\n", machdep->machspec->l2_shift);
-	fprintf(fp, "             l1_shift: %d\n", machdep->machspec->l1_shift);
-	fprintf(fp, "         pte_rpn_mask: %lx\n", machdep->machspec->pte_rpn_mask);
-	fprintf(fp, "        pte_rpn_shift: %d\n", machdep->machspec->pte_rpn_shift);
-	fprintf(fp, "      pgd_masked_bits: %lx\n", machdep->machspec->pgd_masked_bits);
-	fprintf(fp, "      pud_masked_bits: %lx\n", machdep->machspec->pud_masked_bits);
-	fprintf(fp, "      pmd_masked_bits: %lx\n", machdep->machspec->pmd_masked_bits);
+	fprintf(fp, "           hwstackbuf: %lx\n", (ulong)ms->hwstackbuf);
+	fprintf(fp, "          hwstacksize: %d\n", ms->hwstacksize);
+	fprintf(fp, "        l4_index_size: %d\n", ms->l4_index_size);
+	fprintf(fp, "        l3_index_size: %d\n", ms->l3_index_size);
+	fprintf(fp, "        l2_index_size: %d\n", ms->l2_index_size);
+	fprintf(fp, "        l1_index_size: %d\n", ms->l1_index_size);
+	fprintf(fp, "          ptrs_per_l4: %d\n", ms->ptrs_per_l4);
+	fprintf(fp, "          ptrs_per_l3: %d\n", ms->ptrs_per_l3);
+	fprintf(fp, "          ptrs_per_l2: %d\n", ms->ptrs_per_l2);
+	fprintf(fp, "          ptrs_per_l1: %d\n", ms->ptrs_per_l1);
+	fprintf(fp, "             l4_shift: %d\n", ms->l4_shift);
+	fprintf(fp, "             l3_shift: %d\n", ms->l3_shift);
+	fprintf(fp, "             l2_shift: %d\n", ms->l2_shift);
+	fprintf(fp, "             l1_shift: %d\n", ms->l1_shift);
+	fprintf(fp, "         pte_rpn_mask: %lx\n", ms->pte_rpn_mask);
+	fprintf(fp, "        pte_rpn_shift: %d\n", ms->pte_rpn_shift);
+	fprintf(fp, "      pgd_masked_bits: %lx\n", ms->pgd_masked_bits);
+	fprintf(fp, "      pud_masked_bits: %lx\n", ms->pud_masked_bits);
+	fprintf(fp, "      pmd_masked_bits: %lx\n", ms->pmd_masked_bits);
 	fprintf(fp, "         vmemmap_base: "); 
-	if (machdep->machspec->vmemmap_base)
-		fprintf(fp, "%lx\n", machdep->machspec->vmemmap_base);
+	if (ms->vmemmap_base)
+		fprintf(fp, "%lx\n", ms->vmemmap_base);
 	else
 		fprintf(fp, "(unused)\n");
-	if (machdep->machspec->vmemmap_cnt) {
+	if (ms->vmemmap_cnt) {
 		fprintf(fp, "          vmemmap_cnt: %d\n", 
-			machdep->machspec->vmemmap_cnt);
+			ms->vmemmap_cnt);
 		fprintf(fp, "        vmemmap_psize: %d\n", 
-			machdep->machspec->vmemmap_psize);
-		for (i = 0; i < machdep->machspec->vmemmap_cnt; i++) {
+			ms->vmemmap_psize);
+		for (i = 0; i < ms->vmemmap_cnt; i++) {
 			fprintf(fp, 
 			    "      vmemmap_list[%d]: virt: %lx  phys: %lx\n", i, 
-				machdep->machspec->vmemmap_list[i].virt,
-				machdep->machspec->vmemmap_list[i].phys);
+				ms->vmemmap_list[i].virt,
+				ms->vmemmap_list[i].phys);
 		}
 	} else {
 		fprintf(fp, "          vmemmap_cnt: (unused)\n");
