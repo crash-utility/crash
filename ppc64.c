@@ -256,7 +256,7 @@ static int set_ppc64_max_physmem_bits(void)
 }
 
 struct machine_specific ppc64_machine_specific = { 
-	.hwintrstack = { 0 }, 
+	.hwintrstack = NULL,
 	.hwstackbuf = 0,
 	.hwstacksize = 0,
 	.pte_rpn_shift = PTE_RPN_SHIFT_DEFAULT,
@@ -275,7 +275,7 @@ struct machine_specific ppc64_machine_specific = {
 };
 
 struct machine_specific book3e_machine_specific = {
-	.hwintrstack = { 0 },
+	.hwintrstack = NULL,
 	.hwstackbuf = 0,
 	.hwstacksize = 0,
 	.pte_rpn_shift = PTE_RPN_SHIFT_L4_BOOK3E_64K,
@@ -676,6 +676,9 @@ ppc64_init(int when)
 			 */
 			offset = MEMBER_OFFSET("paca_struct", "xHrdIntStack");
 			paca_sym  = symbol_value("paca");
+			if (!(machdep->machspec->hwintrstack =
+			      (ulong *)calloc(NR_CPUS, sizeof(ulong))))
+				error(FATAL, "cannot malloc hwintrstack space.");
 			for (cpu = 0; cpu < kt->cpus; cpu++)  {
 				readmem(paca_sym + (paca_size * cpu) + offset,
 					KVADDR, 
@@ -686,14 +689,9 @@ ppc64_init(int when)
 			machdep->machspec->hwstacksize = 8 * machdep->pagesize;
 			if ((machdep->machspec->hwstackbuf = (char *)
 				malloc(machdep->machspec->hwstacksize)) == NULL)
-				error(FATAL, "cannot malloc hwirqstack space.");
-		} else
-			/*
-			 * 'xHrdIntStack' member in "paca_struct" is not 
-			 * available for 2.6 kernel. 
-			 */
-			BZERO(&machdep->machspec->hwintrstack,
-				NR_CPUS*sizeof(ulong));
+				error(FATAL, "cannot malloc hwirqstack buffer space.");
+		}
+
 		if (!machdep->hz) {
 			machdep->hz = HZ;
 			if (THIS_KERNEL_VERSION >= LINUX(2,6,0))
@@ -846,23 +844,15 @@ ppc64_dump_machdep_table(ulong arg)
 	fprintf(fp, "            is_vmaddr: %s\n", 
 		machdep->machspec->is_vmaddr == book3e_is_vmaddr ? 
 		"book3e_is_vmaddr()" : "ppc64_is_vmaddr()");
-	fprintf(fp, "    hwintrstack[%d]: ", NR_CPUS);
-       	for (c = 0; c < NR_CPUS; c++) {
-		for (others = 0, i = c; i < NR_CPUS; i++) {
-			if (machdep->machspec->hwintrstack[i])
-				others++;
+	if (machdep->machspec->hwintrstack) {
+		fprintf(fp, "    hwintrstack[%d]: ", NR_CPUS);
+		for (c = 0; c < NR_CPUS; c++) {
+			fprintf(fp, "%s%016lx ",
+				((c % 4) == 0) ? "\n  " : "",
+				machdep->machspec->hwintrstack[c]);
 		}
-		if (!others) {
-			fprintf(fp, "%s%s", 
-			        c && ((c % 4) == 0) ? "\n  " : "",
-				c ? "(remainder unused)" : "(unused)");
-			break;
-		}
-
-		fprintf(fp, "%s%016lx ", 
-			((c % 4) == 0) ? "\n  " : "",
-			machdep->machspec->hwintrstack[c]);
-	}
+	} else
+		fprintf(fp, "          hwintrstack: (unused)");
 	fprintf(fp, "\n");
 	fprintf(fp, "           hwstackbuf: %lx\n", (ulong)machdep->machspec->hwstackbuf);
 	fprintf(fp, "          hwstacksize: %d\n", machdep->machspec->hwstacksize);
@@ -1683,9 +1673,10 @@ ppc64_check_sp_in_HWintrstack(ulong sp, struct bt_info *bt)
 	 * 
 	 * Note: HW Interrupt stack is used only in 2.4 kernel.
 	 */
-	if (is_task_active(bt->task) && (tt->panic_task != bt->task) &&
-		machdep->machspec->hwintrstack[bt->tc->processor]) {
+	if (machdep->machspec->hwintrstack && is_task_active(bt->task) &&
+	    (bt->task != tt->panic_task)) {
 		ulong newsp;
+
 		readmem(machdep->machspec->hwintrstack[bt->tc->processor],
 			KVADDR, &newsp, sizeof(ulong),
 			"stack pointer", FAULT_ON_ERROR);
@@ -1958,7 +1949,7 @@ ppc64_back_trace(struct gnu_request *req, struct bt_info *bt)
 			bt->stackbase = irqstack;
 			bt->stacktop = bt->stackbase + STACKSIZE();
 			alter_stackbuf(bt);
-		} else if (ms->hwintrstack[bt->tc->processor]) {
+		} else if (ms->hwintrstack) {
 			bt->stacktop = ms->hwintrstack[bt->tc->processor] +
 				sizeof(ulong);
 			bt->stackbase = ms->hwintrstack[bt->tc->processor] - 
@@ -2555,7 +2546,7 @@ retry:
 		goto retry;
 	} 
 
-	if (check_intrstack && ms->hwintrstack[bt->tc->processor]) {
+	if (check_intrstack && ms->hwintrstack) {
 		bt->stacktop = ms->hwintrstack[bt->tc->processor] +
 			sizeof(ulong);
 		bt->stackbase = ms->hwintrstack[bt->tc->processor] -

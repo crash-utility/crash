@@ -6303,7 +6303,7 @@ struct ppc64_vmemmap {
  * Used to store the HW interrupt stack. It is only for 2.4.
  */
 struct machine_specific {
-        ulong hwintrstack[NR_CPUS];
+	ulong *hwintrstack;
         char *hwstackbuf;
         uint hwstacksize;
 
