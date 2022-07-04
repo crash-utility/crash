@@ -149,6 +149,14 @@ arm64_init(int when)
 
 		ms = machdep->machspec;
 
+		/*
+		 * The st->_stext_vmlinux is needed in arm64_init(PRE_GDB) when a
+		 * dumpfile does not have vmcoreinfo and we use -m vabits_actual
+		 * option, e.g. a raw RAM dumpfile.
+		 */
+		if (ms->VA_BITS_ACTUAL)
+			st->_stext_vmlinux = UNINITIALIZED;
+
 		if (!ms->kimage_voffset && STREQ(pc->live_memsrc, "/dev/crash"))
 			ioctl(pc->mfd, DEV_CRASH_ARCH_DATA, &ms->kimage_voffset);
 
