@@ -48,6 +48,10 @@ static ulong ppc64_get_stackbase(ulong);
 static ulong ppc64_get_stacktop(ulong);
 void ppc64_compiler_warning_stub(void);
 static ulong ppc64_in_irqstack(ulong);
+static enum emergency_stack_type ppc64_in_emergency_stack(int cpu, ulong addr,
+							  bool verbose);
+static void ppc64_set_bt_emergency_stack(enum emergency_stack_type type,
+					 struct bt_info *bt);
 static char * ppc64_check_eframe(struct ppc64_pt_regs *);
 static void ppc64_print_eframe(char *, struct ppc64_pt_regs *, 
 		struct bt_info *);
@@ -56,6 +60,7 @@ static int ppc64_paca_percpu_offset_init(int);
 static void ppc64_init_cpu_info(void);
 static int ppc64_get_cpu_map(void);
 static void ppc64_clear_machdep_cache(void);
+static void ppc64_init_paca_info(void);
 static void ppc64_vmemmap_init(void);
 static int ppc64_get_kvaddr_ranges(struct vaddr_range *);
 static uint get_ptetype(ulong pte);
@@ -692,6 +697,8 @@ ppc64_init(int when)
 				error(FATAL, "cannot malloc hwirqstack buffer space.");
 		}
 
+		ppc64_init_paca_info();
+
 		if (!machdep->hz) {
 			machdep->hz = HZ;
 			if (THIS_KERNEL_VERSION >= LINUX(2,6,0))
@@ -1202,6 +1209,70 @@ ppc64_kvtop(struct task_context *tc, ulong kvaddr,
 		return ppc64_vtop_level4(kvaddr, (ulong *)vt->kernel_pgd[0], paddr, verbose);
 	else
 		return ppc64_vtop(kvaddr, (ulong *)vt->kernel_pgd[0], paddr, verbose);
+}
+
+static void
+ppc64_init_paca_info(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong *paca_ptr;
+	int i;
+
+	if (!(paca_ptr = (ulong *)calloc(kt->cpus, sizeof(ulong))))
+		error(FATAL, "cannot malloc paca pointers space.\n");
+
+	/* Get paca pointers for all CPUs. */
+	if (symbol_exists("paca_ptrs")) {
+		ulong paca_loc;
+
+		readmem(symbol_value("paca_ptrs"), KVADDR, &paca_loc, sizeof(void *),
+			"paca double pointer", FAULT_ON_ERROR);
+		readmem(paca_loc, KVADDR, paca_ptr, sizeof(void *) * kt->cpus,
+			"paca pointers", FAULT_ON_ERROR);
+	} else if (symbol_exists("paca") &&
+		   (get_symbol_type("paca", NULL, NULL) == TYPE_CODE_PTR)) {
+		readmem(symbol_value("paca"), KVADDR, paca_ptr, sizeof(void *) * kt->cpus,
+			"paca pointers", FAULT_ON_ERROR);
+	} else {
+		free(paca_ptr);
+		return;
+	}
+
+	/* Initialize emergency stacks info. */
+	if (MEMBER_EXISTS("paca_struct", "emergency_sp")) {
+		ulong offset = MEMBER_OFFSET("paca_struct", "emergency_sp");
+
+		if (!(ms->emergency_sp = (ulong *)calloc(kt->cpus, sizeof(ulong))))
+			error(FATAL, "cannot malloc emergency stack space.\n");
+		for (i = 0; i < kt->cpus; i++)
+			readmem(paca_ptr[i] + offset, KVADDR, &ms->emergency_sp[i],
+				sizeof(void *), "paca->emergency_sp",
+				FAULT_ON_ERROR);
+	}
+
+	if (MEMBER_EXISTS("paca_struct", "nmi_emergency_sp")) {
+		ulong offset = MEMBER_OFFSET("paca_struct", "nmi_emergency_sp");
+
+		if (!(ms->nmi_emergency_sp = (ulong *)calloc(kt->cpus, sizeof(ulong))))
+			error(FATAL, "cannot malloc NMI emergency stack space.\n");
+		for (i = 0; i < kt->cpus; i++)
+			readmem(paca_ptr[i] + offset, KVADDR, &ms->nmi_emergency_sp[i],
+				sizeof(void *), "paca->nmi_emergency_sp",
+				FAULT_ON_ERROR);
+	}
+
+	if (MEMBER_EXISTS("paca_struct", "mc_emergency_sp")) {
+		ulong offset = MEMBER_OFFSET("paca_struct", "mc_emergency_sp");
+
+		if (!(ms->mc_emergency_sp = (ulong *)calloc(kt->cpus, sizeof(ulong))))
+			error(FATAL, "cannot malloc machine check emergency stack space.\n");
+		for (i = 0; i < kt->cpus; i++)
+			readmem(paca_ptr[i] + offset, KVADDR, &ms->mc_emergency_sp[i],
+				sizeof(void *), "paca->mc_emergency_sp",
+				FAULT_ON_ERROR);
+	}
+
+	free(paca_ptr);
 }
 
 /*
@@ -1755,6 +1826,11 @@ ppc64_eframe_search(struct bt_info *bt_in)
 			addr = bt->stackbase +
 				roundup(SIZE(thread_info), sizeof(ulong));
 		} else if (!INSTACK(addr, bt)) {
+			enum emergency_stack_type estype;
+
+			if ((estype = ppc64_in_emergency_stack(bt->tc->processor, addr, false)))
+				ppc64_set_bt_emergency_stack(estype, bt);
+
 			/*
 			 * If the user specified SP is in HW interrupt stack
 			 * (only for tasks running on other CPUs and in 2.4
@@ -1857,6 +1933,84 @@ ppc64_in_irqstack(ulong addr)
 }
 
 /*
+ * Check if the CPU is running in any of its emergency stacks.
+ * Returns
+ *	NONE_STACK          : if input is invalid or addr is not within any emergency stack.
+ *	EMERGENCY_STACK     : if the addr is within emergency stack.
+ *	NMI_EMERGENCY_STACK : if the addr is within NMI emergency stack.
+ *	MC_EMERGENCY_STACK  : if the addr is within machine check emergency stack.
+ */
+static enum emergency_stack_type
+ppc64_in_emergency_stack(int cpu, ulong addr, bool verbose)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong base, top;
+
+	if (cpu < 0  || cpu >= kt->cpus)
+		return NONE_STACK;
+
+	if (ms->emergency_sp) {
+		top = ms->emergency_sp[cpu];
+		base =  top - STACKSIZE();
+		if (addr >= base && addr < top) {
+			if (verbose)
+				fprintf(fp, "---<Emergency Stack>---\n");
+			return EMERGENCY_STACK;
+		}
+	}
+
+	if (ms->nmi_emergency_sp) {
+		top = ms->nmi_emergency_sp[cpu];
+		base = top - STACKSIZE();
+		if (addr >= base && addr < top) {
+			if (verbose)
+				fprintf(fp, "---<NMI Emergency Stack>---\n");
+			return NMI_EMERGENCY_STACK;
+		}
+	}
+
+	if (ms->mc_emergency_sp) {
+		top = ms->mc_emergency_sp[cpu];
+		base =  top - STACKSIZE();
+		if (addr >= base && addr < top) {
+			if (verbose)
+				fprintf(fp, "---<Machine Check Emergency Stack>---\n");
+			return MC_EMERGENCY_STACK;
+		}
+	}
+
+	return NONE_STACK;
+}
+
+static void
+ppc64_set_bt_emergency_stack(enum emergency_stack_type type, struct bt_info *bt)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong top;
+
+	switch (type) {
+	case EMERGENCY_STACK:
+		top = ms->emergency_sp[bt->tc->processor];
+		break;
+	case NMI_EMERGENCY_STACK:
+		top = ms->nmi_emergency_sp[bt->tc->processor];
+		break;
+	case MC_EMERGENCY_STACK:
+		top = ms->mc_emergency_sp[bt->tc->processor];
+		break;
+	default:
+		top = 0;
+		break;
+	}
+
+	if (top) {
+		bt->stackbase = top - STACKSIZE();
+		bt->stacktop = top;
+		alter_stackbuf(bt);
+	}
+}
+
+/*
  *  Unroll a kernel stack.
  */
 static void
@@ -1936,10 +2090,13 @@ ppc64_back_trace_cmd(struct bt_info *bt)
 static void
 ppc64_back_trace(struct gnu_request *req, struct bt_info *bt)
 {
+	enum emergency_stack_type estype;
+	ulong newpc = 0, newsp, marker;
+	int c = bt->tc->processor;
+	ulong nmi_sp = 0;
+	int eframe_found;
 	int frame = 0;
 	ulong lr = 0; /* hack...need to pass in initial lr reg */
-	ulong newpc = 0, newsp, marker;
-	int eframe_found;
 
 	if (!INSTACK(req->sp, bt)) {
 		ulong irqstack;
@@ -1949,6 +2106,10 @@ ppc64_back_trace(struct gnu_request *req, struct bt_info *bt)
 			bt->stackbase = irqstack;
 			bt->stacktop = bt->stackbase + STACKSIZE();
 			alter_stackbuf(bt);
+		} else if ((estype = ppc64_in_emergency_stack(c, req->sp, true))) {
+			if (estype == NMI_EMERGENCY_STACK)
+				nmi_sp = req->sp;
+			ppc64_set_bt_emergency_stack(estype, bt);
 		} else if (ms->hwintrstack) {
 			bt->stacktop = ms->hwintrstack[bt->tc->processor] +
 				sizeof(ulong);
@@ -1957,9 +2118,7 @@ ppc64_back_trace(struct gnu_request *req, struct bt_info *bt)
 			bt->stackbuf = ms->hwstackbuf;
 			alter_stackbuf(bt);
 		} else {
-			if (CRASHDEBUG(1)) {
-				fprintf(fp, "cannot find the stack info.\n");
-			}
+			fprintf(fp, "cannot find the stack info.\n");
 			return;
 		}
 	}
@@ -1989,13 +2148,20 @@ ppc64_back_trace(struct gnu_request *req, struct bt_info *bt)
 				newsp = 
 				*(ulong *)&bt->stackbuf[newsp - bt->stackbase];
 			if (!INSTACK(newsp, bt)) {
-                        	/*
-                         	* Switch HW interrupt stack to process's stack.
-                         	*/
-                        	bt->stackbase = GET_STACKBASE(bt->task);
-                        	bt->stacktop = GET_STACKTOP(bt->task);
-                        	alter_stackbuf(bt);
-                	}  
+				if ((estype = ppc64_in_emergency_stack(c, newsp, true))) {
+					if (!nmi_sp && estype == NMI_EMERGENCY_STACK)
+						nmi_sp = newsp;
+					ppc64_set_bt_emergency_stack(estype, bt);
+				} else {
+					/*
+					 * Switch HW interrupt stack or emergency stack
+					 * to process's stack.
+					 */
+					bt->stackbase = GET_STACKBASE(bt->task);
+					bt->stacktop = GET_STACKTOP(bt->task);
+					alter_stackbuf(bt);
+				}
+			}
 			if (IS_KVADDR(newsp) && INSTACK(newsp, bt))
 				newpc = *(ulong *)&bt->stackbuf[newsp + 16 -
 						bt->stackbase];
@@ -2037,6 +2203,16 @@ ppc64_back_trace(struct gnu_request *req, struct bt_info *bt)
 				newpc = regs.nip;
 				newsp = regs.gpr[1];
 			} 
+		}
+
+		/*
+		 * NMI stack may not be re-entrant. In so, an SP in the NMI stack
+		 * is likely to point back to an SP within the NMI stack, in case
+		 * of a nested NMI.
+		 */
+		if (nmi_sp && nmi_sp == newsp) {
+			fprintf(fp, "---<Nested NMI>---\n");
+			break;
 		}
 
 		/*
@@ -2416,6 +2592,9 @@ ppc64_get_dumpfile_stack_frame(struct bt_info *bt_in, ulong *nip, ulong *ksp)
 		pt_regs = (struct ppc64_pt_regs *)bt->machdep;
 		ur_nip = pt_regs->nip;
 		ur_ksp = pt_regs->gpr[1];
+		/* Print the collected regs for panic task. */
+		ppc64_print_regs(pt_regs);
+		ppc64_print_nip_lr(pt_regs, 1);
 	} else if ((pc->flags & KDUMP) ||
 		   ((pc->flags & DISKDUMP) &&
 		    (*diskdump_flags & KDUMP_CMPRS_LOCAL))) {

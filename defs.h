@@ -6288,6 +6288,13 @@ struct ppc64_elf_prstatus {
 
 #ifdef PPC64
 
+enum emergency_stack_type {
+	NONE_STACK		= 0,
+	EMERGENCY_STACK,
+	NMI_EMERGENCY_STACK,
+	MC_EMERGENCY_STACK
+};
+
 struct ppc64_opal {
 	uint64_t base;
 	uint64_t entry;
@@ -6306,6 +6313,11 @@ struct machine_specific {
 	ulong *hwintrstack;
         char *hwstackbuf;
         uint hwstacksize;
+
+	/* Emergency stacks */
+	ulong *emergency_sp;
+	ulong *nmi_emergency_sp;
+	ulong *mc_emergency_sp;
 
 	uint l4_index_size;
 	uint l3_index_size;
