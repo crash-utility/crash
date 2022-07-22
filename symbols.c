@@ -7351,7 +7351,7 @@ cmd_p(void)
 	unsigned radix;
 	int do_load_module_filter;
 	char buf1[BUFSIZE]; 
-	char *cpuspec;
+	char *cpuspec, *p;
 
 	do_load_module_filter = radix = 0;
 
@@ -7386,7 +7386,7 @@ cmd_p(void)
         if (argerrs || !args[optind])
                 cmd_usage(pc->curcmd, SYNOPSIS);
 
-	cpuspec = strrchr(args[optind], ':');
+	p = cpuspec = strrchr(args[optind], ':');
 	if (cpuspec)
 		*cpuspec++ = NULLCHAR;
 
@@ -7409,7 +7409,7 @@ cmd_p(void)
 			      sp->name);
 		else
 			/* maybe a valid C expression (e.g. ':') */
-			*(cpuspec-1) = ':';
+			*p = ':';
 	}
 
 	process_gdb_output(concat_args(buf1, 0, TRUE), radix,
