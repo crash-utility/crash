@@ -64,7 +64,7 @@ struct kvmdump_data {
 	ulong compresses;
 	uint64_t kvbase;
 	ulong *debug;
-	uint32_t cpu_devices;
+	uint64_t cpu_devices;
 	struct register_set *registers;
 	uint64_t iohole;
 };
