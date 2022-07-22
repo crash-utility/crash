@@ -389,5 +389,5 @@ flattened_format_get_osrelease(char *file)
 		}
 	}
 
-	fclose(pipe);
+	pclose(pipe);
 }
