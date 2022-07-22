@@ -715,7 +715,7 @@ mount_point(char *name)
 				continue;
 			found++;
 		}
-		pclose(mp);
+		fclose(mp);
 
 		if (!(mount_points = (char **)malloc(sizeof(char *) * found)))
 			return FALSE;
@@ -735,7 +735,7 @@ mount_point(char *name)
                         	mount_points_gathered++, i++;
 			}
                 }
-        	pclose(mp);
+		fclose(mp);
 
 		if (CRASHDEBUG(2))
 			for (i = 0; i < mount_points_gathered; i++)
