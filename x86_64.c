@@ -208,6 +208,10 @@ x86_64_init(int when)
 			machdep->machspec->kernel_image_size = dtol(string, QUIET, NULL);
 			free(string);
 		}
+		if ((string = pc->read_vmcoreinfo("NUMBER(sme_mask)"))) {
+			machdep->machspec->sme_mask = dtol(string, QUIET, NULL);
+			free(string);
+		}
 		if (SADUMP_DUMPFILE() || QEMU_MEM_DUMP_NO_VMCOREINFO() ||
 		    VMSS_DUMPFILE())
 			/* Need for calculation of kaslr_offset and phys_base */
@@ -940,6 +944,7 @@ x86_64_dump_machdep_table(ulong arg)
 			ms->kernel_image_size/MEGABYTES(1));
 	else
 		fprintf(fp, "(uninitialized)\n");
+	fprintf(fp, "                 sme_mask: %lx\n", ms->sme_mask);
 	fprintf(fp, "      physical_mask_shift: %ld\n", ms->physical_mask_shift);
 	fprintf(fp, "              pgdir_shift: %ld\n", ms->pgdir_shift);
 	fprintf(fp, "               GART_start: %lx\n", ms->GART_start);
@@ -1817,7 +1822,7 @@ x86_64_kpgd_offset(ulong kvaddr, int verbose, int IS_XEN)
 		if (IS_XEN)
 			fprintf(fp, "PAGE DIRECTORY: %lx [machine]\n", *pgd);
 		else
-			fprintf(fp, "PAGE DIRECTORY: %lx\n", *pgd);
+			fprintf(fp, "PAGE DIRECTORY: %lx\n", *pgd & ~machdep->machspec->sme_mask);
 	}
 
 	return pgd;
@@ -1854,7 +1859,8 @@ x86_64_upgd_offset_legacy(struct task_context *tc, ulong uvaddr, int verbose, in
 		if (IS_XEN)
 			fprintf(fp, "   PGD: %lx => %lx [machine]\n", (ulong)pud, pud_pte);
 		else
-			fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pud, pud_pte);
+			fprintf(fp, "   PGD: %lx => %lx\n",
+				(ulong)pud, pud_pte & ~machdep->machspec->sme_mask);
         }
 
 	return pud_pte;
@@ -1885,7 +1891,8 @@ x86_64_upgd_offset(struct task_context *tc, ulong uvaddr, int verbose, int IS_XE
 		if (IS_XEN)
 			fprintf(fp, "   PGD: %lx => %lx [machine]\n", (ulong)pgd, pgd_pte);
 		else
-			fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd, pgd_pte);
+			fprintf(fp, "   PGD: %lx => %lx\n",
+				(ulong)pgd, pgd_pte & ~machdep->machspec->sme_mask);
         }
 
 	return pgd_pte;
@@ -1903,9 +1910,11 @@ x86_64_p4d_offset(ulong pgd_pte, ulong vaddr, int verbose, int IS_XEN)
 	ulong p4d_pte;
 
 	p4d_paddr = pgd_pte & PHYSICAL_PAGE_MASK;
+	p4d_paddr &= ~machdep->machspec->sme_mask;
 	FILL_P4D(p4d_paddr, PHYSADDR, PAGESIZE());
 	p4d = ((ulong *)p4d_paddr) + p4d_index(vaddr);
 	p4d_pte = ULONG(machdep->machspec->p4d + PAGEOFFSET(p4d));
+	p4d_pte &= ~machdep->machspec->sme_mask;
         if (verbose) {
 		if (IS_XEN)
 			fprintf(fp, "   P4D: %lx => %lx [machine]\n", (ulong)p4d, p4d_pte);
@@ -1928,6 +1937,7 @@ x86_64_pud_offset(ulong pgd_pte, ulong vaddr, int verbose, int IS_XEN)
 	ulong pud_pte;
 
 	pud_paddr = pgd_pte & PHYSICAL_PAGE_MASK;
+	pud_paddr &= ~machdep->machspec->sme_mask;
 
 	if (IS_XEN) {
 		pud_paddr = xen_m2p(pud_paddr);
@@ -1938,6 +1948,7 @@ x86_64_pud_offset(ulong pgd_pte, ulong vaddr, int verbose, int IS_XEN)
 	FILL_PUD(pud_paddr, PHYSADDR, PAGESIZE());
 	pud = ((ulong *)pud_paddr) + pud_index(vaddr);
 	pud_pte = ULONG(machdep->pud + PAGEOFFSET(pud));
+	pud_pte &= ~machdep->machspec->sme_mask;
 	if (verbose) {
 		if (IS_XEN)
 			fprintf(fp, "   PUD: %lx => %lx [machine]\n", (ulong)pud, pud_pte);
@@ -1960,6 +1971,7 @@ x86_64_pmd_offset(ulong pud_pte, ulong vaddr, int verbose, int IS_XEN)
 	ulong pmd_pte;
 
 	pmd_paddr = pud_pte & PHYSICAL_PAGE_MASK;
+	pmd_paddr &= ~machdep->machspec->sme_mask;
 
 	if (IS_XEN) {
 		pmd_paddr = xen_m2p(pmd_paddr);
@@ -1970,6 +1982,7 @@ x86_64_pmd_offset(ulong pud_pte, ulong vaddr, int verbose, int IS_XEN)
 	FILL_PMD(pmd_paddr, PHYSADDR, PAGESIZE());
 	pmd = ((ulong *)pmd_paddr) + pmd_index(vaddr);
 	pmd_pte = ULONG(machdep->pmd + PAGEOFFSET(pmd));
+	pmd_pte &= ~machdep->machspec->sme_mask;
         if (verbose) {
 		if (IS_XEN)
 			fprintf(fp, "   PMD: %lx => %lx [machine]\n", (ulong)pmd, pmd_pte);
@@ -1991,6 +2004,7 @@ x86_64_pte_offset(ulong pmd_pte, ulong vaddr, int verbose, int IS_XEN)
 	ulong pte;
 
 	pte_paddr = pmd_pte & PHYSICAL_PAGE_MASK;
+	pte_paddr &= ~machdep->machspec->sme_mask;
 
 	if (IS_XEN) {
 		pte_paddr = xen_m2p(pte_paddr);
@@ -2001,6 +2015,7 @@ x86_64_pte_offset(ulong pmd_pte, ulong vaddr, int verbose, int IS_XEN)
 	FILL_PTBL(pte_paddr, PHYSADDR, PAGESIZE());
 	ptep = ((ulong *)pte_paddr) + pte_index(vaddr);
 	pte = ULONG(machdep->ptbl + PAGEOFFSET(ptep));
+	pte &= ~machdep->machspec->sme_mask;
 	if (verbose) {
 		if (IS_XEN)
 			fprintf(fp, "   PTE: %lx => %lx [machine]\n", (ulong)ptep, pte);
