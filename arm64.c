@@ -4586,6 +4586,36 @@ arm64_IS_VMALLOC_ADDR(ulong vaddr)
                 (vaddr >= ms->modules_vaddr && vaddr <= ms->modules_end));
 }
 
+/* Return TRUE if we succeed, return FALSE on failure. */
+static int
+arm64_set_va_bits_by_tcr(void)
+{
+	ulong value;
+	char *string;
+
+	if ((string = pc->read_vmcoreinfo("NUMBER(TCR_EL1_T1SZ)")) ||
+	    (string = pc->read_vmcoreinfo("NUMBER(tcr_el1_t1sz)"))) {
+		/* See ARMv8 ARM for the description of
+		 * TCR_EL1.T1SZ and how it can be used
+		 * to calculate the vabits_actual
+		 * supported by underlying kernel.
+		 *
+		 * Basically:
+		 * vabits_actual = 64 - T1SZ;
+		 */
+		value = 64 - strtoll(string, NULL, 0);
+		if (CRASHDEBUG(1))
+			fprintf(fp,  "vmcoreinfo : vabits_actual: %ld\n", value);
+		free(string);
+		machdep->machspec->VA_BITS_ACTUAL = value;
+		machdep->machspec->VA_BITS = value;
+		machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
 static void 
 arm64_calc_VA_BITS(void)
 {
@@ -4616,23 +4646,8 @@ arm64_calc_VA_BITS(void)
 		} else if (ACTIVE())
 			error(FATAL, "cannot determine VA_BITS_ACTUAL: please use /proc/kcore\n");
 		else {
-			if ((string = pc->read_vmcoreinfo("NUMBER(TCR_EL1_T1SZ)")) ||
-			    (string = pc->read_vmcoreinfo("NUMBER(tcr_el1_t1sz)"))) {
-				/* See ARMv8 ARM for the description of
-				 * TCR_EL1.T1SZ and how it can be used
-				 * to calculate the vabits_actual
-				 * supported by underlying kernel.
-				 *
-				 * Basically:
-				 * vabits_actual = 64 - T1SZ;
-				 */
-				value = 64 - strtoll(string, NULL, 0);
-				if (CRASHDEBUG(1))
-					fprintf(fp,  "vmcoreinfo : vabits_actual: %ld\n", value);
-				free(string);
-				machdep->machspec->VA_BITS_ACTUAL = value;
-				machdep->machspec->VA_BITS = value;
-				machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
+			if (arm64_set_va_bits_by_tcr()) {
+				/* nothing */
 			} else if (machdep->machspec->VA_BITS_ACTUAL) {
 				machdep->machspec->VA_BITS = machdep->machspec->VA_BITS_ACTUAL;
 				machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
@@ -4653,6 +4668,8 @@ arm64_calc_VA_BITS(void)
 		 * commit to export NUMBER(TCR_EL1_T1SZ)
 		 */
 		machdep->flags |= FLIPPED_VM;
+		return;
+	} else if (arm64_set_va_bits_by_tcr()) {
 		return;
 	}
 
