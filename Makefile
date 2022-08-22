@@ -272,7 +272,7 @@ rebuild:
 	@if [ ! -f ${GDB}/${GDB}.patch ]; then \
 	  touch ${GDB}/${GDB}.patch; fi
 	@if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ] && \
-	  [ "`sum ${GDB}.patch`" != "`sum ${GDB}/${GDB}.patch`" ]; then \
+	  [ "`md5sum < ${GDB}.patch`" != "`md5sum < ${GDB}/${GDB}.patch`" ]; then \
 	  (sh -x ${GDB}.patch ${TARGET}; patch -N -p0 -r- --fuzz=0 < ${GDB}.patch; cp ${GDB}.patch ${GDB}; cd ${GDB}; \
 	  $(MAKE) CRASH_TARGET=${TARGET}) \
 	else (cd ${GDB}/gdb; $(MAKE) CRASH_TARGET=${TARGET}); fi
