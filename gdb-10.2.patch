@@ -9,6 +9,7 @@
 # to all subsequent patch applications.
 
 tar xvzmf gdb-10.2.tar.gz \
+	gdb-10.2/gdb/symfile.c \
 	gdb-10.2/gdb/Makefile.in
 
 exit 0
@@ -1650,3 +1651,13 @@ exit 0
 
  	  c_print_type_1 (type->field (i).type (),
  			  TYPE_FIELD_NAME (type, i),
+--- gdb-10.2/gdb/symfile.c.orig
++++ gdb-10.2/gdb/symfile.c
+@@ -1610,7 +1610,7 @@ find_separate_debug_file_by_debuglink (struct objfile *objfile)
+   if (debugfile.empty ()) {
+        char *name_copy;
+        name_copy = check_specified_kernel_debug_file();
+-       return std::string (name_copy);
++       return name_copy ? std::string (name_copy) : std::string ();
+   }
+ #endif
