@@ -3436,7 +3436,8 @@ parse_task_thread(int argcnt, char *arglist[], struct task_context *tc) {
         while (fgets(buf, BUFSIZE, pc->tmpfile)) {
 		if (STREQ(buf, "  {\n"))
 			randomized = TRUE;
-		else if (randomized && STREQ(buf, "  }, \n"))
+		else if (randomized &&
+			 (STREQ(buf, "  }, \n") || STREQ(buf, "  },\n")))
 			randomized = FALSE;
 
 		if (strlen(lookfor2)) {
