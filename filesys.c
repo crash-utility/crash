@@ -319,7 +319,7 @@ match_proc_version(void)
 
 #define CREATE  1
 #define DESTROY 0
-#define DEFAULT_SEARCHDIRS 5
+#define DEFAULT_SEARCHDIRS 6
 #define EXTRA_SEARCHDIRS 5
 
 static char **
@@ -336,6 +336,7 @@ build_searchdirs(int create, int *preferred)
         	"/boot/",
 	        "/boot/efi/redhat",
 		"/boot/efi/EFI/redhat",
+		"/usr/lib/debug/boot/",
         	"/",
         	NULL
 	};
