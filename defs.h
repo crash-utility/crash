@@ -4874,6 +4874,7 @@ extern "C" int patch_kernel_symbol(struct gnu_request *);
 struct syment *symbol_search(char *);
 int gdb_line_number_callback(ulong, ulong, ulong);
 int gdb_print_callback(ulong);
+char *gdb_lookup_module_symbol(ulong, ulong *);
 extern "C" int same_file(char *, char *);
 #endif
 
@@ -7284,6 +7285,7 @@ int gdb_pass_through(char *, FILE *, ulong);
 int gdb_readmem_callback(ulong, void *, int, int);
 int gdb_line_number_callback(ulong, ulong, ulong);
 int gdb_print_callback(ulong);
+char *gdb_lookup_module_symbol(ulong, ulong *);
 void gdb_error_hook(void);
 void restore_gdb_sanity(void);
 int is_gdb_command(int, ulong);

@@ -9,6 +9,7 @@
 # to all subsequent patch applications.
 
 tar xvzmf gdb-10.2.tar.gz \
+	gdb-10.2/gdb/printcmd.c \
 	gdb-10.2/gdb/symfile.c \
 	gdb-10.2/gdb/Makefile.in
 
@@ -1661,3 +1662,37 @@ exit 0
 +       return name_copy ? std::string (name_copy) : std::string ();
    }
  #endif
+ 
+--- gdb-10.2/gdb/printcmd.c.orig
++++ gdb-10.2/gdb/printcmd.c
+@@ -576,6 +576,10 @@ print_address_symbolic (struct gdbarch *gdbarch, CORE_ADDR addr,
+ 
+ /* See valprint.h.  */
+ 
++#ifdef CRASH_MERGE
++extern "C" char *gdb_lookup_module_symbol(unsigned long, unsigned long *);
++#endif
++
+ int
+ build_address_symbolic (struct gdbarch *gdbarch,
+ 			CORE_ADDR addr,  /* IN */
+@@ -682,7 +686,19 @@ build_address_symbolic (struct gdbarch *gdbarch,
+ 	}
+     }
+   if (symbol == NULL && msymbol.minsym == NULL)
++#ifdef CRASH_MERGE
++  {
++    char *name_ptr = gdb_lookup_module_symbol(addr, (unsigned long *)offset);
++    if (name_ptr) {
++      *name = name_ptr;
++      return 0;
++    } else {
++      return 1;
++    }
++  }
++#else
+     return 1;
++#endif
+ 
+   /* If the nearest symbol is too far away, don't print anything symbolic.  */
+ 

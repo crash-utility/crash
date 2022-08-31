@@ -935,6 +935,18 @@ gdb_print_callback(ulong addr)
 		return IS_KVADDR(addr);
 }
 
+char *
+gdb_lookup_module_symbol(ulong addr, ulong *offset)
+{
+	struct syment *sp;
+
+	if ((sp = value_search_module(addr, offset))) {
+		return sp->name;
+	} else {
+		return NULL;
+	}
+}
+
 /*
  *  Used by gdb_interface() to catch gdb-related errors, if desired.
  */
