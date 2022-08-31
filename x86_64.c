@@ -4432,8 +4432,7 @@ x86_64_function_called_by(ulong rip)
 	if (gdb_pass_through(buf, pc->tmpfile2, GNU_RETURN_ON_ERROR)) {
 	        rewind(pc->tmpfile2);
 	        while (fgets(buf, BUFSIZE, pc->tmpfile2)) {
-			if ((p1 = strstr(buf, "call")) &&
-			    whitespace(*(p1-1))) { 
+			if ((p1 = strstr(buf, " call")) || (p1 = strstr(buf, "\tcall"))) {
 				if (extract_hex(p1, &value, NULLCHAR, TRUE)) 
 					break;
 			}
