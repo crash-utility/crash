@@ -9,6 +9,7 @@
 # to all subsequent patch applications.
 
 tar xvzmf gdb-10.2.tar.gz \
+	gdb-10.2/gdb/symtab.c \
 	gdb-10.2/gdb/printcmd.c \
 	gdb-10.2/gdb/symfile.c \
 	gdb-10.2/gdb/Makefile.in
@@ -1696,3 +1697,43 @@ exit 0
  
    /* If the nearest symbol is too far away, don't print anything symbolic.  */
  
+--- gdb-10.2/gdb/symtab.c.orig
++++ gdb-10.2/gdb/symtab.c
+@@ -7128,8 +7128,8 @@ gdb_get_line_number(struct gnu_request *
+ static void
+ gdb_get_datatype(struct gnu_request *req)
+ {
+-        register struct type *type;
+-        register struct type *typedef_type;
++        struct type *type;
++        struct type *typedef_type;
+         expression_up expr;
+         struct symbol *sym;
+         struct value *val;
+@@ -7235,7 +7235,7 @@ gdb_get_datatype(struct gnu_request *req
+ static void
+ dump_enum(struct type *type, struct gnu_request *req)
+ {
+-        register int i;
++        int i;
+         int len;
+         long long lastval;
+ 
+@@ -7271,7 +7271,7 @@ dump_enum(struct type *type, struct gnu_
+ static void
+ eval_enum(struct type *type, struct gnu_request *req)
+ {
+-        register int i;
++        int i;
+         int len;
+         long long lastval;
+ 
+@@ -7298,7 +7298,7 @@ eval_enum(struct type *type, struct gnu_
+ static void
+ get_member_data(struct gnu_request *req, struct type *type, long offset, int is_first)
+ {
+-        register short i;
++        short i;
+         struct field *nextfield;
+         short nfields;
+         struct type *typedef_type, *target_type;
