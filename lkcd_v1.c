@@ -249,8 +249,7 @@ dump_header_only:
         lkcd_print("          dh_eip: %lx\n", dh->dh_eip);
 	lkcd_print("    dh_num_pages: %d\n", dh->dh_num_pages);
         lkcd_print(" dh_panic_string: %s%s", dh->dh_panic_string,
-		dh && dh->dh_panic_string &&
-		strstr(dh->dh_panic_string, "\n") ? "" : "\n");
+		dh && strstr(dh->dh_panic_string, "\n") ? "" : "\n");
         lkcd_print("         dh_time: %s\n",
                         strip_linefeeds(ctime(&(dh->dh_time.tv_sec))));
 
