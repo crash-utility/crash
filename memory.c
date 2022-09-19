@@ -8861,7 +8861,7 @@ dump_vmlist(struct meminfo *vi)
 				    (vi->spec_addr < (paddr+PAGESIZE()))) {
 					if (vi->flags & GET_PHYS_TO_VMALLOC) {
 						vi->retval = pcheck +
-						    PAGEOFFSET(paddr);
+						    PAGEOFFSET(vi->spec_addr);
 						return;
 				        } else
 						fprintf(fp,
@@ -9010,7 +9010,7 @@ dump_vmap_area(struct meminfo *vi)
 				    (vi->spec_addr < (paddr+PAGESIZE()))) {
 					if (vi->flags & GET_PHYS_TO_VMALLOC) {
 						vi->retval = pcheck +
-						    PAGEOFFSET(paddr);
+						    PAGEOFFSET(vi->spec_addr);
 						FREEBUF(ld->list_ptr);
 						return;
 				        } else
