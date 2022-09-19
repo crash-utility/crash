@@ -13506,6 +13506,10 @@ kmem_search(struct meminfo *mi)
 		mi->flags &= ~GET_PHYS_TO_VMALLOC;
 
 		if (mi->retval) {
+			if ((task = stkptr_to_task(mi->retval)) && (tc = task_to_context(task))) {
+				show_context(tc);
+				fprintf(fp, "\n");
+			}
 			if ((sp = value_search(mi->retval, &offset))) {
                         	show_symbol(sp, offset, 
 					SHOW_LINENUM | SHOW_RADIX());
@@ -13562,11 +13566,11 @@ kmem_search(struct meminfo *mi)
 	/*
 	 *  Check whether it's a current task or stack address.
 	 */
-	if ((mi->memtype == KVADDR) && (task = vaddr_in_task_struct(vaddr)) &&
+	if ((mi->memtype & (KVADDR|PHYSADDR)) && (task = vaddr_in_task_struct(vaddr)) &&
 	    (tc = task_to_context(task))) {
 		show_context(tc);
 		fprintf(fp, "\n");
-	} else if ((mi->memtype == KVADDR) && (task = stkptr_to_task(vaddr)) &&
+	} else if ((mi->memtype & (KVADDR|PHYSADDR)) && (task = stkptr_to_task(vaddr)) &&
 	    (tc = task_to_context(task))) {
 		show_context(tc);
 		fprintf(fp, "\n");
