@@ -13477,6 +13477,10 @@ kmem_search(struct meminfo *mi)
 	 *  Check for a valid mapped address.
 	 */
 	if ((mi->memtype == KVADDR) && IS_VMALLOC_ADDR(mi->spec_addr)) {
+		if ((task = stkptr_to_task(vaddr)) && (tc = task_to_context(task))) {
+			show_context(tc);
+			fprintf(fp, "\n");
+		}
 		if (kvtop(NULL, mi->spec_addr, &paddr, 0)) {
 			mi->flags = orig_flags | VMLIST_VERIFY;
 			dump_vmlist(mi);
