@@ -1224,13 +1224,13 @@ ppc64_init_paca_info(void)
 		ulong paca_loc;
 
 		readmem(symbol_value("paca_ptrs"), KVADDR, &paca_loc, sizeof(void *),
-			"paca double pointer", FAULT_ON_ERROR);
+			"paca double pointer", RETURN_ON_ERROR);
 		readmem(paca_loc, KVADDR, paca_ptr, sizeof(void *) * kt->cpus,
-			"paca pointers", FAULT_ON_ERROR);
+			"paca pointers", RETURN_ON_ERROR);
 	} else if (symbol_exists("paca") &&
 		   (get_symbol_type("paca", NULL, NULL) == TYPE_CODE_PTR)) {
 		readmem(symbol_value("paca"), KVADDR, paca_ptr, sizeof(void *) * kt->cpus,
-			"paca pointers", FAULT_ON_ERROR);
+			"paca pointers", RETURN_ON_ERROR);
 	} else {
 		free(paca_ptr);
 		return;
@@ -1245,7 +1245,7 @@ ppc64_init_paca_info(void)
 		for (i = 0; i < kt->cpus; i++)
 			readmem(paca_ptr[i] + offset, KVADDR, &ms->emergency_sp[i],
 				sizeof(void *), "paca->emergency_sp",
-				FAULT_ON_ERROR);
+				RETURN_ON_ERROR);
 	}
 
 	if (MEMBER_EXISTS("paca_struct", "nmi_emergency_sp")) {
@@ -1256,7 +1256,7 @@ ppc64_init_paca_info(void)
 		for (i = 0; i < kt->cpus; i++)
 			readmem(paca_ptr[i] + offset, KVADDR, &ms->nmi_emergency_sp[i],
 				sizeof(void *), "paca->nmi_emergency_sp",
-				FAULT_ON_ERROR);
+				RETURN_ON_ERROR);
 	}
 
 	if (MEMBER_EXISTS("paca_struct", "mc_emergency_sp")) {
@@ -1267,7 +1267,7 @@ ppc64_init_paca_info(void)
 		for (i = 0; i < kt->cpus; i++)
 			readmem(paca_ptr[i] + offset, KVADDR, &ms->mc_emergency_sp[i],
 				sizeof(void *), "paca->mc_emergency_sp",
-				FAULT_ON_ERROR);
+				RETURN_ON_ERROR);
 	}
 
 	free(paca_ptr);
@@ -1947,7 +1947,7 @@ ppc64_in_emergency_stack(int cpu, ulong addr, bool verbose)
 	if (cpu < 0  || cpu >= kt->cpus)
 		return NONE_STACK;
 
-	if (ms->emergency_sp) {
+	if (ms->emergency_sp && IS_KVADDR(ms->emergency_sp[cpu])) {
 		top = ms->emergency_sp[cpu];
 		base =  top - STACKSIZE();
 		if (addr >= base && addr < top) {
@@ -1957,7 +1957,7 @@ ppc64_in_emergency_stack(int cpu, ulong addr, bool verbose)
 		}
 	}
 
-	if (ms->nmi_emergency_sp) {
+	if (ms->nmi_emergency_sp && IS_KVADDR(ms->nmi_emergency_sp[cpu])) {
 		top = ms->nmi_emergency_sp[cpu];
 		base = top - STACKSIZE();
 		if (addr >= base && addr < top) {
@@ -1967,7 +1967,7 @@ ppc64_in_emergency_stack(int cpu, ulong addr, bool verbose)
 		}
 	}
 
-	if (ms->mc_emergency_sp) {
+	if (ms->mc_emergency_sp && IS_KVADDR(ms->mc_emergency_sp[cpu])) {
 		top = ms->mc_emergency_sp[cpu];
 		base =  top - STACKSIZE();
 		if (addr >= base && addr < top) {
