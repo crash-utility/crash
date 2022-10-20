@@ -1320,6 +1320,44 @@ riscv64_init(int when)
 void
 riscv64_display_regs_from_elf_notes(int cpu, FILE *ofp)
 {
+	const struct machine_specific *ms = machdep->machspec;
+	struct riscv64_register *regs;
+
+	if (!ms->crash_task_regs) {
+		error(INFO, "registers not collected for cpu %d\n", cpu);
+		return;
+	}
+
+	regs = &ms->crash_task_regs[cpu];
+	if (!regs->regs[RISCV64_REGS_SP] && !regs->regs[RISCV64_REGS_EPC]) {
+		error(INFO, "registers not collected for cpu %d\n", cpu);
+		return;
+	}
+
+	/* Print riscv64 32 regs */
+	fprintf(ofp,
+		"epc : " REG_FMT " ra : " REG_FMT " sp : " REG_FMT "\n"
+		" gp : " REG_FMT " tp : " REG_FMT " t0 : " REG_FMT "\n"
+		" t1 : " REG_FMT " t2 : " REG_FMT " s0 : " REG_FMT "\n"
+		" s1 : " REG_FMT " a0 : " REG_FMT " a1 : " REG_FMT "\n"
+		" a2 : " REG_FMT " a3 : " REG_FMT " a4 : " REG_FMT "\n"
+		" a5 : " REG_FMT " a6 : " REG_FMT " a7 : " REG_FMT "\n"
+		" s2 : " REG_FMT " s3 : " REG_FMT " s4 : " REG_FMT "\n"
+		" s5 : " REG_FMT " s6 : " REG_FMT " s7 : " REG_FMT "\n"
+		" s8 : " REG_FMT " s9 : " REG_FMT " s10: " REG_FMT "\n"
+		" s11: " REG_FMT " t3 : " REG_FMT " t4 : " REG_FMT "\n"
+		" t5 : " REG_FMT " t6 : " REG_FMT "\n",
+		regs->regs[0],  regs->regs[1],  regs->regs[2],
+		regs->regs[3],  regs->regs[4],  regs->regs[5],
+		regs->regs[6],  regs->regs[7],  regs->regs[8],
+		regs->regs[9],  regs->regs[10], regs->regs[11],
+		regs->regs[12], regs->regs[13], regs->regs[14],
+		regs->regs[15], regs->regs[16], regs->regs[17],
+		regs->regs[18], regs->regs[19], regs->regs[20],
+		regs->regs[21], regs->regs[22], regs->regs[23],
+		regs->regs[24], regs->regs[25], regs->regs[26],
+		regs->regs[27], regs->regs[28], regs->regs[29],
+		regs->regs[30], regs->regs[31]);
 }
 
 #else /* !RISCV64 */
