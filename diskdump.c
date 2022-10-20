@@ -1532,6 +1532,12 @@ get_diskdump_regs_mips(struct bt_info *bt, ulong *eip, ulong *esp)
 }
 
 static void
+get_diskdump_regs_riscv64(struct bt_info *bt, ulong *eip, ulong *esp)
+{
+	machdep->get_stack_frame(bt, eip, esp);
+}
+
+static void
 get_diskdump_regs_sparc64(struct bt_info *bt, ulong *eip, ulong *esp)
 {
 	Elf64_Nhdr *note;
@@ -1608,6 +1614,10 @@ get_diskdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 
 	case EM_SPARCV9:
 		get_diskdump_regs_sparc64(bt, eip, esp);
+		break;
+
+	case EM_RISCV:
+		get_diskdump_regs_riscv64(bt, eip, esp);
 		break;
 
 	default:

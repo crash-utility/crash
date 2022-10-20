@@ -3496,6 +3496,85 @@ struct arm64_stackframe {
 #define _64BIT_
 #define MACHINE_TYPE		"RISCV64"
 
+typedef struct { ulong pgd; } pgd_t;
+typedef struct { ulong p4d; } p4d_t;
+typedef struct { ulong pud; } pud_t;
+typedef struct { ulong pmd; } pmd_t;
+typedef struct { ulong pte; } pte_t;
+typedef signed int s32;
+
+/* arch/riscv/include/asm/pgtable-64.h */
+#define PGD_SHIFT_L3		(30)
+#define PGD_SHIFT_L4		(39)
+#define PGD_SHIFT_L5		(48)
+
+#define P4D_SHIFT		(39)
+#define PUD_SHIFT		(30)
+#define PMD_SHIFT		(21)
+
+#define PTRS_PER_PGD		(512)
+#define PTRS_PER_P4D		(512)
+#define PTRS_PER_PUD		(512)
+#define PTRS_PER_PMD		(512)
+#define PTRS_PER_PTE		(512)
+
+/*
+ * Mask for bit 0~53(PROT and PPN) of PTE
+ * 63 6261  60    54  53 10  9 8 7 6 5 4 3 2 1 0
+ * N  PBMT  Reserved  P P N  RSW D A G U X W R V
+ */
+#define PTE_PFN_PROT_MASK	0x3FFFFFFFFFFFFF
+
+/*
+ * 3-levels / 4K pages
+ *
+ * sv39
+ * PGD  |  PMD  |  PTE  |  OFFSET  |
+ *  9   |   9   |   9   |    12    |
+ */
+#define pgd_index_l3_4k(addr) (((addr) >> PGD_SHIFT_L3) & (PTRS_PER_PGD - 1))
+#define pmd_index_l3_4k(addr) (((addr) >> PMD_SHIFT) & (PTRS_PER_PMD - 1))
+#define pte_index_l3_4k(addr) (((addr) >> PAGESHIFT()) & (PTRS_PER_PTE - 1))
+
+/*
+ * 4-levels / 4K pages
+ *
+ * sv48
+ * PGD  |  PUD  |  PMD  |   PTE   |  OFFSET  |
+ *  9   |   9   |   9   |    9    |    12    |
+ */
+#define pgd_index_l4_4k(addr) (((addr) >> PGD_SHIFT_L4) & (PTRS_PER_PGD - 1))
+#define pud_index_l4_4k(addr) (((addr) >> PUD_SHIFT) & (PTRS_PER_PUD - 1))
+#define pmd_index_l4_4k(addr) (((addr) >> PMD_SHIFT) & (PTRS_PER_PMD - 1))
+#define pte_index_l4_4k(addr) (((addr) >> PAGESHIFT()) & (PTRS_PER_PTE - 1))
+
+/*
+ * 5-levels / 4K pages
+ *
+ * sv57
+ * PGD  |  P4D  |  PUD  |  PMD  |   PTE   |  OFFSET  |
+ *  9   |   9   |   9   |   9   |    9    |    12    |
+ */
+#define pgd_index_l5_4k(addr) (((addr) >> PGD_SHIFT_L5) & (PTRS_PER_PGD - 1))
+#define p4d_index_l5_4k(addr) (((addr) >> P4D_SHIFT) & (PTRS_PER_P4D - 1))
+#define pud_index_l5_4k(addr) (((addr) >> PUD_SHIFT) & (PTRS_PER_PUD - 1))
+#define pmd_index_l5_4k(addr) (((addr) >> PMD_SHIFT) & (PTRS_PER_PMD - 1))
+#define pte_index_l5_4k(addr) (((addr) >> PAGESHIFT()) & (PTRS_PER_PTE - 1))
+
+#define VM_L3_4K	(0x2)
+#define VM_L3_2M	(0x4)
+#define VM_L3_1G	(0x8)
+#define VM_L4_4K	(0x10)
+#define VM_L4_2M	(0x20)
+#define VM_L4_1G	(0x40)
+#define VM_L5_4K	(0x80)
+#define VM_L5_2M	(0x100)
+#define VM_L5_1G	(0x200)
+
+#define VM_FLAGS	(VM_L3_4K | VM_L3_2M | VM_L3_1G | \
+			 VM_L4_4K | VM_L4_2M | VM_L4_1G | \
+			 VM_L5_4K | VM_L5_2M | VM_L5_1G)
+
 /*
  * Direct memory mapping
  */
@@ -3546,6 +3625,14 @@ struct arm64_stackframe {
 #define _MAX_PHYSMEM_BITS	56 /* 56-bit physical address supported */
 #define PHYS_MASK_SHIFT 	_MAX_PHYSMEM_BITS
 #define PHYS_MASK		(((1UL) << PHYS_MASK_SHIFT) - 1)
+
+#define IS_LAST_P4D_READ(p4d)	((ulong)(p4d) == machdep->machspec->last_p4d_read)
+#define FILL_P4D(P4D, TYPE, SIZE)					      \
+    if (!IS_LAST_P4D_READ(P4D)) {					      \
+	    readmem((ulonglong)((ulong)(P4D)), TYPE, machdep->machspec->p4d,  \
+		     SIZE, "p4d page", FAULT_ON_ERROR);                       \
+	    machdep->machspec->last_p4d_read = (ulong)(P4D);                  \
+    }
 
 #endif  /* RISCV64 */
 
@@ -6834,6 +6921,10 @@ struct machine_specific {
 	ulong _page_soft;
 
 	ulong _pfn_shift;
+	ulong va_bits;
+	char *p4d;
+	ulong last_p4d_read;
+	ulong struct_page_size;
 
 	struct riscv64_register *crash_task_regs;
 };
@@ -6856,6 +6947,12 @@ struct machine_specific {
 #define _PAGE_TABLE	_PAGE_PRESENT
 #define _PAGE_PROT_NONE _PAGE_READ
 #define _PAGE_PFN_SHIFT 10
+
+/* from 'struct pt_regs' definitions of RISC-V arch */
+#define RISCV64_REGS_EPC  0
+#define RISCV64_REGS_RA   1
+#define RISCV64_REGS_SP   2
+#define RISCV64_REGS_FP   8
 
 #endif /* RISCV64 */
 
