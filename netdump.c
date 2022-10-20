@@ -300,6 +300,12 @@ is_netdump(char *file, ulong source_query)
 				goto bailout;
 			break;
 
+		case EM_RISCV:
+			if (machine_type_mismatch(file, "RISCV64", NULL,
+			    source_query))
+				goto bailout;
+			break;
+
 		default:
 			if (machine_type_mismatch(file, "(unknown)", NULL,
 			    source_query))
@@ -2935,7 +2941,8 @@ dump_registers_for_elf_dumpfiles(void)
 
         if (!(machine_type("X86") || machine_type("X86_64") || 
 	    machine_type("ARM64") || machine_type("PPC64") ||
-	    machine_type("MIPS") || machine_type("MIPS64")))
+	    machine_type("MIPS") || machine_type("MIPS64") ||
+	    machine_type("RISCV64")))
                 error(FATAL, "-r option not supported for this dumpfile\n");
 
 	if (NETDUMP_DUMPFILE()) {

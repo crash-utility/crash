@@ -64,7 +64,7 @@ CFILES=main.c tools.c global_data.c memory.c filesys.c help.c task.c \
 	kernel.c test.c gdb_interface.c configure.c net.c dev.c bpf.c \
 	printk.c \
 	alpha.c x86.c ppc.c ia64.c s390.c s390x.c s390dbf.c ppc64.c x86_64.c \
-	arm.c arm64.c mips.c mips64.c sparc64.c \
+	arm.c arm64.c mips.c mips64.c riscv64.c sparc64.c \
 	extensions.c remote.c va_server.c va_server_v1.c symbols.c cmdline.c \
 	lkcd_common.c lkcd_v1.c lkcd_v2_v3.c lkcd_v5.c lkcd_v7.c lkcd_v8.c\
 	lkcd_fix_mem.c s390_dump.c lkcd_x86_trace.c \
@@ -84,7 +84,7 @@ OBJECT_FILES=main.o tools.o global_data.o memory.o filesys.o help.o task.o \
 	build_data.o kernel.o test.o gdb_interface.o net.o dev.o bpf.o \
 	printk.o \
 	alpha.o x86.o ppc.o ia64.o s390.o s390x.o s390dbf.o ppc64.o x86_64.o \
-	arm.o arm64.o mips.o mips64.o sparc64.o \
+	arm.o arm64.o mips.o mips64.o riscv64.o sparc64.o \
 	extensions.o remote.o va_server.o va_server_v1.o symbols.o cmdline.o \
 	lkcd_common.o lkcd_v1.o lkcd_v2_v3.o lkcd_v5.o lkcd_v7.o lkcd_v8.o \
 	lkcd_fix_mem.o s390_dump.o netdump.o diskdump.o makedumpfile.o xendump.o \
@@ -437,6 +437,9 @@ mips.o: ${GENERIC_HFILES} ${REDHAT_HFILES} mips.c
 
 mips64.o: ${GENERIC_HFILES} ${REDHAT_HFILES} mips64.c
 	${CC} -c ${CRASH_CFLAGS} mips64.c ${WARNING_OPTIONS} ${WARNING_ERROR}
+
+riscv64.o: ${GENERIC_HFILES} ${REDHAT_HFILES} riscv64.c
+	${CC} -c ${CRASH_CFLAGS} riscv64.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 sparc64.o: ${GENERIC_HFILES} ${REDHAT_HFILES} sparc64.c
 	${CC} -c ${CRASH_CFLAGS} sparc64.c ${WARNING_OPTIONS} ${WARNING_ERROR}

@@ -3743,6 +3743,11 @@ is_kernel(char *file)
 				goto bailout;
 			break;
 
+		case EM_RISCV:
+			if (machine_type_mismatch(file, "RISCV64", NULL, 0))
+				goto bailout;
+			break;
+
 		default:
 			if (machine_type_mismatch(file, "(unknown)", NULL, 0))
 				goto bailout;
@@ -4000,6 +4005,11 @@ is_shared_object(char *file)
 
 		case EM_MIPS:
 			if (machine_type("MIPS64"))
+				return TRUE;
+			break;
+
+		case EM_RISCV:
+			if (machine_type("RISCV64"))
 				return TRUE;
 			break;
 		}

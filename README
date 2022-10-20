@@ -37,8 +37,8 @@
   These are the current prerequisites: 
 
   o  At this point, x86, ia64, x86_64, ppc64, ppc, arm, arm64, alpha, mips,
-     mips64, s390 and s390x-based kernels are supported.  Other architectures
-     may be addressed in the future.
+     mips64, riscv64, s390 and s390x-based kernels are supported.  Other
+     architectures may be addressed in the future.
 
   o  One size fits all -- the utility can be run on any Linux kernel version
      version dating back to 2.2.5-15.  A primary design goal is to always
@@ -98,6 +98,8 @@
      arm64 dumpfiles may be built by typing "make target=ARM64".
   o  On an x86_64 host, an x86_64 binary that can be used to analyze
      ppc64le dumpfiles may be built by typing "make target=PPC64".
+  o  On an x86_64 host, an x86_64 binary that can be used to analyze
+     riscv64 dumpfiles may be built by typing "make target=RISCV64".
 
   Traditionally when vmcores are compressed via the makedumpfile(8) facility
   the libz compression library is used, and by default the crash utility

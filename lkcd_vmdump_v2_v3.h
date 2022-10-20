@@ -37,7 +37,7 @@
 
 #if defined(ARM) || defined(X86) || defined(PPC) || defined(S390) || \
 	defined(S390X) || defined(ARM64) || defined(MIPS) || \
-	defined(MIPS64) || defined(SPARC64)
+	defined(MIPS64) || defined(SPARC64) || defined(RISCV64)
 
 /*
  * Kernel header file for Linux crash dumps.
@@ -84,12 +84,8 @@ typedef struct _dump_header_asm_s {
 	uint32_t             dha_eip;
 
 	/* the dump registers */
-#ifndef S390
-#ifndef S390X
-#ifndef ARM64
+#if !defined(S390) && !defined(S390X) && !defined(ARM64) && !defined(RISCV64)
 	struct pt_regs       dha_regs;
-#endif
-#endif
 #endif
 
 } dump_header_asm_t;

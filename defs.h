@@ -76,7 +76,7 @@
 #if !defined(X86) && !defined(X86_64) && !defined(ALPHA) && !defined(PPC) && \
     !defined(IA64) && !defined(PPC64) && !defined(S390) && !defined(S390X) && \
     !defined(ARM) && !defined(ARM64) && !defined(MIPS) && !defined(MIPS64) && \
-    !defined(SPARC64)
+    !defined(RISCV64) && !defined(SPARC64)
 #ifdef __alpha__
 #define ALPHA
 #endif
@@ -118,6 +118,9 @@
 #ifdef __sparc_v9__
 #define SPARC64
 #endif
+#if defined(__riscv) && (__riscv_xlen == 64)
+#define RISCV64
+#endif
 #endif
 
 #ifdef X86
@@ -158,6 +161,9 @@
 #endif
 #ifdef SPARC64
 #define NR_CPUS  (4096)
+#endif
+#ifdef RISCV64
+#define NR_CPUS  (256)
 #endif
 
 #define NR_DEVICE_DUMPS (64)
@@ -3486,6 +3492,63 @@ struct arm64_stackframe {
 #define _MAX_PHYSMEM_BITS       48
 #endif  /* MIPS64 */
 
+#ifdef RISCV64
+#define _64BIT_
+#define MACHINE_TYPE		"RISCV64"
+
+/*
+ * Direct memory mapping
+ */
+#define PTOV(X) 									\
+	(((unsigned long)(X)+(machdep->kvbase)) - machdep->machspec->phys_base)
+#define VTOP(X) ({									\
+	ulong _X = X;									\
+	(THIS_KERNEL_VERSION >= LINUX(5,13,0) &&					\
+		(_X) >= machdep->machspec->kernel_link_addr) ?				\
+		(((unsigned long)(_X)-(machdep->machspec->kernel_link_addr)) +		\
+		 machdep->machspec->phys_base):						\
+		(((unsigned long)(_X)-(machdep->kvbase)) +				\
+		 machdep->machspec->phys_base);						\
+	})
+#define PAGEBASE(X)		(((ulong)(X)) & (ulong)machdep->pagemask)
+
+/*
+ * Stack size order
+ */
+#define THREAD_SIZE_ORDER	2
+
+#define PAGE_OFFSET		(machdep->machspec->page_offset)
+#define VMALLOC_START		(machdep->machspec->vmalloc_start_addr)
+#define VMALLOC_END		(machdep->machspec->vmalloc_end)
+#define VMEMMAP_VADDR		(machdep->machspec->vmemmap_vaddr)
+#define VMEMMAP_END		(machdep->machspec->vmemmap_end)
+#define MODULES_VADDR		(machdep->machspec->modules_vaddr)
+#define MODULES_END		(machdep->machspec->modules_end)
+#define IS_VMALLOC_ADDR(X)	riscv64_IS_VMALLOC_ADDR((ulong)(X))
+
+/* from arch/riscv/include/asm/pgtable.h */
+#define __SWP_TYPE_SHIFT	6
+#define __SWP_TYPE_BITS 	5
+#define __SWP_TYPE_MASK 	((1UL << __SWP_TYPE_BITS) - 1)
+#define __SWP_OFFSET_SHIFT	(__SWP_TYPE_BITS + __SWP_TYPE_SHIFT)
+
+#define MAX_SWAPFILES_CHECK()	BUILD_BUG_ON(MAX_SWAPFILES_SHIFT > __SWP_TYPE_BITS)
+
+#define SWP_TYPE(entry) 	(((entry) >> __SWP_TYPE_SHIFT) & __SWP_TYPE_MASK)
+#define SWP_OFFSET(entry)	((entry) >> __SWP_OFFSET_SHIFT)
+#define __swp_type(entry)	SWP_TYPE(entry)
+#define __swp_offset(entry)	SWP_OFFSET(entry)
+
+#define TIF_SIGPENDING		(THIS_KERNEL_VERSION >= LINUX(2,6,23) ? 1 : 2)
+
+/* from arch/riscv/include/asm/sparsemem.h */
+#define _SECTION_SIZE_BITS	27
+#define _MAX_PHYSMEM_BITS	56 /* 56-bit physical address supported */
+#define PHYS_MASK_SHIFT 	_MAX_PHYSMEM_BITS
+#define PHYS_MASK		(((1UL) << PHYS_MASK_SHIFT) - 1)
+
+#endif  /* RISCV64 */
+
 #ifdef X86
 #define _32BIT_
 #define MACHINE_TYPE       "X86"
@@ -4534,6 +4597,10 @@ struct machine_specific {
 #define MAX_HEXADDR_STRLEN (16)
 #define UVADDR_PRLEN      (16)
 #endif
+#ifdef RISCV64
+#define MAX_HEXADDR_STRLEN (16)
+#define UVADDR_PRLEN       (16)
+#endif
 
 #define BADADDR  ((ulong)(-1))
 #define BADVAL   ((ulong)(-1))
@@ -5149,6 +5216,9 @@ void dump_build_data(void);
 #ifdef MIPS64
 #define machdep_init(X) mips64_init(X)
 #endif
+#ifdef RISCV64
+#define machdep_init(X) riscv64_init(X)
+#endif
 #ifdef SPARC64
 #define machdep_init(X) sparc64_init(X)
 #endif
@@ -5629,6 +5699,9 @@ void display_help_screen(char *);
 #endif
 #ifdef SPARC64
 #define dump_machdep_table(X) sparc64_dump_machdep_table(X)
+#endif
+#ifdef RISCV64
+#define dump_machdep_table(X) riscv64_dump_machdep_table(X)
 #endif
 extern char *help_pointer[];
 extern char *help_alias[];
@@ -6706,6 +6779,85 @@ struct machine_specific {
 #define _PFN_SHIFT	(machdep->machspec->_pfn_shift)
 
 #endif /* MIPS64 */
+
+/*
+ * riscv64.c
+ */
+void riscv64_display_regs_from_elf_notes(int, FILE *);
+
+#ifdef RISCV64
+void riscv64_init(int);
+void riscv64_dump_machdep_table(ulong);
+int riscv64_IS_VMALLOC_ADDR(ulong);
+
+#define display_idt_table() \
+	error(FATAL, "-d option is not applicable to RISCV64 architecture\n")
+
+/* from arch/riscv/include/asm/ptrace.h */
+struct riscv64_register {
+	ulong regs[36];
+};
+
+struct riscv64_pt_regs {
+	ulong badvaddr;
+	ulong cause;
+	ulong epc;
+};
+
+struct riscv64_unwind_frame {
+	ulong fp;
+	ulong sp;
+	ulong pc;
+};
+
+#define KSYMS_START	(0x1)
+
+struct machine_specific {
+	ulong phys_base;
+	ulong page_offset;
+	ulong vmalloc_start_addr;
+	ulong vmalloc_end;
+	ulong vmemmap_vaddr;
+	ulong vmemmap_end;
+	ulong modules_vaddr;
+	ulong modules_end;
+	ulong kernel_link_addr;
+
+	ulong _page_present;
+	ulong _page_read;
+	ulong _page_write;
+	ulong _page_exec;
+	ulong _page_user;
+	ulong _page_global;
+	ulong _page_accessed;
+	ulong _page_dirty;
+	ulong _page_soft;
+
+	ulong _pfn_shift;
+
+	struct riscv64_register *crash_task_regs;
+};
+/* from arch/riscv/include/asm/pgtable-bits.h */
+#define _PAGE_PRESENT	(machdep->machspec->_page_present)
+#define _PAGE_READ	(machdep->machspec->_page_read)
+#define _PAGE_WRITE	(machdep->machspec->_page_write)
+#define _PAGE_EXEC	(machdep->machspec->_page_exec)
+#define _PAGE_USER	(machdep->machspec->_page_user)
+#define _PAGE_GLOBAL	(machdep->machspec->_page_global)
+#define _PAGE_ACCESSED	(machdep->machspec->_page_accessed)
+#define _PAGE_DIRTY	(machdep->machspec->_page_dirty)
+#define _PAGE_SOFT	(machdep->machspec->_page_soft)
+#define _PAGE_SEC	(machdep->machspec->_page_sec)
+#define _PAGE_SHARE	(machdep->machspec->_page_share)
+#define _PAGE_BUF	(machdep->machspec->_page_buf)
+#define _PAGE_CACHE	(machdep->machspec->_page_cache)
+#define _PAGE_SO	(machdep->machspec->_page_so)
+#define _PAGE_SPECIAL	_PAGE_SOFT
+#define _PAGE_TABLE	_PAGE_PRESENT
+#define _PAGE_PROT_NONE _PAGE_READ
+#define _PAGE_PFN_SHIFT 10
+
+#endif /* RISCV64 */
 
 /*
  * sparc64.c

@@ -114,14 +114,8 @@ typedef struct _dump_header_s {
 	struct new_utsname   dh_utsname;
 
 	/* the dump registers */
-#ifndef IA64
-#ifndef S390
-#ifndef S390X
-#ifndef ARM64
+#if !defined(IA64) && !defined(S390) && !defined(S390X) && !defined(ARM64) && !defined(RISCV64)
 	struct pt_regs       dh_regs;
-#endif
-#endif
-#endif
 #endif
 
 	/* the address of the current task */
