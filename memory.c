@@ -6599,7 +6599,7 @@ page_flags_init_from_pageflag_names(void)
 		}
 
 		if (!read_string((ulong)name, namebuf, BUFSIZE-1)) {
-			error(INFO, "failed to read pageflag_names entry (i: %d  name: \"%s\"  mask: %ld)\n",
+			error(INFO, "failed to read pageflag_names entry (i: %d  name: %lx  mask: %lx)\n",
 				i, name, mask);
 			goto pageflags_fail;
 		}
