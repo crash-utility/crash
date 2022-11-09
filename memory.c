@@ -4714,18 +4714,29 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 		 *  Latest kernels have mm_struct.mm_rss_stat[].
 		 */ 
 		if (VALID_MEMBER(mm_struct_rss_stat)) {
-			long anonpages, filepages;
+			long anonpages, filepages, count;
 
 			anonpages = tt->anonpages;
 			filepages = tt->filepages;
-			rss += LONG(tt->mm_struct +
+			count = LONG(tt->mm_struct +
 				OFFSET(mm_struct_rss_stat) +
 				OFFSET(mm_rss_stat_count) +
 				(filepages * sizeof(long)));
-			rss += LONG(tt->mm_struct +
+
+			/*
+			 * The counter is updated in asynchronous manner
+			 * and may become negative, see:
+			 * include/linux/mm.h: get_mm_counter()
+			 */
+			if (count > 0)
+				rss += count;
+
+			count = LONG(tt->mm_struct +
 				OFFSET(mm_struct_rss_stat) +
 				OFFSET(mm_rss_stat_count) +
 				(anonpages * sizeof(long)));
+			if (count > 0)
+				rss += count;
 		}
 
 		/* Check whether SPLIT_RSS_COUNTING is enabled */
@@ -4769,7 +4780,8 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 							RETURN_ON_ERROR))
 								continue;
 
-						rss_cache += sync_rss;
+						if (sync_rss > 0)
+							rss_cache += sync_rss;
 
 						/* count 1 -> anonpages */
 						if (!readmem(first->task +
@@ -4782,7 +4794,8 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 							RETURN_ON_ERROR))
 								continue;
 
-						rss_cache += sync_rss;
+						if (sync_rss > 0)
+							rss_cache += sync_rss;
 
 						if (first == last)
 							break;
