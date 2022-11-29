@@ -3504,7 +3504,7 @@ cmd_ps(void)
 	cpuspec = NULL;
 	flag = 0;
 
-        while ((c = getopt(argcnt, args, "ASgstcpkuGlmarC:y:")) != EOF) {
+        while ((c = getopt(argcnt, args, "HASgstcpkuGlmarC:y:")) != EOF) {
                 switch(c)
 		{
 		case 'k':
@@ -3613,6 +3613,10 @@ cmd_ps(void)
 		case 'A':
 			check_ps_exclusive(flag, PS_ACTIVE);
 			flag |= PS_ACTIVE;
+			break;
+
+		case 'H':
+			flag |= PS_NO_HEADER;
 			break;
 
 		default:
