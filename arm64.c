@@ -3479,7 +3479,7 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 	ms = machdep->machspec;
 	for (ptr = start - 8; ptr >= base; ptr--) {
 		if (bt->flags & BT_OPT_BACK_TRACE) {
-			if ((*ptr >= ms->crash_kexec_start) &&
+			if ((*ptr > ms->crash_kexec_start) &&
 			    (*ptr < ms->crash_kexec_end) &&
 			    INSTACK(*(ptr - 1), bt)) {
 				bt->bptr = ((ulong)(ptr - 1) - (ulong)base)
@@ -3488,7 +3488,7 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 					fprintf(fp, "%lx: %lx (crash_kexec)\n", bt->bptr, *ptr);
 				return TRUE;
 			}
-			if ((*ptr >= ms->crash_save_cpu_start) &&
+			if ((*ptr > ms->crash_save_cpu_start) &&
 			    (*ptr < ms->crash_save_cpu_end) &&
 			    INSTACK(*(ptr - 1), bt)) {
 				bt->bptr = ((ulong)(ptr - 1) - (ulong)base)
@@ -3498,14 +3498,14 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 				return TRUE;
 			}
 		} else {
-			if ((*ptr >= ms->machine_kexec_start) && (*ptr < ms->machine_kexec_end)) {
+			if ((*ptr > ms->machine_kexec_start) && (*ptr < ms->machine_kexec_end)) {
 				bt->bptr = ((ulong)ptr - (ulong)base)
 					   + task_to_stackbase(bt->tc->task);
 				if (CRASHDEBUG(1))
 					fprintf(fp, "%lx: %lx (machine_kexec)\n", bt->bptr, *ptr);
 				return TRUE;
 			}
-			if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+			if ((*ptr > ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
 				/*
 				 *  Stash the first crash_kexec frame in case the machine_kexec
 				 *  frame is not found.
@@ -3519,7 +3519,7 @@ arm64_in_kdump_text(struct bt_info *bt, struct arm64_stackframe *frame)
 				}
 				continue;
 			}
-			if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
+			if ((*ptr > ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
 				bt->bptr = ((ulong)ptr - (ulong)base)
 					   + task_to_stackbase(bt->tc->task);
 				if (CRASHDEBUG(1))
@@ -3566,7 +3566,7 @@ arm64_in_kdump_text_on_irq_stack(struct bt_info *bt)
 
 	for (ptr = start - 8; ptr >= base; ptr--) {
 		if (bt->flags & BT_OPT_BACK_TRACE) {
-			if ((*ptr >= ms->crash_kexec_start) &&
+			if ((*ptr > ms->crash_kexec_start) &&
 			    (*ptr < ms->crash_kexec_end) &&
 			    INSTACK(*(ptr - 1), bt)) {
 				bt->bptr = ((ulong)(ptr - 1) - (ulong)base) + stackbase;
@@ -3576,7 +3576,7 @@ arm64_in_kdump_text_on_irq_stack(struct bt_info *bt)
 				FREEBUF(stackbuf);
 				return TRUE;
 			}
-			if ((*ptr >= ms->crash_save_cpu_start) &&
+			if ((*ptr > ms->crash_save_cpu_start) &&
 			    (*ptr < ms->crash_save_cpu_end) &&
 			    INSTACK(*(ptr - 1), bt)) {
 				bt->bptr = ((ulong)(ptr - 1) - (ulong)base) + stackbase;
@@ -3587,7 +3587,7 @@ arm64_in_kdump_text_on_irq_stack(struct bt_info *bt)
 				return TRUE;
 			}
 		} else {
-			if ((*ptr >= ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
+			if ((*ptr > ms->crash_kexec_start) && (*ptr < ms->crash_kexec_end)) {
 				bt->bptr = ((ulong)ptr - (ulong)base) + stackbase;
 				if (CRASHDEBUG(1))
 					fprintf(fp, "%lx: %lx (crash_kexec on IRQ stack)\n", 
@@ -3595,7 +3595,7 @@ arm64_in_kdump_text_on_irq_stack(struct bt_info *bt)
 				FREEBUF(stackbuf);
 				return TRUE;
 			}
-			if ((*ptr >= ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
+			if ((*ptr > ms->crash_save_cpu_start) && (*ptr < ms->crash_save_cpu_end)) {
 				bt->bptr = ((ulong)ptr - (ulong)base) + stackbase;
 				if (CRASHDEBUG(1))
 					fprintf(fp, "%lx: %lx (crash_save_cpu on IRQ stack)\n", 
