@@ -1290,11 +1290,14 @@ x86_64_per_cpu_init(void)
 {
 	int i, cpus, cpunumber;
 	struct machine_specific *ms;
-	struct syment *irq_sp, *curr_sp, *cpu_sp, *hardirq_stack_ptr_sp;
+	struct syment *irq_sp, *curr_sp, *cpu_sp, *hardirq_stack_ptr_sp, *pcpu_sp;
 	ulong hardirq_stack_ptr;
 	ulong __per_cpu_load = 0;
+	long hardirq_addr = 0, cpu_addr = 0, curr_addr = 0;
 
 	ms = machdep->machspec;
+
+	pcpu_sp = per_cpu_symbol_search("pcpu_hot");
 
 	hardirq_stack_ptr_sp = per_cpu_symbol_search("hardirq_stack_ptr");
 	irq_sp = per_cpu_symbol_search("per_cpu__irq_stack_union");
@@ -1324,7 +1327,7 @@ x86_64_per_cpu_init(void)
 		return;
 	}
 
-	if (!cpu_sp || (!irq_sp && !hardirq_stack_ptr_sp))
+	if (!pcpu_sp && (!cpu_sp || (!irq_sp && !hardirq_stack_ptr_sp)))
 		return;
 
 	if (MEMBER_EXISTS("irq_stack_union", "irq_stack"))
@@ -1337,10 +1340,21 @@ x86_64_per_cpu_init(void)
 	if (kernel_symbol_exists("__per_cpu_load"))
 		__per_cpu_load = symbol_value("__per_cpu_load");
 
+	if (pcpu_sp) {
+		hardirq_addr = pcpu_sp->value + MEMBER_OFFSET("pcpu_hot", "hardirq_stack_ptr");
+		cpu_addr = pcpu_sp->value + MEMBER_OFFSET("pcpu_hot", "cpu_number");
+		curr_addr = pcpu_sp->value + MEMBER_OFFSET("pcpu_hot", "current_task");
+	} else {
+		if (hardirq_stack_ptr_sp)
+			hardirq_addr = hardirq_stack_ptr_sp->value;
+		cpu_addr = cpu_sp->value;
+		curr_addr = curr_sp->value;
+	}
+
 	for (i = cpus = 0; i < NR_CPUS; i++) {
 		if (__per_cpu_load && kt->__per_cpu_offset[i] == __per_cpu_load)
 			break;
-		if (!readmem(cpu_sp->value + kt->__per_cpu_offset[i],
+		if (!readmem(cpu_addr + kt->__per_cpu_offset[i],
 		    KVADDR, &cpunumber, sizeof(int),
 		    "cpu number (per_cpu)", QUIET|RETURN_ON_ERROR))
 			break;
@@ -1349,8 +1363,8 @@ x86_64_per_cpu_init(void)
 			break;
 		cpus++;
 
-		if (hardirq_stack_ptr_sp) {
-			if (!readmem(hardirq_stack_ptr_sp->value + kt->__per_cpu_offset[i],
+		if (pcpu_sp || hardirq_stack_ptr_sp) {
+			if (!readmem(hardirq_addr + kt->__per_cpu_offset[i],
 		    	    KVADDR, &hardirq_stack_ptr, sizeof(void *),
 		    	    "hardirq_stack_ptr (per_cpu)", QUIET|RETURN_ON_ERROR))
 				continue;
@@ -1373,13 +1387,13 @@ x86_64_per_cpu_init(void)
 	else
 		kt->cpus = cpus;
 
-	if (DUMPFILE() && curr_sp) {
+	if (DUMPFILE() && (pcpu_sp || curr_sp)) {
 		if ((ms->current = calloc(kt->cpus, sizeof(ulong))) == NULL)
 			error(FATAL, 
 			    "cannot calloc %d x86_64 current pointers!\n",
 				kt->cpus);
 		for (i = 0; i < kt->cpus; i++)
-			if (!readmem(curr_sp->value + kt->__per_cpu_offset[i], 
+			if (!readmem(curr_addr + kt->__per_cpu_offset[i],
 			    KVADDR, &ms->current[i], sizeof(ulong),
 			    "current_task (per_cpu)", RETURN_ON_ERROR))
 				continue;
@@ -5625,11 +5639,19 @@ x86_64_get_smp_cpus(void)
 	char *cpu_pda_buf;
 	ulong level4_pgt, cpu_pda_addr;
 	struct syment *sp;
-	ulong __per_cpu_load = 0;
+	ulong __per_cpu_load = 0, cpu_addr;
 
 	if (!VALID_STRUCT(x8664_pda)) {
-		if (!(sp = per_cpu_symbol_search("per_cpu__cpu_number")) ||
-		    !(kt->flags & PER_CPU_OFF))
+
+		if (!(kt->flags & PER_CPU_OFF))
+			return 1;
+
+		if ((sp = per_cpu_symbol_search("pcpu_hot")) &&
+		    (cpu_addr = MEMBER_OFFSET("pcpu_hot", "cpu_number")) != INVALID_OFFSET)
+			cpu_addr += sp->value;
+		else if ((sp = per_cpu_symbol_search("per_cpu__cpu_number")))
+			cpu_addr = sp->value;
+		else
 			return 1;
 
 		if (kernel_symbol_exists("__per_cpu_load"))
@@ -5638,7 +5660,7 @@ x86_64_get_smp_cpus(void)
 		for (i = cpus = 0; i < NR_CPUS; i++) {
 			if (__per_cpu_load && kt->__per_cpu_offset[i] == __per_cpu_load)
 				break;
-			if (!readmem(sp->value + kt->__per_cpu_offset[i], 
+			if (!readmem(cpu_addr + kt->__per_cpu_offset[i],
 			    KVADDR, &cpunumber, sizeof(int),
 			    "cpu number (per_cpu)", QUIET|RETURN_ON_ERROR))
 				break;
