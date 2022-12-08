@@ -4671,6 +4671,10 @@ arm64_calc_VA_BITS(void)
 		return;
 	} else if (arm64_set_va_bits_by_tcr()) {
 		return;
+	} else if (machdep->machspec->VA_BITS_ACTUAL) {
+		machdep->machspec->VA_BITS = machdep->machspec->VA_BITS_ACTUAL;
+		machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
+		return;
 	}
 
 	if (!(sp = symbol_search("swapper_pg_dir")) &&
