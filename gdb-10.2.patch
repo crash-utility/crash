@@ -1737,3 +1737,305 @@ exit 0
          struct field *nextfield;
          short nfields;
          struct type *typedef_type, *target_type;
+--- gdb-10.2/gdb/symtab.c.orig
++++ gdb-10.2/gdb/symtab.c
+@@ -6913,7 +6913,7 @@
+ #include "../../defs.h"
+ 
+ static void get_member_data(struct gnu_request *, struct type *, long, int);
+-static void dump_enum(struct type *, struct gnu_request *);
++static void walk_enum(struct type *, struct gnu_request *);
+ static void eval_enum(struct type *, struct gnu_request *);
+ static void gdb_get_line_number(struct gnu_request *);
+ static void gdb_get_datatype(struct gnu_request *);
+@@ -7122,6 +7122,79 @@
+ 
+ 
+ /*
++ * Follow the type linkage for full member and value type resolution, with callback
++ */
++static void drillDownType(struct gnu_request *req, struct type *type)
++{
++        while (type)
++        {
++                /* check out for stub types and pull in the definition instead */
++                if (TYPE_STUB(type) && TYPE_TAG_NAME(type)) {
++                        struct symbol *sym;
++                        sym = lookup_symbol(TYPE_TAG_NAME(type), 0, STRUCT_DOMAIN, 0).symbol;
++                        if (sym)
++                                type = sym->type;
++                }
++                switch (TYPE_CODE(type)) {
++                        drill_ops_t op;
++                        long l1, l2;
++                        int typecode;
++
++                case TYPE_CODE_PTR:
++                        req->tcb(EOP_POINTER, req, 0, 0, 0, 0);
++                        break;
++
++                case TYPE_CODE_TYPEDEF:
++                        req->is_typedef = 1;
++                        req->typecode = TYPE_CODE(type);
++                        if (!req->tcb(EOP_TYPEDEF, req, TYPE_NAME(type), 0, 0, 0))
++                                return;
++                        break;
++
++                case TYPE_CODE_FUNC:
++                        req->tcb(EOP_FUNCTION, req, 0, 0, 0, 0);
++                        break;
++
++                case TYPE_CODE_ARRAY:
++                        l1 = TYPE_LENGTH (type);
++                        l2 = TYPE_LENGTH (check_typedef(TYPE_TARGET_TYPE (type)));
++                        req->tcb(EOP_ARRAY, req, &l1, &l2, 0, 0);
++                        break;
++
++                case TYPE_CODE_VOID:
++                case TYPE_CODE_INT:
++                case TYPE_CODE_BOOL:
++                        l1 = TYPE_LENGTH(type);
++                        req->tcb(EOP_INT, req, &l1, 0, 0, 0);
++                        break;
++
++                case TYPE_CODE_UNION:
++                        op = EOP_UNION;
++                        goto label;
++
++                case TYPE_CODE_ENUM:
++                        op = EOP_ENUM;
++                        goto label;
++
++                case TYPE_CODE_STRUCT:
++                        op = EOP_STRUCT;
++                        goto label;
++
++                default:
++                        typecode = TYPE_CODE(type);
++                        req->tcb(EOP_OOPS, req, &typecode, "Unknown typecode", 0, 0);
++                        return; /* not reached */
++
++                label:
++                        l1 = TYPE_LENGTH(type);
++                        req->tcb(op, req, &l1, type, TYPE_TAG_NAME(type), 0);
++                }
++                type = TYPE_TARGET_TYPE(type);
++        }
++        req->tcb(EOP_DONE, req, 0, 0, 0, 0);
++}
++
++/*
+  *  General purpose routine for determining datatypes.
+  */
+ 
+@@ -7149,10 +7222,8 @@
+                 if (req->member)
+                         get_member_data(req, sym->type, 0, 1);
+ 
+-                if (TYPE_CODE(sym->type) == TYPE_CODE_ENUM) {
+-                        if (req->flags & GNU_PRINT_ENUMERATORS)
+-                                dump_enum(sym->type, req);
+-                }
++                if (TYPE_CODE(sym->type) == TYPE_CODE_ENUM)
++                        walk_enum(sym->type, req);
+ 
+                 return;
+         }
+@@ -7172,17 +7243,25 @@
+                 if (gdb_CRASHDEBUG(2))
+                         console("expr->elts[0].opcode: OP_VAR_VALUE\n");
+                 type = expr.get()->elts[2].symbol->type;
+-                if (req->flags & GNU_VAR_LENGTH_TYPECODE) {
++                if (req->tcb) {
++                        long value = SYMBOL_VALUE(expr->elts[2].symbol);
++                        /* callback with symbol value */
+                         req->typecode = TYPE_CODE(type);
+-                        req->length = TYPE_LENGTH(type);
+-                }
+-                if (TYPE_CODE(type) == TYPE_CODE_ENUM) {
+-                        req->typecode = TYPE_CODE(type);
+-                        req->value = SYMBOL_VALUE(expr.get()->elts[2].symbol);
+-                        req->tagname = (char *)TYPE_TAG_NAME(type);
+-                        if (!req->tagname) {
+-                                val = evaluate_type(expr.get());
+-                                eval_enum(value_type(val), req);
++                        req->tcb(EOP_VALUE, req, &value, 0, 0, 0);
++                        drillDownType(req, type);
++                } else {
++                        if (req->flags & GNU_VAR_LENGTH_TYPECODE) {
++                                req->typecode = TYPE_CODE(type);
++                                req->length = TYPE_LENGTH(type);
++                        }
++                        if (TYPE_CODE(type) == TYPE_CODE_ENUM) {
++                                req->typecode = TYPE_CODE(type);
++                                req->value = SYMBOL_VALUE(expr->elts[2].symbol);
++                                req->tagname = (char *)TYPE_TAG_NAME(type);
++                                if (!req->tagname) {
++                                        val = evaluate_type(expr.get());
++                                        eval_enum(value_type(val), req);
++                                }
+                         }
+                 }
+                 break;
+@@ -7192,26 +7271,21 @@
+                         console("expr->elts[0].opcode: OP_TYPE\n");
+                     type = expr.get()->elts[1].type;
+ 
+-                req->typecode = TYPE_CODE(type);
+-                req->length = TYPE_LENGTH(type);
+-
+-                if (TYPE_CODE(type) == TYPE_CODE_TYPEDEF) {
+-                        req->is_typedef = TYPE_CODE_TYPEDEF;
+-                        if ((typedef_type = check_typedef(type))) {
+-                                req->typecode = TYPE_CODE(typedef_type);
+-                                req->length = TYPE_LENGTH(typedef_type);
+-                                type = typedef_type;
+-                        }
+-                }
+-
+-                if (TYPE_CODE(type) == TYPE_CODE_ENUM) {
+-                        if (req->is_typedef)
+-                        if (req->flags & GNU_PRINT_ENUMERATORS) {
+-                                if (req->is_typedef)
+-                                        fprintf_filtered(gdb_stdout,
+-                                                "typedef ");
+-                                dump_enum(type, req);
++                if (req->tcb) {
++                        drillDownType(req, type);
++                } else {
++                        req->typecode = TYPE_CODE(type);
++                        req->length = TYPE_LENGTH(type);
++                        if (TYPE_CODE(type) == TYPE_CODE_TYPEDEF) {
++                                req->is_typedef = TYPE_CODE_TYPEDEF;
++                                if ((typedef_type = check_typedef(type))) {
++                                        req->typecode = TYPE_CODE(typedef_type);
++                                        req->length = TYPE_LENGTH(typedef_type);
++                                        type = typedef_type;
++                                }
+                         }
++                        if (TYPE_CODE(type) == TYPE_CODE_ENUM)
++                                walk_enum(type, req);
+                 }
+ 
+                 if (req->member)
+@@ -7233,36 +7307,38 @@
+  *  identifier, each on its own line.
+  */
+ static void
+-dump_enum(struct type *type, struct gnu_request *req)
++walk_enum(struct type *type, struct gnu_request *req)
+ {
+         int i;
+-        int len;
++        int len, print = (req->flags & GNU_PRINT_ENUMERATORS);
+         long long lastval;
+ 
+-        len = TYPE_NFIELDS (type);
+-        lastval = 0;
+-        if (TYPE_TAG_NAME(type))
+-                fprintf_filtered(gdb_stdout,
+-                        "enum %s {\n", TYPE_TAG_NAME (type));
+-        else
+-                fprintf_filtered(gdb_stdout, "enum {\n");
++        if (print) {
++                if (req->is_typedef)
++                        fprintf_filtered(gdb_stdout, "typedef ");
++                if (TYPE_TAG_NAME(type))
++                        fprintf_filtered(gdb_stdout, "enum %s {\n", TYPE_TAG_NAME (type));
++                else
++                        fprintf_filtered(gdb_stdout, "enum {\n");
++        }
+ 
++        len = TYPE_NFIELDS (type);
+         for (i = 0; i < len; i++) {
+-                fprintf_filtered(gdb_stdout, "  %s",
+-                        TYPE_FIELD_NAME (type, i));
+-                if (lastval != TYPE_FIELD_ENUMVAL (type, i)) {
+-                        fprintf_filtered (gdb_stdout, " = %s",
+-                                plongest(TYPE_FIELD_ENUMVAL (type, i)));
+-                        lastval = TYPE_FIELD_ENUMVAL (type, i);
+-                } else
++                if (print)
++                        fprintf_filtered(gdb_stdout, "  %s", TYPE_FIELD_NAME (type, i));
++                lastval = TYPE_FIELD_ENUMVAL (type, i);
++                if (print) {
+                         fprintf_filtered(gdb_stdout, " = %s", plongest(lastval));
+-                fprintf_filtered(gdb_stdout, "\n");
+-                lastval++;
++                        fprintf_filtered(gdb_stdout, "\n");
++                } else if (req->tcb)
++                        req->tcb(EOP_ENUMVAL, req, TYPE_FIELD_NAME (type, i), &lastval, 0, 0);
++        }
++        if (print) {
++                if (TYPE_TAG_NAME(type))
++                        fprintf_filtered(gdb_stdout, "};\n");
++                else
++                        fprintf_filtered(gdb_stdout, "} %s;\n", req->name);
+         }
+-        if (TYPE_TAG_NAME(type))
+-                fprintf_filtered(gdb_stdout, "};\n");
+-        else
+-                fprintf_filtered(gdb_stdout, "} %s;\n", req->name);
+ }
+ 
+ /*
+@@ -7320,26 +7396,43 @@
+         }
+ 
+         for (i = 0; i < nfields; i++) {
+-                if (STREQ(req->member, nextfield->name)) {
+-                        req->member_offset = offset + nextfield->loc.bitpos;
+-                        req->member_length = TYPE_LENGTH(nextfield->type());
+-                        req->member_typecode = TYPE_CODE(nextfield->type());
+-                        req->member_main_type_name = (char *)TYPE_NAME(nextfield->type());
+-                        req->member_main_type_tag_name = (char *)TYPE_TAG_NAME(nextfield->type());
+-                        target_type = TYPE_TARGET_TYPE(nextfield->type());
+-                        if (target_type) {
+-                                req->member_target_type_name = (char *)TYPE_NAME(target_type);
+-                                req->member_target_type_tag_name = (char *)TYPE_TAG_NAME(target_type);
+-                        }
+-                        if ((req->member_typecode == TYPE_CODE_TYPEDEF) &&
+-                            (typedef_type = check_typedef(nextfield->type())))
+-                                req->member_length = TYPE_LENGTH(typedef_type);
+-                        return;
+-                } else if (*nextfield->name == 0) { /* Anonymous struct/union */
++                if (*nextfield->name == 0) { /* Anonymous struct/union */
+                         get_member_data(req, nextfield->type(),
+                             offset + nextfield->loc.bitpos, 0);
+                         if (req->member_offset != -1)
+                                 return;
++                } else {
++                        /* callback may be just looking for a specific member name */
++                        if (req->tcb) {
++                                if (req->tcb(EOP_MEMBER_NAME, req, nextfield->name, 0, 0, 0)) {
++                                        long bitpos = FIELD_BITPOS(*nextfield);
++                                        long bitsize = FIELD_BITSIZE(*nextfield);
++                                        long len = TYPE_LENGTH(nextfield->type());
++                                        long byteOffset;
++                                        offset += nextfield->loc.bitpos;
++                                        byteOffset = offset/8;
++                                        console("EOP_MEMBER_SIZES\n");
++                                        req->tcb(EOP_MEMBER_SIZES, req, &byteOffset, &len, &bitpos, &bitsize);
++                                        /* callback with full type info */
++                                        drillDownType(req, nextfield->type());
++                                }
++                        } else if (STREQ(req->member, nextfield->name)) {
++                                req->member_offset = offset + nextfield->loc.bitpos;
++                                req->member_length = TYPE_LENGTH(nextfield->type());
++                                req->member_typecode = TYPE_CODE(nextfield->type());
++                                req->member_main_type_name = (char *)TYPE_NAME(nextfield->type());
++                                req->member_main_type_tag_name = (char *)TYPE_TAG_NAME(nextfield->type());
++                                target_type = TYPE_TARGET_TYPE(nextfield->type());
++                                if (target_type) {
++                                        req->member_target_type_name = (char *)TYPE_NAME(target_type);
++                                        req->member_target_type_tag_name = (char *)TYPE_TAG_NAME(target_type);
++                                }
++                                if ((req->member_typecode == TYPE_CODE_TYPEDEF) &&
++                                    (typedef_type = check_typedef(nextfield->type()))) {
++                                        req->member_length = TYPE_LENGTH(typedef_type);
++                                }
++                                return;
++                        }
+                 }
+                 nextfield++;
+         }

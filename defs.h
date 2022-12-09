@@ -4768,6 +4768,23 @@ static inline unsigned int __const_hweight8(unsigned long w)
 
 #endif /* !GDB_COMMON */
 
+typedef enum drill_ops_s {
+	EOP_MEMBER_SIZES,
+	EOP_MEMBER_NAME,
+	EOP_POINTER,
+	EOP_TYPEDEF,
+	EOP_INT,
+	EOP_VALUE,
+	EOP_ARRAY,
+	EOP_UNION,
+	EOP_ENUM,
+	EOP_ENUMVAL,
+	EOP_STRUCT,
+	EOP_FUNCTION,
+	EOP_DONE,
+	EOP_OOPS
+} drill_ops_t;
+
 /*
  *  Common request structure for BFD or GDB data or commands.
  */
@@ -4818,6 +4835,9 @@ struct gnu_request {
 	char *member_target_type_name;
 	char *member_target_type_tag_name;
 	char *type_tag_name;
+	/* callback function for 3rd party symbol and type (EPPIC for now) */
+	void *priv;
+	int (*tcb)(drill_ops_t, struct gnu_request *, const void *, const void *, const void *, const void *);
 };
 
 /*
