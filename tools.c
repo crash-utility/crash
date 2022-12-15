@@ -6902,3 +6902,31 @@ rb_last(struct rb_root *root)
 
 	return node;
 }
+
+long
+percpu_counter_sum_positive(ulong fbc)
+{
+	int i, count;
+	ulong addr;
+	long ret;
+
+	if (INVALID_MEMBER(percpu_counter_count))
+		return 0;
+
+	readmem(fbc + OFFSET(percpu_counter_count), KVADDR, &ret,
+		sizeof(long long), "percpu_counter.count", FAULT_ON_ERROR);
+
+	if (INVALID_MEMBER(percpu_counter_counters)) /* !CONFIG_SMP */
+		return (ret < 0) ? 0 : ret;
+
+	readmem(fbc + OFFSET(percpu_counter_counters), KVADDR, &addr,
+		sizeof(void *), "percpu_counter.counters", FAULT_ON_ERROR);
+
+	for (i = 0; i < kt->cpus; i++) {
+		readmem(addr + kt->__per_cpu_offset[i], KVADDR, &count,
+			sizeof(int), "percpu_counter.counters count", FAULT_ON_ERROR);
+		ret += count;
+	}
+
+	return (ret < 0) ? 0 : ret;
+}

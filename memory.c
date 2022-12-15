@@ -4713,7 +4713,7 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 		/*
 		 *  Latest kernels have mm_struct.mm_rss_stat[].
 		 */ 
-		if (VALID_MEMBER(mm_struct_rss_stat)) {
+		if (VALID_MEMBER(mm_struct_rss_stat) && VALID_MEMBER(mm_rss_stat_count)) {
 			long anonpages, filepages, count;
 
 			anonpages = tt->anonpages;
@@ -4737,6 +4737,18 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 				(anonpages * sizeof(long)));
 			if (count > 0)
 				rss += count;
+
+		} else if (VALID_MEMBER(mm_struct_rss_stat)) {
+			/* 6.2: struct percpu_counter rss_stat[NR_MM_COUNTERS] */
+			ulong fbc;
+
+			fbc = tc->mm_struct + OFFSET(mm_struct_rss_stat) +
+				(tt->filepages * SIZE(percpu_counter));
+			rss += percpu_counter_sum_positive(fbc);
+
+			fbc = tc->mm_struct + OFFSET(mm_struct_rss_stat) +
+				(tt->anonpages * SIZE(percpu_counter));
+			rss += percpu_counter_sum_positive(fbc);
 		}
 
 		/* Check whether SPLIT_RSS_COUNTING is enabled */

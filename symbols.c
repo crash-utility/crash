@@ -10633,8 +10633,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(ktime_t_nsec));
 	fprintf(fp, "              atomic_t_counter: %ld\n",
 		OFFSET(atomic_t_counter));
-	fprintf(fp, "          percpu_counter_count: %ld\n",
-		OFFSET(percpu_counter_count));
+	fprintf(fp, "          percpu_counter_count: %ld\n", OFFSET(percpu_counter_count));
+	fprintf(fp, "       percpu_counter_counters: %ld\n", OFFSET(percpu_counter_counters));
 	fprintf(fp, "             sk_buff_head_next: %ld\n",
 		OFFSET(sk_buff_head_next));
 	fprintf(fp, "             sk_buff_head_qlen: %ld\n",
@@ -11027,6 +11027,8 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "                 sbitmap_queue: %ld\n", SIZE(sbitmap_queue));
 	fprintf(fp, "                sbq_wait_state: %ld\n", SIZE(sbq_wait_state));
 	fprintf(fp, "                   blk_mq_tags: %ld\n", SIZE(blk_mq_tags));
+
+	fprintf(fp, "                percpu_counter: %ld\n", SIZE(percpu_counter));
 
         fprintf(fp, "\n                   array_table:\n");
 	/*

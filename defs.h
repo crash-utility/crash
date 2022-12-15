@@ -2181,6 +2181,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long blk_mq_tags_nr_reserved_tags;
 	long blk_mq_tags_rqs;
 	long request_queue_hctx_table;
+	long percpu_counter_counters;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2351,6 +2352,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long sbitmap_queue;
 	long sbq_wait_state;
 	long blk_mq_tags;
+	long percpu_counter;
 };
 
 struct array_table {
@@ -5325,6 +5327,7 @@ struct rb_node *rb_right(struct rb_node *, struct rb_node *);
 struct rb_node *rb_left(struct rb_node *, struct rb_node *);
 struct rb_node *rb_next(struct rb_node *);
 struct rb_node *rb_last(struct rb_root *);
+long percpu_counter_sum_positive(ulong fbc);
 
 /* 
  *  symbols.c 
