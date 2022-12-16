@@ -9710,6 +9710,7 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(slab_inuse));
         fprintf(fp, "                     slab_free: %ld\n",
                 OFFSET(slab_free));
+        fprintf(fp, "                slab_slab_list: %ld\n", OFFSET(slab_slab_list));
 
         fprintf(fp, "               kmem_cache_size: %ld\n",
                 OFFSET(kmem_cache_size));

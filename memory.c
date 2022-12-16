@@ -781,6 +781,8 @@ vm_init(void)
 		if (INVALID_MEMBER(page_slab))
 			MEMBER_OFFSET_INIT(page_slab, "slab", "slab_cache");
 
+		MEMBER_OFFSET_INIT(slab_slab_list, "slab", "slab_list");
+
 		MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
 		if (INVALID_MEMBER(page_slab_page))
 			ANON_MEMBER_OFFSET_INIT(page_slab_page, "page", "slab_page");
@@ -19474,6 +19476,7 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 {
 	ulong next, last, list_head, flags;
 	int first;
+	long list_off = VALID_MEMBER(slab_slab_list) ? OFFSET(slab_slab_list) : OFFSET(page_lru);
 
 	if (!node_ptr)
 		return;
@@ -19487,7 +19490,7 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 		next == list_head ? "  (empty)\n" : "");
 	first = 0;
         while (next != list_head) {
-		si->slab = last = next - OFFSET(page_lru);
+		si->slab = last = next - list_off;
 		if (first++ == 0)
 			fprintf(fp, "  %s", slab_hdr);
 
@@ -19510,7 +19513,7 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 
 		if (!IS_KVADDR(next) || 
 		    ((next != list_head) && 
-		     !is_page_ptr(next - OFFSET(page_lru), NULL))) {
+		     !is_page_ptr(next - list_off, NULL))) {
 			error(INFO, 
 			    "%s: partial list slab: %lx invalid page.lru.next: %lx\n", 
 				si->curname, last, next);
@@ -19537,7 +19540,7 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 		next == list_head ? "  (empty)\n" : "");
 	first = 0;
         while (next != list_head) {
-		si->slab = next - OFFSET(page_lru);
+		si->slab = next - list_off;
 		if (first++ == 0)
 			fprintf(fp, "  %s", slab_hdr);
 
@@ -19754,6 +19757,7 @@ count_partial(ulong node, struct meminfo *si, ulong *free)
 	short inuse, objects;
 	ulong total_inuse;
 	ulong count = 0;
+	long list_off = VALID_MEMBER(slab_slab_list) ? OFFSET(slab_slab_list) : OFFSET(page_lru);
 
 	count = 0;
 	total_inuse = 0;
@@ -19765,12 +19769,12 @@ count_partial(ulong node, struct meminfo *si, ulong *free)
 	hq_open();
 
 	while (next != list_head) {
-		if (!readmem(next - OFFSET(page_lru) + OFFSET(page_inuse), 
+		if (!readmem(next - list_off + OFFSET(page_inuse),
 		    KVADDR, &inuse, sizeof(ushort), "page.inuse", RETURN_ON_ERROR)) {
 			hq_close();
 			return -1;
 		}
-		last = next - OFFSET(page_lru);
+		last = next - list_off;
 
 		if (inuse == -1) {
 			error(INFO, 
@@ -19796,7 +19800,7 @@ count_partial(ulong node, struct meminfo *si, ulong *free)
 		}
 		if (!IS_KVADDR(next) ||
 		    ((next != list_head) && 
-		     !is_page_ptr(next - OFFSET(page_lru), NULL))) {
+		     !is_page_ptr(next - list_off, NULL))) {
 			error(INFO, "%s: partial list slab: %lx invalid page.lru.next: %lx\n", 
 				si->curname, last, next);
 			break;
