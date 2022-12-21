@@ -1491,6 +1491,10 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
 		}
 
 		sbp = ULONG(vfsmount_buf + OFFSET(vfsmount_mnt_sb)); 
+		if (!IS_KVADDR(sbp)) {
+			error(WARNING, "cannot get super_block from vfsmnt: 0x%lx\n", *vfsmnt);
+			continue;
+		}
 
 		if (flags)
 			fprintf(fp, "%s", mount_hdr);
