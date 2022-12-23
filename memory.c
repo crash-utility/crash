@@ -8388,6 +8388,11 @@ dump_kmeminfo(void)
 			get_slabs = nr_slab;
 			if (dump_vm_stat("NR_SLAB_UNRECLAIMABLE", &nr_slab, 0))
 				get_slabs += nr_slab;
+		} else if (dump_vm_stat("NR_SLAB_RECLAIMABLE_B", &nr_slab, 0)) {
+			/* 5.9 and later */
+			get_slabs = nr_slab;
+			if (dump_vm_stat("NR_SLAB_UNRECLAIMABLE_B", &nr_slab, 0))
+				get_slabs += nr_slab;
 		}
 	}
 
