@@ -2039,3 +2039,42 @@ exit 0
                  }
                  nextfield++;
          }
+--- gdb-10.2/gdb/gdbtypes.c.orig
++++ gdb-10.2/gdb/gdbtypes.c
+@@ -5492,27 +5492,25 @@ copy_type_recursive (struct objfile *objfile,
+ }
+ 
+ /* Make a copy of the given TYPE, except that the pointer & reference
+-   types are not preserved.
+-   
+-   This function assumes that the given type has an associated objfile.
+-   This objfile is used to allocate the new type.  */
++   types are not preserved. */
+ 
+ struct type *
+ copy_type (const struct type *type)
+ {
+-  struct type *new_type;
+-
+-  gdb_assert (TYPE_OBJFILE_OWNED (type));
++  struct type *new_type = alloc_type_copy (type);
+ 
+-  new_type = alloc_type_copy (type);
+   TYPE_INSTANCE_FLAGS (new_type) = TYPE_INSTANCE_FLAGS (type);
+   TYPE_LENGTH (new_type) = TYPE_LENGTH (type);
+   memcpy (TYPE_MAIN_TYPE (new_type), TYPE_MAIN_TYPE (type),
+ 	  sizeof (struct main_type));
+   if (type->main_type->dyn_prop_list != NULL)
+-    new_type->main_type->dyn_prop_list
+-      = copy_dynamic_prop_list (&TYPE_OBJFILE (type) -> objfile_obstack,
+-				type->main_type->dyn_prop_list);
++    {
++      struct obstack *storage = (TYPE_OBJFILE_OWNED (type)
++                                ? &TYPE_OBJFILE (type)->objfile_obstack
++                                : gdbarch_obstack (TYPE_OWNER (type).gdbarch));
++      new_type->main_type->dyn_prop_list
++       = copy_dynamic_prop_list (storage, type->main_type->dyn_prop_list);
++    }
+ 
+   return new_type;
+ }
