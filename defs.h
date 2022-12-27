@@ -3493,6 +3493,10 @@ struct arm64_stackframe {
 #define _MAX_PHYSMEM_BITS       48
 #endif  /* MIPS64 */
 
+#ifndef EM_RISCV
+#define EM_RISCV		243
+#endif
+
 #ifdef RISCV64
 #define _64BIT_
 #define MACHINE_TYPE		"RISCV64"
