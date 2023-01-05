@@ -78,6 +78,7 @@ struct meminfo {           /* general purpose memory information structure */
 	int *freelist;
 	int freelist_index_size;
 	ulong random;
+	ulong list_offset;
 };
 
 /*
@@ -553,6 +554,8 @@ vm_init(void)
 			MEMBER_OFFSET_INIT(page_freelist, "slab", "freelist");
 		if (INVALID_MEMBER(page_active))
 			MEMBER_OFFSET_INIT(page_active, "slab", "active");
+
+		MEMBER_OFFSET_INIT(slab_slab_list, "slab", "slab_list");
 	}
 
         if (!VALID_STRUCT(kmem_slab_s) && VALID_STRUCT(slab_s)) {
@@ -10767,6 +10770,8 @@ dump_kmem_cache_percpu_v2(struct meminfo *si)
 	if (vt->flags & SLAB_OVERLOAD_PAGE) {
 		si->freelist = si->kmem_bufctl;
 		si->freelist_index_size = slab_freelist_index_size();
+		si->list_offset = VALID_MEMBER(slab_slab_list) ?
+					OFFSET(slab_slab_list) : OFFSET(page_lru);
 	}
 	for (i = 0; i < vt->kmem_max_cpus; i++) 
 		si->cpudata[i] = (ulong *)
@@ -11983,7 +11988,7 @@ do_slab_chain_slab_overload_page(long cmd, struct meminfo *si)
 					}
 					last = si->slab;
 		
-					readmem(si->slab - OFFSET(page_lru), KVADDR, page_buf, 
+					readmem(si->slab - si->list_offset, KVADDR, page_buf,
 						SIZE(page), "page (slab) buffer", 
 						FAULT_ON_ERROR);
 		
@@ -11996,8 +12001,7 @@ do_slab_chain_slab_overload_page(long cmd, struct meminfo *si)
 	
 					si->num_slabs++;
 		
-					si->slab = ULONG(page_buf + 
-						OFFSET(page_lru));
+					si->slab = ULONG(page_buf + si->list_offset);
 
 					/*
 				 	 *  Check for slab transition. (Tony Dziedzic)
@@ -12024,11 +12028,11 @@ do_slab_chain_slab_overload_page(long cmd, struct meminfo *si)
 	case SLAB_WALKTHROUGH:
 		if (si->flags & SLAB_OVERLOAD_PAGE_PTR) {
 			specified_slab = si->spec_addr;
-			si->slab = si->spec_addr + OFFSET(page_lru);
+			si->slab = si->spec_addr + si->list_offset;
 		} else { 
 			specified_slab = si->slab;    
 			if (si->slab)
-				si->slab += OFFSET(page_lru);
+				si->slab += si->list_offset;
 		}
 		si->flags |= (SLAB_WALKTHROUGH|SLAB_FIRST_NODE);
 		si->flags &= ~SLAB_GET_COUNTS;
@@ -12082,7 +12086,7 @@ do_slab_chain_slab_overload_page(long cmd, struct meminfo *si)
 				if (si->slab == slab_chains[s])
 					continue;
 				
-				readmem(si->slab - OFFSET(page_lru), KVADDR, page_buf, 
+				readmem(si->slab - si->list_offset, KVADDR, page_buf,
 						SIZE(page), "page (slab) buffer", 
 						FAULT_ON_ERROR);
 		
@@ -12242,7 +12246,7 @@ verify_slab_overload_page(struct meminfo *si, ulong last, int s)
 
 	errcnt = 0;
 
-        if (!readmem(si->slab - OFFSET(page_lru), KVADDR, page_buf,
+        if (!readmem(si->slab - si->list_offset, KVADDR, page_buf,
             SIZE(page), "page (slab) buffer", QUIET|RETURN_ON_ERROR)) {
                 error(INFO, "%s: %s list: bad slab pointer: %lx\n",
                         si->curname, list, si->slab);
@@ -12250,7 +12254,7 @@ verify_slab_overload_page(struct meminfo *si, ulong last, int s)
 		return FALSE;
         }                        
 
-        list_head = (struct kernel_list_head *)(page_buf + OFFSET(page_lru));
+        list_head = (struct kernel_list_head *)(page_buf + si->list_offset);
 	if (!IS_KVADDR((ulong)list_head->next) || 
 	    !accessible((ulong)list_head->next)) {
                 error(INFO, "%s: %s list: page/slab: %lx  bad next pointer: %lx\n",
@@ -12569,7 +12573,7 @@ dump_slab_overload_page(struct meminfo *si)
 	int tmp;
 	ulong slab_overload_page, freelist;
 
-	slab_overload_page = si->slab - OFFSET(page_lru);
+	slab_overload_page = si->slab - si->list_offset;
 
         readmem(slab_overload_page + OFFSET(page_s_mem),
                 KVADDR, &si->s_mem, sizeof(ulong),
@@ -12796,12 +12800,12 @@ gather_slab_free_list_slab_overload_page(struct meminfo *si)
 
 	if (CRASHDEBUG(1))
 		fprintf(fp, "slab page: %lx active: %ld si->c_num: %ld\n", 
-			si->slab - OFFSET(page_lru), si->s_inuse, si->c_num);
+			si->slab - si->list_offset, si->s_inuse, si->c_num);
 
 	if (si->s_inuse == si->c_num )
 		return;
 
-	slab_overload_page = si->slab - OFFSET(page_lru);
+	slab_overload_page = si->slab - si->list_offset;
 	readmem(slab_overload_page + OFFSET(page_freelist),
 		KVADDR, &freelist, sizeof(void *), "page freelist",
 		FAULT_ON_ERROR);
@@ -13099,7 +13103,7 @@ dump_slab_objects_percpu(struct meminfo *si)
 
 	if ((si->flags & ADDRESS_SPECIFIED) && 
 	    (vt->flags & SLAB_OVERLOAD_PAGE)) {
-		readmem(si->slab - OFFSET(page_lru) + OFFSET(page_freelist),
+		readmem(si->slab - si->list_offset + OFFSET(page_freelist),
 			KVADDR, &freelist, sizeof(ulong), "page.freelist", 
 			FAULT_ON_ERROR);
 
@@ -18713,6 +18717,9 @@ dump_kmem_cache_slub(struct meminfo *si)
 
 	si->cache_buf = GETBUF(SIZE(kmem_cache));
 
+	si->list_offset = VALID_MEMBER(slab_slab_list) ?
+				OFFSET(slab_slab_list) : OFFSET(page_lru);
+
 	if (VALID_MEMBER(page_objects) &&
 	    OFFSET(page_objects) == OFFSET(page_inuse))
 		si->flags |= SLAB_BITFIELD;
@@ -19484,7 +19491,6 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 {
 	ulong next, last, list_head, flags;
 	int first;
-	long list_off = VALID_MEMBER(slab_slab_list) ? OFFSET(slab_slab_list) : OFFSET(page_lru);
 
 	if (!node_ptr)
 		return;
@@ -19498,7 +19504,7 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 		next == list_head ? "  (empty)\n" : "");
 	first = 0;
         while (next != list_head) {
-		si->slab = last = next - list_off;
+		si->slab = last = next - si->list_offset;
 		if (first++ == 0)
 			fprintf(fp, "  %s", slab_hdr);
 
@@ -19521,7 +19527,7 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 
 		if (!IS_KVADDR(next) || 
 		    ((next != list_head) && 
-		     !is_page_ptr(next - list_off, NULL))) {
+		     !is_page_ptr(next - si->list_offset, NULL))) {
 			error(INFO, 
 			    "%s: partial list slab: %lx invalid page.lru.next: %lx\n", 
 				si->curname, last, next);
@@ -19548,7 +19554,7 @@ do_node_lists_slub(struct meminfo *si, ulong node_ptr, int node)
 		next == list_head ? "  (empty)\n" : "");
 	first = 0;
         while (next != list_head) {
-		si->slab = next - list_off;
+		si->slab = next - si->list_offset;
 		if (first++ == 0)
 			fprintf(fp, "  %s", slab_hdr);
 
@@ -19765,7 +19771,6 @@ count_partial(ulong node, struct meminfo *si, ulong *free)
 	short inuse, objects;
 	ulong total_inuse;
 	ulong count = 0;
-	long list_off = VALID_MEMBER(slab_slab_list) ? OFFSET(slab_slab_list) : OFFSET(page_lru);
 
 	count = 0;
 	total_inuse = 0;
@@ -19777,12 +19782,12 @@ count_partial(ulong node, struct meminfo *si, ulong *free)
 	hq_open();
 
 	while (next != list_head) {
-		if (!readmem(next - list_off + OFFSET(page_inuse),
+		if (!readmem(next - si->list_offset + OFFSET(page_inuse),
 		    KVADDR, &inuse, sizeof(ushort), "page.inuse", RETURN_ON_ERROR)) {
 			hq_close();
 			return -1;
 		}
-		last = next - list_off;
+		last = next - si->list_offset;
 
 		if (inuse == -1) {
 			error(INFO, 
@@ -19808,7 +19813,7 @@ count_partial(ulong node, struct meminfo *si, ulong *free)
 		}
 		if (!IS_KVADDR(next) ||
 		    ((next != list_head) && 
-		     !is_page_ptr(next - list_off, NULL))) {
+		     !is_page_ptr(next - si->list_offset, NULL))) {
 			error(INFO, "%s: partial list slab: %lx invalid page.lru.next: %lx\n", 
 				si->curname, last, next);
 			break;
