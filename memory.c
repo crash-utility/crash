@@ -535,8 +535,11 @@ vm_init(void)
 	/*
 	 * slab: overload struct slab over struct page 
          * https://lkml.org/lkml/2013/10/16/155
+	 *
+	 * commit e36ce448a08d removed kmem_cache.freelist_cache in 6.1,
+	 * so use freelist_size instead.
 	 */
-	if (MEMBER_EXISTS("kmem_cache", "freelist_cache")) {
+	if (MEMBER_EXISTS("kmem_cache", "freelist_size")) {
 		vt->flags |= SLAB_OVERLOAD_PAGE;
 		ANON_MEMBER_OFFSET_INIT(page_s_mem, "page", "s_mem");
 		ANON_MEMBER_OFFSET_INIT(page_freelist, "page", "freelist");
