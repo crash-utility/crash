@@ -5762,6 +5762,12 @@ int cleanup_memory_driver(void);
 
 void maple_init(void);
 int do_mptree(struct tree_data *);
+ulong do_maple_tree(ulong, int, struct list_pair *);
+#define MAPLE_TREE_COUNT   (1)
+#define MAPLE_TREE_SEARCH  (2)
+#define MAPLE_TREE_DUMP    (3)
+#define MAPLE_TREE_GATHER  (4)
+#define MAPLE_TREE_DUMP_CB (5)
 
 /*
  *  help.c 

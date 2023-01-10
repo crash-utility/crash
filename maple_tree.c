@@ -40,6 +40,12 @@ static inline bool ma_is_leaf(const enum maple_type type)
 
 /*************** For cmd_tree ********************/
 
+struct do_maple_tree_info {
+	ulong maxcount;
+	ulong count;
+	void *data;
+};
+
 struct maple_tree_ops {
 	void (*entry)(ulong node, ulong slot, const char *path,
 		      ulong index, void *private);
@@ -281,6 +287,9 @@ static void do_mt_entry(ulong entry, ulong min, ulong max, uint depth,
 	static struct req_entry **e = NULL;
 	struct tree_data *td = ops->is_td ? (struct tree_data *)ops->private : NULL;
 
+	if (ops->entry)
+		ops->entry(entry, entry, path, max, ops->private);
+
 	if (!td)
 		return;
 
@@ -422,6 +431,142 @@ int do_mptree(struct tree_data *td)
 	do_maple_tree_traverse(td->start, is_root, &ops);
 
 	return 0;
+}
+
+/************* For do_maple_tree *****************/
+static void do_maple_tree_count(ulong node, ulong slot, const char *path,
+				ulong index, void *private)
+{
+	struct do_maple_tree_info *info = private;
+	info->count++;
+}
+
+static void do_maple_tree_search(ulong node, ulong slot, const char *path,
+				 ulong index, void *private)
+{
+	struct do_maple_tree_info *info = private;
+	struct list_pair *lp = info->data;
+
+	if (lp->index == index) {
+		lp->value = (void *)slot;
+		info->count = 1;
+	}
+}
+
+static void do_maple_tree_dump(ulong node, ulong slot, const char *path,
+			       ulong index, void *private)
+{
+	struct do_maple_tree_info *info = private;
+	fprintf(fp, "[%lu] %lx\n", index, slot);
+	info->count++;
+}
+
+static void do_maple_tree_gather(ulong node, ulong slot, const char *path,
+				 ulong index, void *private)
+{
+	struct do_maple_tree_info *info = private;
+	struct list_pair *lp = info->data;
+
+	if (info->maxcount) {
+		lp[info->count].index = index;
+		lp[info->count].value = (void *)slot;
+
+		info->count++;
+		info->maxcount--;
+	}
+}
+
+static void do_maple_tree_dump_cb(ulong node, ulong slot, const char *path,
+				  ulong index, void *private)
+{
+	struct do_maple_tree_info *info = private;
+	struct list_pair *lp = info->data;
+	int (*cb)(ulong) = lp->value;
+
+	/* Caller defined operation */
+	if (!cb(slot)) {
+		error(FATAL, "do_maple_tree: callback "
+		      "operation failed: entry: %ld  item: %lx\n",
+		      info->count, slot);
+	}
+	info->count++;
+}
+
+/*
+ *  do_maple_tree argument usage:
+ *
+ *    root: Address of a maple_tree_root structure
+ *
+ *    flag: MAPLE_TREE_COUNT - Return the number of entries in the tree.
+ *          MAPLE_TREE_SEARCH - Search for an entry at lp->index; if found,
+ *            store the entry in lp->value and return a count of 1; otherwise
+ *            return a count of 0.
+ *          MAPLE_TREE_DUMP - Dump all existing index/value pairs.
+ *          MAPLE_TREE_GATHER - Store all existing index/value pairs in the
+ *            passed-in array of list_pair structs starting at lp,
+ *            returning the count of entries stored; the caller can/should
+ *            limit the number of returned entries by putting the array size
+ *            (max count) in the lp->index field of the first structure
+ *            in the passed-in array.
+ *          MAPLE_TREE_DUMP_CB - Similar with MAPLE_TREE_DUMP, but for each
+ *            maple tree entry, a user defined callback at lp->value will
+ *            be invoked.
+ *
+ *     lp: Unused by MAPLE_TREE_COUNT and MAPLE_TREE_DUMP.
+ *          A pointer to a list_pair structure for MAPLE_TREE_SEARCH.
+ *          A pointer to an array of list_pair structures for
+ *          MAPLE_TREE_GATHER; the dimension (max count) of the array may
+ *          be stored in the index field of the first structure to avoid
+ *          any chance of an overrun.
+ *          For MAPLE_TREE_DUMP_CB, the lp->value must be initialized as a
+ *          callback function.  The callback prototype must be: int (*)(ulong);
+ */
+ulong
+do_maple_tree(ulong root, int flag, struct list_pair *lp)
+{
+	struct do_maple_tree_info info = {
+		.count		= 0,
+		.data		= lp,
+	};
+	struct maple_tree_ops ops = {
+		.private	= &info,
+		.is_td		= false,
+	};
+
+	switch (flag)
+	{
+	case MAPLE_TREE_COUNT:
+		ops.entry = do_maple_tree_count;
+		break;
+
+	case MAPLE_TREE_SEARCH:
+		ops.entry = do_maple_tree_search;
+		break;
+
+	case MAPLE_TREE_DUMP:
+		ops.entry = do_maple_tree_dump;
+		break;
+
+	case MAPLE_TREE_GATHER:
+		if (!(info.maxcount = lp->index))
+			info.maxcount = (ulong)(-1);   /* caller beware */
+
+		ops.entry = do_maple_tree_gather;
+		break;
+
+	case MAPLE_TREE_DUMP_CB:
+		if (lp->value == NULL) {
+			error(FATAL, "do_maple_tree: need set callback function");
+		}
+		ops.entry = do_maple_tree_dump_cb;
+		break;
+
+	default:
+		error(FATAL, "do_maple_tree: invalid flag: %lx\n", flag);
+	}
+
+	do_maple_tree_traverse(root, true, &ops);
+	return info.count;
 }
 
 /***********************************************/
