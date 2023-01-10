@@ -21,6 +21,7 @@
 #include <ctype.h>
 #include <netinet/in.h>
 #include <byteswap.h>
+#include "maple_tree.h"
 
 struct meminfo {           /* general purpose memory information structure */
         ulong cache;       /* used by the various memory searching/dumping */
@@ -135,6 +136,27 @@ struct searchinfo {
 		} s_chars;
 	} s_parms;
 	char buf[BUFSIZE];
+};
+
+struct handle_each_vm_area_args {
+	ulong task;
+	ulong flag;
+	ulong vaddr;
+	struct reference *ref;
+	char *vma_header;
+	char *buf1;
+	char *buf2;
+	char *buf3;
+	char *buf4;
+	char *buf5;
+	ulong vma;
+	char **vma_buf;
+	struct task_mem_usage *tm;
+	int *found;
+	int *single_vma_found;
+	unsigned int radix;
+	struct task_context *tc;
+	ulong *single_vma;
 };
 
 static char *memtype_string(int, int);
@@ -299,6 +321,7 @@ static void dump_page_flags(ulonglong);
 static ulong kmem_cache_nodelists(ulong);
 static void dump_hstates(void);
 static ulong freelist_ptr(struct meminfo *, ulong, ulong);
+static ulong handle_each_vm_area(struct handle_each_vm_area_args *);
 
 /*
  *  Memory display modes specific to this file.
@@ -363,6 +386,10 @@ vm_init(void)
 
         MEMBER_OFFSET_INIT(task_struct_mm, "task_struct", "mm");
         MEMBER_OFFSET_INIT(mm_struct_mmap, "mm_struct", "mmap");
+	MEMBER_OFFSET_INIT(mm_struct_mm_mt, "mm_struct", "mm_mt");
+	if (VALID_MEMBER(mm_struct_mm_mt)) {
+		maple_init();
+	}
         MEMBER_OFFSET_INIT(mm_struct_pgd, "mm_struct", "pgd");
 	MEMBER_OFFSET_INIT(mm_struct_rss, "mm_struct", "rss");
 	if (!VALID_MEMBER(mm_struct_rss))
@@ -3874,7 +3901,7 @@ bailout:
  *                        for references -- and only then does a display      
  */
 
-#define PRINT_VM_DATA()                                                  \
+#define PRINT_VM_DATA(buf4, buf5, tm)                                    \
                 {                                                        \
                 fprintf(fp, "%s  %s  ",                                  \
                     mkstring(buf4, VADDR_PRLEN, CENTER|LJUST, "MM"),     \
@@ -3896,9 +3923,9 @@ bailout:
                     mkstring(buf5, 8, CENTER|LJUST, NULL));              \
 	        }
 
-#define PRINT_VMA_DATA()                                                       \
+#define PRINT_VMA_DATA(buf1, buf2, buf3, buf4, vma)                            \
 	fprintf(fp, "%s%s%s%s%s %6llx%s%s\n",                                  \
-                mkstring(buf4, VADDR_PRLEN, CENTER|LJUST|LONG_HEX, MKSTR(vma)),       \
+                mkstring(buf4, VADDR_PRLEN, CENTER|LJUST|LONG_HEX, MKSTR(vma)),\
 	        space(MINSPACE),                                               \
                 mkstring(buf2, UVADDR_PRLEN, RJUST|LONG_HEX, MKSTR(vm_start)), \
                 space(MINSPACE),                                               \
@@ -3925,18 +3952,137 @@ bailout:
    (DO_REF_SEARCH(X) && (string_exists(S)) && FILENAME_COMPONENT((S),(X)->str))
 #define VM_REF_FOUND(X)    ((X) && ((X)->cmdflags & VM_REF_HEADER))
 
-ulong
-vm_area_dump(ulong task, ulong flag, ulong vaddr, struct reference *ref)
+static ulong handle_each_vm_area(struct handle_each_vm_area_args *args)
 {
-        struct task_context *tc;
-	ulong vma;
+	char *dentry_buf, *file_buf;
 	ulong vm_start;
 	ulong vm_end;
-	ulong vm_next, vm_mm;
-	char *dentry_buf, *vma_buf, *file_buf;
+	ulong vm_mm;
 	ulonglong vm_flags;
 	ulong vm_file, inode;
 	ulong dentry, vfsmnt;
+
+	if ((args->flag & PHYSADDR) && !DO_REF_SEARCH(args->ref))
+		fprintf(fp, "%s", args->vma_header);
+
+	inode = 0;
+	BZERO(args->buf1, BUFSIZE);
+	*(args->vma_buf) = fill_vma_cache(args->vma);
+
+	vm_mm = ULONG(*(args->vma_buf) + OFFSET(vm_area_struct_vm_mm));
+	vm_end = ULONG(*(args->vma_buf) + OFFSET(vm_area_struct_vm_end));
+	vm_start = ULONG(*(args->vma_buf) + OFFSET(vm_area_struct_vm_start));
+	vm_flags = get_vm_flags(*(args->vma_buf));
+	vm_file = ULONG(*(args->vma_buf) + OFFSET(vm_area_struct_vm_file));
+
+	if (args->flag & PRINT_SINGLE_VMA) {
+		if (args->vma != *(args->single_vma))
+			return 0;
+		fprintf(fp, "%s", args->vma_header);
+		*(args->single_vma_found) = TRUE;
+	}
+
+	if (args->flag & PRINT_VMA_STRUCTS) {
+		dump_struct("vm_area_struct", args->vma, args->radix);
+		return 0;
+	}
+
+	if (vm_file && !(args->flag & VERIFY_ADDR)) {
+		file_buf = fill_file_cache(vm_file);
+		dentry = ULONG(file_buf + OFFSET(file_f_dentry));
+		dentry_buf = NULL;
+		if (dentry) {
+			dentry_buf = fill_dentry_cache(dentry);
+			if (VALID_MEMBER(file_f_vfsmnt)) {
+				vfsmnt = ULONG(file_buf + OFFSET(file_f_vfsmnt));
+				get_pathname(dentry, args->buf1, BUFSIZE, 1, vfsmnt);
+			} else
+				get_pathname(dentry, args->buf1, BUFSIZE, 1, 0);
+		}
+		if ((args->flag & PRINT_INODES) && dentry)
+			inode = ULONG(dentry_buf + OFFSET(dentry_d_inode));
+	}
+
+	if (!(args->flag & UVADDR) || ((args->flag & UVADDR) &&
+	    ((args->vaddr >= vm_start) && (args->vaddr < vm_end)))) {
+		*(args->found) = TRUE;
+
+		if (args->flag & VERIFY_ADDR)
+			return args->vma;
+
+		if (DO_REF_SEARCH(args->ref)) {
+			if (VM_REF_CHECK_HEXVAL(args->ref, args->vma) ||
+			    VM_REF_CHECK_HEXVAL(args->ref, (ulong)vm_flags) ||
+			    VM_REF_CHECK_STRING(args->ref, args->buf1)) {
+				if (!(args->ref->cmdflags & VM_REF_HEADER)) {
+					print_task_header(fp, args->tc, 0);
+					PRINT_VM_DATA(args->buf4, args->buf5, args->tm);
+					args->ref->cmdflags |= VM_REF_HEADER;
+				}
+				if (!(args->ref->cmdflags & VM_REF_VMA) ||
+				    (args->ref->cmdflags & VM_REF_PAGE)) {
+					fprintf(fp, "%s", args->vma_header);
+					args->ref->cmdflags |= VM_REF_VMA;
+					args->ref->cmdflags &= ~VM_REF_PAGE;
+					args->ref->ref1 = args->vma;
+				}
+				PRINT_VMA_DATA(args->buf1, args->buf2,
+						args->buf3, args->buf4, args->vma);
+			}
+
+			if (vm_area_page_dump(args->vma, args->task,
+			    vm_start, vm_end, vm_mm, args->ref)) {
+				if (!(args->ref->cmdflags & VM_REF_HEADER)) {
+					print_task_header(fp, args->tc, 0);
+					PRINT_VM_DATA(args->buf4, args->buf5, args->tm);
+					args->ref->cmdflags |= VM_REF_HEADER;
+				}
+				if (!(args->ref->cmdflags & VM_REF_VMA) ||
+				    (args->ref->ref1 != args->vma)) {
+					fprintf(fp, "%s", args->vma_header);
+					PRINT_VMA_DATA(args->buf1, args->buf2,
+							args->buf3, args->buf4, args->vma);
+					args->ref->cmdflags |= VM_REF_VMA;
+					args->ref->ref1 = args->vma;
+				}
+
+				args->ref->cmdflags |= VM_REF_DISPLAY;
+				vm_area_page_dump(args->vma, args->task,
+					vm_start, vm_end, vm_mm, args->ref);
+				args->ref->cmdflags &= ~VM_REF_DISPLAY;
+			}
+
+			return 0;
+		}
+
+		if (inode) {
+			fprintf(fp, "%lx%s%s%s%s%s%6llx%s%lx %s\n",
+				args->vma, space(MINSPACE),
+				mkstring(args->buf2, UVADDR_PRLEN, RJUST|LONG_HEX,
+				MKSTR(vm_start)), space(MINSPACE),
+				mkstring(args->buf3, UVADDR_PRLEN, RJUST|LONG_HEX,
+				MKSTR(vm_end)), space(MINSPACE),
+				vm_flags, space(MINSPACE), inode, args->buf1);
+		} else {
+			PRINT_VMA_DATA(args->buf1, args->buf2,
+					args->buf3, args->buf4, args->vma);
+
+			if (args->flag & (PHYSADDR|PRINT_SINGLE_VMA))
+				vm_area_page_dump(args->vma, args->task,
+				    vm_start, vm_end, vm_mm, args->ref);
+		}
+
+		if (args->flag & UVADDR)
+			return args->vma;
+	}
+	return 0;
+}
+
+ulong
+vm_area_dump(ulong task, ulong flag, ulong vaddr, struct reference *ref)
+{
+	struct task_context *tc;
+	ulong vma;
 	ulong single_vma;
 	unsigned int radix;
 	int single_vma_found;
@@ -3948,6 +4094,10 @@ vm_area_dump(ulong task, ulong flag, ulong vaddr, struct reference *ref)
 	char buf4[BUFSIZE];
 	char buf5[BUFSIZE];
 	char vma_header[BUFSIZE];
+	char *vma_buf;
+	int i;
+	ulong mm_mt, entry_num;
+	struct list_pair *entry_list;
 
         tc = task_to_context(task);
 	tm = &task_mem_usage;
@@ -3981,14 +4131,14 @@ vm_area_dump(ulong task, ulong flag, ulong vaddr, struct reference *ref)
         if (VM_REF_CHECK_HEXVAL(ref, tm->mm_struct_addr) ||
             VM_REF_CHECK_HEXVAL(ref, tm->pgd_addr)) {
         	print_task_header(fp, tc, 0);
-		PRINT_VM_DATA();
+		PRINT_VM_DATA(buf4, buf5, tm);
 		fprintf(fp, "\n");
                 return (ulong)NULL;
         }
 
         if (!(flag & (UVADDR|PRINT_MM_STRUCT|PRINT_VMA_STRUCTS|PRINT_SINGLE_VMA)) &&
 	    !DO_REF_SEARCH(ref)) 
-		PRINT_VM_DATA();
+		PRINT_VM_DATA(buf4, buf5, tm);
 
         if (!tm->mm_struct_addr) {
 		if (pc->curcmd_flags & MM_STRUCT_FORCE) {
@@ -4012,9 +4162,6 @@ vm_area_dump(ulong task, ulong flag, ulong vaddr, struct reference *ref)
                 return (ulong)NULL;
 	}
 
-	readmem(tm->mm_struct_addr + OFFSET(mm_struct_mmap), KVADDR, 
-		&vma, sizeof(void *), "mm_struct mmap", FAULT_ON_ERROR);
-
        	sprintf(vma_header, "%s%s%s%s%s  FLAGS%sFILE\n",
                 mkstring(buf1, VADDR_PRLEN, CENTER|LJUST, "VMA"),
                 space(MINSPACE),              
@@ -4027,125 +4174,41 @@ vm_area_dump(ulong task, ulong flag, ulong vaddr, struct reference *ref)
 	    !DO_REF_SEARCH(ref)) 
 		fprintf(fp, "%s", vma_header);
 
-	for (found = FALSE; vma; vma = vm_next) {
+	found = FALSE;
 
-		if ((flag & PHYSADDR) && !DO_REF_SEARCH(ref))
-			fprintf(fp, "%s", vma_header);
+	struct handle_each_vm_area_args args = {
+		.task = task,		.flag = flag,	.vaddr = vaddr,
+		.ref = ref,		.tc = tc,	.radix = radix,
+		.tm = tm,		.buf1 = buf1,	.buf2 = buf2,
+		.buf3 = buf3,		.buf4 = buf4,	.buf5 = buf5,
+		.vma_header = vma_header,		.single_vma = &single_vma,
+		.single_vma_found = &single_vma_found,	.found = &found,
+		.vma_buf = &vma_buf,
+	};
 
-		inode = 0;
-		BZERO(buf1, BUFSIZE);
-		vma_buf = fill_vma_cache(vma);
+	if (INVALID_MEMBER(mm_struct_mmap) && VALID_MEMBER(mm_struct_mm_mt)) {
+		mm_mt = tm->mm_struct_addr + OFFSET(mm_struct_mm_mt);
+		entry_num = do_maple_tree(mm_mt, MAPLE_TREE_COUNT, NULL);
+		entry_list = (struct list_pair *)GETBUF(entry_num * sizeof(struct list_pair));
+		do_maple_tree(mm_mt, MAPLE_TREE_GATHER, entry_list);
 
-		vm_mm = ULONG(vma_buf + OFFSET(vm_area_struct_vm_mm));
-		vm_end = ULONG(vma_buf + OFFSET(vm_area_struct_vm_end));
-		vm_next = ULONG(vma_buf + OFFSET(vm_area_struct_vm_next));
-		vm_start = ULONG(vma_buf + OFFSET(vm_area_struct_vm_start));
-		vm_flags = get_vm_flags(vma_buf);
-		vm_file = ULONG(vma_buf + OFFSET(vm_area_struct_vm_file));
-		
-		if (flag & PRINT_SINGLE_VMA) {
-			if (vma != single_vma)
-				continue;
-			fprintf(fp, "%s", vma_header);
-			single_vma_found = TRUE;
-		}
-
-		if (flag & PRINT_VMA_STRUCTS) {
-			dump_struct("vm_area_struct", vma, radix);
-			continue;
-		}
-
-		if (vm_file && !(flag & VERIFY_ADDR)) {
-			file_buf = fill_file_cache(vm_file);
-			dentry = ULONG(file_buf + OFFSET(file_f_dentry));
-			dentry_buf = NULL;
-			if (dentry) {
-				dentry_buf = fill_dentry_cache(dentry);
-				if (VALID_MEMBER(file_f_vfsmnt)) {
-					vfsmnt = ULONG(file_buf +
-                                		OFFSET(file_f_vfsmnt));
-					get_pathname(dentry, buf1, BUFSIZE,
-						1, vfsmnt);
-				} else {
-					get_pathname(dentry, buf1, BUFSIZE, 
-						1, 0);
-				}
-			}
-			if ((flag & PRINT_INODES) && dentry) {
-				inode = ULONG(dentry_buf + 
-					OFFSET(dentry_d_inode));
+		for (i = 0; i < entry_num; i++) {
+			if (!!(args.vma = (ulong)entry_list[i].value) &&
+			    handle_each_vm_area(&args)) {
+				FREEBUF(entry_list);
+				return args.vma;
 			}
 		}
-
-		if (!(flag & UVADDR) || ((flag & UVADDR) && 
-		    ((vaddr >= vm_start) && (vaddr < vm_end)))) {
-			found = TRUE;
-
-			if (flag & VERIFY_ADDR)
+		FREEBUF(entry_list);
+	} else {
+		readmem(tm->mm_struct_addr + OFFSET(mm_struct_mmap), KVADDR,
+			&vma, sizeof(void *), "mm_struct mmap", FAULT_ON_ERROR);
+		while (vma) {
+			args.vma = vma;
+			if (handle_each_vm_area(&args))
 				return vma;
-
-			if (DO_REF_SEARCH(ref)) {
-				if (VM_REF_CHECK_HEXVAL(ref, vma) ||
-				    VM_REF_CHECK_HEXVAL(ref, (ulong)vm_flags) ||
-				    VM_REF_CHECK_STRING(ref, buf1)) {
-					if (!(ref->cmdflags & VM_REF_HEADER)) {
-						print_task_header(fp, tc, 0);
-                				PRINT_VM_DATA();
-						ref->cmdflags |= VM_REF_HEADER;
-					}
-					if (!(ref->cmdflags & VM_REF_VMA) ||
-					    (ref->cmdflags & VM_REF_PAGE)) { 
-						fprintf(fp, "%s", vma_header);
-						ref->cmdflags |= VM_REF_VMA;
-						ref->cmdflags &= ~VM_REF_PAGE;
-						ref->ref1 = vma;
-					}
-					PRINT_VMA_DATA();
-				}
-
-				if (vm_area_page_dump(vma, task, 
-				    vm_start, vm_end, vm_mm, ref)) {
-					if (!(ref->cmdflags & VM_REF_HEADER)) {
-					        print_task_header(fp, tc, 0);
-                			        PRINT_VM_DATA();
-						ref->cmdflags |= VM_REF_HEADER;
-					}
-                                        if (!(ref->cmdflags & VM_REF_VMA) ||
-                                            (ref->ref1 != vma)) {
-                                                fprintf(fp, "%s", vma_header);
-						PRINT_VMA_DATA();
-                                                ref->cmdflags |= VM_REF_VMA;
-                                                ref->ref1 = vma;
-					}
-
-					ref->cmdflags |= VM_REF_DISPLAY;
-					vm_area_page_dump(vma, task,
-						vm_start, vm_end, vm_mm, ref); 
-					ref->cmdflags &= ~VM_REF_DISPLAY;
-				}
-
-				continue;
-			}
-
-			if (inode) {
-                                fprintf(fp, "%lx%s%s%s%s%s%6llx%s%lx %s\n",
-                                    vma, space(MINSPACE),               
-                                    mkstring(buf2, UVADDR_PRLEN, RJUST|LONG_HEX,
-                                        MKSTR(vm_start)), space(MINSPACE),      
-                                    mkstring(buf3, UVADDR_PRLEN, RJUST|LONG_HEX,
-                                        MKSTR(vm_end)), space(MINSPACE), 
-				    vm_flags, space(MINSPACE), inode, buf1);
-			} else {
-				PRINT_VMA_DATA();
-				     
-				if (flag & (PHYSADDR|PRINT_SINGLE_VMA)) 
-					vm_area_page_dump(vma, task,
-						vm_start, vm_end, vm_mm, ref);
-			}
-
-			if (flag & UVADDR)
-				return vma;
-		} 
+			vma = ULONG(vma_buf + OFFSET(vm_area_struct_vm_next));
+		}
 	}
 
 	if (flag & VERIFY_ADDR)

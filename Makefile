@@ -355,7 +355,7 @@ filesys.o: ${GENERIC_HFILES} filesys.c
 help.o: ${GENERIC_HFILES} help.c
 	${CC} -c ${CRASH_CFLAGS} help.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
-memory.o: ${GENERIC_HFILES} memory.c
+memory.o: ${GENERIC_HFILES} ${MAPLE_TREE_HFILES} memory.c
 	${CC} -c ${CRASH_CFLAGS} memory.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 test.o: ${GENERIC_HFILES} test.c
