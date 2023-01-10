@@ -59,6 +59,7 @@ IBM_HFILES=ibm_common.h
 SADUMP_HFILES=sadump.h
 UNWIND_HFILES=unwind.h unwind_i.h rse.h unwind_x86.h unwind_x86_64.h
 VMWARE_HFILES=vmware_vmss.h
+MAPLE_TREE_HFILES=maple_tree.h
 
 CFILES=main.c tools.c global_data.c memory.c filesys.c help.c task.c \
 	kernel.c test.c gdb_interface.c configure.c net.c dev.c bpf.c \
@@ -73,12 +74,12 @@ CFILES=main.c tools.c global_data.c memory.c filesys.c help.c task.c \
 	xen_hyper.c xen_hyper_command.c xen_hyper_global_data.c \
 	xen_hyper_dump_tables.c kvmdump.c qemu.c qemu-load.c sadump.c ipcs.c \
 	ramdump.c vmware_vmss.c vmware_guestdump.c \
-	xen_dom0.c kaslr_helper.c sbitmap.c
+	xen_dom0.c kaslr_helper.c sbitmap.c maple_tree.c
 
 SOURCE_FILES=${CFILES} ${GENERIC_HFILES} ${MCORE_HFILES} \
 	${REDHAT_CFILES} ${REDHAT_HFILES} ${UNWIND_HFILES} \
 	${LKCD_DUMP_HFILES} ${LKCD_TRACE_HFILES} ${LKCD_OBSOLETE_HFILES}\
-	${IBM_HFILES} ${SADUMP_HFILES} ${VMWARE_HFILES}
+	${IBM_HFILES} ${SADUMP_HFILES} ${VMWARE_HFILES} ${MAPLE_TREE_HFILES}
 
 OBJECT_FILES=main.o tools.o global_data.o memory.o filesys.o help.o task.o \
 	build_data.o kernel.o test.o gdb_interface.o net.o dev.o bpf.o \
@@ -93,7 +94,7 @@ OBJECT_FILES=main.o tools.o global_data.o memory.o filesys.o help.o task.o \
 	xen_hyper.o xen_hyper_command.o xen_hyper_global_data.o \
 	xen_hyper_dump_tables.o kvmdump.o qemu.o qemu-load.o sadump.o ipcs.o \
 	ramdump.o vmware_vmss.o vmware_guestdump.o \
-	xen_dom0.o kaslr_helper.o sbitmap.o
+	xen_dom0.o kaslr_helper.o sbitmap.o maple_tree.o
 
 MEMORY_DRIVER_FILES=memory_driver/Makefile memory_driver/crash.c memory_driver/README
 
@@ -538,6 +539,9 @@ kaslr_helper.o: ${GENERIC_HFILES} kaslr_helper.c
 
 bpf.o: ${GENERIC_HFILES} bpf.c
 	${CC} -c ${CRASH_CFLAGS} bpf.c ${WARNING_OPTIONS} ${WARNING_ERROR}
+
+maple_tree.o: ${GENERIC_HFILES} ${MAPLE_TREE_HFILES} maple_tree.c
+	${CC} -c ${CRASH_CFLAGS} maple_tree.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 ${PROGRAM}: force
 	@$(MAKE) all

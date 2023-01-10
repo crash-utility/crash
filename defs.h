@@ -2189,6 +2189,21 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long request_queue_hctx_table;
 	long percpu_counter_counters;
 	long slab_slab_list;
+	long mm_struct_mm_mt;
+	long maple_tree_ma_root;
+	long maple_tree_ma_flags;
+	long maple_node_parent;
+	long maple_node_ma64;
+	long maple_node_mr64;
+	long maple_node_slot;
+	long maple_arange_64_pivot;
+	long maple_arange_64_slot;
+	long maple_arange_64_gap;
+	long maple_arange_64_meta;
+	long maple_range_64_pivot;
+	long maple_range_64_slot;
+	long maple_metadata_end;
+	long maple_metadata_gap;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2360,6 +2375,8 @@ struct size_table {         /* stash of commonly-used sizes */
 	long sbq_wait_state;
 	long blk_mq_tags;
 	long percpu_counter;
+	long maple_tree;
+	long maple_node;
 };
 
 struct array_table {
@@ -5742,6 +5759,8 @@ int file_dump(ulong, ulong, ulong, int, int);
 int same_file(char *, char *);
 int cleanup_memory_driver(void);
 
+void maple_init(void);
+int do_mptree(struct tree_data *);
 
 /*
  *  help.c 
