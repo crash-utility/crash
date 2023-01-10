@@ -173,6 +173,10 @@ static void do_mt_range64(ulong entry, ulong min, ulong max,
 
 	mr64_buf = node_buf + OFFSET(maple_node_mr64);
 
+	if (td && td->flags & TREE_STRUCT_VERBOSE) {
+		dump_mt_range64(mr64_buf);
+	}
+
 	for (i = 0; i < mt_slots[maple_range_64]; i++) {
 		last = max;
 
@@ -230,6 +234,10 @@ static void do_mt_arange64(ulong entry, ulong min, ulong max,
 
 	ma64_buf = node_buf + OFFSET(maple_node_ma64);
 
+	if (td && td->flags & TREE_STRUCT_VERBOSE) {
+		dump_mt_arange64(ma64_buf);
+	}
+
 	for (i = 0; i < mt_slots[maple_arange_64]; i++) {
 		last = max;
 
@@ -275,6 +283,51 @@ static void do_mt_entry(ulong entry, ulong min, ulong max, uint depth,
 
 	if (!td)
 		return;
+
+	if (!td->count && td->structname_args) {
+		/*
+		 * Retrieve all members' info only once (count == 0)
+		 * After last iteration all memory will be freed up
+		 */
+		e = (struct req_entry **)GETBUF(sizeof(*e) * td->structname_args);
+		for (i = 0; i < td->structname_args; i++)
+			e[i] = fill_member_offsets(td->structname[i]);
+	}
+
+	td->count++;
+
+	if (td->flags & TREE_STRUCT_VERBOSE) {
+		dump_mt_entry(entry, min, max, depth);
+	} else if (td->flags & VERBOSE && entry)
+		fprintf(fp, "%lx\n", entry);
+	if (td->flags & TREE_POSITION_DISPLAY && entry)
+		fprintf(fp, "  index: %ld  position: %s/%u\n",
+			++(*global_index), path, index);
+
+	if (td->structname) {
+		if (td->flags & TREE_STRUCT_RADIX_10)
+			print_radix = 10;
+		else if (td->flags & TREE_STRUCT_RADIX_16)
+			print_radix = 16;
+		else
+			print_radix = 0;
+
+		for (i = 0; i < td->structname_args; i++) {
+			switch (count_chars(td->structname[i], '.')) {
+			case 0:
+				dump_struct(td->structname[i], entry, print_radix);
+				break;
+			default:
+				if (td->flags & TREE_PARSE_MEMBER)
+					dump_struct_members_for_tree(td, i, entry);
+				else if (td->flags & TREE_READ_MEMBER)
+					dump_struct_members_fast(e[i], print_radix, entry);
+			}
+		}
+	}
+
+	if (e)
+		FREEBUF(e);
 }
 
 static void do_mt_node(ulong entry, ulong min, ulong max,
@@ -292,6 +345,10 @@ static void do_mt_node(ulong entry, ulong min, ulong max,
 
 	readmem(maple_node, KVADDR, node_buf, SIZE(maple_node),
 		"mt_dump_node read maple_node", FAULT_ON_ERROR);
+
+	if (td && td->flags & TREE_STRUCT_VERBOSE) {
+		dump_mt_node(maple_node, node_buf, type, min, max, depth);
+	}
 
 	switch (type) {
 	case maple_dense:
@@ -334,6 +391,12 @@ static int do_maple_tree_traverse(ulong ptr, int is_root,
 		readmem(ptr, KVADDR, tree_buf, SIZE(maple_tree),
 			"mt_dump read maple_tree", FAULT_ON_ERROR);
 		entry = ULONG(tree_buf + OFFSET(maple_tree_ma_root));
+
+		if (td && td->flags & TREE_STRUCT_VERBOSE) {
+			fprintf(fp, "maple_tree(%lx) flags %X, height %u root 0x%lx\n\n",
+				ptr, UINT(tree_buf + OFFSET(maple_tree_ma_flags)),
+				mt_height(tree_buf), entry);
+		}
 
 		if (!xa_is_node(entry))
 			do_mt_entry(entry, 0, 0, 0, 0, path, &global_index, ops);

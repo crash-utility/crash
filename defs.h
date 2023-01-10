@@ -2713,6 +2713,7 @@ struct tree_data {
 #define TREE_PARSE_MEMBER         (VERBOSE << 7)
 #define TREE_READ_MEMBER          (VERBOSE << 8)
 #define TREE_LINEAR_ORDER         (VERBOSE << 9)
+#define TREE_STRUCT_VERBOSE       (VERBOSE << 10)
 
 #define ALIAS_RUNTIME  (1)
 #define ALIAS_RCLOCAL  (2)

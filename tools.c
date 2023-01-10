@@ -30,7 +30,7 @@ static void dealloc_hq_entry(struct hq_entry *);
 static void show_options(void);
 static void dump_struct_members(struct list_data *, int, ulong);
 static void rbtree_iteration(ulong, struct tree_data *, char *);
-static void dump_struct_members_for_tree(struct tree_data *, int, ulong);
+void dump_struct_members_for_tree(struct tree_data *, int, ulong);
 
 struct req_entry {
 	char *arg, *name, **member;
@@ -40,8 +40,8 @@ struct req_entry {
 };
 
 static void print_value(struct req_entry *, unsigned int, ulong, unsigned int);
-static struct req_entry *fill_member_offsets(char *);
-static void dump_struct_members_fast(struct req_entry *, int, ulong);
+struct req_entry *fill_member_offsets(char *);
+void dump_struct_members_fast(struct req_entry *, int, ulong);
 
 FILE *
 set_error(char *target)
@@ -3666,7 +3666,7 @@ dump_struct_members_fast(struct req_entry *e, int radix, ulong p)
 	}
 }
 
-static struct req_entry *
+struct req_entry *
 fill_member_offsets(char *arg)
 {
 	int j;
@@ -4307,6 +4307,7 @@ dump_struct_members(struct list_data *ld, int idx, ulong next)
 #define RADIXTREE_REQUEST (0x1)
 #define RBTREE_REQUEST    (0x2)
 #define XARRAY_REQUEST    (0x4)
+#define MAPLE_REQUEST     (0x8)
 
 void
 cmd_tree()
@@ -4317,6 +4318,7 @@ cmd_tree()
 	struct datatype_member struct_member, *sm;
 	struct syment *sp;
 	ulong value;
+	char *type_name = NULL;
 
 	type_flag = 0;
 	root_offset = 0;
@@ -4324,25 +4326,33 @@ cmd_tree()
 	td = &tree_data;
 	BZERO(td, sizeof(struct tree_data));
 
-	while ((c = getopt(argcnt, args, "xdt:r:o:s:S:plN")) != EOF) {
+	while ((c = getopt(argcnt, args, "xdt:r:o:s:S:plNv")) != EOF) {
 		switch (c)
 		{
 		case 't':
-			if (type_flag & (RADIXTREE_REQUEST|RBTREE_REQUEST|XARRAY_REQUEST)) {
+			if (type_flag & (RADIXTREE_REQUEST|RBTREE_REQUEST|XARRAY_REQUEST|MAPLE_REQUEST)) {
 				error(INFO, "multiple tree types may not be entered\n");
 				cmd_usage(pc->curcmd, SYNOPSIS);
 			}
 
 			if (STRNEQ(optarg, "ra"))
-				if (MEMBER_EXISTS("radix_tree_root", "xa_head"))
+				if (MEMBER_EXISTS("radix_tree_root", "xa_head")) {
 					type_flag = XARRAY_REQUEST;
-				else
+					type_name = "Xarrays";
+				} else {
 					type_flag = RADIXTREE_REQUEST;
-			else if (STRNEQ(optarg, "rb"))
+					type_name = "radix trees";
+				}
+			else if (STRNEQ(optarg, "rb")) {
 				type_flag = RBTREE_REQUEST;
-			else if (STRNEQ(optarg, "x"))
+				type_name = "rbtrees";
+			} else if (STRNEQ(optarg, "x")) {
 				type_flag = XARRAY_REQUEST;
-			else {
+				type_name = "Xarrays";
+			} else if (STRNEQ(optarg, "m")) {
+				type_flag = MAPLE_REQUEST;
+				type_name = "maple trees";
+			} else {
 				error(INFO, "invalid tree type: %s\n", optarg);
 				cmd_usage(pc->curcmd, SYNOPSIS);
 			}
@@ -4417,6 +4427,9 @@ cmd_tree()
 					"-d and -x are mutually exclusive\n");
 			td->flags |= TREE_STRUCT_RADIX_10;
 			break;
+		case 'v':
+			td->flags |= TREE_STRUCT_VERBOSE;
+			break;
 		default:
 			argerrs++;
 			break;
@@ -4426,13 +4439,17 @@ cmd_tree()
 	if (argerrs)
 		cmd_usage(pc->curcmd, SYNOPSIS);
 
-	if ((type_flag & (XARRAY_REQUEST|RADIXTREE_REQUEST)) && (td->flags & TREE_LINEAR_ORDER))
-		error(FATAL, "-l option is not applicable to %s\n", 
-			type_flag & RADIXTREE_REQUEST ? "radix trees" : "Xarrays");
+	if ((type_flag & (XARRAY_REQUEST|RADIXTREE_REQUEST|MAPLE_REQUEST)) &&
+	    (td->flags & TREE_LINEAR_ORDER))
+		error(FATAL, "-l option is not applicable to %s\n", type_name);
 
-	if ((type_flag & (XARRAY_REQUEST|RADIXTREE_REQUEST)) && (td->flags & TREE_NODE_OFFSET_ENTERED))
-		error(FATAL, "-o option is not applicable to %s\n",
-			type_flag & RADIXTREE_REQUEST ? "radix trees" : "Xarrays");
+	if ((type_flag & (XARRAY_REQUEST|RADIXTREE_REQUEST|MAPLE_REQUEST)) &&
+	    (td->flags & TREE_NODE_OFFSET_ENTERED))
+		error(FATAL, "-o option is not applicable to %s\n", type_name);
+
+	if ((type_flag & (RBTREE_REQUEST|XARRAY_REQUEST|RADIXTREE_REQUEST)) &&
+	    (td->flags & TREE_STRUCT_VERBOSE))
+		error(FATAL, "-v option is not applicable to %s\n", type_name);
 
 	if ((td->flags & TREE_ROOT_OFFSET_ENTERED) && 
 	    (td->flags & TREE_NODE_POINTER))
@@ -4506,12 +4523,26 @@ next_arg:
 		if (td->flags & TREE_STRUCT_RADIX_16)
 			fprintf(fp, "%sTREE_STRUCT_RADIX_16",
 				others++ ? "|" : "");
+		if (td->flags & TREE_PARSE_MEMBER)
+			fprintf(fp, "%sTREE_PARSE_MEMBER",
+				others++ ? "|" : "");
+		if (td->flags & TREE_READ_MEMBER)
+			fprintf(fp, "%sTREE_READ_MEMBER",
+				others++ ? "|" : "");
+		if (td->flags & TREE_LINEAR_ORDER)
+			fprintf(fp, "%sTREE_LINEAR_ORDER",
+				others++ ? "|" : "");
+		if (td->flags & TREE_STRUCT_VERBOSE)
+			fprintf(fp, "%sTREE_STRUCT_VERBOSE",
+				others++ ? "|" : "");
 		fprintf(fp, ")\n");
 		fprintf(fp, "              type: ");
 			if (type_flag & RADIXTREE_REQUEST)
 				fprintf(fp, "radix\n");
 			else if (type_flag & XARRAY_REQUEST)
 				fprintf(fp, "xarray\n");
+			else if (type_flag & MAPLE_REQUEST)
+				fprintf(fp, "maple\n");
 			else
 				fprintf(fp, "red-black%s", 
 					type_flag & RBTREE_REQUEST ? 
@@ -4532,6 +4563,8 @@ next_arg:
 		do_rdtree(td);
 	else if (type_flag & XARRAY_REQUEST)
 		do_xatree(td);
+	else if (type_flag & MAPLE_REQUEST)
+		do_mptree(td);
 	else
 		do_rbtree(td);
 	hq_close();
