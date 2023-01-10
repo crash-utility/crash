@@ -10766,6 +10766,21 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(sbq_wait_state_wait_cnt));
 	fprintf(fp, "           sbq_wait_state_wait: %ld\n",
 		OFFSET(sbq_wait_state_wait));
+	fprintf(fp, "               mm_struct_mm_mt: %ld\n", OFFSET(mm_struct_mm_mt));
+	fprintf(fp, "            maple_tree_ma_root: %ld\n", OFFSET(maple_tree_ma_root));
+	fprintf(fp, "           maple_tree_ma_flags: %ld\n", OFFSET(maple_tree_ma_flags));
+	fprintf(fp, "             maple_node_parent: %ld\n", OFFSET(maple_node_parent));
+	fprintf(fp, "               maple_node_ma64: %ld\n", OFFSET(maple_node_ma64));
+	fprintf(fp, "               maple_node_mr64: %ld\n", OFFSET(maple_node_mr64));
+	fprintf(fp, "               maple_node_slot: %ld\n", OFFSET(maple_node_slot));
+	fprintf(fp, "         maple_arange_64_pivot: %ld\n", OFFSET(maple_arange_64_pivot));
+	fprintf(fp, "          maple_arange_64_slot: %ld\n", OFFSET(maple_arange_64_slot));
+	fprintf(fp, "           maple_arange_64_gap: %ld\n", OFFSET(maple_arange_64_gap));
+	fprintf(fp, "          maple_arange_64_meta: %ld\n", OFFSET(maple_arange_64_meta));
+	fprintf(fp, "          maple_range_64_pivot: %ld\n", OFFSET(maple_range_64_pivot));
+	fprintf(fp, "           maple_range_64_slot: %ld\n", OFFSET(maple_range_64_slot));
+	fprintf(fp, "            maple_metadata_end: %ld\n", OFFSET(maple_metadata_end));
+	fprintf(fp, "            maple_metadata_gap: %ld\n", OFFSET(maple_metadata_gap));
 
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
@@ -11038,6 +11053,8 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "                 sbitmap_queue: %ld\n", SIZE(sbitmap_queue));
 	fprintf(fp, "                sbq_wait_state: %ld\n", SIZE(sbq_wait_state));
 	fprintf(fp, "                   blk_mq_tags: %ld\n", SIZE(blk_mq_tags));
+	fprintf(fp, "                    maple_tree: %ld\n", SIZE(maple_tree));
+	fprintf(fp, "                    maple_node: %ld\n", SIZE(maple_node));
 
 	fprintf(fp, "                percpu_counter: %ld\n", SIZE(percpu_counter));
 
