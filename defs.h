@@ -731,6 +731,7 @@ struct kernel_table {                   /* kernel data */
 #define ONLINE_MAP     (ONLINE)
 #define ACTIVE_MAP       (0x10)
 	int BUG_bytes;
+	int freelist_ptr_has_bswap;
 	ulong xen_flags;
 #define WRITABLE_PAGE_TABLES    (0x1)
 #define SHADOW_PAGE_TABLES      (0x2)

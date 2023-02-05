@@ -81,6 +81,7 @@ static void read_in_kernel_config_err(int, char *);
 static void BUG_bytes_init(void);
 static int BUG_x86(void);
 static int BUG_x86_64(void);
+static void freelist_ptr_init();
 static void cpu_maps_init(void);
 static void get_xtime(struct timespec *);
 static char *log_from_idx(uint32_t, char *);
@@ -766,6 +767,7 @@ kernel_init()
 	STRUCT_SIZE_INIT(mem_section, "mem_section");
 
 	BUG_bytes_init();
+	freelist_ptr_init();
 
 	/*
 	 *  for hrtimer
@@ -2351,6 +2353,59 @@ BUG_x86_64(void)
 	return 0;
 }
 
+
+/*
+ * With CONFIG_SLAB_FREELIST_HARDENED, freelist_ptr's are crypted with xor's, 
+ * and for recent release with an additionnal bswap. Some releases prio to 5.7.0
+ * may be using the additionnal bswap. The only easy and reliable way to tell is
+ * to inspect assembly code (eg. "__slab_free") for a bswap instruction.
+ */
+static int
+freelist_ptr_has_bswap_x86(void)
+{
+	struct syment *sp, *spn;
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char *arglist[MAXARGS];
+	ulong vaddr;
+	int found;
+
+	if (!(sp = symbol_search("__slab_free")) ||
+	    !(spn = next_symbol(NULL, sp)))
+		return FALSE;
+
+	sprintf(buf1, "x/%ldi 0x%lx", spn->value - sp->value, sp->value);
+
+	found = FALSE;
+	vaddr = 0;
+	open_tmpfile();
+	gdb_pass_through(buf1, pc->tmpfile, GNU_RETURN_ON_ERROR);
+	rewind(pc->tmpfile);
+	while (fgets(buf2, BUFSIZE, pc->tmpfile)) {
+		if (parse_line(buf2, arglist) < 3)
+			continue;
+
+		if ((vaddr = htol(strip_ending_char(arglist[0], ':'), 
+		    RETURN_ON_ERROR|QUIET, NULL)) >= spn->value)
+			continue; 
+
+		if (STREQ(arglist[2], "bswap")) {
+			found = TRUE;
+			break;
+		}
+	}
+	close_tmpfile();
+	return found;
+}
+
+static void
+freelist_ptr_init(void)
+{
+	if (THIS_KERNEL_VERSION >= LINUX(5,7,0))
+		kt->freelist_ptr_has_bswap = TRUE;
+	else if (machine_type("X86") || machine_type("X86_64"))
+		kt->freelist_ptr_has_bswap = freelist_ptr_has_bswap_x86();
+}
 
 /*
  *  Callback from gdb disassembly code.
