@@ -320,6 +320,7 @@ static void dump_per_cpu_offsets(void);
 static void dump_page_flags(ulonglong);
 static ulong kmem_cache_nodelists(ulong);
 static void dump_hstates(void);
+static void freelist_ptr_init(void);
 static ulong freelist_ptr(struct meminfo *, ulong, ulong);
 static ulong handle_each_vm_area(struct handle_each_vm_area_args *);
 
@@ -789,6 +790,8 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(kmem_cache_name, "kmem_cache", "name");
 		MEMBER_OFFSET_INIT(kmem_cache_flags, "kmem_cache", "flags");
 		MEMBER_OFFSET_INIT(kmem_cache_random, "kmem_cache", "random");
+		if (VALID_MEMBER(kmem_cache_random))
+			freelist_ptr_init();
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_freelist, "kmem_cache_cpu", "freelist");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_page, "kmem_cache_cpu", "page");
 		if (INVALID_MEMBER(kmem_cache_cpu_page))
@@ -13932,6 +13935,8 @@ dump_vm_table(int verbose)
 		fprintf(fp, "%sSLAB_CPU_CACHE", others++ ? "|" : "");\
 	if (vt->flags & SLAB_ROOT_CACHES)
 		fprintf(fp, "%sSLAB_ROOT_CACHES", others++ ? "|" : "");\
+	if (vt->flags & FREELIST_PTR_BSWAP)
+		fprintf(fp, "%sFREELIST_PTR_BSWAP", others++ ? "|" : "");\
 	if (vt->flags & USE_VMAP_AREA)
 		fprintf(fp, "%sUSE_VMAP_AREA", others++ ? "|" : "");\
 	if (vt->flags & CONFIG_NUMA)
@@ -19519,13 +19524,55 @@ count_free_objects(struct meminfo *si, ulong freelist)
 	return c;
 }
 
+/*
+ * With CONFIG_SLAB_FREELIST_HARDENED, freelist_ptr's are crypted with xor's,
+ * and for recent release with an additionnal bswap. Some releases prio to 5.7.0
+ * may be using the additionnal bswap. The only easy and reliable way to tell is
+ * to inspect assembly code (eg. "__slab_free") for a bswap instruction.
+ */
+static int
+freelist_ptr_bswap_x86(void)
+{
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char *arglist[MAXARGS];
+	int found;
+
+	sprintf(buf1, "disassemble __slab_free");
+	open_tmpfile();
+	if (!gdb_pass_through(buf1, pc->tmpfile, GNU_RETURN_ON_ERROR)) {
+		close_tmpfile();
+		return FALSE;
+	}
+	rewind(pc->tmpfile);
+	found = FALSE;
+	while (fgets(buf2, BUFSIZE, pc->tmpfile)) {
+		if (parse_line(buf2, arglist) < 3)
+			continue;
+		if (STREQ(arglist[2], "bswap")) {
+			found = TRUE;
+			break;
+		}
+	}
+	close_tmpfile();
+	return found;
+}
+
+static void
+freelist_ptr_init(void)
+{
+	if (THIS_KERNEL_VERSION >= LINUX(5,7,0) ||
+	    ((machine_type("X86_64") || machine_type("X86")) && freelist_ptr_bswap_x86()))
+		vt->flags |= FREELIST_PTR_BSWAP;
+}
+
 static ulong
 freelist_ptr(struct meminfo *si, ulong ptr, ulong ptr_addr)
 {
 	if (VALID_MEMBER(kmem_cache_random)) {
 		/* CONFIG_SLAB_FREELIST_HARDENED */
 
-		if (THIS_KERNEL_VERSION >= LINUX(5,7,0))
+		if (vt->flags & FREELIST_PTR_BSWAP)
 			ptr_addr = (sizeof(long) == 8) ? bswap_64(ptr_addr)
 						       : bswap_32(ptr_addr);
 		return (ptr ^ si->random ^ ptr_addr);
