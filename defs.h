@@ -2204,6 +2204,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long maple_range_64_slot;
 	long maple_metadata_end;
 	long maple_metadata_gap;
+	long sock_sk_common;
+	long sock_common_skc_v6_daddr;
+	long sock_common_skc_v6_rcv_saddr;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

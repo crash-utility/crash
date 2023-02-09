@@ -199,6 +199,9 @@ net_init(void)
 			MEMBER_OFFSET_INIT(sock_common_skc_family,
 				"sock_common", "skc_family");
 			MEMBER_OFFSET_INIT(sock_sk_type, "sock", "sk_type");
+			MEMBER_OFFSET_INIT(sock_sk_common, "sock", "__sk_common");
+			MEMBER_OFFSET_INIT(sock_common_skc_v6_daddr, "sock_common", "skc_v6_daddr");
+			MEMBER_OFFSET_INIT(sock_common_skc_v6_rcv_saddr, "sock_common", "skc_v6_rcv_saddr");
 			/*
 			 *  struct inet_sock {
         		 *	struct sock       sk;
@@ -1104,12 +1107,19 @@ get_sock_info(ulong sock, char *buf)
 		break;
 
 	case SOCK_V2:
-		if (INVALID_MEMBER(ipv6_pinfo_rcv_saddr) ||
-		    INVALID_MEMBER(ipv6_pinfo_daddr))
+		if (VALID_MEMBER(ipv6_pinfo_rcv_saddr) &&
+		    VALID_MEMBER(ipv6_pinfo_daddr)) {
+			ipv6_rcv_saddr = ipv6_pinfo + OFFSET(ipv6_pinfo_rcv_saddr);
+			ipv6_daddr = ipv6_pinfo + OFFSET(ipv6_pinfo_daddr);
+		} else if (VALID_MEMBER(sock_sk_common) &&
+			   VALID_MEMBER(sock_common_skc_v6_daddr) &&
+			   VALID_MEMBER(sock_common_skc_v6_rcv_saddr)) {
+			ipv6_rcv_saddr = sock + OFFSET(sock_sk_common) + OFFSET(sock_common_skc_v6_rcv_saddr);
+			ipv6_daddr = sock + OFFSET(sock_sk_common) + OFFSET(sock_common_skc_v6_daddr);
+		} else {
+			sprintf(&buf[strlen(buf)], "%s", "(cannot get IPv6 addresses)");
 			break;
-
-        	ipv6_rcv_saddr = ipv6_pinfo + OFFSET(ipv6_pinfo_rcv_saddr);
-		ipv6_daddr = ipv6_pinfo + OFFSET(ipv6_pinfo_daddr);
+		}
 
 		if (!readmem(ipv6_rcv_saddr, KVADDR, u6_addr16_src, SIZE(in6_addr),
                     "ipv6_rcv_saddr buffer", QUIET|RETURN_ON_ERROR))
