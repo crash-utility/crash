@@ -3938,6 +3938,11 @@ in_exception_stack:
         if (irq_eframe) {
                 bt->flags |= BT_EXCEPTION_FRAME;
                 i = (irq_eframe - bt->stackbase)/sizeof(ulong);
+                if (symbol_exists("asm_common_interrupt")) {
+			i -= 1;
+			up = (ulong *)(&bt->stackbuf[i*sizeof(ulong)]);
+			bt->instptr = *up;
+                }
                 x86_64_print_stack_entry(bt, ofp, level, i, bt->instptr);
                 bt->flags &= ~(ulonglong)BT_EXCEPTION_FRAME;
                 cs = x86_64_exception_frame(EFRAME_PRINT|EFRAME_CS, 0, 
@@ -6520,6 +6525,14 @@ x86_64_irq_eframe_link_init(void)
 		machdep->machspec->irq_eframe_link = 0;
 	else
 		return; 
+
+	if (symbol_exists("asm_common_interrupt")) {
+		if (symbol_exists("asm_call_on_stack"))
+			machdep->machspec->irq_eframe_link = -64;
+		else
+			machdep->machspec->irq_eframe_link = -32;
+		return;
+	}
 
 	if (THIS_KERNEL_VERSION < LINUX(2,6,9)) 
 		return;
