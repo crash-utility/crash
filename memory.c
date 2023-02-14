@@ -8615,6 +8615,11 @@ dump_kmeminfo(void)
 		page_cache_size = 0;
 
 
+	if (page_cache_size < 0) {
+		error(INFO, "page_cache_size went negative (%ld), setting to 0\n",
+			page_cache_size);
+		page_cache_size = 0;
+	}
         pct = (page_cache_size * 100)/totalram_pages;
         fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
 		"CACHED", page_cache_size, 
