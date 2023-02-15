@@ -3825,10 +3825,11 @@ in_exception_stack:
 		up -= 1;
                 bt->instptr = *up;
 		/*
-		 *  No exception frame when coming from call_softirq.
+		 *  No exception frame when coming from do_softirq_own_stack
+		 *  or call_softirq.
 		 */
 		if ((sp = value_search(bt->instptr, &offset)) && 
-		    STREQ(sp->name, "call_softirq"))
+		    (STREQ(sp->name, "do_softirq_own_stack") || STREQ(sp->name, "call_softirq")))
 			irq_eframe = 0;
                 bt->frameptr = 0;
                 done = FALSE;
