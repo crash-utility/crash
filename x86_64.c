@@ -122,7 +122,7 @@ static int x86_64_do_not_cache_framesize(struct syment *, ulong);
 static int x86_64_framesize_cache_func(int, ulong, int *, int, struct syment *);
 static ulong x86_64_get_framepointer(struct bt_info *, ulong);
 int search_for_eframe_target_caller(struct bt_info *, ulong, int *);
-static int x86_64_get_framesize(struct bt_info *, ulong, ulong);
+static int x86_64_get_framesize(struct bt_info *, ulong, ulong, char *);
 static void x86_64_framesize_debug(struct bt_info *);
 static void x86_64_get_active_set(void);
 static int x86_64_get_kvaddr_ranges(struct vaddr_range *);
@@ -3642,7 +3642,7 @@ in_exception_stack:
 				bt, ofp);
                         rsp += SIZE(pt_regs);  /* guaranteed kernel mode */
 			if (bt->eframe_ip && ((framesize = x86_64_get_framesize(bt, 
-			    bt->eframe_ip, rsp)) >= 0))
+			    bt->eframe_ip, rsp, NULL)) >= 0))
 				rsp += framesize;
                         level++;
                         irq_eframe = 0;
@@ -3674,7 +3674,7 @@ in_exception_stack:
 	                case BACKTRACE_ENTRY_DISPLAYED:
 	                        level++;
 				if ((framesize = x86_64_get_framesize(bt, 
-				    bt->eframe_ip ?  bt->eframe_ip : *up, rsp)) >= 0) {
+				    bt->eframe_ip ?  bt->eframe_ip : *up, rsp, NULL)) >= 0) {
 					rsp += framesize;
 					i += framesize/sizeof(ulong);
 				}
@@ -3747,7 +3747,7 @@ in_exception_stack:
 			}
 
 			level++;
-			if ((framesize = x86_64_get_framesize(bt, bt->instptr, rsp)) >= 0)
+			if ((framesize = x86_64_get_framesize(bt, bt->instptr, rsp, NULL)) >= 0)
 				rsp += framesize;
 		}
 	}
@@ -3799,7 +3799,7 @@ in_exception_stack:
                         case BACKTRACE_ENTRY_DISPLAYED:
                                 level++;
 				if ((framesize = x86_64_get_framesize(bt, 
-				    bt->eframe_ip ? bt->eframe_ip : *up, rsp)) >= 0) {
+				    bt->eframe_ip ? bt->eframe_ip : *up, rsp, NULL)) >= 0) {
 					rsp += framesize;
 					i += framesize/sizeof(ulong);
 				}
@@ -3909,24 +3909,34 @@ in_exception_stack:
 	    (STREQ(rip_symbol, "thread_return") || 
 	     STREQ(rip_symbol, "schedule") || 
 	     STREQ(rip_symbol, "__schedule"))) {
-		if (STREQ(rip_symbol, "__schedule")) {
-			i = (rsp - bt->stackbase)/sizeof(ulong);
-			x86_64_print_stack_entry(bt, ofp, level, 
-				i, bt->instptr);
-			level++;
-			rsp = __schedule_frame_adjust(rsp, bt);
-			if (STREQ(closest_symbol(bt->instptr), "schedule"))
+		if ((machdep->flags & ORC) && VALID_MEMBER(inactive_task_frame_ret_addr)) {
+			/*
+			 * %rsp should have the address of inactive_task_frame, so
+			 * skip the registers before ret_addr to adjust rsp.
+			 */
+			if (CRASHDEBUG(1))
+				fprintf(fp, "rsp: %lx rbp: %lx\n", rsp, bt->bptr);
+			rsp += OFFSET(inactive_task_frame_ret_addr);
+		} else {
+			if (STREQ(rip_symbol, "__schedule")) {
+				i = (rsp - bt->stackbase)/sizeof(ulong);
+				x86_64_print_stack_entry(bt, ofp, level,
+					i, bt->instptr);
+				level++;
+				rsp = __schedule_frame_adjust(rsp, bt);
+				if (STREQ(closest_symbol(bt->instptr), "schedule"))
+					bt->flags |= BT_SCHEDULE;
+			} else
 				bt->flags |= BT_SCHEDULE;
-		} else
-			bt->flags |= BT_SCHEDULE;
 
-		if (bt->flags & BT_SCHEDULE) {
-			i = (rsp - bt->stackbase)/sizeof(ulong);
-			x86_64_print_stack_entry(bt, ofp, level, 
-				i, bt->instptr);
-			bt->flags &= ~(ulonglong)BT_SCHEDULE;
-			rsp += sizeof(ulong);
-			level++;
+			if (bt->flags & BT_SCHEDULE) {
+				i = (rsp - bt->stackbase)/sizeof(ulong);
+				x86_64_print_stack_entry(bt, ofp, level,
+					i, bt->instptr);
+				bt->flags &= ~(ulonglong)BT_SCHEDULE;
+				rsp += sizeof(ulong);
+				level++;
+			}
 		}
 	}
 
@@ -3957,7 +3967,7 @@ in_exception_stack:
 			irq_eframe = 0;
 			bt->flags |= BT_EFRAME_TARGET;
 			if (bt->eframe_ip && ((framesize = x86_64_get_framesize(bt, 
-			    bt->eframe_ip, rsp)) >= 0))
+			    bt->eframe_ip, rsp, NULL)) >= 0))
 				rsp += framesize;
 			bt->flags &= ~BT_EFRAME_TARGET;
 		}
@@ -4044,7 +4054,7 @@ in_exception_stack:
 		case BACKTRACE_ENTRY_DISPLAYED:
 			level++;
 			if ((framesize = x86_64_get_framesize(bt, 
-			    bt->eframe_ip ? bt->eframe_ip : *up, rsp)) >= 0) {
+			    bt->eframe_ip ? bt->eframe_ip : *up, rsp, (char *)up)) >= 0) {
 				rsp += framesize;
 				i += framesize/sizeof(ulong);
 			}
@@ -4755,7 +4765,8 @@ x86_64_exception_frame(ulong flags, ulong kvaddr, char *local,
 		bt->instptr = rip;
 		bt->stkptr = rsp;
 		bt->bptr = rbp;
-	}
+	} else if (machdep->flags & ORC)
+		bt->bptr = rbp;
 
 	if (kvaddr)
 		FREEBUF(pt_regs_buf);
@@ -5315,6 +5326,10 @@ x86_64_get_sp(struct bt_info *bt)
 			OFFSET(thread_struct_rsp), KVADDR,
                         &rsp, sizeof(void *),
                         "thread_struct rsp", FAULT_ON_ERROR);
+		if ((machdep->flags & ORC) && VALID_MEMBER(inactive_task_frame_bp)) {
+			readmem(rsp + OFFSET(inactive_task_frame_bp), KVADDR, &bt->bptr,
+				sizeof(void *), "inactive_task_frame.bp", FAULT_ON_ERROR);
+		}
                 return rsp;
         }
 
@@ -6420,6 +6435,9 @@ x86_64_ORC_init(void)
 	orc->__start_orc_unwind = symbol_value("__start_orc_unwind");
 	orc->__stop_orc_unwind = symbol_value("__stop_orc_unwind");
 	orc->orc_lookup = symbol_value("orc_lookup");
+
+	MEMBER_OFFSET_INIT(inactive_task_frame_bp, "inactive_task_frame", "bp");
+	MEMBER_OFFSET_INIT(inactive_task_frame_ret_addr, "inactive_task_frame", "ret_addr");
 
 	machdep->flags |= ORC;
 }
@@ -8489,7 +8507,7 @@ search_for_eframe_target_caller(struct bt_info *bt, ulong stkptr, int *framesize
 	(BT_OLD_BACK_TRACE|BT_TEXT_SYMBOLS|BT_TEXT_SYMBOLS_ALL|BT_FRAMESIZE_DISABLE)
  
 static int
-x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp)
+x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp, char *stack_ptr)
 {
 	int c, framesize, instr, arg, max;
 	struct syment *sp;
@@ -8590,19 +8608,49 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp)
 	if ((machdep->flags & ORC) && (korc = orc_find(textaddr))) {
 		if (CRASHDEBUG(1)) {
 			fprintf(fp, 
-			    "rsp: %lx textaddr: %lx framesize: %d -> spo: %d bpo: %d spr: %d bpr: %d type: %d %s", 
-				rsp, textaddr, framesize, korc->sp_offset, korc->bp_offset, 
-				korc->sp_reg, korc->bp_reg, korc->type,
-				(korc->type == ORC_TYPE_CALL) && (korc->sp_reg == ORC_REG_SP) ? "" : "(UNUSED)");
+			    "rsp: %lx textaddr: %lx -> spo: %d bpo: %d spr: %d bpr: %d type: %d",
+				rsp, textaddr, korc->sp_offset, korc->bp_offset,
+				korc->sp_reg, korc->bp_reg, korc->type);
 			if (MEMBER_EXISTS("orc_entry", "end"))
 				fprintf(fp, " end: %d", korc->end);
 			fprintf(fp, "\n");
 		}
 
-		if ((korc->type == ORC_TYPE_CALL) && (korc->sp_reg == ORC_REG_SP)) {
-			framesize = (korc->sp_offset - 8);
-			return (x86_64_framesize_cache_func(FRAMESIZE_ENTER, textaddr, 
-				&framesize, exception, NULL));
+		if (korc->type == ORC_TYPE_CALL) {
+			ulong prev_sp = 0, prev_bp = 0;
+			framesize = -1;
+
+			if (korc->sp_reg == ORC_REG_SP) {
+				framesize = (korc->sp_offset - 8);
+
+				/* rsp points to a return address, so +8 to use sp_offset */
+				prev_sp = (rsp + 8) + korc->sp_offset;
+				if (CRASHDEBUG(1))
+					fprintf(fp, "rsp: %lx prev_sp: %lx framesize: %d\n",
+							rsp, prev_sp, framesize);
+			} else if ((korc->sp_reg == ORC_REG_BP) && bt->bptr) {
+				prev_sp = bt->bptr + korc->sp_offset;
+				framesize = (prev_sp - (rsp + 8) - 8);
+				if (CRASHDEBUG(1))
+					fprintf(fp, "rsp: %lx rbp: %lx prev_sp: %lx framesize: %d\n",
+							rsp, bt->bptr, prev_sp, framesize);
+			}
+
+			if ((korc->bp_reg == ORC_REG_PREV_SP) && prev_sp) {
+				prev_bp = prev_sp + korc->bp_offset;
+				if (stack_ptr && INSTACK(prev_bp, bt)) {
+					bt->bptr = ULONG(stack_ptr + (prev_bp - rsp));
+					if (CRASHDEBUG(1))
+						fprintf(fp, "rsp: %lx prev_sp: %lx prev_bp: %lx -> %lx\n",
+								rsp, prev_sp, prev_bp, bt->bptr);
+				} else
+					bt->bptr = 0;
+			} else if ((korc->bp_reg != ORC_REG_UNDEFINED))
+				bt->bptr = 0;
+
+			if (framesize >= 0)
+				/* Do not cache this, possibly it may be variable. */
+				return framesize;
 		}
 	}
 
@@ -8758,7 +8806,7 @@ x86_64_framesize_debug(struct bt_info *bt)
 		if (!bt->hp->eip)
 			error(INFO, "x86_64_framesize_debug: ignoring command\n");
 		else
-			x86_64_get_framesize(bt, bt->hp->eip, 0);
+			x86_64_get_framesize(bt, bt->hp->eip, 0, NULL);
 		break;
 
 	case -3:

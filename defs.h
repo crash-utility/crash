@@ -2207,6 +2207,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long sock_sk_common;
 	long sock_common_skc_v6_daddr;
 	long sock_common_skc_v6_rcv_saddr;
+	long inactive_task_frame_bp;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
