@@ -2112,6 +2112,10 @@ cmd_dis(void)
 			rewind(pc->tmpfile);
 
 		while (fgets(buf2, BUFSIZE, pc->tmpfile)) {
+
+			if (STRNEQ(buf2, "=>"))
+				shift_string_left(buf2, 2);
+
 			strip_beginning_whitespace(buf2);
 
 			if (do_load_module_filter)
