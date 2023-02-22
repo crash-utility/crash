@@ -14245,14 +14245,28 @@ vaddr_type(ulong vaddr, struct task_context *tc)
 static int
 address_space_start(struct task_context *tc, ulong *addr)
 {
-        ulong vma;
+	ulong mm_mt, entry_num, i, vma = 0;
         char *vma_buf;
+	struct list_pair *entry_list;
 
         if (!tc->mm_struct)
                 return FALSE;
 
-        fill_mm_struct(tc->mm_struct);
-        vma = ULONG(tt->mm_struct + OFFSET(mm_struct_mmap));
+	if (INVALID_MEMBER(mm_struct_mmap) && VALID_MEMBER(mm_struct_mm_mt)) {
+		mm_mt = tc->mm_struct + OFFSET(mm_struct_mm_mt);
+		entry_num = do_maple_tree(mm_mt, MAPLE_TREE_COUNT, NULL);
+		entry_list = (struct list_pair *)GETBUF(entry_num * sizeof(struct list_pair));
+		do_maple_tree(mm_mt, MAPLE_TREE_GATHER, entry_list);
+		for (i = 0; i < entry_num; i++) {
+			if (!!(vma = (ulong)entry_list[i].value))
+				break;
+		}
+		FREEBUF(entry_list);
+	} else {
+		fill_mm_struct(tc->mm_struct);
+		vma = ULONG(tt->mm_struct + OFFSET(mm_struct_mmap));
+	}
+
         if (!vma)
                 return FALSE;
 	vma_buf = fill_vma_cache(vma);
@@ -15491,6 +15505,30 @@ search_physical(struct searchinfo *si)
 	FREEBUF(pagebuf);
 }
 
+static bool
+check_vma(ulong vma, ulong vaddr, ulong *vm_next, ulong *nextvaddr)
+{
+	char *vma_buf;
+	ulong vm_start, vm_end;
+
+	vma_buf = fill_vma_cache(vma);
+
+	vm_start = ULONG(vma_buf + OFFSET(vm_area_struct_vm_start));
+	vm_end = ULONG(vma_buf + OFFSET(vm_area_struct_vm_end));
+	if (vm_next)
+		*vm_next = ULONG(vma_buf + OFFSET(vm_area_struct_vm_next));
+
+	if (vaddr <= vm_start) {
+		*nextvaddr = vm_start;
+		return TRUE;
+	}
+
+	if ((vaddr > vm_start) && (vaddr < vm_end)) {
+		*nextvaddr = vaddr;
+		return TRUE;
+	}
+	return FALSE;
+}
 
 /*
  *  Return the next mapped user virtual address page that comes after 
@@ -15500,37 +15538,40 @@ static int
 next_upage(struct task_context *tc, ulong vaddr, ulong *nextvaddr)
 {
 	ulong vma, total_vm;
-	char *vma_buf;
-        ulong vm_start, vm_end;
 	ulong vm_next;
+	ulong mm_mt, entry_num, i;
+	struct list_pair *entry_list;
 
         if (!tc->mm_struct)
                 return FALSE;
 
-        fill_mm_struct(tc->mm_struct);
-	vma = ULONG(tt->mm_struct + OFFSET(mm_struct_mmap));
+	fill_mm_struct(tc->mm_struct);
+	vaddr = VIRTPAGEBASE(vaddr) + PAGESIZE();  /* first possible page */
 	total_vm = ULONG(tt->mm_struct + OFFSET(mm_struct_total_vm));
-
-	if (!vma || (total_vm == 0))
+	if (!total_vm)
 		return FALSE;
 
-	vaddr = VIRTPAGEBASE(vaddr) + PAGESIZE();  /* first possible page */
-
-        for ( ; vma; vma = vm_next) {
-                vma_buf = fill_vma_cache(vma);
-
-                vm_start = ULONG(vma_buf + OFFSET(vm_area_struct_vm_start));
-                vm_end = ULONG(vma_buf + OFFSET(vm_area_struct_vm_end));
-                vm_next = ULONG(vma_buf + OFFSET(vm_area_struct_vm_next));
-
-		if (vaddr <= vm_start) {
-			*nextvaddr = vm_start;
-			return TRUE;
+	if (INVALID_MEMBER(mm_struct_mmap) && VALID_MEMBER(mm_struct_mm_mt)) {
+		mm_mt = tc->mm_struct + OFFSET(mm_struct_mm_mt);
+		entry_num = do_maple_tree(mm_mt, MAPLE_TREE_COUNT, NULL);
+		entry_list = (struct list_pair *)GETBUF(entry_num * sizeof(struct list_pair));
+		do_maple_tree(mm_mt, MAPLE_TREE_GATHER, entry_list);
+		for (i = 0; i < entry_num; i++) {
+			if (!!(vma = (ulong)entry_list[i].value) &&
+			    check_vma(vma, vaddr, NULL, nextvaddr)) {
+				FREEBUF(entry_list);
+				return TRUE;
+			}
 		}
+		FREEBUF(entry_list);
+	} else {
+		vma = ULONG(tt->mm_struct + OFFSET(mm_struct_mmap));
 
-		if ((vaddr > vm_start) && (vaddr < vm_end)) {
-			*nextvaddr = vaddr;
-			return TRUE;
+		if (!vma)
+			return FALSE;
+		for ( ; vma; vma = vm_next) {
+			if (check_vma(vma, vaddr, &vm_next, nextvaddr))
+				return TRUE;
 		}
 	}
 
