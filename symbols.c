@@ -9787,6 +9787,7 @@ dump_offset_table(char *spec, ulong makestruct)
         	OFFSET(net_device_addr_len));
 	fprintf(fp, "             net_device_ip_ptr: %ld\n",
         	OFFSET(net_device_ip_ptr));
+	fprintf(fp, "            net_device_ip6_ptr: %ld\n", OFFSET(net_device_ip6_ptr));
 	fprintf(fp, "           net_device_dev_list: %ld\n",
 		OFFSET(net_device_dev_list));
 	fprintf(fp, "             net_dev_base_head: %ld\n",
@@ -9839,6 +9840,11 @@ dump_offset_table(char *spec, ulong makestruct)
         fprintf(fp, "                  inet_opt_num: %ld\n", 
 		OFFSET(inet_opt_num));
 
+	fprintf(fp, "           inet6_dev_addr_list: %ld\n", OFFSET(inet6_dev_addr_list));
+	fprintf(fp, "             inet6_ifaddr_addr: %ld\n", OFFSET(inet6_ifaddr_addr));
+	fprintf(fp, "          inet6_ifaddr_if_list: %ld\n", OFFSET(inet6_ifaddr_if_list));
+	fprintf(fp, "          inet6_ifaddr_if_next: %ld\n", OFFSET(inet6_ifaddr_if_next));
+	fprintf(fp, "                in6_addr_in6_u: %ld\n", OFFSET(in6_addr_in6_u));
         fprintf(fp, "          ipv6_pinfo_rcv_saddr: %ld\n", 
 		OFFSET(ipv6_pinfo_rcv_saddr));
         fprintf(fp, "              ipv6_pinfo_daddr: %ld\n", 

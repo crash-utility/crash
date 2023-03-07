@@ -2208,6 +2208,12 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long sock_common_skc_v6_daddr;
 	long sock_common_skc_v6_rcv_saddr;
 	long inactive_task_frame_bp;
+	long net_device_ip6_ptr;
+	long inet6_dev_addr_list;
+	long inet6_ifaddr_addr;
+	long inet6_ifaddr_if_list;
+	long inet6_ifaddr_if_next;
+	long in6_addr_in6_u;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
