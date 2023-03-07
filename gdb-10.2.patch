@@ -4,7 +4,7 @@
 # that have already been applied.  However, if a gdb file has been modified
 # multiple times, the subsequent patching may fail to recognize that a
 # given patch has been previously applied, and will attempt to re-apply it.
-# To prevent any uninintended consequences, this file also acts as a
+# To prevent any unintended consequences, this file also acts as a
 # shell script that can restore any gdb file to its original state prior
 # to all subsequent patch applications.
 
@@ -12,7 +12,8 @@ tar xvzmf gdb-10.2.tar.gz \
 	gdb-10.2/gdb/symtab.c \
 	gdb-10.2/gdb/printcmd.c \
 	gdb-10.2/gdb/symfile.c \
-	gdb-10.2/gdb/Makefile.in
+	gdb-10.2/gdb/Makefile.in \
+	gdb-10.2/gdb/dwarf2/read.c
 
 exit 0
 
@@ -3104,4 +3105,18 @@ exit 0
 +AC_REVISION([for Readline 8.0, version 2.86])
  
  m4_include([../../config/override.m4])
+ 
+--- gdb-10.2/gdb/dwarf2/read.c.orig
++++ gdb-10.2/gdb/dwarf2/read.c
+@@ -4925,7 +4925,10 @@ dw2_find_pc_sect_compunit_symtab (struct objfile *objfile,
+   result = recursively_find_pc_sect_compunit_symtab
+     (dw2_instantiate_symtab (data, per_objfile, false), pc);
+ 
+-  gdb_assert (result != NULL);
++  if (warn_if_readin && result == nullptr)
++    warning (_("(Error: pc %s in address map, but not in symtab.)"),
++            paddress (objfile->arch (), pc));
++
+   return result;
+ }
  
