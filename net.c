@@ -420,6 +420,9 @@ cmd_net(void)
 				case STR_PID:
 				case STR_TASK:
 					task = tc->task;
+					break;
+				case STR_INVALID:
+					error(FATAL, "invalid task or pid value: %s\n", args[optind]);
 				}
 			}
 			break;
