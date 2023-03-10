@@ -2214,6 +2214,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long inet6_ifaddr_if_list;
 	long inet6_ifaddr_if_next;
 	long in6_addr_in6_u;
+	long kset_kobj;
+	long subsys_private_subsys;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

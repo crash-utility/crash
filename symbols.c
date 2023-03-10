@@ -10404,6 +10404,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(kobject_entry));
 	fprintf(fp, "                     kset_list: %ld\n",
 		OFFSET(kset_list));
+	fprintf(fp, "                     kset_kobj: %ld\n", OFFSET(kset_kobj));
 	fprintf(fp, "            request_list_count: %ld\n",
 		OFFSET(request_list_count));
 	fprintf(fp, "             request_cmd_flags: %ld\n",
@@ -10441,6 +10442,7 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "               blk_mq_tags_rqs: %ld\n",
 		OFFSET(blk_mq_tags_rqs));
 
+	fprintf(fp, "         subsys_private_subsys: %ld\n", OFFSET(subsys_private_subsys));
 	fprintf(fp, "  subsys_private_klist_devices: %ld\n",
 		OFFSET(subsys_private_klist_devices));
 	fprintf(fp, "                subsystem_kset: %ld\n",
