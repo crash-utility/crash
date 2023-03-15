@@ -8113,7 +8113,7 @@ x86_64_init_hyper(int when)
                 machdep->pageshift = ffs(machdep->pagesize) - 1;
                 machdep->pageoffset = machdep->pagesize - 1;
                 machdep->pagemask = ~((ulonglong)machdep->pageoffset);
-		machdep->stacksize = machdep->pagesize * 2;
+		machdep->stacksize = machdep->pagesize * 8;
                 if ((machdep->pgd = (char *)malloc(PAGESIZE())) == NULL)
                         error(FATAL, "cannot malloc pgd space.");
 		if ((machdep->pud = (char *)malloc(PAGESIZE())) == NULL)
