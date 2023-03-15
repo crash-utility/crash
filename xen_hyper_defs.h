@@ -551,6 +551,7 @@ struct xen_hyper_sched_context {
 	ulong idle;
 	ulong sched_priv;
 	ulong tick;
+	ulong sched_resource;
 };
 
 struct xen_hyper_sched_table {
@@ -602,6 +603,7 @@ struct xen_hyper_size_table {
 	long vcpu;
 	long vcpu_runstate_info;
 	long xen_crash_xen_regs_t;		/* elf note v2 */
+	long sched_resource;
 };
 
 struct xen_hyper_offset_table {
@@ -692,7 +694,7 @@ struct xen_hyper_offset_table {
 	/* mm_struct */
 	long mm_struct_pgd;
 #endif
-	/* schedule_data */
+	/* schedule_data or sched_resource */
 	long schedule_data_schedule_lock;
 	long schedule_data_curr;
 	long schedule_data_idle;

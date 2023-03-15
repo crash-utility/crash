@@ -558,6 +558,8 @@ xen_hyper_dump_xen_hyper_sched_table(int verbose)
 				flag, (buf, "%d]\n", i));
 			XEN_HYPER_PRI(fp, len, "schedule_data: ", buf, flag,
 				(buf, "%lx\n", schc->schedule_data));
+			XEN_HYPER_PRI(fp, len, "sched_resource: ", buf, flag,
+				(buf, "%lx\n", schc->sched_resource));
 			XEN_HYPER_PRI(fp, len, "curr: ", buf, flag,
 				(buf, "%lx\n", schc->curr));
 			XEN_HYPER_PRI(fp, len, "idle: ", buf, flag,
@@ -630,6 +632,8 @@ xen_hyper_dump_xen_hyper_size_table(char *spec, ulong makestruct)
 		(buf, "%ld\n", xen_hyper_size_table.note_buf_t));
 	XEN_HYPER_PRI(fp, len, "schedule_data: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_size_table.schedule_data));
+	XEN_HYPER_PRI(fp, len, "sched_resource: ", buf, flag,
+		(buf, "%ld\n", xen_hyper_size_table.sched_resource));
 	XEN_HYPER_PRI(fp, len, "scheduler: ", buf, flag,
 		(buf, "%ld\n", xen_hyper_size_table.scheduler));
 	XEN_HYPER_PRI(fp, len, "shared_info: ", buf, flag,
