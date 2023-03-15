@@ -324,7 +324,7 @@ void
 xen_hyper_x86_pcpu_init(void)
 {
 	ulong cpu_info;
-	ulong init_tss_base, init_tss;
+	ulong init_tss_base, init_tss, stack_base = 0;
 	ulong sp;
 	struct xen_hyper_pcpu_context *pcc;
 	char *buf, *bp;
@@ -340,34 +340,40 @@ xen_hyper_x86_pcpu_init(void)
 	}
 	/* get physical cpu context */
 	xen_hyper_alloc_pcpu_context_space(XEN_HYPER_MAX_CPUS());
-	if (symbol_exists("per_cpu__init_tss")) {
+	if (symbol_exists("stack_base")) {
+		stack_base = symbol_value("stack_base");
+		flag = 0;
+	} else if (symbol_exists("per_cpu__init_tss")) {
 		init_tss_base = symbol_value("per_cpu__init_tss");
-		flag = TRUE;
+		flag = 1;
 	} else if (symbol_exists("per_cpu__tss_page")) {
-			init_tss_base = symbol_value("per_cpu__tss_page");
-			flag = TRUE;
+		init_tss_base = symbol_value("per_cpu__tss_page");
+		flag = 1;
 	} else {
 		init_tss_base = symbol_value("init_tss");
-		flag = FALSE;
+		flag = 2;
 	}
-	buf = GETBUF(XEN_HYPER_SIZE(tss));
+	if (flag)
+		buf = GETBUF(XEN_HYPER_SIZE(tss));
 	for_cpu_indexes(i, cpuid)
 	{
-		if (flag)
-			init_tss = xen_hyper_per_cpu(init_tss_base, cpuid);
-		else
-			init_tss = init_tss_base +
-				XEN_HYPER_SIZE(tss) * cpuid;
-		if (!readmem(init_tss, KVADDR, buf,
-			XEN_HYPER_SIZE(tss), "init_tss", RETURN_ON_ERROR)) {
-			error(FATAL, "cannot read init_tss.\n");
+		if (flag) {
+			if (flag == 1)
+				init_tss = xen_hyper_per_cpu(init_tss_base, cpuid);
+			else
+				init_tss = init_tss_base + XEN_HYPER_SIZE(tss) * cpuid;
+			readmem(init_tss, KVADDR, buf,
+				XEN_HYPER_SIZE(tss), "init_tss", FAULT_ON_ERROR);
+			if (machine_type("X86")) {
+				sp = ULONG(buf + XEN_HYPER_OFFSET(tss_esp0));
+			} else if (machine_type("X86_64")) {
+				sp = ULONG(buf + XEN_HYPER_OFFSET(tss_rsp0));
+			} else
+				sp = 0;
+		} else {
+			readmem(stack_base + sizeof(ulong) * cpuid, KVADDR, &sp,
+				sizeof(ulong), "stack_base", FAULT_ON_ERROR);
 		}
-		if (machine_type("X86")) {
-			sp = ULONG(buf + XEN_HYPER_OFFSET(tss_esp0));
-		} else if (machine_type("X86_64")) {
-			sp = ULONG(buf + XEN_HYPER_OFFSET(tss_rsp0));
-		} else
-			sp = 0;
 		cpu_info = XEN_HYPER_GET_CPU_INFO(sp);
 		if (CRASHDEBUG(1)) {
 			fprintf(fp, "sp=%lx, cpu_info=%lx\n", sp, cpu_info);
@@ -377,9 +383,11 @@ xen_hyper_x86_pcpu_init(void)
 		}
 		pcc = &xhpct->context_array[cpuid];
 		xen_hyper_store_pcpu_context(pcc, cpu_info, bp);
-		xen_hyper_store_pcpu_context_tss(pcc, init_tss, buf);
+		if (flag)
+			xen_hyper_store_pcpu_context_tss(pcc, init_tss, buf);
 	}
-	FREEBUF(buf);
+	if (flag)
+		FREEBUF(buf);
 }
 
 #elif defined(IA64)
