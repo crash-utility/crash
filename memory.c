@@ -3559,6 +3559,8 @@ cmd_vm(void)
 		case 'M':
 			pc->curcmd_private = htoll(optarg, FAULT_ON_ERROR, NULL);
 			pc->curcmd_flags |= MM_STRUCT_FORCE;
+			if (!IS_KVADDR(pc->curcmd_private))
+				error(FATAL, "invalid mm_struct address: %s\n", optarg);
 			break;
 
 		case 'f':

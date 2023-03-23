@@ -4695,6 +4695,7 @@ char *help_vm[] = {
 "                However, if the address can be determined from the kernel stack,",
 "                it can be entered manually in order to try to resurrect the",
 "                virtual memory data of the task.",
+"                NOTE: this option is only used when the task's mm_struct is NULL.",
 "  -R reference  search for references to this number or filename.",
 "            -m  dump the mm_struct associated with the task.",
 "            -v  dump all of the vm_area_structs associated with the task.",
