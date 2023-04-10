@@ -3398,6 +3398,7 @@ cmd_fuser(void)
 	char fuser_header[BUFSIZE];
 	int doing_fds, doing_mmap, len;
 	int fuser_header_printed, lockd_header_printed;
+	ulong spec_addr;
 
         while ((c = getopt(argcnt, args, "")) != EOF) {
                 switch(c)
@@ -3421,7 +3422,12 @@ cmd_fuser(void)
 
 	doing_fds = doing_mmap = 0;
 	while (args[optind]) {
-                spec_string = args[optind];
+		spec_string = args[optind];
+		spec_addr = htol(spec_string, RETURN_ON_ERROR|QUIET, NULL);
+		if ((spec_addr == BADADDR || !IS_KVADDR(spec_addr)) &&
+		    spec_string[0] != '/')
+			error(FATAL, "invalid argument: %s\n", args[optind]);
+
 		if (STRNEQ(spec_string, "0x") && hexadecimal(spec_string, 0))
 			shift_string_left(spec_string, 2);
 		len = strlen(spec_string);
