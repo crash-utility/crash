@@ -8486,7 +8486,7 @@ dump_kmeminfo(void)
 	ulong hugetlb_total_pages, hugetlb_total_free_pages = 0;
 	int done_hugetlb_calc = 0; 
 	long nr_file_pages, nr_slab;
-	ulong swapper_space_nrpages;
+	long swapper_space_nrpages;
 	ulong pct;
 	uint tmp;
 	struct meminfo meminfo;
@@ -8609,7 +8609,9 @@ dump_kmeminfo(void)
 		char *swapper_space = GETBUF(SIZE(address_space));
 
 		swapper_space_nrpages = 0;
-		if (symbol_exists("nr_swapper_spaces") &&
+		if (dump_vm_stat("NR_SWAPCACHE", &swapper_space_nrpages, 0)) {
+			;
+		} else if (symbol_exists("nr_swapper_spaces") &&
 			(len = get_array_length("nr_swapper_spaces",
 				NULL, 0))) {
 			char *nr_swapper_space =
