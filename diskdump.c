@@ -515,16 +515,22 @@ arm_kdump_header_adjust(int header_version)
 static int
 read_pd(int fd, off_t offset, page_desc_t *pd)
 {
-	const off_t failed = (off_t)-1;
+	int ret;
 
 	if (FLAT_FORMAT()) {
 		if (!read_flattened_format(fd, offset, pd, sizeof(*pd)))
 			return READ_ERROR;
 	} else {
-		if (lseek(fd, offset, SEEK_SET) == failed)
+		if (offset < 0) {
+			if (CRASHDEBUG(8))
+				fprintf(fp, "read_pd: invalid offset: %lx\n", offset);
 			return SEEK_ERROR;
-		if (read(fd, pd, sizeof(*pd)) != sizeof(*pd))
+		}
+		if ((ret = pread(fd, pd, sizeof(*pd), offset)) != sizeof(*pd)) {
+			if (ret == -1 && CRASHDEBUG(8))
+				fprintf(fp, "read_pd: pread error: %s\n", strerror(errno));
 			return READ_ERROR;
+		}
 	}
 
 	return 0;
@@ -1125,7 +1131,6 @@ cache_page(physaddr_t paddr)
 	off_t seek_offset;
 	page_desc_t pd;
 	const int block_size = dd->block_size;
-	const off_t failed = (off_t)-1;
 	ulong retlen;
 #ifdef ZSTD
 	static ZSTD_DCtx *dctx = NULL;
@@ -1190,10 +1195,18 @@ cache_page(physaddr_t paddr)
 			return PAGE_INCOMPLETE;
 		}
 	} else {
-		if (lseek(dd->dfd, pd.offset, SEEK_SET) == failed)
+		if (pd.offset < 0) {
+			if (CRASHDEBUG(8))
+				fprintf(fp, "read_diskdump/cache_page: invalid offset: %lx\n",
+					pd.offset);
 			return SEEK_ERROR;
-		if (read(dd->dfd, dd->compressed_page, pd.size) != pd.size)
+		}
+		if ((ret = pread(dd->dfd, dd->compressed_page, pd.size, pd.offset)) != pd.size) {
+			if (ret == -1 && CRASHDEBUG(8))
+				fprintf(fp, "read_diskdump/cache_page: pread error: %s\n",
+					strerror(errno));
 			return READ_ERROR;
+		}
 	}
 
 	if (pd.flags & DUMP_DH_COMPRESSED_ZLIB) {

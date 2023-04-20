@@ -4336,7 +4336,7 @@ no_nt_prstatus_exists:
 int
 read_proc_kcore(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr) 
 {
-	int i; 
+	int i, ret;
 	size_t readcnt;
 	ulong kvaddr;
 	Elf32_Phdr *lp32;
@@ -4436,11 +4436,16 @@ read_proc_kcore(int fd, void *bufptr, int cnt, ulong addr, physaddr_t paddr)
 	if (offset == UNINITIALIZED)
 		return SEEK_ERROR;
 
-        if (lseek(fd, offset, SEEK_SET) != offset)
-		perror("lseek");
-
-	if (read(fd, bufptr, readcnt) != readcnt)
+	if (offset < 0) {
+		if (CRASHDEBUG(8))
+			fprintf(fp, "read_proc_kcore: invalid offset: %lx\n", offset);
+		return SEEK_ERROR;
+	}
+	if ((ret = pread(fd, bufptr, readcnt, offset)) != readcnt) {
+		if (ret == -1 && CRASHDEBUG(8))
+			fprintf(fp, "read_proc_kcore: pread error: %s\n", strerror(errno));
 		return READ_ERROR;
+	}
 
 	return cnt;
 }
