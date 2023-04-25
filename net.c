@@ -996,6 +996,9 @@ get_device_ip6_address(ulong devaddr, char **bufp, long buflen)
 		return;
 	}
 
+	if (INVALID_MEMBER(inet6_ifaddr_if_next))
+		return;
+
 	readmem(ip6_ptr + OFFSET(inet6_dev_addr_list), KVADDR,
 		&addr, sizeof(void *), "inet6_dev.addr_list", FAULT_ON_ERROR);
 
