@@ -74,8 +74,8 @@
 
   To build the crash utility: 
 
-    $ tar -xf crash-8.0.2.tar.gz
-    $ cd crash-8.0.2
+    $ tar -xf crash-8.0.3.tar.gz
+    $ cd crash-8.0.3
     $ make
 
   The initial build will take several minutes  because the embedded gdb module
@@ -124,7 +124,7 @@
   If neither /dev/mem or /dev/crash are available, then /proc/kcore will be
   be used as the live memory source.  If /proc/kcore is also restricted, then
   the Red Hat /dev/crash driver may be compiled and installed; its source
-  is included in the crash-8.0.2/memory_driver subdirectory.
+  is included in the crash-8.0.3/memory_driver subdirectory.
 
   If the kernel file is stored in /boot, /, /boot/efi, or in any /usr/src
   or /usr/lib/debug/lib/modules subdirectory, then no command line arguments
@@ -135,7 +135,7 @@
 
     $ crash
     
-    crash 8.0.2
+    crash 8.0.3
     Copyright (C) 2002-2022  Red Hat, Inc.
     Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
     Copyright (C) 1999-2006  Hewlett-Packard Co
@@ -161,7 +161,7 @@
           KERNEL: /boot/vmlinux
         DUMPFILE: /dev/mem
             CPUS: 1
-            DATE: Wed Nov 16 13:11:21 JST 2022
+            DATE: Wed Apr 26 10:51:52 JST 2023
           UPTIME: 10 days, 22:55:18
     LOAD AVERAGE: 0.08, 0.03, 0.01
            TASKS: 42
@@ -190,7 +190,7 @@
     exit           log            repeat         timer          
     extend         mach           runq           tree           
     
-    crash version: 8.0.2    gdb version: 10.2
+    crash version: 8.0.3    gdb version: 10.2
     For help on any command above, enter "help <command>".
     For help on input options, enter "help input".
     For help on output options, enter "help output".
@@ -203,7 +203,7 @@
 
     $ crash vmlinux vmcore
  
-    crash 8.0.2
+    crash 8.0.3
     Copyright (C) 2002-2022  Red Hat, Inc.
     Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
     Copyright (C) 1999-2006  Hewlett-Packard Co
