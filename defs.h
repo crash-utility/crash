@@ -807,10 +807,10 @@ struct kernel_table {                   /* kernel data */
         }                                                            \
 }
 
-#define THIS_KERNEL_VERSION ((kt->kernel_version[0] << 16) + \
-			     (kt->kernel_version[1] << 8) + \
+#define THIS_KERNEL_VERSION ((kt->kernel_version[0] << 24) + \
+			     (kt->kernel_version[1] << 16) + \
 			     (kt->kernel_version[2]))
-#define LINUX(x,y,z) (((uint)(x) << 16) + ((uint)(y) << 8) + (uint)(z))
+#define LINUX(x,y,z) (((uint)(x) << 24) + ((uint)(y) << 16) + (uint)(z))
 
 #define THIS_GCC_VERSION    ((kt->gcc_version[0] << 16) + \
                              (kt->gcc_version[1] << 8) + \
