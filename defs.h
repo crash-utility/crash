@@ -5521,6 +5521,7 @@ struct rb_node *rb_left(struct rb_node *, struct rb_node *);
 struct rb_node *rb_next(struct rb_node *);
 struct rb_node *rb_last(struct rb_root *);
 long percpu_counter_sum_positive(ulong fbc);
+ulong get_subsys_private(char *, char *);
 
 /* 
  *  symbols.c 

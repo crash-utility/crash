@@ -17865,38 +17865,9 @@ init_memory_block(int *klistcnt, ulong **klistbuf)
 	 * v6.3-rc1
 	 * d2bf38c088e0 driver core: remove private pointer from struct bus_type
 	 */
-	if (INVALID_MEMBER(bus_type_p)) {
-		int i, cnt;
-		char buf[32];
-		ulong bus_kset, list, name;
-
-		BZERO(ld, sizeof(struct list_data));
-
-		get_symbol_data("bus_kset", sizeof(ulong), &bus_kset);
-		readmem(bus_kset + OFFSET(kset_list), KVADDR, &list,
-			sizeof(ulong), "bus_kset.list", FAULT_ON_ERROR);
-
-		ld->flags |= LIST_ALLOCATE;
-		ld->start = list;
-		ld->end = bus_kset + OFFSET(kset_list);
-		ld->list_head_offset = OFFSET(kobject_entry);
-
-		cnt = do_list(ld);
-		for (i = 0; i < cnt; i++) {
-			readmem(ld->list_ptr[i] + OFFSET(kobject_name), KVADDR, &name,
-				sizeof(ulong), "kobject.name", FAULT_ON_ERROR);
-			read_string(name, buf, sizeof(buf)-1);
-			if (CRASHDEBUG(1))
-				fprintf(fp, "kobject: %lx name: %s\n", ld->list_ptr[i], buf);
-			if (STREQ(buf, "memory")) {
-				/* entry is subsys_private.subsys.kobj. See bus_to_subsys(). */
-				private = ld->list_ptr[i] - OFFSET(kset_kobj)
-						- OFFSET(subsys_private_subsys);
-				break;
-			}
-		}
-		FREEBUF(ld->list_ptr);
-	} else {
+	if (INVALID_MEMBER(bus_type_p))
+		private = get_subsys_private("bus_kset", "memory");
+	else {
 		ulong memory_subsys = symbol_value("memory_subsys");
 		readmem(memory_subsys + OFFSET(bus_type_p), KVADDR, &private,
 			sizeof(void *), "memory_subsys.private", FAULT_ON_ERROR);

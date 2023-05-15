@@ -6963,3 +6963,46 @@ percpu_counter_sum_positive(ulong fbc)
 
 	return (ret < 0) ? 0 : ret;
 }
+
+ulong
+get_subsys_private(char *kset_name, char *target_name)
+{
+	ulong kset_addr, kset_list, name_addr, private = 0;
+	struct list_data list_data, *ld;
+	char buf[32];
+	int i, cnt;
+
+	if (!symbol_exists(kset_name))
+		return 0;
+
+	ld = &list_data;
+	BZERO(ld, sizeof(struct list_data));
+
+	get_symbol_data(kset_name, sizeof(ulong), &kset_addr);
+	readmem(kset_addr + OFFSET(kset_list), KVADDR, &kset_list,
+		sizeof(ulong), "kset.list", FAULT_ON_ERROR);
+
+	ld->flags |= LIST_ALLOCATE;
+	ld->start = kset_list;
+	ld->end = kset_addr + OFFSET(kset_list);
+	ld->list_head_offset = OFFSET(kobject_entry);
+
+	cnt = do_list(ld);
+
+	for (i = 0; i < cnt; i++) {
+		readmem(ld->list_ptr[i] + OFFSET(kobject_name), KVADDR, &name_addr,
+			sizeof(ulong), "kobject.name", FAULT_ON_ERROR);
+		read_string(name_addr, buf, sizeof(buf)-1);
+		if (CRASHDEBUG(1))
+			fprintf(fp, "kobject: %lx name: %s\n", ld->list_ptr[i], buf);
+		if (STREQ(buf, target_name)) {
+			/* entry is subsys_private.subsys.kobj. See bus_to_subsys(). */
+			private = ld->list_ptr[i] - OFFSET(kset_kobj)
+					- OFFSET(subsys_private_subsys);
+			break;
+		}
+	}
+	FREEBUF(ld->list_ptr);
+
+	return private;
+}

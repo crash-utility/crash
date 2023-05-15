@@ -4686,9 +4686,16 @@ init_iter(struct iter *i)
 		} else {
 			/* kernel version > 2.6.27, klist */
 			unsigned long class_private_addr;
-			readmem(block_class_addr + OFFSET(class_p), KVADDR,
-				&class_private_addr, sizeof(class_private_addr),
-				"class.p", FAULT_ON_ERROR);
+
+			if (INVALID_MEMBER(class_p)) /* kernel version >= 6.4 */
+				class_private_addr = get_subsys_private("class_kset", "block");
+			else
+				readmem(block_class_addr + OFFSET(class_p), KVADDR,
+					&class_private_addr, sizeof(class_private_addr),
+					"class.p", FAULT_ON_ERROR);
+
+			if (!class_private_addr)
+				error(FATAL, "cannot determine subsys_private for block.\n");
 
 			if (VALID_STRUCT(class_private)) {
 				/* 2.6.27 < kernel version <= 2.6.37-rc2 */
@@ -4823,6 +4830,13 @@ void diskio_init(void)
 	if (INVALID_MEMBER(class_devices))
 		MEMBER_OFFSET_INIT(class_devices, "class", "devices");
 	MEMBER_OFFSET_INIT(class_p, "class", "p");
+	if (INVALID_MEMBER(class_p)) {
+		MEMBER_OFFSET_INIT(kset_list, "kset", "list");
+		MEMBER_OFFSET_INIT(kset_kobj, "kset", "kobj");
+		MEMBER_OFFSET_INIT(kobject_name, "kobject", "name");
+		MEMBER_OFFSET_INIT(kobject_entry, "kobject", "entry");
+		MEMBER_OFFSET_INIT(subsys_private_subsys, "subsys_private", "subsys");
+	}
 	MEMBER_OFFSET_INIT(class_private_devices, "class_private",
 		"class_devices");
 	MEMBER_OFFSET_INIT(device_knode_class, "device", "knode_class");
