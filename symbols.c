@@ -9169,6 +9169,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(vmap_area_vm));
 	fprintf(fp, "               vmap_area_flags: %ld\n", 
 		OFFSET(vmap_area_flags));
+	fprintf(fp, "          vmap_area_purge_list: %ld\n", OFFSET(vmap_area_purge_list));
 
 	fprintf(fp, "         module_size_of_struct: %ld\n", 
 		OFFSET(module_size_of_struct));

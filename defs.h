@@ -2216,6 +2216,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long in6_addr_in6_u;
 	long kset_kobj;
 	long subsys_private_subsys;
+	long vmap_area_purge_list;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

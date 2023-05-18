@@ -429,6 +429,7 @@ vm_init(void)
 	MEMBER_OFFSET_INIT(vmap_area_vm, "vmap_area", "vm");
 	if (INVALID_MEMBER(vmap_area_vm))
 		MEMBER_OFFSET_INIT(vmap_area_vm, "vmap_area", "private");
+	MEMBER_OFFSET_INIT(vmap_area_purge_list, "vmap_area", "purge_list");
 	STRUCT_SIZE_INIT(vmap_area, "vmap_area");
 	if (VALID_MEMBER(vmap_area_va_start) &&
 	    VALID_MEMBER(vmap_area_va_end) &&
@@ -9063,7 +9064,8 @@ dump_vmap_area(struct meminfo *vi)
 		readmem(ld->list_ptr[i], KVADDR, vmap_area_buf,
                         SIZE(vmap_area), "vmap_area struct", FAULT_ON_ERROR); 
 
-		if (VALID_MEMBER(vmap_area_flags)) {
+		if (VALID_MEMBER(vmap_area_flags) &&
+		    VALID_MEMBER(vmap_area_purge_list)) {
 			flags = ULONG(vmap_area_buf + OFFSET(vmap_area_flags));
 			if (flags != VM_VM_AREA)
 				continue;
