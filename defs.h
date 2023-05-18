@@ -6363,8 +6363,28 @@ typedef struct __attribute__((__packed__)) {
         unsigned int sp_reg:4;
         unsigned int bp_reg:4;
         unsigned int type:2;
+        unsigned int signal:1;
         unsigned int end:1;
 } kernel_orc_entry;
+
+typedef struct __attribute__((__packed__)) {
+        signed short sp_offset;
+        signed short bp_offset;
+        unsigned int sp_reg:4;
+        unsigned int bp_reg:4;
+        unsigned int type:3;
+        unsigned int signal:1;
+} kernel_orc_entry_6_4;
+
+typedef struct orc_entry {
+        signed short sp_offset;
+        signed short bp_offset;
+        unsigned int sp_reg;
+        unsigned int bp_reg;
+        unsigned int type;
+        unsigned int signal;
+        unsigned int end;
+} orc_entry;
 
 struct ORC_data {
 	int module_ORC;
@@ -6376,10 +6396,13 @@ struct ORC_data {
 	ulong orc_lookup;
 	ulong ip_entry;
 	ulong orc_entry;
-	kernel_orc_entry kernel_orc_entry;
+	orc_entry orc_entry_data;
+	int has_signal;
+	int has_end;
 };
 
-#define ORC_TYPE_CALL                   0
+#define ORC_TYPE_CALL                   ((machdep->flags & ORC_6_4) ? 2 : 0)
+/* The below entries are not used and must be updated if we use them. */
 #define ORC_TYPE_REGS                   1
 #define ORC_TYPE_REGS_IRET              2
 #define UNWIND_HINT_TYPE_SAVE           3
@@ -6456,6 +6479,7 @@ struct machine_specific {
 #define ORC         (0x4000)
 #define KPTI        (0x8000)
 #define L1TF       (0x10000)
+#define ORC_6_4    (0x20000)
 
 #define VM_FLAGS (VM_ORIG|VM_2_6_11|VM_XEN|VM_XEN_RHEL4|VM_5LEVEL)
 
