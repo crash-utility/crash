@@ -1209,6 +1209,27 @@ vm_init(void)
 		machdep->memory_size()));
 	vt->paddr_prlen = strlen(buf);
 
+	vt->zero_paddr = ~0UL;
+	if (kernel_symbol_exists("zero_pfn")) {
+		ulong zero_pfn;
+
+		if (readmem(symbol_value("zero_pfn"), KVADDR,
+			    &zero_pfn, sizeof(zero_pfn),
+			    "read zero_pfn", QUIET|RETURN_ON_ERROR))
+			vt->zero_paddr = zero_pfn << PAGESHIFT();
+	}
+
+	vt->huge_zero_paddr = ~0UL;
+	if (kernel_symbol_exists("huge_zero_pfn")) {
+		ulong huge_zero_pfn;
+
+		if (readmem(symbol_value("huge_zero_pfn"), KVADDR,
+			    &huge_zero_pfn, sizeof(huge_zero_pfn),
+			    "read huge_zero_pfn", QUIET|RETURN_ON_ERROR) &&
+		    huge_zero_pfn != ~0UL)
+			vt->huge_zero_paddr = huge_zero_pfn << PAGESHIFT();
+	}
+
 	if (vt->flags & PERCPU_KMALLOC_V1) 
                 vt->dump_kmem_cache = dump_kmem_cache_percpu_v1;
 	else if (vt->flags & PERCPU_KMALLOC_V2) 
@@ -14065,6 +14086,8 @@ dump_vm_table(int verbose)
 	} else {
 		fprintf(fp, "    node_online_map: (unused)\n");
 	}
+	fprintf(fp, "         zero_paddr: %lx\n", vt->zero_paddr);
+	fprintf(fp, "    huge_zero_paddr: %lx\n", vt->huge_zero_paddr);
 	fprintf(fp, "   nr_vm_stat_items: %d\n", vt->nr_vm_stat_items);
 	fprintf(fp, "      vm_stat_items: %s", (vt->flags & VM_STAT) ?
 		"\n" : "(not used)\n");

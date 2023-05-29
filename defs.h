@@ -2619,6 +2619,8 @@ struct vm_table {                /* kernel VM-related data */
 		char *name;
 	} *pageflags_data;
 	ulong max_mem_section_nr;
+	ulong zero_paddr;
+	ulong huge_zero_paddr;
 };
 
 #define NODES                       (0x1)
@@ -2999,6 +3001,9 @@ struct load_module {
 #define PAGEOFFSET(X) (((ulong)(X)) & machdep->pageoffset)
 #define VIRTPAGEBASE(X)  (((ulong)(X)) & (ulong)machdep->pagemask)
 #define PHYSPAGEBASE(X)  (((physaddr_t)(X)) & (physaddr_t)machdep->pagemask)
+
+#define IS_ZEROPAGE(paddr)   ((paddr) == vt->zero_paddr || \
+			      (paddr) == vt->huge_zero_paddr)
 
 /* 
  * Sparse memory stuff

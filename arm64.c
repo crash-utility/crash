@@ -1787,7 +1787,8 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if ((pgd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
 		ulong sectionbase = (pgd_val & SECTION_PAGE_MASK_512MB) & PHYS_MASK;
 		if (verbose) {
-			fprintf(fp, "  PAGE: %lx  (512MB)\n\n", sectionbase);
+			fprintf(fp, "  PAGE: %lx  (512MB%s)\n\n", sectionbase,
+				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
 			arm64_translate_pte(pgd_val, 0, 0);
 		}
 		*paddr = sectionbase + (vaddr & ~SECTION_PAGE_MASK_512MB);
@@ -1806,7 +1807,8 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if (pte_val & PTE_VALID) {
 		*paddr = (PAGEBASE(pte_val) & PHYS_MASK) + PAGEOFFSET(vaddr);
 		if (verbose) {
-			fprintf(fp, "  PAGE: %lx\n\n", PAGEBASE(*paddr));
+			fprintf(fp, "  PAGE: %lx  %s\n\n", PAGEBASE(*paddr),
+				IS_ZEROPAGE(PAGEBASE(*paddr)) ? "(ZERO PAGE)" : "");
 			arm64_translate_pte(pte_val, 0, 0);
 		}
 	} else {
@@ -1859,7 +1861,8 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
 		ulong sectionbase = PTE_TO_PHYS(pmd_val) & SECTION_PAGE_MASK_512MB;
 		if (verbose) {
-			fprintf(fp, "  PAGE: %lx  (512MB)\n\n", sectionbase);
+			fprintf(fp, "  PAGE: %lx  (512MB%s)\n\n", sectionbase,
+				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
 			arm64_translate_pte(pmd_val, 0, 0);
 		}
 		*paddr = sectionbase + (vaddr & ~SECTION_PAGE_MASK_512MB);
@@ -1878,7 +1881,8 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if (pte_val & PTE_VALID) {
 		*paddr = PTE_TO_PHYS(pte_val) + PAGEOFFSET(vaddr);
 		if (verbose) {
-			fprintf(fp, "  PAGE: %lx\n\n", PAGEBASE(*paddr));
+			fprintf(fp, "  PAGE: %lx  %s\n\n", PAGEBASE(*paddr),
+				IS_ZEROPAGE(PAGEBASE(*paddr)) ? "(ZERO PAGE)" : "");
 			arm64_translate_pte(pte_val, 0, 0);
 		}
 	} else {
@@ -1940,7 +1944,8 @@ arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
 		ulong sectionbase = (pmd_val & SECTION_PAGE_MASK_2MB) & PHYS_MASK;
 		if (verbose) {
-			fprintf(fp, "  PAGE: %lx  (2MB)\n\n", sectionbase);
+			fprintf(fp, "  PAGE: %lx  (2MB%s)\n\n", sectionbase,
+				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
 			arm64_translate_pte(pmd_val, 0, 0);
 		}
 		*paddr = sectionbase + (vaddr & ~SECTION_PAGE_MASK_2MB);
@@ -1959,7 +1964,8 @@ arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if (pte_val & PTE_VALID) {
 		*paddr = (PAGEBASE(pte_val) & PHYS_MASK) + PAGEOFFSET(vaddr);
 		if (verbose) {
-			fprintf(fp, "  PAGE: %lx\n\n", PAGEBASE(*paddr));
+			fprintf(fp, "  PAGE: %lx  %s\n\n", PAGEBASE(*paddr),
+				IS_ZEROPAGE(PAGEBASE(*paddr)) ? "(ZERO PAGE)" : "");
 			arm64_translate_pte(pte_val, 0, 0);
 		}
 	} else {
@@ -2029,7 +2035,8 @@ arm64_vtop_4level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
 		ulong sectionbase = (pmd_val & SECTION_PAGE_MASK_2MB) & PHYS_MASK;
 		if (verbose) {
-			fprintf(fp, "  PAGE: %lx  (2MB)\n\n", sectionbase);
+			fprintf(fp, "  PAGE: %lx  (2MB%s)\n\n", sectionbase,
+				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
 			arm64_translate_pte(pmd_val, 0, 0);
 		}
 		*paddr = sectionbase + (vaddr & ~SECTION_PAGE_MASK_2MB);
@@ -2048,7 +2055,8 @@ arm64_vtop_4level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if (pte_val & PTE_VALID) {
 		*paddr = (PAGEBASE(pte_val) & PHYS_MASK) + PAGEOFFSET(vaddr);
 		if (verbose) {
-			fprintf(fp, "  PAGE: %lx\n\n", PAGEBASE(*paddr));
+			fprintf(fp, "  PAGE: %lx  %s\n\n", PAGEBASE(*paddr),
+				IS_ZEROPAGE(PAGEBASE(*paddr)) ? "(ZERO PAGE)" : "");
 			arm64_translate_pte(pte_val, 0, 0);
 		}
 	} else {

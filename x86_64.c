@@ -2114,8 +2114,9 @@ x86_64_uvtop_level4(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, in
 		goto no_upage;
         if (pmd_pte & _PAGE_PSE) {
 		if (verbose) {
-                        fprintf(fp, "  PAGE: %lx  (2MB)\n\n", 
-				PAGEBASE(pmd_pte) & PHYSICAL_PAGE_MASK);
+			fprintf(fp, "  PAGE: %lx  (2MB%s)\n\n",
+				PAGEBASE(pmd_pte) & PHYSICAL_PAGE_MASK,
+				IS_ZEROPAGE(PAGEBASE(pmd_pte) & PHYSICAL_PAGE_MASK) ? ", ZERO PAGE" : "");
                         x86_64_translate_pte(pmd_pte, 0, 0);
                 }
 
@@ -2143,8 +2144,8 @@ x86_64_uvtop_level4(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, in
 	*paddr = (PAGEBASE(pte) & PHYSICAL_PAGE_MASK) + PAGEOFFSET(uvaddr);
 
 	if (verbose) {
-		fprintf(fp, "  PAGE: %lx\n\n", 
-			PAGEBASE(*paddr) & PHYSICAL_PAGE_MASK);
+		fprintf(fp, "  PAGE: %lx  %s\n\n", PAGEBASE(*paddr) & PHYSICAL_PAGE_MASK,
+			IS_ZEROPAGE(PAGEBASE(*paddr) & PHYSICAL_PAGE_MASK) ? "(ZERO PAGE)" : "");
 		x86_64_translate_pte(pte, 0, 0);
 	}
 
