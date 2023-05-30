@@ -976,7 +976,10 @@ struct bt_info {
 
 #define STACK_OFFSET_TYPE(OFF) \
   (((ulong)(OFF) > STACKSIZE()) ? \
-  (ulong)((ulong)(OFF) - (ulong)(bt->stackbase)) : (ulong)(OFF)) 
+  (((ulong)(OFF) < (ulong)(bt->stackbase) || (ulong)(OFF) >= (ulong)(bt->stackbase) + STACKSIZE()) ? \
+  error(FATAL, "invalid stack pointer is given\n") :			\
+   (ulong)((ulong)(OFF) - (ulong)(bt->stackbase))) :			\
+   (ulong)(OFF))
 
 #define GET_STACK_ULONG(OFF) \
  *((ulong *)((char *)(&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(OFF))])))
