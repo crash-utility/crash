@@ -7118,6 +7118,7 @@ int dumpfile_is_split(void);
 void show_split_dumpfiles(void);
 void x86_process_elf_notes(void *, unsigned long);
 void *diskdump_get_prstatus_percpu(int);
+int have_crash_notes(int cpu);
 void map_cpus_to_prstatus_kdump_cmprs(void);
 void diskdump_display_regs(int, FILE *);
 void process_elf32_notes(void *, ulong);

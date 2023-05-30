@@ -101,12 +101,54 @@ int dumpfile_is_split(void)
 	return KDUMP_SPLIT();
 }
 
+int have_crash_notes(int cpu)
+{
+	ulong crash_notes, notes_ptr;
+	char *buf, *p;
+	Elf64_Nhdr *note = NULL;
+
+	if (!readmem(symbol_value("crash_notes"), KVADDR, &crash_notes,
+		     sizeof(crash_notes), "crash_notes", RETURN_ON_ERROR)) {
+		error(WARNING, "cannot read \"crash_notes\"\n");
+		return FALSE;
+	}
+
+	if ((kt->flags & SMP) && (kt->flags & PER_CPU_OFF))
+		notes_ptr = crash_notes + kt->__per_cpu_offset[cpu];
+	else
+		notes_ptr = crash_notes;
+
+	buf = GETBUF(SIZE(note_buf));
+
+	if (!readmem(notes_ptr, KVADDR, buf,
+		     SIZE(note_buf), "note_buf_t", RETURN_ON_ERROR)) {
+		error(WARNING, "cpu %d: cannot read NT_PRSTATUS note\n", cpu);
+		return FALSE;
+	}
+
+	note = (Elf64_Nhdr *)buf;
+	p = buf + sizeof(Elf64_Nhdr);
+
+	if (note->n_type != NT_PRSTATUS) {
+		error(WARNING, "cpu %d: invalid NT_PRSTATUS note (n_type != NT_PRSTATUS)\n", cpu);
+		return FALSE;
+	}
+
+	if (!STRNEQ(p, "CORE")) {
+		error(WARNING, "cpu %d: invalid NT_PRSTATUS note (name != \"CORE\")\n", cpu);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 void
 map_cpus_to_prstatus_kdump_cmprs(void)
 {
 	void **nt_ptr;
 	int online, i, j, nrcpus;
 	size_t size;
+	int crash_notes_exists;
 
 	if (pc->flags2 & QEMU_MEM_DUMP_COMPRESSED)  /* notes exist for all cpus */
 		goto resize_note_pointers;
@@ -129,9 +171,10 @@ map_cpus_to_prstatus_kdump_cmprs(void)
 	 *  Re-populate the array with the notes mapping to online cpus
 	 */
 	nrcpus = (kt->kernel_NR_CPUS ? kt->kernel_NR_CPUS : NR_CPUS);
+	crash_notes_exists = kernel_symbol_exists("crash_notes");
 
 	for (i = 0, j = 0; i < nrcpus; i++) {
-		if (in_cpu_map(ONLINE_MAP, i)) {
+		if (in_cpu_map(ONLINE_MAP, i) && (!crash_notes_exists || have_crash_notes(i))) {
 			dd->nt_prstatus_percpu[i] = nt_ptr[j++];
 			dd->num_prstatus_notes = 
 				MAX(dd->num_prstatus_notes, i+1);
