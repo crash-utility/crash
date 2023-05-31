@@ -64,8 +64,8 @@ process_command_line(void)
 	fp = stdout;
 	BZERO(pc->command_line, BUFSIZE);
 
-	if (!(pc->flags & 
-	    (READLINE|SILENT|CMDLINE_IFILE|RCHOME_IFILE|RCLOCAL_IFILE))) 
+	if (!pc->ifile_in_progress && !(pc->flags &
+	    (TTY|SILENT|CMDLINE_IFILE|RCHOME_IFILE|RCLOCAL_IFILE)))
 		fprintf(fp, "%s", pc->prompt);
 	fflush(fp);
 
@@ -136,12 +136,16 @@ process_command_line(void)
 			add_history(pc->command_line);
 		
 		check_special_handling(pc->command_line);
-        } else {
-        	if (fgets(pc->command_line, BUFSIZE-1, stdin) == NULL)
+	} else {
+		if (fgets(pc->command_line, BUFSIZE-1, stdin) == NULL)
 			clean_exit(1);
+		if (!(pc->flags & SILENT)) {
+			fprintf(fp, "%s", pc->command_line);
+			fflush(fp);
+		}
 		clean_line(pc->command_line);
 		strcpy(pc->orig_line, pc->command_line);
-        }
+	}
 
 	/*
 	 *  First clean out all linefeeds and leading/trailing spaces.
