@@ -2381,6 +2381,12 @@ arm64_is_kernel_exception_frame(struct bt_info *bt, ulong stkptr)
         struct arm64_pt_regs *regs;
 	struct machine_specific *ms = machdep->machspec;
 
+	if (stkptr > STACKSIZE() && !INSTACK(stkptr, bt)) {
+		if (CRASHDEBUG(1))
+			error(WARNING, "stkptr: %lx is outside the kernel stack range\n", stkptr);
+		return FALSE;
+	}
+
         regs = (struct arm64_pt_regs *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(stkptr))];
 
 	if (INSTACK(regs->sp, bt) && INSTACK(regs->regs[29], bt) && 
