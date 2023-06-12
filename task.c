@@ -675,6 +675,9 @@ task_init(void)
 		tt->this_task = pid_to_task(active_pid);
 	}
 	else {
+		if (INVALID_SIZE(note_buf))
+			STRUCT_SIZE_INIT(note_buf, "note_buf_t");
+
 		if (KDUMP_DUMPFILE())
 			map_cpus_to_prstatus();
 		else if (ELF_NOTES_VALID() && DISKDUMP_DUMPFILE())
