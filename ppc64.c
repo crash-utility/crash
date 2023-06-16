@@ -968,9 +968,6 @@ ppc64_vtop(ulong vaddr, ulong *pgd, physaddr_t *paddr, int verbose)
 		return FALSE;
 	}
 
-	if (!pte)
-		return FALSE;
-
 	*paddr = PAGEBASE(PTOB(pte >> PTE_RPN_SHIFT_DEFAULT)) + PAGEOFFSET(vaddr);
 
 	if (verbose) {
@@ -1076,9 +1073,6 @@ ppc64_vtop_level4(ulong vaddr, ulong *level4, physaddr_t *paddr, int verbose)
 		}
 		return FALSE;
 	}
-
-	if (!pte)
-		return FALSE;
 
 out:
 	if (hugepage_type) {
