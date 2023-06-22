@@ -48,8 +48,8 @@ static int load_module_index(struct syment *);
 static void section_header_info(bfd *, asection *, void *);
 static void store_section_data(struct load_module *, bfd *, asection *);
 static void calculate_load_order_v1(struct load_module *, bfd *);
-static void calculate_load_order_v2(struct load_module *, bfd *, int,
-        void *, long, unsigned int);
+static void calculate_load_order_v2(struct load_module *, bfd *, int, void *, long, unsigned int);
+static void calculate_load_order_6_4(struct load_module *, bfd *, int, void *, long, unsigned int);
 static void check_insmod_builtin(struct load_module *, int, ulong *);
 static int is_insmod_builtin(struct load_module *, struct syment *);
 struct load_module;
@@ -104,6 +104,42 @@ static unsigned char is_right_brace(const char *);
 static struct struct_elem *find_node(struct struct_elem *, char *);
 static void dump_node(struct struct_elem *, char *, unsigned char, unsigned char);
 
+static int module_mem_type(ulong, struct load_module *);
+static ulong module_mem_end(ulong, struct load_module *);
+static int in_module_range(ulong, struct load_module *, int, int);
+static struct syment *value_search_module_6_4(ulong, ulong *);
+static struct syment *next_symbol_by_symname(char *);
+static struct syment *prev_symbol_by_symname(char *);
+static struct syment *next_module_symbol_by_value(ulong);
+static struct syment *prev_module_symbol_by_value(ulong);
+static struct syment *next_module_symbol_by_syment(struct syment *);
+static struct syment *prev_module_symbol_by_syment(struct syment *);
+
+struct module_tag {
+	char *start;
+	char *end;
+	char *start_str;
+	char *end_str;
+};
+
+#define MODULE_TAG(type, suffix)	("_MODULE_" #type "_" #suffix "_")
+#define MODULE_STR(type, suffix)	( "MODULE " #type " " #suffix)
+#define MODULE_TAGS(type)		{		\
+	.start		= MODULE_TAG(type, START),	\
+	.end		= MODULE_TAG(type, END),	\
+	.start_str	= MODULE_STR(type, START),	\
+	.end_str	= MODULE_STR(type, END)		\
+}
+
+static const struct module_tag module_tag[] = {
+	MODULE_TAGS(TEXT),
+	MODULE_TAGS(DATA),
+	MODULE_TAGS(RODATA),
+	MODULE_TAGS(RO_AFTER_INIT),
+	MODULE_TAGS(INIT_TEXT),
+	MODULE_TAGS(INIT_DATA),
+	MODULE_TAGS(INIT_RODATA),
+};
 
 /*
  *  structure/union printing stuff
@@ -1268,10 +1304,7 @@ symname_hash_search(struct syment *table[], char *name)
  *  Output for sym -[lL] command.
  */
 
-#define MODULE_PSEUDO_SYMBOL(sp) \
-    ((STRNEQ((sp)->name, "_MODULE_START_") || STRNEQ((sp)->name, "_MODULE_END_")) || \
-    (STRNEQ((sp)->name, "_MODULE_INIT_START_") || STRNEQ((sp)->name, "_MODULE_INIT_END_")) || \
-    (STRNEQ((sp)->name, "_MODULE_SECTION_")))
+#define MODULE_PSEUDO_SYMBOL(sp)	(STRNEQ((sp)->name, "_MODULE_"))
 
 #define MODULE_START(sp) (STRNEQ((sp)->name, "_MODULE_START_"))
 #define MODULE_END(sp)   (STRNEQ((sp)->name, "_MODULE_END_"))
@@ -1279,6 +1312,76 @@ symname_hash_search(struct syment *table[], char *name)
 #define MODULE_INIT_END(sp)   (STRNEQ((sp)->name, "_MODULE_INIT_END_"))
 #define MODULE_SECTION_START(sp) (STRNEQ((sp)->name, "_MODULE_SECTION_START"))
 #define MODULE_SECTION_END(sp)   (STRNEQ((sp)->name, "_MODULE_SECTION_END"))
+
+#define MODULE_MEM_START(sp,t)	(STRNEQ((sp)->name, module_tag[t].start))
+#define MODULE_MEM_END(sp,t)	(STRNEQ((sp)->name, module_tag[t].end))
+
+/* For 6.4 and later */
+static void
+module_symbol_dump(char *module)
+{
+	int i, t;
+	struct syment *sp, *sp_end;
+	struct load_module *lm;
+	const char *p1, *p2;
+
+	for (i = 0; i < st->mods_installed; i++) {
+
+		lm = &st->load_modules[i];
+		if (module && !STREQ(module, lm->mod_name))
+			continue;
+
+		if (received_SIGINT() || output_closed())
+			return;
+
+		/*
+		 * module percpu symbols are within the .data..percpu section,
+		 * not in any module memory regions.
+		 */
+		if (MODULE_PERCPU_SYMS_LOADED(lm)) {
+			p1 = "MODULE PERCPU START";
+			p2 = lm->mod_name;
+			fprintf(fp, "%lx %s: %s\n", lm->mod_percpu, p1, p2);
+
+			dump_percpu_symbols(lm);
+
+			p1 = "MODULE PERCPU END";
+			fprintf(fp, "%lx %s: %s\n", lm->mod_percpu + lm->mod_percpu_size, p1, p2);
+		}
+
+		for_each_mod_mem_type(t) {
+			if (!lm->symtable[t])
+				continue;
+
+			sp = lm->symtable[t];
+			sp_end = lm->symend[t];
+
+			for ( ; sp <= sp_end; sp++) {
+				if (MODULE_PSEUDO_SYMBOL(sp)) {
+					if (MODULE_MEM_START(sp, t)) {
+						p1 = module_tag[t].start_str;
+						p2 = sp->name + strlen(module_tag[t].start);
+					} else if (MODULE_MEM_END(sp, t)) {
+						p1 = module_tag[t].end_str;
+						p2 = sp->name + strlen(module_tag[t].end);
+					} else if (MODULE_SECTION_START(sp)) {
+						p1 = sp->name + strlen("_MODULE_SECTION_START ");
+						p2 = "section start";
+					} else if (MODULE_SECTION_END(sp)) {
+						p1 = sp->name + strlen("_MODULE_SECTION_END ");
+						p2 = "section end";
+					} else {
+						p1 = "unknown tag";
+						p2 = sp->name;
+					}
+
+					fprintf(fp, "%lx %s: %s\n", sp->value, p1, p2);
+				} else
+					show_symbol(sp, 0, SHOW_RADIX());
+			}
+		}
+	}
+}
 
 static void
 symbol_dump(ulong flags, char *module)
@@ -1301,6 +1404,11 @@ symbol_dump(ulong flags, char *module)
 
 	if (!(flags & MODULE_SYMS))
 		return;
+
+	if (MODULE_MEMORY()) {
+		module_symbol_dump(module);
+		return;
+	}
 
 	for (i = 0; i < st->mods_installed; i++) {
 
@@ -1389,8 +1497,14 @@ dump_percpu_symbols(struct load_module *lm)
 	struct syment *sp, *sp_end;
 
 	if (MODULE_PERCPU_SYMS_LOADED(lm)) {
-		sp = lm->mod_symtable;
-		sp_end = lm->mod_symend;
+		if (MODULE_MEMORY()) {
+			/* The lm should have mod_load_symtable. */
+			sp = lm->mod_load_symtable;
+			sp_end = lm->mod_load_symend;
+		} else {
+			sp = lm->mod_symtable;
+			sp_end = lm->mod_symend;
+		}
 		for ( ; sp <= sp_end; sp++) {
 			if (IN_MODULE_PERCPU(sp->value, lm))
 				show_symbol(sp, 0, SHOW_RADIX());
@@ -1425,8 +1539,13 @@ check_for_dups(struct load_module *lm)
 {
 	struct syment *sp, *sp_end;
 
-        sp = lm->mod_symtable;
-        sp_end = lm->mod_symend;
+	if (MODULE_MEMORY()) {
+		sp = lm->mod_load_symtable;
+		sp_end = lm->mod_load_symend;
+	} else {
+		sp = lm->mod_symtable;
+		sp_end = lm->mod_symend;
+	}
 
         for ( ; sp <= sp_end; sp++) {
                 if (symbol_name_count(sp->name) > 1)
@@ -1786,6 +1905,362 @@ modsym_value(ulong syms, union kernel_symbol *modsym, int i)
 	}
 
 	return 0;
+}
+
+/*
+ * Linux 6.4 introduced module.mem memory layout
+ */
+void
+store_module_symbols_6_4(ulong total, int mods_installed)
+{
+	int i, m, t;
+	ulong mod, mod_next;
+	char *mod_name;
+	uint nsyms, ngplsyms;
+	ulong syms, gpl_syms;
+	ulong nksyms;
+	long strbuflen;
+	ulong size;
+	int mcnt, lm_mcnt;
+	union kernel_symbol *modsym;
+	size_t kernel_symbol_size;
+	struct load_module *lm;
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char *strbuf = NULL, *modbuf, *modsymbuf;
+	struct syment *sp;
+	ulong first, last;
+
+	st->mods_installed = mods_installed;
+
+	if (!st->mods_installed) {
+		st->flags &= ~MODULE_SYMS;
+		return;
+	}
+
+	/*
+	 *  If we've been here before, free up everything and start over.
+	 */
+	if (st->flags & MODULE_SYMS)
+		error(FATAL, "re-initialization of module symbols not implemented yet!\n");
+
+	kernel_symbol_size = kernel_symbol_type_init();
+
+	if ((st->ext_module_symtable = (struct syment *)
+	    calloc(total, sizeof(struct syment))) == NULL)
+		error(FATAL, "module syment space malloc (%ld symbols): %s\n",
+			total, strerror(errno));
+
+	if (!namespace_ctl(NAMESPACE_INIT, &st->ext_module_namespace,
+	    (void *)total, NULL))
+		error(FATAL, "module namespace malloc: %s\n", strerror(errno));
+
+	if ((st->load_modules = (struct load_module *)calloc
+	    (st->mods_installed, sizeof(struct load_module))) == NULL)
+		error(FATAL, "load_module array malloc: %s\n", strerror(errno));
+
+	modbuf = GETBUF(SIZE(module));
+	modsymbuf = NULL;
+	m = mcnt = mod_next = 0;
+
+	for (mod = kt->module_list; mod != kt->kernel_module; mod = mod_next) {
+
+		readmem(mod, KVADDR, modbuf, SIZE(module),
+			"module buffer", FAULT_ON_ERROR);
+
+		syms = ULONG(modbuf + OFFSET(module_syms));
+		gpl_syms = ULONG(modbuf + OFFSET(module_gpl_syms));
+		nsyms = UINT(modbuf + OFFSET(module_num_syms));
+		ngplsyms = UINT(modbuf + OFFSET(module_num_gpl_syms));
+
+		nksyms = UINT(modbuf + OFFSET(module_num_symtab));
+
+		mod_name = modbuf + OFFSET(module_name);
+
+		lm = &st->load_modules[m++];
+		BZERO(lm, sizeof(struct load_module));
+
+		size = 0;
+		for_each_mod_mem_type(t) {
+			lm->mem[t].base = ULONG(modbuf + OFFSET(module_mem) +
+						SIZE(module_memory) * t + OFFSET(module_memory_base));
+			lm->mem[t].size = UINT(modbuf + OFFSET(module_mem) +
+						SIZE(module_memory) * t + OFFSET(module_memory_size));
+			if (t < MOD_INIT_TEXT)
+				size += lm->mem[t].size;
+		}
+		lm->mod_base = lm->mem[MOD_TEXT].base;
+		/* module core size, init not included */
+		lm->mod_size = size;
+		lm->module_struct = mod;
+
+		if (strlen(mod_name) < MAX_MOD_NAME)
+			strcpy(lm->mod_name, mod_name);
+		else {
+			error(INFO, "module name greater than MAX_MOD_NAME: %s\n", mod_name);
+			strncpy(lm->mod_name, mod_name, MAX_MOD_NAME-1);
+		}
+		if (CRASHDEBUG(3))
+			fprintf(fp, "%lx (%lx): %s syms: %d gplsyms: %d ksyms: %ld\n",
+				mod, lm->mod_base, lm->mod_name, nsyms, ngplsyms, nksyms);
+
+		lm->mod_flags = MOD_EXT_SYMS;
+		lm->mod_ext_symcnt = mcnt;
+		lm->mod_text_start = lm->mod_base;
+		lm->mod_init_module_ptr = lm->mem[MOD_INIT_TEXT].base;
+		lm->mod_init_size = lm->mem[MOD_INIT_TEXT].size;
+		lm->mod_init_text_size = lm->mem[MOD_INIT_TEXT].size;
+
+		if (VALID_MEMBER(module_percpu))
+			lm->mod_percpu = ULONG(modbuf + OFFSET(module_percpu));
+
+		lm_mcnt = mcnt;
+		for_each_mod_mem_type(t) {
+			if (!lm->mem[t].size)
+				continue;
+
+			st->ext_module_symtable[mcnt].value = lm->mem[t].base;
+			st->ext_module_symtable[mcnt].type = 'm';
+			st->ext_module_symtable[mcnt].flags |= MODULE_SYMBOL;
+			sprintf(buf2, "%s%s", module_tag[t].start, mod_name);
+			namespace_ctl(NAMESPACE_INSTALL, &st->ext_module_namespace,
+				&st->ext_module_symtable[mcnt], buf2);
+			lm_mcnt = mcnt;
+			mcnt++;
+
+			if (t >= MOD_INIT_TEXT)
+				lm->mod_flags |= MOD_INIT;
+		}
+
+		if (nsyms && !IN_MODULE(syms, lm)) {
+			error(WARNING,
+			    "[%s] module.syms outside of module " "address space (%lx)\n\n",
+				lm->mod_name, syms);
+			nsyms = 0;
+		}
+
+		if (nsyms) {
+			modsymbuf = GETBUF(kernel_symbol_size*nsyms);
+			readmem((ulong)syms, KVADDR, modsymbuf,
+				nsyms * kernel_symbol_size,
+				"module symbols", FAULT_ON_ERROR);
+		}
+
+		for (i = first = last = 0; i < nsyms; i++) {
+			modsym = (union kernel_symbol *)
+			    (modsymbuf + (i * kernel_symbol_size));
+			if (!first
+			    || first > modsym_name(syms, modsym, i))
+				first = modsym_name(syms, modsym, i);
+			if (modsym_name(syms, modsym, i) > last)
+				last = modsym_name(syms, modsym, i);
+		}
+
+		if (last > first) {
+			/* The buffer should not go over the block. */
+			ulong end = module_mem_end(first, lm);
+
+			strbuflen = (last-first) + BUFSIZE;
+			if ((first + strbuflen) >= end) {
+				strbuflen = end - first;
+
+			}
+			strbuf = GETBUF(strbuflen);
+
+			if (!readmem(first, KVADDR, strbuf, strbuflen,
+			    "module symbol strings", RETURN_ON_ERROR)) {
+				FREEBUF(strbuf);
+				strbuf = NULL;
+			}
+		}
+
+
+		for (i = 0; i < nsyms; i++) {
+			modsym = (union kernel_symbol *)(modsymbuf + (i * kernel_symbol_size));
+
+			BZERO(buf1, BUFSIZE);
+
+			if (strbuf)
+				strcpy(buf1, &strbuf[modsym_name(syms, modsym, i) - first]);
+			else
+				read_string(modsym_name(syms, modsym, i), buf1, BUFSIZE-1);
+
+			if (strlen(buf1)) {
+				st->ext_module_symtable[mcnt].value =
+					modsym_value(syms, modsym, i);
+				st->ext_module_symtable[mcnt].type = '?';
+				st->ext_module_symtable[mcnt].flags |= MODULE_SYMBOL;
+				strip_module_symbol_end(buf1);
+				strip_symbol_end(buf1, NULL);
+				namespace_ctl(NAMESPACE_INSTALL,
+				    &st->ext_module_namespace,
+				    &st->ext_module_symtable[mcnt], buf1);
+
+				mcnt++;
+			}
+		}
+
+		if (modsymbuf) {
+			FREEBUF(modsymbuf);
+			modsymbuf = NULL;
+		}
+
+		if (strbuf)
+			FREEBUF(strbuf);
+
+		if (ngplsyms) {
+			modsymbuf = GETBUF(kernel_symbol_size * ngplsyms);
+			readmem((ulong)gpl_syms, KVADDR, modsymbuf,
+				ngplsyms * kernel_symbol_size,
+				"module gpl symbols", FAULT_ON_ERROR);
+		}
+
+		for (i = first = last = 0; i < ngplsyms; i++) {
+			modsym = (union kernel_symbol *)
+			    (modsymbuf + (i * kernel_symbol_size));
+			if (!first
+			    || first > modsym_name(gpl_syms, modsym, i))
+				first = modsym_name(gpl_syms, modsym, i);
+			if (modsym_name(gpl_syms, modsym, i) > last)
+				last = modsym_name(gpl_syms, modsym, i);
+		}
+
+		if (last > first) {
+			ulong end = module_mem_end(first, lm);
+
+			strbuflen = (last-first) + BUFSIZE;
+			if ((first + strbuflen) >= end) {
+				strbuflen = end - first;
+
+			}
+			strbuf = GETBUF(strbuflen);
+
+			if (!readmem(first, KVADDR, strbuf, strbuflen,
+			    "module gpl symbol strings", RETURN_ON_ERROR)) {
+				FREEBUF(strbuf);
+				strbuf = NULL;
+			}
+		} else
+			strbuf = NULL;
+
+		for (i = 0; i < ngplsyms; i++) {
+			modsym = (union kernel_symbol *) (modsymbuf + (i * kernel_symbol_size));
+
+			BZERO(buf1, BUFSIZE);
+
+			if (strbuf)
+				strcpy(buf1, &strbuf[modsym_name(gpl_syms, modsym, i) - first]);
+			else
+				read_string(modsym_name(gpl_syms, modsym, i), buf1, BUFSIZE-1);
+
+			if (strlen(buf1)) {
+				st->ext_module_symtable[mcnt].value =
+					modsym_value(gpl_syms, modsym, i);
+				st->ext_module_symtable[mcnt].type = '?';
+				st->ext_module_symtable[mcnt].flags |= MODULE_SYMBOL;
+				strip_module_symbol_end(buf1);
+				strip_symbol_end(buf1, NULL);
+				namespace_ctl(NAMESPACE_INSTALL,
+				    &st->ext_module_namespace,
+				    &st->ext_module_symtable[mcnt], buf1);
+
+				mcnt++;
+			}
+		}
+
+		if (modsymbuf) {
+			FREEBUF(modsymbuf);
+			modsymbuf = NULL;
+		}
+
+		if (strbuf)
+			FREEBUF(strbuf);
+
+		/*
+		 *  If the module was compiled with kallsyms, add them in.
+		 */
+		switch (kt->flags & (KALLSYMS_V1|KALLSYMS_V2))
+		{
+		case KALLSYMS_V1:  /* impossible, I hope... */
+			mcnt += store_module_kallsyms_v1(lm, lm_mcnt, mcnt, modbuf);
+			break;
+		case KALLSYMS_V2:
+			mcnt += store_module_kallsyms_v2(lm, lm_mcnt, mcnt, modbuf);
+			break;
+		}
+
+		for_each_mod_mem_type(t) {
+			if (!lm->mem[t].size)
+				continue;
+
+			st->ext_module_symtable[mcnt].value = lm->mem[t].base + lm->mem[t].size;
+			st->ext_module_symtable[mcnt].type = 'm';
+			st->ext_module_symtable[mcnt].flags |= MODULE_SYMBOL;
+			sprintf(buf2, "%s%s", module_tag[t].end, mod_name);
+			namespace_ctl(NAMESPACE_INSTALL,
+				&st->ext_module_namespace,
+				&st->ext_module_symtable[mcnt], buf2);
+			mcnt++;
+		}
+
+		lm->mod_ext_symcnt = mcnt - lm->mod_ext_symcnt;
+
+		NEXT_MODULE(mod_next, modbuf);
+	}
+
+	FREEBUF(modbuf);
+
+	st->ext_module_symcnt = mcnt;
+	st->ext_module_symend = &st->ext_module_symtable[mcnt];
+
+	namespace_ctl(NAMESPACE_COMPLETE, &st->ext_module_namespace,
+		st->ext_module_symtable, st->ext_module_symend);
+
+	qsort(st->ext_module_symtable, mcnt, sizeof(struct syment),
+		compare_syms);
+
+	/* sort by text base address */
+	qsort(st->load_modules, m, sizeof(struct load_module), compare_mods);
+
+	for (m = 0; m < st->mods_installed; m++) {
+		lm = &st->load_modules[m];
+
+		for_each_mod_mem_type(t) {
+			if (!lm->mem[t].size)
+				continue;
+
+			sprintf(buf1, "%s%s", module_tag[t].start, lm->mod_name);
+			sprintf(buf2, "%s%s", module_tag[t].end, lm->mod_name);
+
+			for (sp = st->ext_module_symtable; sp < st->ext_module_symend; sp++) {
+				if (STREQ(sp->name, buf1)) {
+					lm->ext_symtable[t] = sp;
+					break;
+				}
+			}
+			for ( ; sp < st->ext_module_symend; sp++) {
+				if (STREQ(sp->name, buf2)) {
+					lm->ext_symend[t] = sp;
+					break;
+				}
+			}
+
+			if (lm->ext_symtable[t] && lm->ext_symend[t])
+				mod_symtable_hash_install_range(lm->ext_symtable[t], lm->ext_symend[t]);
+		}
+		lm->symtable = lm->ext_symtable;
+		lm->symend = lm->ext_symend;
+	}
+
+	st->flags |= MODULE_SYMS;
+
+	if (CRASHDEBUG(2)) {
+		for (sp = st->ext_module_symtable; sp < st->ext_module_symend; sp++)
+			fprintf(fp, "%16lx %s\n", sp->value, sp->name);
+	}
+
+	if (mcnt > total)
+		error(FATAL, "store_module_symbols_6_4: total: %ld mcnt: %d\n", total, mcnt);
 }
 
 void
@@ -2384,6 +2859,7 @@ store_module_kallsyms_v2(struct load_module *lm, int start, int curr,
         int mcnt;
         int mcnt_idx;
 	char *module_buf_init = NULL;
+	ulong base, base_init, size, size_init;
 
 	if (!(kt->flags & KALLSYMS_V2))
 		return 0;
@@ -2394,9 +2870,22 @@ store_module_kallsyms_v2(struct load_module *lm, int start, int curr,
         ns = &st->ext_module_namespace;
 	ec = &elf_common;
 
-        module_buf = GETBUF(lm->mod_size);
+	/* kallsyms data looks to be in MOD_DATA region. */
+	if (MODULE_MEMORY()) {
+		base = lm->mem[MOD_DATA].base;
+		size = lm->mem[MOD_DATA].size;
+		base_init = lm->mem[MOD_INIT_DATA].base;
+		size_init = lm->mem[MOD_INIT_DATA].size;
+	} else {
+		base = lm->mod_base;
+		size = lm->mod_size;
+		base_init = lm->mod_init_module_ptr;
+		size_init = lm->mod_init_size;
+	}
 
-        if (!readmem(lm->mod_base, KVADDR, module_buf, lm->mod_size,
+	module_buf = GETBUF(size);
+
+	if (!readmem(base, KVADDR, module_buf, size,
             "module (kallsyms)", RETURN_ON_ERROR|QUIET)) {
                 error(WARNING,"cannot access module kallsyms\n");
                 FREEBUF(module_buf);
@@ -2404,10 +2893,10 @@ store_module_kallsyms_v2(struct load_module *lm, int start, int curr,
         }
 
 	if (lm->mod_init_size > 0) {
-		module_buf_init = GETBUF(lm->mod_init_size);
+		module_buf_init = GETBUF(size_init);
 
-		if (!readmem(lm->mod_init_module_ptr, KVADDR, module_buf_init, lm->mod_init_size,
-					"module init (kallsyms)", RETURN_ON_ERROR|QUIET)) {
+		if (!readmem(base_init, KVADDR, module_buf_init, size_init,
+				"module init (kallsyms)", RETURN_ON_ERROR|QUIET)) {
 			error(WARNING,"cannot access module init kallsyms\n");
 			FREEBUF(module_buf_init);
 		}
@@ -2429,9 +2918,9 @@ store_module_kallsyms_v2(struct load_module *lm, int start, int curr,
 		return 0;
 	} 
 	if (IN_MODULE(ksymtab, lm))
-		locsymtab = module_buf + (ksymtab - lm->mod_base);
+		locsymtab = module_buf + (ksymtab - base);
 	else
-		locsymtab = module_buf_init + (ksymtab - lm->mod_init_module_ptr);
+		locsymtab = module_buf_init + (ksymtab - base_init);
 
 	kstrtab = ULONG(modbuf + OFFSET(module_strtab));
 	if (!IN_MODULE(kstrtab, lm) && !IN_MODULE_INIT(kstrtab, lm)) {
@@ -2444,9 +2933,9 @@ store_module_kallsyms_v2(struct load_module *lm, int start, int curr,
 		return 0;
 	}
 	if (IN_MODULE(kstrtab, lm))
-		locstrtab = module_buf + (kstrtab - lm->mod_base);
+		locstrtab = module_buf + (kstrtab - base);
 	else
-		locstrtab = module_buf_init + (kstrtab - lm->mod_init_module_ptr);
+		locstrtab = module_buf_init + (kstrtab - base_init);
 
 	for (i = 1; i < nksyms; i++) {  /* ELF starts real symbols at 1 */
 		switch (BITS())
@@ -2461,11 +2950,8 @@ store_module_kallsyms_v2(struct load_module *lm, int start, int curr,
 			break;
 		}
 
-		if (((ec->st_value < lm->mod_base) ||
-		    (ec->st_value >  (lm->mod_base + lm->mod_size))) &&
-		    ((ec->st_value < lm->mod_init_module_ptr) ||
-		    (ec->st_value > (lm->mod_init_module_ptr + lm->mod_init_size))))
-				continue;
+		if (!IN_MODULE(ec->st_value, lm) && !IN_MODULE_INIT(ec->st_value, lm))
+			continue;
 
 		if (ec->st_shndx == SHN_UNDEF)
                         continue;
@@ -2572,7 +3058,7 @@ strip_module_symbol_end(char *buf)
 ulong
 lowest_module_address(void)
 {
-	int i;
+	int i, t;
 	struct load_module *lm;
 	ulong low, lowest;
 
@@ -2582,9 +3068,20 @@ lowest_module_address(void)
 	lowest = (ulong)(-1);
 	for (i = 0; i < st->mods_installed; i++) {
 		lm = &st->load_modules[i];
-		low = lm->mod_base;
-		if (low < lowest)
-			lowest = low;
+		if (MODULE_MEMORY())
+			for_each_mod_mem_type(t) {
+				if (!lm->mem[t].size)
+					continue;
+
+				low = lm->mem[t].base;
+				if (low < lowest)
+					lowest = low;
+			}
+		else {
+			low = lm->mod_base;
+			if (low < lowest)
+				lowest = low;
+		}
 	}
 
 	return lowest;
@@ -2593,16 +3090,27 @@ lowest_module_address(void)
 ulong
 highest_module_address(void)
 {
-	int i;
+	int i, t;
 	struct load_module *lm;
 	ulong high, highest;
 
 	highest = 0;
 	for (i = 0; i < st->mods_installed; i++) {
 		lm = &st->load_modules[i];
-		high = lm->mod_base + lm->mod_size;
-		if (high > highest)
-			highest = high;
+		if (MODULE_MEMORY()) {
+			for_each_mod_mem_type(t) {
+				if (!lm->mem[t].size)
+					continue;
+
+				high = lm->mem[t].base + lm->mem[t].size;
+				if (high > highest)
+					highest = high;
+			}
+		} else {
+			high = lm->mod_base + lm->mod_size;
+			if (high > highest)
+				highest = high;
+		}
 	}
 
 	return highest;
@@ -2853,7 +3361,8 @@ compare_syms(const void *v1, const void *v2)
 			return -1;
 		if (STRNEQ(s2->name, "__insmod"))
 			return 1;
-		if (STRNEQ(s2->name, "_MODULE_START_"))
+		if (MODULE_MEM_START(s2, MOD_TEXT) ||
+		    STRNEQ(s2->name, "_MODULE_START_"))
 			return 1;
 		/* Get pseudo section name. */
 		if (MODULE_SECTION_START(s1))
@@ -2986,13 +3495,19 @@ is_kernel_text(ulong value)
 				if (!(lm->mod_section_data[s].flags & SEC_CODE))
 					continue;
 	
-				start = lm->mod_base + 
-					lm->mod_section_data[s].offset;
+				if (MODULE_MEMORY())
+					start = lm->mod_section_data[s].addr;
+				else
+					start = lm->mod_base + lm->mod_section_data[s].offset;
+
 				end = start + lm->mod_section_data[s].size;
 	
 	        		if ((value >= start) && (value < end)) 
 	                		return TRUE;
 	                }
+		} else if (MODULE_MEMORY()) {
+			if (IN_MODULE_TEXT(value, lm))
+				return TRUE;
 		} else {
 			switch (kt->flags & (KMOD_V1|KMOD_V2))
 			{
@@ -3531,22 +4046,42 @@ dump_symbol_table(void)
 			(ulong)lm->mod_section_data,
 			lm->mod_section_data ? "" : "(not allocated)");
 
+		if (MODULE_MEMORY()) {
+			int t;
+			for_each_mod_mem_type(t) {
+				fprintf(fp, "                mem[%d]: %lx (%x)\n",
+					t, lm->mem[t].base, lm->mem[t].size);
+			}
+			fprintf(fp, "              symtable: %lx\n", (ulong)lm->symtable);
+			fprintf(fp, "          ext_symtable: %lx\n", (ulong)lm->ext_symtable);
+			for_each_mod_mem_type(t) {
+				fprintf(fp, "       ext_symtable[%d]: %lx - %lx\n",
+					t, (ulong)lm->ext_symtable[t], (ulong)lm->ext_symend[t]);
+			}
+			fprintf(fp, "         load_symtable: %lx\n", (ulong)lm->load_symtable);
+			for_each_mod_mem_type(t) {
+				fprintf(fp, "      load_symtable[%d]: %lx - %lx\n",
+					t, (ulong)lm->load_symtable[t], (ulong)lm->load_symend[t]);
+			}
+		}
 
 		for (s = 0; s < lm->mod_sections; s++) {
 			fprintf(fp, 
-                "       %12s  prio: %x  flags: %05x  offset: %-8lx size: %lx\n",
+		"       %20s  prio: %x  flags: %08x  %s: %-16lx size: %lx\n",
 				lm->mod_section_data[s].name,
 				lm->mod_section_data[s].priority,
 				lm->mod_section_data[s].flags,
-				lm->mod_section_data[s].offset,
+				MODULE_MEMORY() ? "addr" : "offset",
+				MODULE_MEMORY() ? lm->mod_section_data[s].addr :
+						lm->mod_section_data[s].offset,
 				lm->mod_section_data[s].size);
 		}
 
 		fprintf(fp, "        loaded_objfile: %lx\n", (ulong)lm->loaded_objfile);
 
-		if (CRASHDEBUG(1)) {
+		if (CRASHDEBUG(1) && lm->mod_load_symtable) {
         		for (sp = lm->mod_load_symtable; 
-			     sp < lm->mod_load_symend; sp++) {
+			     sp <= lm->mod_load_symend; sp++) {
 				fprintf(fp, "  %lx  %s\n",
 					sp->value, sp->name);	
 			}
@@ -4458,8 +4993,11 @@ get_section(ulong vaddr, char *buf)
 	if (module_symbol(vaddr, NULL, &lm, NULL, *gdb_output_radix)) {
 		if (lm->mod_flags & MOD_LOAD_SYMS) { 
 			for (i = (lm->mod_sections-1); i >= 0; i--) {
-                                start = lm->mod_base +
-                                        lm->mod_section_data[i].offset;
+				if (MODULE_MEMORY())
+					start = lm->mod_section_data[i].addr;
+				else
+					start = lm->mod_base +
+						lm->mod_section_data[i].offset;
                                 end = start + lm->mod_section_data[i].size;
 
                                 if ((vaddr >= start) && (vaddr < end)) {
@@ -4514,7 +5052,7 @@ get_build_directory(char *buf)
 int 
 symbol_query(char *s, char *print_pad, struct syment **spp)
 {
-	int i;
+	int i, t;
         struct syment *sp, *sp_end;
 	struct load_module *lm;
 	int cnt, search_init;
@@ -4534,6 +5072,60 @@ symbol_query(char *s, char *print_pad, struct syment **spp)
 		}
 	}
 
+	if (!MODULE_MEMORY())
+		goto old_module;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		if (lm->mod_flags & MOD_LOAD_SYMS) {
+			sp = lm->mod_load_symtable;
+			sp_end = lm->mod_load_symend;
+
+			for (; sp < sp_end; sp++) {
+				if (MODULE_PSEUDO_SYMBOL(sp))
+					continue;
+
+				if (strstr(sp->name, s)) {
+					if (print_pad) {
+						if (strlen(print_pad))
+							fprintf(fp, "%s", print_pad);
+						show_symbol(sp, 0, SHOW_RADIX()|SHOW_MODULE);
+					}
+					if (spp)
+						*spp = sp;
+					cnt++;
+				}
+			}
+		} else {
+			for_each_mod_mem_type(t) {
+				if (!lm->symtable[t])
+					continue;
+
+				sp = lm->symtable[t];
+				sp_end = lm->symend[t];
+
+				for (; sp < sp_end; sp++) {
+					if (MODULE_PSEUDO_SYMBOL(sp))
+						continue;
+
+					if (strstr(sp->name, s)) {
+						if (print_pad) {
+							if (strlen(print_pad))
+								fprintf(fp, "%s", print_pad);
+							show_symbol(sp, 0, SHOW_RADIX()|SHOW_MODULE);
+						}
+						if (spp)
+							*spp = sp;
+						cnt++;
+					}
+				}
+			}
+		}
+	}
+	return cnt;
+
+old_module:
 	search_init = FALSE;
 
 	for (i = 0; i < st->mods_installed; i++) {
@@ -4639,7 +5231,7 @@ symbol_search(char *s)
 int
 symbol_name_count(char *s)
 {
-        int i;
+        int i, t;
         struct syment *sp, *sp_end;
         struct load_module *lm;
         int count, pseudos, search_init;
@@ -4653,6 +5245,37 @@ symbol_name_count(char *s)
 		}
         }
 
+	if (!MODULE_MEMORY())
+		goto old_module;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		if (lm->mod_flags & MOD_LOAD_SYMS) {
+			sp = lm->mod_load_symtable;
+			sp_end = lm->mod_load_symend;
+
+			for (; sp < sp_end; sp++) {
+				if (STREQ(s, sp->name))
+					count++;
+			}
+		} else {
+			for_each_mod_mem_type(t) {
+				if (!lm->symtable[t])
+					continue;
+
+				sp = lm->symtable[t];
+				sp_end = lm->symend[t];
+				for (; sp < sp_end; sp++) {
+					if (STREQ(s, sp->name))
+						count++;
+				}
+			}
+		}
+	}
+	return count++;
+
+old_module:
         pseudos = (strstr(s, "_MODULE_START_") || strstr(s, "_MODULE_END_"));
 	search_init = FALSE;
 
@@ -4702,7 +5325,7 @@ symbol_name_count(char *s)
 struct syment *
 symbol_search_next(char *s, struct syment *spstart)
 {
-	int i;
+	int i, t;
         struct syment *sp, *sp_end;
 	struct load_module *lm;
 	int found_start;
@@ -4722,6 +5345,38 @@ symbol_search_next(char *s, struct syment *spstart)
 		}
         }
 
+	if (!MODULE_MEMORY())
+		goto old_module;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		for_each_mod_mem_type(t) {
+			if (!lm->symtable[t])
+				continue;
+
+			sp = lm->symtable[t];
+			sp_end = lm->symend[t];
+
+			if (!found_start && (spstart < sp || spstart > sp_end))
+				continue;
+
+			for ( ; sp < sp_end; sp++) {
+				if (sp == spstart) {
+					found_start = TRUE;
+					continue;
+				} else if (!found_start)
+					continue;
+
+				if (STREQ(s, sp->name))
+					return sp;
+			}
+		}
+	}
+
+	return NULL;
+
+old_module:
 	pseudos = (strstr(s, "_MODULE_START_") || strstr(s, "_MODULE_END_"));
 	search_init = FALSE;
 
@@ -4831,17 +5486,29 @@ module_symbol(ulong value,
 	for (i = 0; i < st->mods_installed; i++) {
 		lm = &st->load_modules[i];
 
-		if (IN_MODULE(value, lm)) {
-			base = lm->mod_base;
-			end = lm->mod_base + lm->mod_size;
-		} else if (IN_MODULE_INIT(value, lm)) {
-			base = lm->mod_init_module_ptr;
-			end = lm->mod_init_module_ptr + lm->mod_init_size;
-		} else if (IN_MODULE_PERCPU(value, lm)) {
-			base = lm->mod_percpu;
-			end = lm->mod_percpu + lm->mod_percpu_size;
-		} else
-			continue;
+		if (MODULE_MEMORY()) {
+			if (IN_MODULE(value, lm) || IN_MODULE_INIT(value, lm)) {
+				int type = module_mem_type(value, lm);
+				base = lm->mem[type].base;
+				end = base + lm->mem[type].size;
+			} else if (IN_MODULE_PERCPU(value, lm)) {
+				base = lm->mod_percpu;
+				end = lm->mod_percpu + lm->mod_percpu_size;
+			} else
+				continue;
+		} else {
+			if (IN_MODULE(value, lm)) {
+				base = lm->mod_base;
+				end = lm->mod_base + lm->mod_size;
+			} else if (IN_MODULE_INIT(value, lm)) {
+				base = lm->mod_init_module_ptr;
+				end = lm->mod_init_module_ptr + lm->mod_init_size;
+			} else if (IN_MODULE_PERCPU(value, lm)) {
+				base = lm->mod_percpu;
+				end = lm->mod_percpu + lm->mod_percpu_size;
+			} else
+				continue;
+		}
 
 		if ((value >= base) && (value < end)) {
 			if (lmp) 
@@ -4877,6 +5544,71 @@ module_symbol(ulong value,
 	return FALSE;
 }
 
+static struct syment *
+value_search_module_6_4(ulong value, ulong *offset)
+{
+	int i, t;
+	struct syment *sp, *sp_end, *spnext, *splast;
+	struct load_module *lm;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		if (!IN_MODULE(value, lm) && !IN_MODULE_INIT(value, lm))
+			continue;
+
+		for_each_mod_mem_type(t) {
+			sp = lm->symtable[t];
+			sp_end = lm->symend[t];
+
+			if (value < sp->value)
+				continue;
+
+			splast = NULL;
+			for ( ; sp <= sp_end; sp++) {
+				if (machine_type("ARM64") &&
+				    IN_MODULE_PERCPU(sp->value, lm) &&
+				    !IN_MODULE_PERCPU(value, lm))
+					continue;
+
+				if (value == sp->value) {
+					if (MODULE_MEM_END(sp, t))
+						break;
+
+					if (MODULE_PSEUDO_SYMBOL(sp)) {
+						spnext = sp + 1;
+						if (MODULE_PSEUDO_SYMBOL(spnext))
+							continue;
+						if (spnext->value == value)
+							sp = spnext;
+					}
+					if (sp->name[0] == '.') {
+						spnext = sp+1;
+						if (spnext->value == value)
+							sp = spnext;
+					}
+					if (offset)
+						*offset = 0;
+					return sp;
+				}
+
+				if (sp->value > value) {
+					sp = splast ? splast : sp - 1;
+					if (offset)
+						*offset = value - sp->value;
+					return sp;
+				}
+
+				if (!MODULE_PSEUDO_SYMBOL(sp)) {
+					splast = sp;
+				}
+			}
+		}
+	}
+
+	return NULL;
+}
+
 struct syment *
 value_search_module(ulong value, ulong *offset)
 {
@@ -4884,6 +5616,9 @@ value_search_module(ulong value, ulong *offset)
         struct syment *sp, *sp_end, *spnext, *splast;
 	struct load_module *lm;
 	int search_init_sections, search_init;
+
+	if (MODULE_MEMORY())
+		return value_search_module_6_4(value, offset);
 
 	search_init = FALSE;
 	search_init_sections = 0;
@@ -5203,6 +5938,99 @@ closest_symbol_value(ulong value)
                 return(0);
 }
 
+/* Only for 6.4 and later */
+static struct syment *
+next_symbol_by_symname(char *symbol)
+{
+	struct syment *sp;
+
+	if ((sp = symbol_search(symbol))) {
+		sp++;
+		if (MODULE_PSEUDO_SYMBOL(sp) && strstr(sp->name, "_END"))
+			return next_module_symbol_by_value(sp->value);
+
+		return sp;
+	}
+
+	return NULL;
+}
+
+/* val_in should be a pseudo module end symbol. */
+static struct syment *
+next_module_symbol_by_value(ulong val_in)
+{
+	struct load_module *lm;
+	struct syment *sp, *sp_end;
+	ulong start, min;
+	int i, t;
+
+retry:
+	sp = sp_end = NULL;
+	min = (ulong)-1;
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		/* Search for the next lowest symtable. */
+		for_each_mod_mem_type(t) {
+			if (!lm->symtable[t])
+				continue;
+
+			start = lm->symtable[t]->value;
+			if (start > val_in && start < min) {
+				min = start;
+				sp = lm->symtable[t];
+				sp_end = lm->symend[t];
+			}
+		}
+	}
+
+	if (!sp)
+		return NULL;
+
+	for ( ; sp < sp_end; sp++) {
+		if (MODULE_PSEUDO_SYMBOL(sp))
+			continue;
+		if (sp->value > val_in)
+			return sp;
+	}
+
+	/* Found a table that has only pseudo symbols. */
+	val_in = sp_end->value;
+	goto retry;
+}
+
+/* Only for 6.4 and later */
+static struct syment *
+next_module_symbol_by_syment(struct syment *sp_in)
+{
+	struct load_module *lm;
+	struct syment *sp;
+	int i, t;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		for_each_mod_mem_type(t) {
+			if (!lm->symtable[t])
+				continue;
+
+			if (sp_in < lm->symtable[t] || sp_in > lm->symend[t])
+				continue;
+
+			if (sp_in == lm->symend[t])
+				return next_module_symbol_by_value(sp_in->value);
+
+			sp = sp_in + 1;
+			if (MODULE_PSEUDO_SYMBOL(sp))
+				return next_module_symbol_by_value(sp->value);
+
+			return sp;
+		}
+	}
+
+	return NULL;
+}
+
 /*
  *  For a given symbol, return a pointer to the next (higher) symbol's syment. 
  *  Either a symbol name or syment pointer may be passed as an argument.
@@ -5230,6 +6058,9 @@ next_symbol(char *symbol, struct syment *sp_in)
 			}
 	        }
 	
+		if (MODULE_MEMORY())
+			return next_module_symbol_by_syment(sp_in);
+
 		search_init = FALSE;
 
 	        for (i = 0; i < st->mods_installed; i++) {
@@ -5273,6 +6104,8 @@ next_symbol(char *symbol, struct syment *sp_in)
 		return NULL;
 	}
 
+	if (MODULE_MEMORY())
+		return next_symbol_by_symname(symbol);
 
 	/*
 	 *  Deal with a few special cases...
@@ -5312,6 +6145,106 @@ next_symbol(char *symbol, struct syment *sp_in)
         return NULL;
 }
 
+/* Only for 6.4 and later */
+static struct syment *
+prev_symbol_by_symname(char *symbol)
+{
+	struct syment *sp;
+
+        if ((sp = symbol_search(symbol))) {
+		if (sp == st->symtable)
+			return NULL;
+
+		if (module_symbol(sp->value, NULL, NULL, NULL, 0)) {
+			if (MODULE_PSEUDO_SYMBOL(sp) && strstr(sp->name, "_START"))
+				return prev_module_symbol_by_value(sp->value);
+			else
+				sp--;
+		} else
+			sp--;
+
+		return sp;
+	}
+
+        return NULL;
+}
+
+/* val_in should be a pseudo module start symbol. */
+static struct syment *
+prev_module_symbol_by_value(ulong val_in)
+{
+	struct load_module *lm;
+	struct syment *sp, *sp_end;
+	ulong end, max;
+	int i, t;
+
+retry:
+	sp = sp_end = NULL;
+	max = 0;
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		/* Search for the previous highest table. */
+		for_each_mod_mem_type(t) {
+			if (!lm->symtable[t])
+				continue;
+
+			end = lm->symend[t]->value;
+			if (end < val_in && end > max) {
+				max = end;
+				sp = lm->symtable[t];
+				sp_end = lm->symend[t];
+			}
+		}
+	}
+
+	if (!sp)
+		return NULL;
+
+	for ( ; sp_end > sp; sp_end--) {
+		if (MODULE_PSEUDO_SYMBOL(sp_end))
+			continue;
+		if (sp_end->value < val_in)
+			return sp_end;
+	}
+
+	/* Found a table that has only pseudo symbols. */
+	val_in = sp->value;
+	goto retry;
+}
+
+/* Only for 6.4 and later */
+static struct syment *
+prev_module_symbol_by_syment(struct syment *sp_in)
+{
+	struct load_module *lm;
+	struct syment *sp;
+	int i, t;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		for_each_mod_mem_type(t) {
+			if (!lm->symtable[t])
+				continue;
+
+			if (sp_in < lm->symtable[t] || sp_in > lm->symend[t])
+				continue;
+
+			if (sp_in == lm->symtable[t])
+				return prev_module_symbol_by_value(sp_in->value);
+
+			sp = sp_in - 1;
+			if (MODULE_PSEUDO_SYMBOL(sp))
+				return prev_module_symbol_by_value(sp->value);
+
+			return sp;
+		}
+	}
+
+	return NULL;
+}
+
 /*
  * For a given symbol, return a pointer to the previous (lower) symbol's syment.
  * Either a symbol name or syment pointer may be passed as an argument.
@@ -5334,6 +6267,9 @@ prev_symbol(char *symbol, struct syment *sp_in)
                                 return sp_prev;
 			sp_prev = sp;
                 }
+
+		if (MODULE_MEMORY())
+			return prev_module_symbol_by_syment(sp_in);
 
 		search_init = FALSE;
 
@@ -5377,6 +6313,9 @@ prev_symbol(char *symbol, struct syment *sp_in)
 
                 return NULL;
 	}
+
+	if (MODULE_MEMORY())
+		return prev_symbol_by_symname(symbol);
 
         if (strstr(symbol, " module)")) {
 		sprintf(buf, "_MODULE_START_");
@@ -5600,7 +6539,7 @@ kernel_symbol_search(char *symbol)
 int
 get_syment_array(char *symbol, struct syment **sp_array, int max)
 {
-        int i, cnt;
+        int i, cnt, t;
         struct syment *sp, *sp_end;
         struct load_module *lm;
 
@@ -5625,6 +6564,31 @@ get_syment_array(char *symbol, struct syment **sp_array, int max)
 		}
         }
 
+	if (!MODULE_MEMORY())
+		goto old_module;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		for_each_mod_mem_type(t) {
+			if (!lm->symtable[t])
+				continue;
+
+			sp = lm->symtable[t];
+			sp_end = lm->symend[t];
+			for (; sp < sp_end; sp++) {
+				if (STREQ(symbol, sp->name)) {
+					if (max && (cnt < max))
+						sp_array[cnt] = sp;
+					cnt++;
+				}
+			}
+		}
+	}
+
+	return cnt;
+
+old_module:
         for (i = 0; i < st->mods_installed; i++) {
                 lm = &st->load_modules[i];
                 sp = lm->mod_symtable;
@@ -9229,6 +10193,9 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(module_strtab));
 	fprintf(fp, "                 module_percpu: %ld\n",
 		OFFSET(module_percpu));
+	fprintf(fp, "                    module_mem: %ld\n", OFFSET(module_mem));
+	fprintf(fp, "            module_memory_base: %ld\n", OFFSET(module_memory_base));
+	fprintf(fp, "            module_memory_size: %ld\n", OFFSET(module_memory_size));
 
 	fprintf(fp, "             module_sect_attrs: %ld\n",
 		OFFSET(module_sect_attrs));
@@ -10852,6 +11819,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(super_block)); 
 	fprintf(fp, "                       irqdesc: %ld\n", SIZE(irqdesc));
 	fprintf(fp, "                        module: %ld\n", SIZE(module));
+	fprintf(fp, "                 module_memory: %ld\n", SIZE(module_memory));
 	fprintf(fp, "              module_sect_attr: %ld\n", SIZE(module_sect_attr));
 	fprintf(fp, "                     list_head: %ld\n", SIZE(list_head));
 	fprintf(fp, "                    hlist_head: %ld\n", SIZE(hlist_head));
@@ -11467,6 +12435,13 @@ store_section_data(struct load_module *lm, bfd *bfd, asection *section)
 	lm->mod_section_data[i].section = section;
 	lm->mod_section_data[i].priority = prio;
 	lm->mod_section_data[i].flags = section->flags & ~SEC_FOUND;
+	lm->mod_section_data[i].size = bfd_section_size(section);
+	lm->mod_section_data[i].offset = 0;
+	lm->mod_section_data[i].addr = 0;
+	if (strlen(name) < MAX_MOD_SEC_NAME)
+		strcpy(lm->mod_section_data[i].name, name);
+	else
+		strncpy(lm->mod_section_data[i].name, name, MAX_MOD_SEC_NAME-1);
 	/* 
 	 * The percpu section isn't included in kallsyms or module_core area.
 	 */
@@ -11474,13 +12449,8 @@ store_section_data(struct load_module *lm, bfd *bfd, asection *section)
 	    (STREQ(name,".data.percpu") || STREQ(name, ".data..percpu"))) {
 		lm->mod_percpu_size = bfd_section_size(section);
 		lm->mod_section_data[i].flags |= SEC_FOUND;
+		lm->mod_section_data[i].addr = lm->mod_percpu;
 	}
-	lm->mod_section_data[i].size = bfd_section_size(section);
-	lm->mod_section_data[i].offset = 0;
-	if (strlen(name) < MAX_MOD_SEC_NAME)
-		strcpy(lm->mod_section_data[i].name, name);
-	else
-		strncpy(lm->mod_section_data[i].name, name, MAX_MOD_SEC_NAME-1);
 	lm->mod_sections += 1;
 }
 
@@ -11722,6 +12692,124 @@ calculate_load_order_v2(struct load_module *lm, bfd *bfd, int dynamic,
 	}
 }
 
+/* Linux 6.4 and later */
+static void
+calculate_load_order_6_4(struct load_module *lm, bfd *bfd, int dynamic,
+	void *minisyms, long symcount, unsigned int size)
+{
+	struct syment *s1, *s2;
+	ulong sec_start;
+	bfd_byte *from, *fromend;
+	asymbol *store;
+	asymbol *sym;
+	symbol_info syminfo;
+	char *secname;
+	int i, t;
+
+	if ((store = bfd_make_empty_symbol(bfd)) == NULL)
+		error(FATAL, "bfd_make_empty_symbol() failed\n");
+
+	for_each_mod_mem_type(t) {
+		s1 = lm->symtable[t];
+		s2 = lm->symend[t];
+		while (s1 < s2) {
+
+			if (MODULE_PSEUDO_SYMBOL(s1)) {
+				s1++;
+				continue;
+			}
+
+			/* Skip over symbols whose sections have been identified. */
+			for (i = 0; i < lm->mod_sections; i++) {
+				if ((lm->mod_section_data[i].flags & SEC_FOUND) == 0)
+					continue;
+
+				if (s1->value >= lm->mod_section_data[i].addr &&
+				    s1->value < lm->mod_section_data[i].addr
+						+ lm->mod_section_data[i].size)
+					break;
+			}
+
+			/* Matched one of the sections. Skip symbol. */
+			if (i < lm->mod_sections) {
+				if (CRASHDEBUG(2))
+					fprintf(fp, "skip %lx %s %s\n", s1->value, s1->name,
+						lm->mod_section_data[i].name);
+				s1++;
+				continue;
+			}
+
+			/* Find the symbol in the object file. */
+			from = (bfd_byte *) minisyms;
+			fromend = from + symcount * size;
+			secname = NULL;
+			for (; from < fromend; from += size) {
+				if (!(sym = bfd_minisymbol_to_symbol(bfd, dynamic, from, store)))
+					error(FATAL, "bfd_minisymbol_to_symbol() failed\n");
+
+				bfd_get_symbol_info(bfd, sym, &syminfo);
+				if (CRASHDEBUG(3)) {
+					fprintf(fp,"matching sym %s %lx against bfd %s %lx\n",
+						s1->name, (long) s1->value, syminfo.name,
+						(long) syminfo.value);
+				}
+				if (strcmp(syminfo.name, s1->name) == 0) {
+					secname = (char *)bfd_section_name(sym->section);
+					break;
+				}
+
+			}
+			if (secname == NULL) {
+				if (CRASHDEBUG(1))
+					fprintf(fp, "symbol %s not found in module\n", s1->name);
+				s1++;
+				continue;
+			}
+
+			/* Match the section it came in. */
+			for (i = 0; i < lm->mod_sections; i++) {
+				if (STREQ(lm->mod_section_data[i].name, secname))
+					break;
+			}
+
+			if (i == lm->mod_sections) {
+				fprintf(fp, "?? Section %s not found for symbol %s\n",
+					secname, s1->name);
+				s1++;
+				continue;
+			}
+
+			if (lm->mod_section_data[i].flags & SEC_FOUND) {
+				s1++;
+				continue;
+			}
+
+			/* Update the offset information for the section */
+			sec_start = s1->value - syminfo.value;
+			/* keep the address instead of offset */
+			lm->mod_section_data[i].addr = sec_start;
+			lm->mod_section_data[i].flags |= SEC_FOUND;
+
+			if (CRASHDEBUG(2))
+				fprintf(fp, "update sec offset sym %s @ %lx  val %lx  section %s\n",
+					s1->name, s1->value, (ulong)syminfo.value, secname);
+
+			if (strcmp(secname, ".text") == 0)
+				lm->mod_text_start = sec_start;
+
+			if (strcmp(secname, ".bss") == 0)
+				lm->mod_bss_start = sec_start;
+
+			if (strcmp(secname, ".data") == 0)
+				lm->mod_data_start = sec_start;
+
+			if (strcmp(secname, ".rodata") == 0)
+				lm->mod_rodata_start = sec_start;
+			s1++;
+		}
+	}
+}
+
 /*
  *  Later versons of insmod store basic address information of each
  *  module in a format that looks like the following example of the
@@ -11927,8 +13015,11 @@ add_symbol_file(struct load_module *lm)
 		    (!STREQ(secname, ".text") &&
 		     !STREQ(secname, ".data.percpu") &&
 		     !STREQ(secname, ".data..percpu"))) {
-			sprintf(buf, " -s %s 0x%lx", secname, 
-				lm->mod_section_data[i].offset + lm->mod_base);
+			if (MODULE_MEMORY())
+				sprintf(buf, " -s %s 0x%lx", secname, lm->mod_section_data[i].addr);
+			else
+				sprintf(buf, " -s %s 0x%lx", secname,
+					lm->mod_section_data[i].offset + lm->mod_base);
 			len += strlen(buf);
 		}
 	}
@@ -12269,24 +13360,43 @@ static struct syment *
 kallsyms_module_symbol(struct load_module *lm, symbol_info *syminfo)
 {
 	struct syment *sp, *spx;
-	int cnt;
+	int cnt, t;
 
 	if (!(lm->mod_flags & MOD_KALLSYMS))
 		return NULL;
 
 	sp = NULL;
 	cnt = 0;
-	for (spx = lm->mod_ext_symtable; spx <= lm->mod_ext_symend; spx++) {
-		if (!STREQ(spx->name, syminfo->name))
-			continue;
-		if (spx->cnt) { 
-			cnt++;
-			continue;
-		} 
+	if (MODULE_MEMORY()) {
+		for_each_mod_mem_type(t) {
+			if (!lm->ext_symtable[t])
+				continue;
+			for (spx = lm->ext_symtable[t]; spx <= lm->ext_symend[t]; spx++) {
+				if (!STREQ(spx->name, syminfo->name))
+					continue;
+				if (spx->cnt) {
+					cnt++;
+					continue;
+				}
 
-		spx->cnt++;
-		sp = spx;
-		break;
+				spx->cnt++;
+				sp = spx;
+				break;
+			}
+		}
+	} else {
+		for (spx = lm->mod_ext_symtable; spx <= lm->mod_ext_symend; spx++) {
+			if (!STREQ(spx->name, syminfo->name))
+				continue;
+			if (spx->cnt) {
+				cnt++;
+				continue;
+			}
+
+			spx->cnt++;
+			sp = spx;
+			break;
+		}
 	}
 
 	if (CRASHDEBUG(2)) {
@@ -12312,7 +13422,7 @@ static void
 store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms, 
 	long symcount, unsigned int size, ulong base_addr, char *namelist)
 {
-	int i;
+	int i, t;
   	asymbol *store;
         asymbol *sym;
   	bfd_byte *from, *fromend;
@@ -12323,7 +13433,7 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 	char *nameptr, *secname;
 	long index;
 	long symalloc;
-	int found;
+	int found = FALSE;
 
         if ((store = bfd_make_empty_symbol(bfd)) == NULL)
                 error(FATAL, "bfd_make_empty_symbol() failed\n");
@@ -12380,8 +13490,17 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 	lm->mod_rodata_start = lm->mod_bss_start = 0;
 	lm->mod_load_symcnt = 0;
 	lm->mod_sections = 0;
-       	for (spx = lm->mod_ext_symtable; spx <= lm->mod_ext_symend; spx++)
-               	spx->cnt = 0;
+	if (MODULE_MEMORY()) {
+		for_each_mod_mem_type(t) {
+			if (!lm->ext_symtable[t])
+				continue;
+			for (spx = lm->ext_symtable[t]; spx <= lm->ext_symend[t]; spx++)
+				spx->cnt = 0;
+		}
+	} else {
+		for (spx = lm->mod_ext_symtable; spx <= lm->mod_ext_symend; spx++)
+			spx->cnt = 0;
+	}
 	sp = lm->mod_load_symtable;
 
 	if (!(lm->mod_section_data = (struct mod_section_data *)
@@ -12392,12 +13511,13 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 
         bfd_map_over_sections(bfd, section_header_info, MODULE_SECTIONS);
 
-	if (kt->flags & KMOD_V1)
+	if (MODULE_MEMORY())
+		calculate_load_order_6_4(lm, bfd, dynamic, minisyms, symcount, size);
+	else if (kt->flags & KMOD_V1)
 		calculate_load_order_v1(lm, bfd);
 	else
 		calculate_load_order_v2(lm, bfd, dynamic, minisyms,
 			symcount, size);
-
 
         from = (bfd_byte *) minisyms;
         fromend = from + symcount * size;
@@ -12501,7 +13621,10 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 					syminfo.value += lm->mod_percpu;
 					found = TRUE;
 				} else {
-                                        syminfo.value += lm->mod_section_data[i].offset + lm->mod_base;
+					if (MODULE_MEMORY())
+						syminfo.value += lm->mod_section_data[i].addr;
+					else
+						syminfo.value += lm->mod_section_data[i].offset + lm->mod_base;
                                         found = TRUE;
                                 }
                         }
@@ -12536,6 +13659,53 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 	 *  syminfo data types accepted above, plus the two pseudo symbols.
          *  Note that the new syment name pointers haven't been resolved yet.
 	 */
+	if (!MODULE_MEMORY())
+		goto old_module;
+
+	for_each_mod_mem_type(t) {
+		if (!lm->ext_symtable[t])
+			continue;
+		for (spx = lm->ext_symtable[t]; spx <= lm->ext_symend[t]; spx++) {
+			found = FALSE;
+			for (sp = lm->mod_load_symtable; sp < lm->mod_load_symend; sp++) {
+				index = (long)sp->name;
+				nameptr = &lm->mod_load_namespace.address[index];
+				if (STREQ(spx->name, nameptr)) {
+					found = TRUE;
+					if (spx->value == sp->value) {
+						if (CRASHDEBUG(2))
+							fprintf(fp, "%s: %s matches!\n",
+									lm->mod_name, nameptr);
+					} else {
+						if (CRASHDEBUG(2))
+							fprintf(fp,
+					       "[%s] %s: %lx != extern'd value: %lx\n",
+								lm->mod_name,
+								nameptr, sp->value,
+								spx->value);
+					}
+					break;
+				}
+			}
+			if (!found) {
+				if (CRASHDEBUG(2))
+					fprintf(fp, "append ext %s (%lx)\n", spx->name, spx->value);
+				/* append it here... */
+				namespace_ctl(NAMESPACE_INSTALL,
+					&lm->mod_load_namespace,
+					lm->mod_load_symend, spx->name);
+
+				lm->mod_load_symend->value = spx->value;
+				lm->mod_load_symend->type = spx->type;
+				lm->mod_load_symend->flags |= MODULE_SYMBOL;
+				lm->mod_load_symend++;
+				lm->mod_load_symcnt++;
+			}
+		}
+	}
+	goto append_section_symbols;
+
+old_module:
 	for (spx = lm->mod_ext_symtable; spx <= lm->mod_ext_symend; spx++) {
 		found = FALSE;
 	        for (sp = lm->mod_load_symtable; 
@@ -12578,6 +13748,7 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 		} 
 	}
 
+append_section_symbols:
 	/*
 	 * Append helpful pseudo symbols about found out sections.
 	 * Use 'S' as its type which is never seen in existing symbols.
@@ -12587,8 +13758,11 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 		if (!(lm->mod_section_data[i].flags & SEC_FOUND))
 			continue;
 		/* Section start */
-		lm->mod_load_symend->value = lm->mod_base +
-					     lm->mod_section_data[i].offset;
+		if (MODULE_MEMORY())
+			lm->mod_load_symend->value = lm->mod_section_data[i].addr;
+		else
+			lm->mod_load_symend->value = lm->mod_base +
+						     lm->mod_section_data[i].offset;
 		lm->mod_load_symend->type = 'S';
 		lm->mod_load_symend->flags |= MODULE_SYMBOL;
 		sprintf(name, "_MODULE_SECTION_START [%s]",
@@ -12599,9 +13773,12 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 		lm->mod_load_symcnt++;
 
 		/* Section end */
-		lm->mod_load_symend->value = lm->mod_base +
-					     lm->mod_section_data[i].offset +
-					     lm->mod_section_data[i].size;
+		if (MODULE_MEMORY())
+			lm->mod_load_symend->value = lm->mod_section_data[i].addr;
+		else
+			lm->mod_load_symend->value = lm->mod_base +
+						     lm->mod_section_data[i].offset;
+		lm->mod_load_symend->value += lm->mod_section_data[i].size;
 		lm->mod_load_symend->type = 'S';
 		lm->mod_load_symend->flags |= MODULE_SYMBOL;
 		sprintf(name, "_MODULE_SECTION_END [%s]",
@@ -12618,16 +13795,57 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
         qsort(lm->mod_load_symtable, lm->mod_load_symcnt, sizeof(struct syment),
                 compare_syms);
 
+	if (MODULE_MEMORY()) {
+		/* keep load symtable addresses to lm->load_symtable[] */
+		/* TODO: make more efficient */
+		for (sp = lm->mod_load_symtable; sp < lm->mod_load_symend; sp++) {
+			char buf1[BUFSIZE], buf2[BUFSIZE];
+
+			if (CRASHDEBUG(2))
+				fprintf(fp, "DEBUG: value %16lx name %s\n", sp->value, sp->name);
+
+			if (!MODULE_PSEUDO_SYMBOL(sp))
+				continue;
+
+			for_each_mod_mem_type(t) {
+				if (!lm->mem[t].size)
+					continue;
+
+				sprintf(buf1, "%s%s", module_tag[t].start, lm->mod_name);
+				sprintf(buf2, "%s%s", module_tag[t].end, lm->mod_name);
+
+				if (STREQ(sp->name, buf1)) {
+					lm->load_symtable[t] = sp;
+					break;
+				} else if (STREQ(sp->name, buf2)) {
+					lm->load_symend[t] = sp;
+					break;
+				}
+			}
+		}
+	}
+
 	lm->mod_load_symend--;
-	if (!MODULE_END(lm->mod_load_symend) &&
+	if (!MODULE_MEMORY() && !MODULE_END(lm->mod_load_symend) &&
 	    !IN_MODULE_PERCPU(lm->mod_load_symend->value, lm))
 		error(INFO, "%s: last symbol: %s is not _MODULE_END_%s?\n",
 			lm->mod_name, lm->mod_load_symend->name, lm->mod_name);
 
-	mod_symtable_hash_remove_range(lm->mod_symtable, lm->mod_symend);
-        lm->mod_symtable = lm->mod_load_symtable;
-        lm->mod_symend = lm->mod_load_symend;
-	mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
+	if (MODULE_MEMORY()) {
+		for_each_mod_mem_type(t) {
+			if (!lm->symtable[t])
+				continue;
+			mod_symtable_hash_remove_range(lm->symtable[t], lm->symend[t]);
+		}
+		lm->symtable = lm->load_symtable;
+		lm->symend = lm->load_symend;
+		mod_symtable_hash_install_range(lm->mod_load_symtable, lm->mod_load_symend);
+	} else {
+		mod_symtable_hash_remove_range(lm->mod_symtable, lm->mod_symend);
+		lm->mod_symtable = lm->mod_load_symtable;
+		lm->mod_symend = lm->mod_load_symend;
+		mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
+	}
 
 	lm->mod_flags &= ~MOD_EXT_SYMS;
 	lm->mod_flags |= MOD_LOAD_SYMS;
@@ -12642,7 +13860,7 @@ store_load_module_symbols(bfd *bfd, int dynamic, void *minisyms,
 void 
 delete_load_module(ulong base_addr)
 {
-	int i;
+	int i, t;
         struct load_module *lm;
 	struct gnu_request request, *req;
 
@@ -12657,7 +13875,18 @@ delete_load_module(ulong base_addr)
         			req->name = lm->mod_namelist;
         			gdb_interface(req); 
 			}
-			mod_symtable_hash_remove_range(lm->mod_symtable, lm->mod_symend);
+			if (MODULE_MEMORY()) {
+				if (lm->mod_load_symtable) {
+					mod_symtable_hash_remove_range(lm->mod_load_symtable,
+									lm->mod_load_symend);
+					for_each_mod_mem_type(t) {
+						lm->load_symtable[t] = NULL;
+						lm->load_symend[t] = NULL;
+					}
+				}
+			} else
+				mod_symtable_hash_remove_range(lm->mod_symtable, lm->mod_symend);
+
 			if (lm->mod_load_symtable) {
                         	free(lm->mod_load_symtable);
                                 namespace_ctl(NAMESPACE_FREE,
@@ -12665,9 +13894,23 @@ delete_load_module(ulong base_addr)
 			}
 			if (lm->mod_flags & MOD_REMOTE)
 				unlink_module(lm);
-			lm->mod_symtable = lm->mod_ext_symtable;
-			lm->mod_symend = lm->mod_ext_symend;
-			mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
+
+			if (MODULE_MEMORY()) {
+				if (lm->mod_load_symtable) { /* still non-NULL */
+					lm->symtable = lm->ext_symtable;
+					lm->symend = lm->ext_symend;
+					for_each_mod_mem_type(t) {
+						if (!lm->symtable[t])
+							continue;
+						mod_symtable_hash_install_range(lm->symtable[t],
+										lm->symend[t]);
+					}
+				}
+			} else {
+				lm->mod_symtable = lm->mod_ext_symtable;
+				lm->mod_symend = lm->mod_ext_symend;
+				mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
+			}
 			lm->mod_flags &= ~(MOD_LOAD_SYMS|MOD_REMOTE|MOD_NOPATCH);
 			lm->mod_flags |= MOD_EXT_SYMS;
 			lm->mod_load_symtable = NULL;
@@ -12696,7 +13939,18 @@ delete_load_module(ulong base_addr)
                         	req->name = lm->mod_namelist;
                         	gdb_interface(req);
 			}
-			mod_symtable_hash_remove_range(lm->mod_symtable, lm->mod_symend);
+			if (MODULE_MEMORY()) {
+				if (lm->mod_load_symtable) {
+					mod_symtable_hash_remove_range(lm->mod_load_symtable,
+									lm->mod_load_symend);
+					for_each_mod_mem_type(t) {
+						lm->load_symtable[t] = NULL;
+						lm->load_symend[t] = NULL;
+					}
+				}
+			} else
+				mod_symtable_hash_remove_range(lm->mod_symtable, lm->mod_symend);
+
 			if (lm->mod_load_symtable) {
                         	free(lm->mod_load_symtable);
 				namespace_ctl(NAMESPACE_FREE,
@@ -12704,9 +13958,23 @@ delete_load_module(ulong base_addr)
 			}
 			if (lm->mod_flags & MOD_REMOTE)
 				unlink_module(lm);
-			lm->mod_symtable = lm->mod_ext_symtable;
-			lm->mod_symend = lm->mod_ext_symend;
-			mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
+
+			if (MODULE_MEMORY()) {
+				if (lm->mod_load_symtable) {
+					lm->symtable = lm->ext_symtable;
+					lm->symend = lm->ext_symend;
+					for_each_mod_mem_type(t) {
+						if (!lm->symtable[t])
+							continue;
+						mod_symtable_hash_install_range(lm->symtable[t],
+										lm->symend[t]);
+					}
+				}
+			} else {
+				lm->mod_symtable = lm->mod_ext_symtable;
+				lm->mod_symend = lm->mod_ext_symend;
+				mod_symtable_hash_install_range(lm->mod_symtable, lm->mod_symend);
+			}
                         lm->mod_flags &= ~(MOD_LOAD_SYMS|MOD_REMOTE|MOD_NOPATCH);
                         lm->mod_flags |= MOD_EXT_SYMS;
                         lm->mod_load_symtable = NULL;
@@ -13455,7 +14723,7 @@ is_downsized(char *name)
 struct syment *
 symbol_complete_match(const char *match, struct syment *sp_last)
 {
-	int i;
+	int i, t;
 	struct syment *sp, *sp_end, *sp_start;
 	struct load_module *lm;
 	int search_init;
@@ -13475,6 +14743,34 @@ symbol_complete_match(const char *match, struct syment *sp_last)
 		sp_start = NULL;
 	}
 
+	if (!MODULE_MEMORY())
+		goto old_module;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		for_each_mod_mem_type(t) {
+			sp_end = lm->symend[t];
+			if (!sp_start)
+				sp_start = lm->symtable[t];
+
+			if (sp_start < lm->symtable[t] || sp_start > sp_end)
+				continue;
+
+			for (sp = sp_start; sp < sp_end; sp++) {
+				if (MODULE_PSEUDO_SYMBOL(sp))
+					continue;
+
+				if (STRNEQ(sp->name, match))
+					return sp;
+			}
+			sp_start = NULL;
+		}
+	}
+
+	return NULL;
+
+old_module:
 	search_init = FALSE;
 
 	for (i = 0; i < st->mods_installed; i++) {
@@ -13520,4 +14816,59 @@ symbol_complete_match(const char *match, struct syment *sp_last)
 	}
 
 	return NULL;
+}
+
+/* Returns module memory type if addr is in range, otherwise MOD_INVALID(-1) */
+static int
+in_module_range(ulong addr, struct load_module *lm, int start, int end)
+{
+	ulong base = 0, size = 0;
+	int i;
+
+	if (!MODULE_MEMORY())
+		goto old_module;
+
+	for (i = start ; i <= end; i++) {
+		base = lm->mem[i].base;
+		size = lm->mem[i].size;
+		if (!size)
+			continue;
+		if ((addr >= base) && (addr < (base + size)))
+			return i;
+	}
+	return MOD_INVALID;
+
+old_module:
+	if (start == MOD_TEXT) {
+		base = lm->mod_base;
+		size = lm->mod_size;
+	} else if (start == MOD_INIT_TEXT) {
+		base = lm->mod_init_module_ptr;
+		size = lm->mod_init_size;
+	} else
+		error(FATAL, "invalid module memory type!");
+
+	if ((addr >= base) && (addr < (base + size)))
+		return start;
+
+	return MOD_INVALID;
+}
+
+/* Returns module memory type, otherwise MOD_INVALID(-1) */
+static int
+module_mem_type(ulong addr, struct load_module *lm)
+{
+	return in_module_range(addr, lm, MOD_TEXT, MOD_INIT_RODATA);
+}
+
+/* Returns the end address of the module memory region. */
+static ulong
+module_mem_end(ulong addr, struct load_module *lm)
+{
+	int type = module_mem_type(addr, lm);
+
+	if (type == MOD_INVALID)
+		return 0;
+
+	return lm->mem[type].base + lm->mem[type].size;
 }

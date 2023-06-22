@@ -15712,10 +15712,44 @@ in_vmlist_segment(ulong vaddr)
 static int
 next_module_vaddr(ulong vaddr, ulong *nextvaddr)
 {
-	int i;
-	ulong start, end;
+	int i, t;
+	ulong start, end, min = (ulong)-1;
 	struct load_module *lm;
 
+	if (!MODULE_MEMORY())
+		goto old_module;
+
+	for (i = 0; i < st->mods_installed; i++) {
+		lm = &st->load_modules[i];
+
+		for_each_mod_mem_type(t) {
+			if (!lm->mem[t].size)
+				continue;
+
+			start = lm->mem[t].base;
+			end = start + lm->mem[t].size;
+
+			if (vaddr >= end)
+				continue;
+
+			if (vaddr < start) {
+				if (start < min) /* replace candidate */
+					min = start;
+				continue;
+			}
+
+			*nextvaddr = vaddr;
+			return TRUE;
+		}
+	}
+
+	if (min != (ulong)-1) {
+		*nextvaddr = min;
+		return TRUE;
+	}
+	return FALSE;
+
+old_module:
 	for (i = 0; i < st->mods_installed; i++) {
 		lm = &st->load_modules[i];
 		start = lm->mod_base;

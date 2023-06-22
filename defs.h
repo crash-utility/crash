@@ -675,6 +675,7 @@ struct new_utsname {
 #define IRQ_DESC_TREE_RADIX        (0x40ULL)
 #define IRQ_DESC_TREE_XARRAY       (0x80ULL)
 #define KMOD_PAX                  (0x100ULL)
+#define KMOD_MEMORY               (0x200ULL)
 
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
@@ -682,6 +683,7 @@ struct new_utsname {
 #define PVOPS_XEN() (kt->flags & ARCH_PVOPS_XEN)
 
 #define PAX_MODULE_SPLIT() (kt->flags2 & KMOD_PAX)
+#define MODULE_MEMORY()    (kt->flags2 & KMOD_MEMORY)
 
 #define XEN_MACHINE_TO_MFN(m)    ((ulonglong)(m) >> PAGESHIFT())
 #define XEN_PFN_TO_PSEUDO(p)     ((ulonglong)(p) << PAGESHIFT())
@@ -2217,6 +2219,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long kset_kobj;
 	long subsys_private_subsys;
 	long vmap_area_purge_list;
+	long module_mem;
+	long module_memory_base;
+	long module_memory_size;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2390,6 +2395,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long percpu_counter;
 	long maple_tree;
 	long maple_node;
+	long module_memory;
 };
 
 struct array_table {
@@ -2922,6 +2928,23 @@ struct mod_section_data {
         ulong size;
         int priority;
         int flags;
+	ulong addr;
+};
+
+/* Emulate enum mod_mem_type in include/linux/module.h */
+#define MOD_TEXT		(0)
+#define MOD_DATA		(1)
+#define MOD_RODATA		(2)
+#define MOD_RO_AFTER_INIT	(3)
+#define MOD_INIT_TEXT		(4)
+#define MOD_INIT_DATA		(5)
+#define MOD_INIT_RODATA		(6)
+#define MOD_MEM_NUM_TYPES	(7)
+#define MOD_INVALID		(-1)
+
+struct module_memory {
+	ulong base;
+	uint size;
 };
 
 struct load_module {
@@ -2957,18 +2980,28 @@ struct load_module {
 	ulong mod_percpu;
 	ulong mod_percpu_size;
 	struct objfile *loaded_objfile;
+
+	/* For 6.4 module_memory */
+	struct module_memory mem[MOD_MEM_NUM_TYPES];
+	struct syment **symtable;
+	struct syment **symend;
+	struct syment *ext_symtable[MOD_MEM_NUM_TYPES];
+	struct syment *ext_symend[MOD_MEM_NUM_TYPES];
+	struct syment *load_symtable[MOD_MEM_NUM_TYPES];
+	struct syment *load_symend[MOD_MEM_NUM_TYPES];
 };
 
-#define IN_MODULE(A,L) \
- (((ulong)(A) >= (L)->mod_base) && ((ulong)(A) < ((L)->mod_base+(L)->mod_size)))
-
-#define IN_MODULE_INIT(A,L) \
- (((ulong)(A) >= (L)->mod_init_module_ptr) && ((ulong)(A) < ((L)->mod_init_module_ptr+(L)->mod_init_size)))
-
+#define IN_MODULE(A,L)		(in_module_range(A, L, MOD_TEXT, MOD_RO_AFTER_INIT) != MOD_INVALID)
+#define IN_MODULE_INIT(A,L)	(in_module_range(A, L, MOD_INIT_TEXT, MOD_INIT_RODATA) != MOD_INVALID)
+#define IN_MODULE_TEXT(A,L)	(in_module_range(A, L, MOD_TEXT, MOD_TEXT) == MOD_TEXT || \
+				in_module_range(A, L, MOD_INIT_TEXT, MOD_INIT_TEXT) == MOD_INIT_TEXT)
 #define IN_MODULE_PERCPU(A,L) \
  (((ulong)(A) >= (L)->mod_percpu) && ((ulong)(A) < ((L)->mod_percpu+(L)->mod_percpu_size)))
 
 #define MODULE_PERCPU_SYMS_LOADED(L) ((L)->mod_percpu && (L)->mod_percpu_size)
+
+#define for_each_mod_mem_type(type) \
+	for ((type) = MOD_TEXT; (type) < MOD_MEM_NUM_TYPES; (type)++)
 
 #ifndef GDB_COMMON
 
@@ -5588,6 +5621,7 @@ void dump_struct_member(char *, ulong, unsigned);
 void dump_union(char *, ulong, unsigned);
 void store_module_symbols_v1(ulong, int);
 void store_module_symbols_v2(ulong, int);
+void store_module_symbols_6_4(ulong, int);
 int is_datatype_command(void);
 int is_typedef(char *);
 int arg_to_datatype(char *, struct datatype_member *, ulong);

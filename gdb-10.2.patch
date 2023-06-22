@@ -3120,3 +3120,28 @@ exit 0
    return result;
  }
  
+--- gdb-10.2/gdb/symtab.c.orig
++++ gdb-10.2/gdb/symtab.c
+@@ -7476,7 +7476,7 @@ gdb_add_symbol_file(struct gnu_request *
+         int i;
+         int allsect = 0;
+         char *secname;
+-        char buf[80];
++        char buf[96];
+ 
+         gdb_current_load_module = lm = (struct load_module *)req->addr;
+ 
+@@ -7515,8 +7515,11 @@ gdb_add_symbol_file(struct gnu_request *
+                             secname = lm->mod_section_data[i].name;
+                             if ((lm->mod_section_data[i].flags & SEC_FOUND) &&
+                                 !STREQ(secname, ".text")) {
+-                                    sprintf(buf, " -s %s 0x%lx", secname,
+-                                        lm->mod_section_data[i].offset + lm->mod_base);
++                                    if (lm->mod_section_data[i].addr)
++                                        sprintf(buf, " -s %s 0x%lx", secname, lm->mod_section_data[i].addr);
++                                    else
++                                        sprintf(buf, " -s %s 0x%lx", secname,
++                                            lm->mod_section_data[i].offset + lm->mod_base);
+                                     strcat(req->buf, buf);
+                             }
+                     }

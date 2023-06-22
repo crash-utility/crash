@@ -3571,7 +3571,21 @@ module_init(void)
         	MEMBER_OFFSET_INIT(module_num_gpl_syms, "module", 
 			"num_gpl_syms");
 
-		if (MEMBER_EXISTS("module", "module_core")) {
+		if (MEMBER_EXISTS("module", "mem")) {	/* 6.4 and later */
+			kt->flags2 |= KMOD_MEMORY;	/* MODULE_MEMORY() can be used. */
+
+			MEMBER_OFFSET_INIT(module_mem, "module", "mem");
+			MEMBER_OFFSET_INIT(module_memory_base, "module_memory", "base");
+			MEMBER_OFFSET_INIT(module_memory_size, "module_memory", "size");
+			STRUCT_SIZE_INIT(module_memory, "module_memory");
+
+			if (CRASHDEBUG(1))
+				error(INFO, "struct module_memory detected.\n");
+
+			if (get_array_length("module.mem", NULL, 0) != MOD_MEM_NUM_TYPES)
+				error(WARNING, "module memory types have changed!\n");
+
+		} else if (MEMBER_EXISTS("module", "module_core")) {
 			MEMBER_OFFSET_INIT(module_core_size, "module",
 					   "core_size");
 			MEMBER_OFFSET_INIT(module_init_size, "module",
@@ -3757,6 +3771,8 @@ module_init(void)
 		total += nsyms;
 		total += 2;  /* store the module's start/ending addresses */
 		total += 2;  /* and the init start/ending addresses */
+		if (MODULE_MEMORY()) /* 7 regions at most -> 14, so needs +10 */
+			total += 10;
 
 		/*
 		 *  If the module has kallsyms, set up to grab them as well.
@@ -3784,7 +3800,11 @@ module_init(void)
 		case KALLSYMS_V2:
 			if (THIS_KERNEL_VERSION >= LINUX(2,6,27)) {
 				numksyms = UINT(modbuf + OFFSET(module_num_symtab));
-				size = UINT(modbuf + MODULE_OFFSET2(module_core_size, rx));
+				if (MODULE_MEMORY())
+					/* check mem[MOD_TEXT].size only */
+					size = UINT(modbuf + OFFSET(module_mem) + OFFSET(module_memory_size));
+				else
+					size = UINT(modbuf + MODULE_OFFSET2(module_core_size, rx));
 			} else {
 				numksyms = ULONG(modbuf + OFFSET(module_num_symtab));
 				size = ULONG(modbuf + MODULE_OFFSET2(module_core_size, rx));
@@ -3822,7 +3842,10 @@ module_init(void)
 		store_module_symbols_v1(total, kt->mods_installed);
 		break;
 	case KMOD_V2:
-		store_module_symbols_v2(total, kt->mods_installed);
+		if (MODULE_MEMORY())
+			store_module_symbols_6_4(total, kt->mods_installed);
+		else
+			store_module_symbols_v2(total, kt->mods_installed);
 		break;
 	}
 
@@ -3836,7 +3859,7 @@ module_init(void)
 static int
 verify_modules(void)
 {
-	int i;
+	int i, t;
 	int found, irregularities;
         ulong mod, mod_next, mod_base;
 	long mod_size;
@@ -3893,8 +3916,13 @@ verify_modules(void)
 				mod_base = mod;
 				break;
 			case KMOD_V2:
-				mod_base = ULONG(modbuf + 
-					MODULE_OFFSET2(module_module_core, rx));
+				if (MODULE_MEMORY())
+					/* mem[MOD_TEXT].base */
+					mod_base = ULONG(modbuf + OFFSET(module_mem) +
+							OFFSET(module_memory_base));
+				else
+					mod_base = ULONG(modbuf +
+						MODULE_OFFSET2(module_module_core, rx));
 				break;
 			}
 
@@ -3916,7 +3944,17 @@ verify_modules(void)
 				case KMOD_V2:
         				module_name = modbuf + 
 						OFFSET(module_name);
-					if (THIS_KERNEL_VERSION >= LINUX(2,6,27))
+					if (MODULE_MEMORY()) {
+						mod_size = 0;
+						for_each_mod_mem_type(t) {
+							if (t == MOD_INIT_TEXT)
+								break;
+
+							mod_size += UINT(modbuf + OFFSET(module_mem) +
+									SIZE(module_memory) * t +
+									OFFSET(module_memory_size));
+						}
+					} else if (THIS_KERNEL_VERSION >= LINUX(2,6,27))
 						mod_size = UINT(modbuf +
 							MODULE_OFFSET2(module_core_size, rx));
 					else
@@ -4536,7 +4574,7 @@ do_module_cmd(ulong flag, char *modref, ulong address,
 				"MODULE"),
 				mkstring(buf2, maxnamelen, LJUST, "NAME"),
 				mkstring(buf4, VADDR_PRLEN, CENTER|LJUST,
-				"BASE"),
+				MODULE_MEMORY() ? "TEXT_BASE" : "BASE"),
 				mkstring(buf3, maxsizelen, RJUST, "SIZE"));
 		}
 	
@@ -6144,6 +6182,8 @@ dump_kernel_table(int verbose)
 		fprintf(fp, "%sIRQ_DESC_TREE_XARRAY", others++ ? "|" : "");
 	if (kt->flags2 & KMOD_PAX)
 		fprintf(fp, "%sKMOD_PAX", others++ ? "|" : "");
+	if (kt->flags2 & KMOD_MEMORY)
+		fprintf(fp, "%sKMOD_MEMORY", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
         fprintf(fp, "         stext: %lx\n", kt->stext);
