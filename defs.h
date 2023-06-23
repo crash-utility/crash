@@ -2430,6 +2430,7 @@ struct array_table {
 	int task_struct_rlim;
 	int signal_struct_rlim;
 	int vm_numa_stat;
+	int pid_numbers;
 };
 
 /*

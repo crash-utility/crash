@@ -9705,6 +9705,8 @@ builtin_array_length(char *s, int len, int *two_dim)
 		lenptr = &array_table.signal_struct_rlim;
 	else if (STREQ(s, "vm_numa_stat"))
 		lenptr = &array_table.vm_numa_stat;
+	else if (STREQ(s, "pid.numbers"))
+		lenptr = &array_table.pid_numbers;
 
 	if (!lenptr)                /* not stored */
 		return(len);        
@@ -12107,6 +12109,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		ARRAY_LENGTH(signal_struct_rlim));
 	fprintf(fp, "                  vm_numa_stat: %d\n",
 		ARRAY_LENGTH(vm_numa_stat));
+	fprintf(fp, "                   pid_numbers: %d\n", ARRAY_LENGTH(pid_numbers));
 
 	if (spec) {
 		int in_size_table, in_array_table, arrays, offsets, sizes;

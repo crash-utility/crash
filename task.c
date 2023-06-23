@@ -352,6 +352,7 @@ task_init(void)
 		MEMBER_OFFSET_INIT(upid_ns, "upid", "ns"); 
 		MEMBER_OFFSET_INIT(upid_pid_chain, "upid", "pid_chain");
 		MEMBER_OFFSET_INIT(pid_numbers, "pid", "numbers");
+		ARRAY_LENGTH_INIT(len, pid_numbers, "pid.numbers", NULL, 0);
 		MEMBER_OFFSET_INIT(pid_tasks, "pid", "tasks");
 		tt->init_pid_ns = symbol_value("init_pid_ns");
 	}
@@ -2574,6 +2575,7 @@ refresh_xarray_task_table(void)
 	char *tp;
 	struct list_pair xp;
 	char *pidbuf;
+	long pid_size = SIZE(pid);
 
 	if (DUMPFILE() && (tt->flags & TASK_INIT_DONE))   /* impossible */
 		return;
@@ -2603,8 +2605,12 @@ refresh_xarray_task_table(void)
 	if (CRASHDEBUG(1))
 		console("xarray: count: %ld\n", count);
 
+	/* 6.5: b69f0aeb0689 changed pid.numbers[1] to numbers[] */
+	if (ARRAY_LENGTH(pid_numbers) == 0)
+		pid_size += SIZE(upid);
+
 	retries = 0;
-	pidbuf = GETBUF(SIZE(pid));
+	pidbuf = GETBUF(pid_size);
 
 retry_xarray:
 	if (retries && DUMPFILE())
@@ -2672,7 +2678,7 @@ retry_xarray:
 		 *  - get task from address of task->pids[0]
 		 */
 		if (!readmem(next, KVADDR, pidbuf,
-		    SIZE(pid), "pid", RETURN_ON_ERROR|QUIET)) {
+		    pid_size, "pid", RETURN_ON_ERROR|QUIET)) {
 			error(INFO, "\ncannot read pid struct from xarray\n");
 			if (DUMPFILE())
 				continue;
