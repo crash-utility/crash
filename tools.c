@@ -6795,7 +6795,7 @@ make_cpumask_error:
  * always be NULL-terminated.
  */
 size_t 
-strlcpy(char *dest, char *src, size_t size)
+strlcpy(char *dest, const char *src, size_t size)
 {
 	size_t ret = strlen(src);
 

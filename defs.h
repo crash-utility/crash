@@ -5553,7 +5553,7 @@ uint32_t swap32(uint32_t, int);
 uint64_t swap64(uint64_t, int);
 ulong *get_cpumask_buf(void);
 int make_cpumask(char *, ulong *, int, int *);
-size_t strlcpy(char *, char *, size_t);
+size_t strlcpy(char *, const char *, size_t) __attribute__ ((__weak__));
 struct rb_node *rb_first(struct rb_root *);
 struct rb_node *rb_parent(struct rb_node *, struct rb_node *);
 struct rb_node *rb_right(struct rb_node *, struct rb_node *);
