@@ -39,8 +39,8 @@ is_vmware_vmss(char *filename)
         }
 
 	if (fread(&hdr, sizeof(cptdumpheader), 1, fp) != 1) {
-		error(INFO, LOGPRX"Failed to read '%s': [Error %d] %s\n",
-		      filename, errno, strerror(errno));
+		error(INFO, LOGPRX"Failed to read '%s' from file '%s': [Error %d] %s\n",
+		      "cptdumpheader", filename, errno, strerror(errno));
 		fclose(fp);
 		return FALSE;
 	}
@@ -86,8 +86,8 @@ vmware_vmss_init(char *filename, FILE *ofp)
         }
 
 	if (fread(&hdr, sizeof(cptdumpheader), 1, fp) != 1) {
-		error(INFO, LOGPRX"Failed to read '%s': %s [Error %d] %s\n",
-                      filename, errno, strerror(errno));
+		error(INFO, LOGPRX"Failed to read '%s' from file '%s': [Error %d] %s\n",
+		      "cptdumpheader", filename, errno, strerror(errno));
 		result = FALSE;
 		goto exit;
 	}
@@ -112,8 +112,8 @@ vmware_vmss_init(char *filename, FILE *ofp)
 	}
 
 	if (fread(grps, sizeof(cptgroupdesc), grpsize, fp) != grpsize) {
-		error(INFO, LOGPRX"Failed to read '%s': [Error %d] %s\n",
-		      filename, errno, strerror(errno));
+		error(INFO, LOGPRX"Failed to read '%s' from file '%s': [Error %d] %s\n",
+		      "cptgroupdesc", filename, errno, strerror(errno));
 		result = FALSE;
 		goto exit;
 	}
@@ -225,8 +225,8 @@ vmware_vmss_init(char *filename, FILE *ofp)
 					   idx[0] < vmss.num_vcpus) {
 					int cpu = idx[0];
 					if (fread(vmss.regs64[cpu], VMW_GPREGS_SIZE, 1, fp) != 1) {
-						error(INFO, LOGPRX"Failed to read '%s': [Error %d] %s\n",
-						      filename, errno, strerror(errno));
+						error(INFO, LOGPRX"Failed to read '%s' from file '%s': [Error %d] %s\n",
+						      name, filename, errno, strerror(errno));
 						break;
 					}
 					DEBUG_PARSE_PRINT((ofp, "\n"));
@@ -237,8 +237,8 @@ vmware_vmss_init(char *filename, FILE *ofp)
 					int cpu = idx[0];
 					DEBUG_PARSE_PRINT((ofp, "\t=> "));
 					if (fread(&vmss.regs64[cpu]->cr[0], VMW_CR64_SIZE, 1, fp) != 1) {
-						error(INFO, LOGPRX"Failed to read '%s': [Error %d] %s\n",
-						      filename, errno, strerror(errno));
+						error(INFO, LOGPRX"Failed to read '%s' from file '%s': [Error %d] %s\n",
+						      name, filename, errno, strerror(errno));
 						break;
 					}
 					for (j = 0; j < VMW_CR64_SIZE / 8; j++)
@@ -257,8 +257,8 @@ vmware_vmss_init(char *filename, FILE *ofp)
 						break;
 					}
 					if (fread(&idtr, sizeof(idtr), 1, fp) != 1) {
-						error(INFO, LOGPRX"Failed to read '%s': [Error %d] %s\n",
-						      filename, errno, strerror(errno));
+						error(INFO, LOGPRX"Failed to read '%s' from file '%s': [Error %d] %s\n",
+						      name, filename, errno, strerror(errno));
 						break;
 					}
 					DEBUG_PARSE_PRINT((ofp, "\n"));

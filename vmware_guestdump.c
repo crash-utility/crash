@@ -117,8 +117,8 @@ is_vmware_guestdump(char *filename)
         }
 
 	if (fread(&hdr, sizeof(struct guestdumpheader), 1, fp) != 1) {
-		error(INFO, LOGPRX"Failed to read '%s': [Error %d] %s\n",
-		      filename, errno, strerror(errno));
+		error(INFO, LOGPRX"Failed to read '%s' from file '%s': [Error %d] %s\n",
+		      "guestdumpheader", filename, errno, strerror(errno));
 		fclose(fp);
 		return FALSE;
 	}
@@ -204,8 +204,8 @@ vmware_guestdump_init(char *filename, FILE *ofp)
 
 	for (i = 0; i < vmss.num_vcpus; i++) {
 		if (fread(&vs, sizeof(struct vcpu_state), 1, fp) != 1) {
-			error(INFO, LOGPRX"Failed to read '%s': [Error %d] %s\n",
-					filename, errno, strerror(errno));
+			error(INFO, LOGPRX"Failed to read '%s' from file '%s': [Error %d] %s\n",
+					"vcpu_state", filename, errno, strerror(errno));
 			result = FALSE;
 			goto exit;
 		}
