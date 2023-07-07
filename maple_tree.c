@@ -287,7 +287,7 @@ static void do_mt_entry(ulong entry, ulong min, ulong max, uint depth,
 	static struct req_entry **e = NULL;
 	struct tree_data *td = ops->is_td ? (struct tree_data *)ops->private : NULL;
 
-	if (ops->entry)
+	if (ops->entry && entry)
 		ops->entry(entry, entry, path, max, ops->private);
 
 	if (!td)
