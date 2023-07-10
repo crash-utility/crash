@@ -7298,7 +7298,8 @@ generic_get_irq_affinity(int irq)
 		tmp_addr = irq_desc_addr + \
 			   OFFSET(irq_desc_t_affinity);
 
-	if (symbol_exists("alloc_cpumask_var")) /* pointer member */
+	if (symbol_exists("alloc_cpumask_var_node") ||
+	    symbol_exists("alloc_cpumask_var")) /* pointer member */
 		readmem(tmp_addr,KVADDR, &affinity_ptr, sizeof(ulong),
 		        "irq_desc affinity", FAULT_ON_ERROR);
 	else /* array member */
