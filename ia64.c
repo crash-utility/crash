@@ -791,7 +791,8 @@ ia64_back_trace_cmd(struct bt_info *bt)
 static void
 ia64_dump_irq(int irq)
 {
-        if (symbol_exists("irq_desc") || symbol_exists("_irq_desc") ||
+	if (kernel_symbol_exists("sparse_irqs") ||
+	    symbol_exists("irq_desc") || symbol_exists("_irq_desc") ||
 	    kernel_symbol_exists("irq_desc_ptrs")) {
                 machdep->dump_irq = generic_dump_irq;
                 return(generic_dump_irq(irq));

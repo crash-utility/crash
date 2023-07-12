@@ -676,6 +676,7 @@ struct new_utsname {
 #define IRQ_DESC_TREE_XARRAY       (0x80ULL)
 #define KMOD_PAX                  (0x100ULL)
 #define KMOD_MEMORY               (0x200ULL)
+#define IRQ_DESC_TREE_MAPLE       (0x400ULL)
 
 #define XEN()       (kt->flags & ARCH_XEN)
 #define OPENVZ()    (kt->flags & ARCH_OPENVZ)
@@ -2222,6 +2223,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long module_mem;
 	long module_memory_base;
 	long module_memory_size;
+	long irq_data_irq;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

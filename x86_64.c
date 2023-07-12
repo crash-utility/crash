@@ -5391,7 +5391,8 @@ get_x86_64_frame(struct bt_info *bt, ulong *getpc, ulong *getsp)
 static void 
 x86_64_dump_irq(int irq)
 {
-        if (symbol_exists("irq_desc") || 
+	if (kernel_symbol_exists("sparse_irqs") ||
+	    symbol_exists("irq_desc") ||
 	    kernel_symbol_exists("irq_desc_ptrs") ||
 	    kernel_symbol_exists("irq_desc_tree")) {
                 machdep->dump_irq = generic_dump_irq;
@@ -5405,7 +5406,8 @@ x86_64_dump_irq(int irq)
 static void
 x86_64_get_irq_affinity(int irq)
 {
-        if (symbol_exists("irq_desc") ||
+	if (kernel_symbol_exists("sparse_irqs") ||
+	    symbol_exists("irq_desc") ||
 	    kernel_symbol_exists("irq_desc_ptrs") ||
 	    kernel_symbol_exists("irq_desc_tree")) {
                 machdep->get_irq_affinity = generic_get_irq_affinity;
@@ -5419,7 +5421,8 @@ x86_64_get_irq_affinity(int irq)
 static void
 x86_64_show_interrupts(int irq, ulong *cpus)
 {
-        if (symbol_exists("irq_desc") ||
+	if (kernel_symbol_exists("sparse_irqs") ||
+	    symbol_exists("irq_desc") ||
 	    kernel_symbol_exists("irq_desc_ptrs") ||
 	    kernel_symbol_exists("irq_desc_tree")) {
                 machdep->show_interrupts = generic_show_interrupts;

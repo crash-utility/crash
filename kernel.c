@@ -541,7 +541,10 @@ kernel_init()
 	MEMBER_OFFSET_INIT(irqaction_dev_id, "irqaction", "dev_id");
 	MEMBER_OFFSET_INIT(irqaction_next, "irqaction", "next");
 
-	if (kernel_symbol_exists("irq_desc_tree")) {
+	/* 6.5 and later: CONFIG_SPARSE_IRQ */
+	if (kernel_symbol_exists("sparse_irqs"))
+		kt->flags2 |= IRQ_DESC_TREE_MAPLE;
+	else if (kernel_symbol_exists("irq_desc_tree")) {
 		get_symbol_type("irq_desc_tree", NULL, &req);
 		if (STREQ(req.type_tag_name, "xarray")) {
 			kt->flags2 |= IRQ_DESC_TREE_XARRAY;
@@ -554,6 +557,7 @@ kernel_init()
 	}
 	STRUCT_SIZE_INIT(irq_data, "irq_data");
 	if (VALID_STRUCT(irq_data)) {
+		MEMBER_OFFSET_INIT(irq_data_irq, "irq_data", "irq");
 		MEMBER_OFFSET_INIT(irq_data_chip, "irq_data", "chip");
 		MEMBER_OFFSET_INIT(irq_data_affinity, "irq_data", "affinity");
 		MEMBER_OFFSET_INIT(irq_desc_irq_data, "irq_desc", "irq_data");
@@ -6180,6 +6184,8 @@ dump_kernel_table(int verbose)
 		fprintf(fp, "%sIRQ_DESC_TREE_RADIX", others++ ? "|" : "");
 	if (kt->flags2 & IRQ_DESC_TREE_XARRAY)
 		fprintf(fp, "%sIRQ_DESC_TREE_XARRAY", others++ ? "|" : "");
+	if (kt->flags2 & IRQ_DESC_TREE_MAPLE)
+		fprintf(fp, "%sIRQ_DESC_TREE_MAPLE", others++ ? "|" : "");
 	if (kt->flags2 & KMOD_PAX)
 		fprintf(fp, "%sKMOD_PAX", others++ ? "|" : "");
 	if (kt->flags2 & KMOD_MEMORY)
@@ -6652,6 +6658,45 @@ get_irq_desc_addr(int irq)
 		readmem(ptr, KVADDR, &addr,
                         sizeof(void *), "irq_desc_ptrs entry",
                         FAULT_ON_ERROR);
+	} else if (kt->flags2 & IRQ_DESC_TREE_MAPLE) {
+		unsigned int i;
+
+		if (kt->highest_irq && (irq > kt->highest_irq))
+			return addr;
+
+		cnt = do_maple_tree(symbol_value("sparse_irqs"), MAPLE_TREE_COUNT, NULL);
+
+		len = sizeof(struct list_pair) * (cnt+1);
+		lp = (struct list_pair *)GETBUF(len);
+		lp[0].index = cnt; /* maxcount */
+
+		cnt = do_maple_tree(symbol_value("sparse_irqs"), MAPLE_TREE_GATHER, lp);
+
+		/*
+		 * NOTE: We cannot use lp.index like Radix Tree or XArray because
+		 * it's not an absolute index and just counter in Maple Tree.
+		 */
+		if (kt->highest_irq == 0) {
+			readmem((ulong)lp[cnt-1].value +
+					OFFSET(irq_desc_irq_data) + OFFSET(irq_data_irq),
+				KVADDR, &kt->highest_irq, sizeof(int), "irq_data.irq",
+				FAULT_ON_ERROR);
+		}
+
+		for (c = 0; c < cnt; c++) {
+			readmem((ulong)lp[c].value +
+					OFFSET(irq_desc_irq_data) + OFFSET(irq_data_irq),
+				KVADDR, &i, sizeof(int), "irq_data.irq", FAULT_ON_ERROR);
+			if (i == irq) {
+				if (CRASHDEBUG(1))
+					fprintf(fp, "index: %d value: %lx\n",
+						i, (ulong)lp[c].value);
+				addr = (ulong)lp[c].value;
+				break;
+			}
+		}
+		FREEBUF(lp);
+
 	} else if (kt->flags2 & (IRQ_DESC_TREE_RADIX|IRQ_DESC_TREE_XARRAY)) {
 		if (kt->highest_irq && (irq > kt->highest_irq))
 			return addr;
@@ -6700,8 +6745,8 @@ get_irq_desc_addr(int irq)
 		FREEBUF(lp);
 	} else {
 		error(FATAL,
-		    "neither irq_desc, _irq_desc, irq_desc_ptrs "
-		    "or irq_desc_tree symbols exist\n");
+		    "neither irq_desc, _irq_desc, irq_desc_ptrs, "
+		    "irq_desc_tree or sparse_irqs symbols exist\n");
 	}
 
 	return addr;
