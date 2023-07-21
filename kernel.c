@@ -1375,8 +1375,6 @@ verify_namelist()
 				buffer3[i++] = *p1++;
 			buffer3[i] = NULLCHAR;
 		}
-
-		break;
         }
         pclose(pipe);
 
