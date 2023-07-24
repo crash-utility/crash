@@ -11891,8 +11891,13 @@ int get_linux_banner_from_vmlinux(char *buf, size_t size)
 {
 	struct bfd_section *sect;
 	long offset;
+	ulong start_rodata;
 
-	if (!kernel_symbol_exists(".rodata"))
+	if (kernel_symbol_exists(".rodata"))
+		start_rodata = symbol_value(".rodata");
+	else if (kernel_symbol_exists("__start_rodata"))
+		start_rodata = symbol_value("__start_rodata");
+	else
 		return FALSE;
 
 	sect = bfd_get_section_by_name(st->bfd, ".rodata");
@@ -11905,7 +11910,7 @@ int get_linux_banner_from_vmlinux(char *buf, size_t size)
 	 * value in vmlinux file, but relative offset to linux_banner
 	 * object in .rodata section is idential.
 	 */
-	offset = symbol_value("linux_banner") - symbol_value(".rodata");
+	offset = symbol_value("linux_banner") - start_rodata;
 
 	if (!bfd_get_section_contents(st->bfd,
 				      sect,
