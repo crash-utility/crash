@@ -1203,7 +1203,7 @@ struct foreach_data {
 		char *pattern;
 		regex_t regex;
 	} regex_info[MAX_REGEX_ARGS];
-	ulong state;
+	const char *state;
 	char *reference;
 	int keys;
 	int pids;
