@@ -418,6 +418,28 @@ error:
 	error(FATAL, "cannot get vm layout\n");
 }
 
+static void
+riscv64_get_va_kernel_pa_offset(struct machine_specific *ms)
+{
+	unsigned long kernel_version = riscv64_get_kernel_version();
+
+	/*
+	 * Since Linux v6.4 phys_base is not the physical start of the kernel,
+	 * trying to use "va_kernel_pa_offset" to determine the offset between
+	 * kernel virtual and physical addresses.
+	 */
+	if (kernel_version >= LINUX(6,4,0)) {
+		char *string;
+		if ((string = pc->read_vmcoreinfo("NUMBER(va_kernel_pa_offset)"))) {
+			ms->va_kernel_pa_offset = htol(string, QUIET, NULL);
+			free(string);
+		} else
+			error(FATAL, "cannot read va_kernel_pa_offset\n");
+	}
+	else
+		ms->va_kernel_pa_offset = ms->kernel_link_addr - ms->phys_base;
+}
+
 static int
 riscv64_is_kvaddr(ulong vaddr)
 {
@@ -1352,6 +1374,7 @@ riscv64_init(int when)
 		riscv64_get_struct_page_size(machdep->machspec);
 		riscv64_get_va_bits(machdep->machspec);
 		riscv64_get_va_range(machdep->machspec);
+		riscv64_get_va_kernel_pa_offset(machdep->machspec);
 
 		pt_level_alloc(&machdep->pgd, "cannot malloc pgd space.");
 		pt_level_alloc(&machdep->machspec->p4d, "cannot malloc p4d space.");

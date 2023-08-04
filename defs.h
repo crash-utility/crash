@@ -3663,8 +3663,7 @@ typedef signed int s32;
 	ulong _X = X;									\
 	(THIS_KERNEL_VERSION >= LINUX(5,13,0) &&					\
 		(_X) >= machdep->machspec->kernel_link_addr) ?				\
-		(((unsigned long)(_X)-(machdep->machspec->kernel_link_addr)) +		\
-		 machdep->machspec->phys_base):						\
+		((unsigned long)(_X)-(machdep->machspec->va_kernel_pa_offset)): 	\
 		(((unsigned long)(_X)-(machdep->kvbase)) +				\
 		 machdep->machspec->phys_base);						\
 	})
@@ -7022,6 +7021,7 @@ struct machine_specific {
 	ulong modules_vaddr;
 	ulong modules_end;
 	ulong kernel_link_addr;
+	ulong va_kernel_pa_offset;
 
 	ulong _page_present;
 	ulong _page_read;
