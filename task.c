@@ -7873,6 +7873,7 @@ dump_task_table(int verbose)
 	fprintf(fp, "       init_pid_ns: %lx\n", tt->init_pid_ns);
 	fprintf(fp, "         filepages: %ld\n", tt->filepages);
 	fprintf(fp, "         anonpages: %ld\n", tt->anonpages);
+	fprintf(fp, "        shmempages: %ld\n", tt->shmempages);
 	fprintf(fp, "   stack_end_magic: %lx\n", tt->stack_end_magic);
 	fprintf(fp, "        pf_kthread: %lx ", tt->pf_kthread);
 	switch (tt->pf_kthread) 

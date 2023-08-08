@@ -4466,13 +4466,13 @@ in_user_stack(ulong task, ulong vaddr)
 }
 
 /*
- * Set the const value of filepages and anonpages 
- * according to MM_FILEPAGES and MM_ANONPAGES.
+ * Set the const value of filepages, anonpages and shmempages
+ * according to MM_FILEPAGES, MM_ANONPAGES and MM_SHMEMPAGES.
  */
 static void 
 rss_page_types_init(void)
 {
-	long anonpages, filepages;
+	long anonpages, filepages, shmempages;
 
 	if (VALID_MEMBER(mm_struct_rss))
 		return;
@@ -4487,6 +4487,15 @@ rss_page_types_init(void)
 		}
 		tt->filepages = filepages;
 		tt->anonpages = anonpages;
+
+		/*
+		 * The default value(MM_SHMEMPAGES) is 3, which is introduced
+		 * in linux v4.5-rc1 and later. See commit eca56ff906bd.
+		 */
+		if (!enumerator_value("MM_SHMEMPAGES", &shmempages))
+			tt->shmempages = -1;
+		else
+			tt->shmempages = shmempages;
 	}
 }
 
@@ -4812,10 +4821,11 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 		 *  Latest kernels have mm_struct.mm_rss_stat[].
 		 */ 
 		if (VALID_MEMBER(mm_struct_rss_stat) && VALID_MEMBER(mm_rss_stat_count)) {
-			long anonpages, filepages, count;
+			long anonpages, filepages, shmempages, count;
 
 			anonpages = tt->anonpages;
 			filepages = tt->filepages;
+			shmempages = tt->shmempages;
 			count = LONG(tt->mm_struct +
 				OFFSET(mm_struct_rss_stat) +
 				OFFSET(mm_rss_stat_count) +
@@ -4836,6 +4846,15 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 			if (count > 0)
 				rss += count;
 
+			if (shmempages > 0) {
+				count = LONG(tt->mm_struct +
+					OFFSET(mm_struct_rss_stat) +
+					OFFSET(mm_rss_stat_count) +
+					(shmempages * sizeof(long)));
+				if (count > 0)
+					rss += count;
+			}
+
 		} else if (VALID_MEMBER(mm_struct_rss_stat)) {
 			/* 6.2: struct percpu_counter rss_stat[NR_MM_COUNTERS] */
 			ulong fbc;
@@ -4846,6 +4865,10 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 
 			fbc = tc->mm_struct + OFFSET(mm_struct_rss_stat) +
 				(tt->anonpages * SIZE(percpu_counter));
+			rss += percpu_counter_sum_positive(fbc);
+
+			fbc = tc->mm_struct + OFFSET(mm_struct_rss_stat) +
+				(tt->shmempages * SIZE(percpu_counter));
 			rss += percpu_counter_sum_positive(fbc);
 		}
 
@@ -4880,12 +4903,11 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 				if (ACTIVE() || last->rss_cache == UNINITIALIZED) {
 					while (first <= last)
 					{
+						ulong addr = first->task + OFFSET(task_struct_rss_stat) +
+								OFFSET(task_rss_stat_count);
+
 						/* count 0 -> filepages */
-						if (!readmem(first->task +
-							OFFSET(task_struct_rss_stat) +
-							OFFSET(task_rss_stat_count), KVADDR,
-							&sync_rss,
-							sizeof(int),
+						if (!readmem(addr, KVADDR, &sync_rss, sizeof(int),
 							"task_struct rss_stat MM_FILEPAGES",
 							RETURN_ON_ERROR))
 								continue;
@@ -4894,18 +4916,25 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 							rss_cache += sync_rss;
 
 						/* count 1 -> anonpages */
-						if (!readmem(first->task +
-							OFFSET(task_struct_rss_stat) +
-							OFFSET(task_rss_stat_count) +
-							sizeof(int),
-							KVADDR, &sync_rss,
-							sizeof(int),
+						if (!readmem(addr + sizeof(int), KVADDR, &sync_rss, sizeof(int),
 							"task_struct rss_stat MM_ANONPAGES",
 							RETURN_ON_ERROR))
 								continue;
 
 						if (sync_rss > 0)
 							rss_cache += sync_rss;
+
+						/* count 3 -> shmempages */
+						if (tt->shmempages >= 0) {
+							if (!readmem(addr + tt->shmempages * sizeof(int), KVADDR,
+								&sync_rss, sizeof(int),
+								"task_struct rss_stat MM_SHMEMPAGES",
+								RETURN_ON_ERROR))
+									continue;
+
+							if (sync_rss > 0)
+								rss_cache += sync_rss;
+						}
 
 						if (first == last)
 							break;

@@ -887,6 +887,7 @@ struct task_table {                      /* kernel/local task table data */
 	int callbacks;
 	struct task_context **context_by_task; /* task_context sorted by task addr */
 	ulong pid_xarray;
+	long shmempages;
 };
 
 #define TASK_INIT_DONE       (0x1)
