@@ -190,6 +190,8 @@ char *ramdump_to_elf(void)
 		e_machine = EM_X86_64;
 	else if (machine_type("RISCV64"))
 		e_machine = EM_RISCV;
+	else if (machine_type("LOONGARCH64"))
+		e_machine = EM_LOONGARCH;
 	else
 		error(FATAL, "ramdump: unsupported machine type: %s\n", 
 			MACHINE_TYPE);

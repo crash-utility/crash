@@ -76,7 +76,7 @@
 #if !defined(X86) && !defined(X86_64) && !defined(ALPHA) && !defined(PPC) && \
     !defined(IA64) && !defined(PPC64) && !defined(S390) && !defined(S390X) && \
     !defined(ARM) && !defined(ARM64) && !defined(MIPS) && !defined(MIPS64) && \
-    !defined(RISCV64) && !defined(SPARC64)
+    !defined(RISCV64) && !defined(SPARC64) && !defined(LOONGARCH64)
 #ifdef __alpha__
 #define ALPHA
 #endif
@@ -121,6 +121,9 @@
 #if defined(__riscv) && (__riscv_xlen == 64)
 #define RISCV64
 #endif
+#ifdef __loongarch64
+#define LOONGARCH64
+#endif
 #endif
 
 #ifdef X86
@@ -163,6 +166,9 @@
 #define NR_CPUS  (4096)
 #endif
 #ifdef RISCV64
+#define NR_CPUS  (256)
+#endif
+#ifdef LOONGARCH64
 #define NR_CPUS  (256)
 #endif
 
@@ -2014,6 +2020,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long atomic_t_counter;
 	long percpu_counter_count;
 	long mm_struct_mm_count;
+	long task_struct_thread_reg01;
+	long task_struct_thread_reg03;
 	long task_struct_thread_reg29;
 	long task_struct_thread_reg31;
 	long pt_regs_regs;
@@ -3574,6 +3582,43 @@ struct arm64_stackframe {
 #define _64BIT_
 #define MACHINE_TYPE		"RISCV64"
 
+#ifdef LOONGARCH64
+#define	_64BIT_
+#define MACHINE_TYPE		"LOONGARCH64"
+
+#define PAGEBASE(X)		(((ulong)(X)) & (ulong)machdep->pagemask)
+
+#define IS_XKPRANGE(X)		(((X) >= 0x8000000000000000lu) && \
+				((X) < 0xc000000000000000lu))
+
+#define PTOV(X)			((ulong)(X) + 0x9000000000000000lu)
+#define VTOP(X)			((ulong)(X) & 0x0000fffffffffffflu)
+
+#define IS_VMALLOC_ADDR(X) (vt->vmalloc_start && (ulong)(X) >= vt->vmalloc_start)
+
+#define DEFAULT_MODULES_VADDR	0xffff800000000000lu
+#define MODULES_VADDR		(machdep->machspec->modules_vaddr)
+#define MODULES_END		(machdep->machspec->modules_end)
+#define VMALLOC_START		(machdep->machspec->vmalloc_start_addr)
+#define VMALLOC_END		(machdep->machspec->vmalloc_end)
+
+#define __SWP_TYPE_SHIFT	16
+#define __SWP_TYPE_BITS		8
+#define __SWP_TYPE_MASK		((1 << __SWP_TYPE_BITS) - 1)
+#define __SWP_OFFSET_SHIFT	(__SWP_TYPE_BITS + __SWP_TYPE_SHIFT)
+
+#define SWP_TYPE(entry)		(((entry) >> __SWP_TYPE_SHIFT) & __SWP_TYPE_MASK)
+#define SWP_OFFSET(entry)	((entry) >> __SWP_OFFSET_SHIFT)
+
+#define __swp_type(entry)	SWP_TYPE(entry)
+#define __swp_offset(entry)	SWP_OFFSET(entry)
+
+#define TIF_SIGPENDING		(1)
+
+#define _SECTION_SIZE_BITS	28
+#define _MAX_PHYSMEM_BITS	48
+#endif  /* LOONGARCH64 */
+
 typedef struct { ulong pgd; } pgd_t;
 typedef struct { ulong p4d; } p4d_t;
 typedef struct { ulong pud; } pud_t;
@@ -4766,6 +4811,10 @@ struct machine_specific {
 #define MAX_HEXADDR_STRLEN (16)
 #define UVADDR_PRLEN       (16)
 #endif
+#ifdef LOONGARCH64
+#define MAX_HEXADDR_STRLEN (16)
+#define UVADDR_PRLEN       (16)
+#endif
 
 #define BADADDR  ((ulong)(-1))
 #define BADVAL   ((ulong)(-1))
@@ -5387,6 +5436,9 @@ void dump_build_data(void);
 #ifdef SPARC64
 #define machdep_init(X) sparc64_init(X)
 #endif
+#ifdef LOONGARCH64
+#define machdep_init(X) loongarch64_init(X)
+#endif
 int clean_exit(int);
 int untrusted_file(FILE *, char *);
 char *readmem_function_name(void);
@@ -5877,6 +5929,9 @@ void display_help_screen(char *);
 #endif
 #ifdef RISCV64
 #define dump_machdep_table(X) riscv64_dump_machdep_table(X)
+#endif
+#ifdef LOONGARCH64
+#define dump_machdep_table(X) loongarch64_dump_machdep_table(X)
 #endif
 extern char *help_pointer[];
 extern char *help_alias[];
@@ -7078,6 +7133,109 @@ int sparc64_vmalloc_addr(ulong);
 #define display_idt_table() \
 	error(FATAL, "The -d option is not applicable to sparc64.\n")
 #endif
+
+/*
+ * loongarch64.c
+ */
+void loongarch64_display_regs_from_elf_notes(int, FILE *);
+
+#ifdef LOONGARCH64
+void loongarch64_init(int);
+void loongarch64_dump_machdep_table(ulong);
+
+#define display_idt_table() \
+	error(FATAL, "-d option is not applicable to LOONGARCH64 architecture\n")
+
+/* from arch/loongarch/include/asm/ptrace.h */
+struct loongarch64_pt_regs {
+	/* Saved main processor registers. */
+	unsigned long regs[32];
+
+	/* Saved special registers. */
+	unsigned long csr_crmd;
+	unsigned long csr_prmd;
+	unsigned long csr_euen;
+	unsigned long csr_ecfg;
+	unsigned long csr_estat;
+	unsigned long csr_epc;
+	unsigned long csr_badvaddr;
+	unsigned long orig_a0;
+};
+
+struct loongarch64_unwind_frame {
+        unsigned long sp;
+        unsigned long pc;
+        unsigned long ra;
+};
+
+#define KSYMS_START     (0x1)
+
+struct machine_specific {
+	ulong phys_base;
+	ulong vmalloc_start_addr;
+	ulong modules_vaddr;
+	ulong modules_end;
+
+	struct loongarch64_pt_regs *crash_task_regs;
+};
+
+/*
+ * Basic page table format:
+ *
+ *   63  62 61       PALEN-1            12      10 9  8 7 6 5 4 3 2 1 0
+ * +----+--+--+------+--------------------+----+--+--+-+-+-+---+---+-+-+
+ * |RPLV|NX|NR|      |  PA[PALEN-1:12]    |    |SP|PN|W|P|G|MAT|PLV|D|V|
+ * +----+--+--+------+--------------------+----+--+--+-+-+-+---+---+-+-+
+ *
+ *
+ * Huge page table format:
+ *
+ *   63  62 61       PALEN-1            12      10 9  8 7 6 5 4 3 2 1 0
+ * +----+--+--+------+-----------------+--+----+--+--+-+-+-+---+---+-+-+
+ * |RPLV|NX|NR|      |  PA[PALEN-1:12] | G|    |SP|PN|W|P|H|MAT|PLV|D|V|
+ * +----+--+--+------+-----------------+--+----+--+--+-+-+-+---+---+-+-+
+ *
+ */
+/* from arch/loongarch/include/asm/pgtable-bits.h */
+
+/* Page table bits */
+#define _PAGE_VALID_SHIFT	0
+#define _PAGE_DIRTY_SHIFT	1
+#define _PAGE_PLV_SHIFT		2  /* 2~3, two bits */
+#define _CACHE_SHIFT		4  /* 4~5, two bits */
+#define _PAGE_GLOBAL_SHIFT	6
+#define _PAGE_HUGE_SHIFT	6  /* HUGE is a PMD bit */
+#define _PAGE_PRESENT_SHIFT	7
+#define _PAGE_WRITE_SHIFT	8
+#define _PAGE_PROTNONE_SHIFT	9
+#define _PAGE_SPECIAL_SHIFT	10
+#define _PAGE_HGLOBAL_SHIFT	12 /* HGlobal is a PMD bit */
+#define _PAGE_PFN_SHIFT		12
+#define _PAGE_PFN_END_SHIFT	48
+#define _PAGE_NO_READ_SHIFT	61
+#define _PAGE_NO_EXEC_SHIFT	62
+#define _PAGE_RPLV_SHIFT	63
+
+/* Used only by software */
+#define _PAGE_PRESENT		(1UL << _PAGE_PRESENT_SHIFT)
+#define _PAGE_WRITE		(1UL << _PAGE_WRITE_SHIFT)
+#define _PAGE_PROTNONE		(1UL << _PAGE_PROTNONE_SHIFT)
+#define _PAGE_SPECIAL		(1UL << _PAGE_SPECIAL_SHIFT)
+
+/* Used by TLB hardware (placed in EntryLo*) */
+#define _PAGE_VALID		(1UL << _PAGE_VALID_SHIFT)
+#define _PAGE_DIRTY		(1UL << _PAGE_DIRTY_SHIFT)
+#define _PAGE_PLV		(3UL << _PAGE_PLV_SHIFT)
+#define _PAGE_GLOBAL		(1UL << _PAGE_GLOBAL_SHIFT)
+#define _PAGE_HUGE		(1UL << _PAGE_HUGE_SHIFT)
+#define _PAGE_HGLOBAL		(1UL << _PAGE_HGLOBAL_SHIFT)
+#define _PAGE_NO_READ		(1UL << _PAGE_NO_READ_SHIFT)
+#define _PAGE_NO_EXEC		(1UL << _PAGE_NO_EXEC_SHIFT)
+#define _PAGE_RPLV		(1UL << _PAGE_RPLV_SHIFT)
+#define _CACHE_MASK		(3UL << _CACHE_SHIFT)
+#define _PFN_SHIFT		(PAGESHIFT() - 12 + _PAGE_PFN_SHIFT)
+
+#endif /* LOONGARCH64 */
 
 /*
  *  netdump.c 

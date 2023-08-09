@@ -336,7 +336,7 @@ char *program_usage_info[] = {
     "    and verification.  The default count is 32768.",
     "",
     "  --kaslr offset | auto",
-    "    If x86, x86_64 or s390x kernel was configured with CONFIG_RANDOMIZE_BASE,",
+    "    If x86, x86_64, loongarch64 or s390x kernel was configured with CONFIG_RANDOMIZE_BASE,",
     "    the offset value is equal to the difference between the symbol values ",
     "    compiled into the vmlinux file and their relocated KASLR value.  If", 
     "    set to auto, the KASLR offset value will be automatically calculated.",

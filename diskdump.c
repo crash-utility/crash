@@ -674,6 +674,9 @@ restart:
 	else if (STRNEQ(header->utsname.machine, "riscv64") &&
 	    machine_type_mismatch(file, "RISCV64", NULL, 0))
 		goto err;
+	else if (STRNEQ(header->utsname.machine, "loongarch64") &&
+	    machine_type_mismatch(file, "LOONGARCH64", NULL, 0))
+		goto err;
 
 	if (header->block_size != block_size) {
 		block_size = header->block_size;
@@ -834,6 +837,8 @@ restart:
 		dd->machine_type = EM_SPARCV9;
 	else if (machine_type("RISCV64"))
 		dd->machine_type = EM_RISCV;
+	else if (machine_type("LOONGARCH64"))
+		dd->machine_type = EM_LOONGARCH;
 	else {
 		error(INFO, "%s: unsupported machine type: %s\n", 
 			DISKDUMP_VALID() ? "diskdump" : "compressed kdump",
@@ -1594,6 +1599,12 @@ get_diskdump_regs_riscv64(struct bt_info *bt, ulong *eip, ulong *esp)
 }
 
 static void
+get_diskdump_regs_loongarch64(struct bt_info *bt, ulong *eip, ulong *esp)
+{
+	machdep->get_stack_frame(bt, eip, esp);
+}
+
+static void
 get_diskdump_regs_sparc64(struct bt_info *bt, ulong *eip, ulong *esp)
 {
 	Elf64_Nhdr *note;
@@ -1674,6 +1685,10 @@ get_diskdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 
 	case EM_RISCV:
 		get_diskdump_regs_riscv64(bt, eip, esp);
+		break;
+			
+	case EM_LOONGARCH:
+		get_diskdump_regs_loongarch64(bt, eip, esp);
 		break;
 
 	default:
@@ -1823,7 +1838,7 @@ dump_note_offsets(FILE *fp)
 			if (machine_type("X86_64") || machine_type("S390X") ||
 			    machine_type("ARM64") || machine_type("PPC64") ||
 			    machine_type("SPARC64") || machine_type("MIPS64") ||
-			    machine_type("RISCV64")) {
+			    machine_type("RISCV64") || machine_type("LOONGARCH64")) {
 				note64 = (void *)dd->notes_buf + tot;
 				len = sizeof(Elf64_Nhdr);
 				if (STRNEQ((char *)note64 + len, "QEMU"))
@@ -1934,6 +1949,8 @@ __diskdump_memory_dump(FILE *fp)
 		fprintf(fp, "(EM_AARCH64)\n"); break;
 	case EM_SPARCV9:
 		fprintf(fp, "(EM_SPARCV9)\n"); break;
+	case EM_LOONGARCH:
+		fprintf(fp, "(EM_LOONGARCH)\n"); break;
 	default:
 		fprintf(fp, "(unknown)\n"); break;
 	}
@@ -2620,6 +2637,9 @@ diskdump_display_regs(int cpu, FILE *ofp)
 
 	if (machine_type("MIPS64"))
 		mips64_display_regs_from_elf_notes(cpu, ofp);
+
+	if (machine_type("LOONGARCH64"))
+		loongarch64_display_regs_from_elf_notes(cpu, ofp);
 }
 
 void
@@ -2631,7 +2651,7 @@ dump_registers_for_compressed_kdump(void)
 	    !(machine_type("X86") || machine_type("X86_64") ||
 	      machine_type("ARM64") || machine_type("PPC64") ||
 	      machine_type("MIPS") || machine_type("MIPS64") ||
-	      machine_type("RISCV64")))
+	      machine_type("RISCV64")) ||machine_type("LOONGARCH64")))
 		error(FATAL, "-r option not supported for this dumpfile\n");
 
 	if (machine_type("ARM64") && (kt->cpus != dd->num_prstatus_notes))
