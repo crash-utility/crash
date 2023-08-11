@@ -834,35 +834,14 @@ static struct kernel_va_range_handler kernel_va_range_handlers[] = {
 static unsigned long arm64_get_kernel_version(void)
 {
 	char *string;
-	char buf[BUFSIZE];
-	char *p1, *p2;
 
 	if (THIS_KERNEL_VERSION)
 		return THIS_KERNEL_VERSION;
 
-	string = pc->read_vmcoreinfo("OSRELEASE");
-	if (string) {
-		strcpy(buf, string);
-
-		p1 = p2 = buf;
-		while (*p2 != '.')
-			p2++;
-		*p2 = NULLCHAR;
-		kt->kernel_version[0] = atoi(p1);
-
-		p1 = ++p2;
-		while (*p2 != '.')
-			p2++;
-		*p2 = NULLCHAR;
-		kt->kernel_version[1] = atoi(p1);
-
-		p1 = ++p2;
-		while ((*p2 >= '0') && (*p2 <= '9'))
-			p2++;
-		*p2 = NULLCHAR;
-		kt->kernel_version[2] = atoi(p1);
+	if ((string = pc->read_vmcoreinfo("OSRELEASE"))) {
+		parse_kernel_version(string);
+		free(string);
 	}
-	free(string);
 	return THIS_KERNEL_VERSION;
 }
 

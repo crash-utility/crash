@@ -104,6 +104,38 @@ static void check_vmcoreinfo(void);
 static int is_pvops_xen(void);
 static int get_linux_banner_from_vmlinux(char *, size_t);
 
+/*
+ * popuplate the global kernel table (kt) with kernel version
+ * information parsed from UTSNAME/OSRELEASE string
+ */
+void
+parse_kernel_version(char *str)
+{
+	char *p1, *p2, separator;
+
+	p1 = p2 = str;
+	while (*p2 != '.' && *p2 != '\0')
+		p2++;
+
+	*p2 = NULLCHAR;
+	kt->kernel_version[0] = atoi(p1);
+	p1 = ++p2;
+	while (*p2 != '.' && *p2 != '-' && *p2 != '\0')
+		p2++;
+
+	separator = *p2;
+	*p2 = NULLCHAR;
+	kt->kernel_version[1] = atoi(p1);
+
+	if (separator == '.') {
+		p1 = ++p2;
+		while ((*p2 >= '0') && (*p2 <= '9'))
+			p2++;
+
+		*p2 = NULLCHAR;
+		kt->kernel_version[2] = atoi(p1);
+	}
+}
 
 /*
  *  Gather a few kernel basics.
@@ -112,7 +144,7 @@ void
 kernel_init()
 {
 	int i, c;
-	char *p1, *p2, buf[BUFSIZE];
+	char buf[BUFSIZE];
 	struct syment *sp1, *sp2;
 	char *rqstruct;
 	char *rq_timestamp_name = NULL;
@@ -270,28 +302,7 @@ kernel_init()
 	if (buf[64])
 		buf[64] = NULLCHAR;
 	if (ascii_string(kt->utsname.release)) {
-		char separator;
-
-		p1 = p2 = buf;
-		while (*p2 != '.')
-			p2++;
-		*p2 = NULLCHAR;
-		kt->kernel_version[0] = atoi(p1);
-		p1 = ++p2;
-		while (*p2 != '.' && *p2 != '-' && *p2 != '\0')
-			p2++;
-		separator = *p2;
-		*p2 = NULLCHAR;
-		kt->kernel_version[1] = atoi(p1);
-		*p2 = separator;
-		if (*p2 == '.') {
-			p1 = ++p2;
-			while ((*p2 >= '0') && (*p2 <= '9'))
-				p2++;
-			*p2 = NULLCHAR;
-			kt->kernel_version[2] = atoi(p1);
-		} else
-			kt->kernel_version[2] = 0;
+		parse_kernel_version(buf);
 
 		if (CRASHDEBUG(1))
 			fprintf(fp, "base kernel version: %d.%d.%d\n",
@@ -10973,8 +10984,6 @@ void
 get_log_from_vmcoreinfo(char *file)
 {
 	char *string;
-	char buf[BUFSIZE];
-	char *p1, *p2;
 	struct vmcoreinfo_data *vmc = &kt->vmcoreinfo;
 
 	if (!(pc->flags2 & VMCOREINFO))
@@ -10986,22 +10995,8 @@ get_log_from_vmcoreinfo(char *file)
 	if ((string = pc->read_vmcoreinfo("OSRELEASE"))) {
 		if (CRASHDEBUG(1))
 			fprintf(fp, "OSRELEASE: %s\n", string);
-		strcpy(buf, string);
-		p1 = p2 = buf;
-		while (*p2 != '.')
-			p2++;
-		*p2 = NULLCHAR;
-		kt->kernel_version[0] = atoi(p1);
-		p1 = ++p2;
-		while (*p2 != '.')
-			p2++;
-		*p2 = NULLCHAR;
-		kt->kernel_version[1] = atoi(p1);
-		p1 = ++p2;
-		while ((*p2 >= '0') && (*p2 <= '9'))
-			p2++;
-		*p2 = NULLCHAR;
-		kt->kernel_version[2] = atoi(p1);
+
+		parse_kernel_version(string);
 
 		if (CRASHDEBUG(1))
 			fprintf(fp, "base kernel version: %d.%d.%d\n",
