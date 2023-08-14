@@ -2663,7 +2663,6 @@ struct vm_table {                /* kernel VM-related data */
 #define SLAB_OVERLOAD_PAGE    (0x8000000)
 #define SLAB_CPU_CACHE       (0x10000000)
 #define SLAB_ROOT_CACHES     (0x20000000)
-#define FREELIST_PTR_BSWAP   (0x40000000)
 
 #define IS_FLATMEM()		(vt->flags & FLATMEM)
 #define IS_DISCONTIGMEM()	(vt->flags & DISCONTIGMEM)
