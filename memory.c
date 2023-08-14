@@ -19683,9 +19683,12 @@ freelist_ptr(struct meminfo *si, ulong ptr, ulong ptr_addr)
 	if (VALID_MEMBER(kmem_cache_random)) {
 		/* CONFIG_SLAB_FREELIST_HARDENED */
 
-		if (THIS_KERNEL_VERSION >= LINUX(5,7,0))
-			ptr_addr = (sizeof(long) == 8) ? bswap_64(ptr_addr)
-						       : bswap_32(ptr_addr);
+		ulong addr = (sizeof(long) == 8) ? bswap_64(ptr_addr) : bswap_32(ptr_addr);
+		addr = ptr ^ si->random ^ addr;
+
+		if (!addr || accessible(addr))
+			return addr;
+
 		return (ptr ^ si->random ^ ptr_addr);
 	} else
 		return ptr;
