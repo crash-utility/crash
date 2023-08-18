@@ -357,6 +357,9 @@ static void riscv64_get_va_range(struct machine_specific *ms)
 	} else
 		goto error;
 
+	if ((kt->flags2 & KASLR) && (kt->flags & RELOC_SET))
+		ms->kernel_link_addr += (kt->relocate * -1);
+
 	/*
 	 * From Linux 5.13, the kernel mapping is moved to the last 2GB
 	 * of the address space, modules use the 2GB memory range right
@@ -1340,6 +1343,14 @@ riscv64_init(int when)
 
 		machdep->verify_paddr = generic_verify_paddr;
 		machdep->ptrs_per_pgd = PTRS_PER_PGD;
+
+		/*
+		 * Even if CONFIG_RANDOMIZE_BASE is not configured,
+		 * derive_kaslr_offset() should work and set
+		 * kt->relocate to 0
+		 */
+		if (!kt->relocate && !(kt->flags2 & (RELOC_AUTO|KASLR)))
+			kt->flags2 |= (RELOC_AUTO|KASLR);
 		break;
 
 	case PRE_GDB:

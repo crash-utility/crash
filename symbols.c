@@ -629,7 +629,7 @@ kaslr_init(void)
 	char *string;
 
 	if ((!machine_type("X86_64") && !machine_type("ARM64") && !machine_type("X86") &&
-	    !machine_type("S390X")) || (kt->flags & RELOC_SET))
+	    !machine_type("S390X") && !machine_type("RISCV64")) || (kt->flags & RELOC_SET))
 		return;
 
 	if (!kt->vmcoreinfo._stext_SYMBOL &&
@@ -795,7 +795,7 @@ store_symbols(bfd *abfd, int dynamic, void *minisyms, long symcount,
 		} else if (!(kt->flags & RELOC_SET))
 			kt->flags |= RELOC_FORCE;
 	} else if (machine_type("X86_64") || machine_type("ARM64") ||
-		   machine_type("S390X")) {
+		   machine_type("S390X") || machine_type("RISCV64")) {
 		if ((kt->flags2 & RELOC_AUTO) && !(kt->flags & RELOC_SET))
 			derive_kaslr_offset(abfd, dynamic, from,
 				fromend, size, store);
