@@ -4792,10 +4792,11 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 {
 	struct task_context *tc;
 	long rss = 0, rss_cache = 0;
+	int mm_count = 0;
 
 	BZERO(tm, sizeof(struct task_mem_usage));
 
-	if (IS_ZOMBIE(task) || IS_EXITING(task)) 
+	if (IS_ZOMBIE(task))
 		return;
 
 	tc = task_to_context(task);
@@ -4806,6 +4807,11 @@ get_task_mem_usage(ulong task, struct task_mem_usage *tm)
 	tm->mm_struct_addr = tc->mm_struct;
 
 	if (!task_mm(task, TRUE))
+		return;
+
+	mm_count = INT(tt->mm_struct + OFFSET(mm_struct_mm_count));
+
+	if (IS_EXITING(task) && mm_count <= 0)
 		return;
 
 	if (VALID_MEMBER(mm_struct_rss))
