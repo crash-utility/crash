@@ -2005,6 +2005,7 @@ verify_crash_note_in_kernel(int cpu)
 	    strncmp(name, "CORE", note32->n_namesz) ||
 	    note32->n_descsz != SIZE(elf_prstatus))
 		ret = FALSE;
+	
 freebuf:
 	FREEBUF(buf);
 out:
