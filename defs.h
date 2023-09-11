@@ -2226,6 +2226,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long module_memory_base;
 	long module_memory_size;
 	long irq_data_irq;
+	long zspage_huge;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -7210,8 +7211,7 @@ ulong try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulon
 #define SECTOR_SHIFT     9
 #define SECTORS_PER_PAGE_SHIFT  (PAGESHIFT() - SECTOR_SHIFT)
 #define SECTORS_PER_PAGE        (1 << SECTORS_PER_PAGE_SHIFT)
-#define ZRAM_FLAG_SHIFT         (1<<24)
-#define ZRAM_FLAG_SAME_BIT      (1<<25)
+
 struct zspage {
     struct {
         unsigned int fullness : 2;
@@ -7221,6 +7221,18 @@ struct zspage {
     };
     unsigned int inuse;
     unsigned int freeobj;
+};
+
+struct zspage_5_17 {
+	struct {
+		unsigned int huge : 1;
+		unsigned int fullness : 2;
+		unsigned int class : 9;
+		unsigned int isolated : 3;
+		unsigned int magic : 8;
+	};
+	unsigned int inuse;
+	unsigned int freeobj;
 };
 
 /*

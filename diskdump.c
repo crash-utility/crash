@@ -2755,15 +2755,36 @@ diskdump_device_dump_info(FILE *ofp)
 	}
 }
 
+static ulong ZRAM_FLAG_SHIFT;
+static ulong ZRAM_FLAG_SAME_BIT;
+
 static void
 zram_init(void)
 {
+	long zram_flag_shift;
+
 	MEMBER_OFFSET_INIT(zram_mempoll, "zram", "mem_pool");
 	MEMBER_OFFSET_INIT(zram_compressor, "zram", "compressor");
 	MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "flags");
 	if (INVALID_MEMBER(zram_table_flag))
 		MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "value");
 	STRUCT_SIZE_INIT(zram_table_entry, "zram_table_entry");
+	MEMBER_OFFSET_INIT(zspoll_size_class, "zs_pool", "size_class");
+	MEMBER_OFFSET_INIT(size_class_size, "size_class", "size");
+	MEMBER_OFFSET_INIT(zspage_huge, "zspage", "huge");
+
+	if (enumerator_value("ZRAM_LOCK", &zram_flag_shift))
+		;
+	else if (THIS_KERNEL_VERSION >= LINUX(6,1,0))
+		zram_flag_shift = PAGESHIFT() + 1;
+	else
+		zram_flag_shift = 24;
+
+	ZRAM_FLAG_SHIFT = 1 << zram_flag_shift;
+	ZRAM_FLAG_SAME_BIT = 1 << (zram_flag_shift+1);
+
+	if (CRASHDEBUG(1))
+		fprintf(fp, "zram_flag_shift: %ld\n", zram_flag_shift);
 }
 
 static unsigned char *
@@ -2771,9 +2792,11 @@ zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
 {
 	ulong obj, off, class, page, zspage;
 	struct zspage zspage_s;
+	struct zspage_5_17 zspage_5_17_s;
 	physaddr_t paddr;
 	unsigned int obj_idx, class_idx, size;
 	ulong pages[2], sizes[2];
+	ulong zs_magic;
 
 	readmem(handle, KVADDR, &obj, sizeof(void *), "zram entry", FAULT_ON_ERROR);
 	obj >>= OBJ_TAG_BITS;
@@ -2782,11 +2805,20 @@ zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
 
 	readmem(page + OFFSET(page_private), KVADDR, &zspage,
 			sizeof(void *), "page_private", FAULT_ON_ERROR);
-	readmem(zspage, KVADDR, &zspage_s, sizeof(struct zspage), "zspage", FAULT_ON_ERROR);
 
-	class_idx = zspage_s.class;
-	if (zspage_s.magic != ZSPAGE_MAGIC)
-		error(FATAL, "zspage magic incorrect: %x\n", zspage_s.magic);
+	if (VALID_MEMBER(zspage_huge)) {
+		readmem(zspage, KVADDR, &zspage_5_17_s,
+			sizeof(struct zspage_5_17), "zspage_5_17", FAULT_ON_ERROR);
+		class_idx = zspage_5_17_s.class;
+		zs_magic = zspage_5_17_s.magic;
+	} else {
+		readmem(zspage, KVADDR, &zspage_s, sizeof(struct zspage), "zspage", FAULT_ON_ERROR);
+		class_idx = zspage_s.class;
+		zs_magic = zspage_s.magic;
+	}
+
+	if (zs_magic != ZSPAGE_MAGIC)
+		error(FATAL, "zspage magic incorrect: %x\n", zs_magic);
 
 	class = pool + OFFSET(zspoll_size_class);
 	class += (class_idx * sizeof(void *));
@@ -2804,8 +2836,13 @@ zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
 	}
 
 	pages[0] = page;
-	readmem(page + OFFSET(page_freelist), KVADDR, &pages[1],
+	if (VALID_MEMBER(page_freelist))
+		readmem(page + OFFSET(page_freelist), KVADDR, &pages[1],
 			sizeof(void *), "page_freelist", FAULT_ON_ERROR);
+	else
+		readmem(page + OFFSET(page_index), KVADDR, &pages[1],
+			sizeof(void *), "page_index", FAULT_ON_ERROR);
+
 	sizes[0] = PAGESIZE() - off;
 	sizes[1] = size - sizes[0];
 	if (!is_page_ptr(pages[0], &paddr)) {
@@ -2822,9 +2859,13 @@ zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
 	readmem(paddr, PHYSADDR, zram_buf + sizes[0], sizes[1], "zram buffer[1]", FAULT_ON_ERROR);
 
 out:
-	readmem(page, KVADDR, &obj, sizeof(void *), "page flags", FAULT_ON_ERROR);
-	if (!(obj & (1<<10))) { //PG_OwnerPriv1 flag
-		return (zram_buf + ZS_HANDLE_SIZE);
+	if (VALID_MEMBER(zspage_huge)) {
+		if (!zspage_5_17_s.huge)
+			return (zram_buf + ZS_HANDLE_SIZE);
+	} else {
+		readmem(page, KVADDR, &obj, sizeof(void *), "page flags", FAULT_ON_ERROR);
+		if (!(obj & (1<<10))) // PG_OwnerPriv1 flag
+			return (zram_buf + ZS_HANDLE_SIZE);
 	}
 
 	return zram_buf;
@@ -3003,7 +3044,12 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 	readmem(zram_table_entry + OFFSET(zram_table_flag), KVADDR, &flags,
 		sizeof(void *), "zram_table_flag", FAULT_ON_ERROR);
 	if (!entry || (flags & ZRAM_FLAG_SAME_BIT)) {
-		memset(buf, entry, len);
+		ulong *same_buf = (ulong *)GETBUF(PAGESIZE());
+		for (int count = 0; count < PAGESIZE() / sizeof(ulong); count++) {
+			same_buf[count] = entry;
+		}
+		memcpy(buf, same_buf + off, len);
+		FREEBUF(same_buf);
 		goto out;
 	}
 	size = flags & (ZRAM_FLAG_SHIFT -1);
