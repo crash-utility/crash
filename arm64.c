@@ -468,8 +468,16 @@ arm64_init(int when)
 			}
 		}
 
-
-		if (THIS_KERNEL_VERSION >= LINUX(4,0,0)) {
+		if (THIS_KERNEL_VERSION >= LINUX(5,19,0)) {
+			ms->__SWP_TYPE_BITS = 5;
+			ms->__SWP_TYPE_SHIFT = 3;
+			ms->__SWP_TYPE_MASK = ((1UL << ms->__SWP_TYPE_BITS) - 1);
+			ms->__SWP_OFFSET_SHIFT = (ms->__SWP_TYPE_BITS + ms->__SWP_TYPE_SHIFT);
+			ms->__SWP_OFFSET_BITS = 50;
+			ms->__SWP_OFFSET_MASK = ((1UL << ms->__SWP_OFFSET_BITS) - 1);
+			ms->PTE_PROT_NONE = (1UL << 58);
+			ms->PTE_FILE = 0;  /* unused */
+		} else if (THIS_KERNEL_VERSION >= LINUX(4,0,0)) {
 			ms->__SWP_TYPE_BITS = 6;
 			ms->__SWP_TYPE_SHIFT = 2;
 			ms->__SWP_TYPE_MASK = ((1UL << ms->__SWP_TYPE_BITS) - 1);
