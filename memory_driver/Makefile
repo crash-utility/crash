@@ -9,6 +9,7 @@
 # GNU General Public License for more details.
 #
 obj-m := crash.o
+PWD := $(shell pwd)
 all:
 	make -C /lib/modules/`uname -r`/build M=${PWD} SUBDIRS=${PWD} modules
 clean:
