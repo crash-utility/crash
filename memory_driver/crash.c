@@ -324,9 +324,9 @@ static struct file_operations crash_fops = {
 };
 
 static struct miscdevice crash_dev = {
-	MISC_DYNAMIC_MINOR,
-	"crash",
-	&crash_fops
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "crash",
+	.fops = &crash_fops
 };
 
 static int __init
