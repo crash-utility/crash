@@ -8,9 +8,14 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
+ifneq ($(KERNELRELEASE),)
 obj-m := crash.o
+else
 PWD := $(shell pwd)
+KVER ?= $(shell uname -r)
+KDIR ?= /lib/modules/${KVER}/build
 all:
-	make -C /lib/modules/`uname -r`/build M=${PWD} SUBDIRS=${PWD} modules
+	${MAKE} -C ${KDIR} M=${PWD} SUBDIRS=${PWD} modules
 clean:
-	rm -f *.mod.c *.ko *.o Module.*
+	test -e ${KDIR}/Makefile && ${MAKE} -C ${KDIR} M=${PWD} SUBDIRS=${PWD} clean || ${RM} *.mod.c *.ko *.o Module.*
+endif
