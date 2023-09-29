@@ -1043,7 +1043,8 @@ is_external_command(void)
             STREQ(cmd, "more") ||
             STREQ(cmd, "less") ||
 	    STREQ(cmd, "echo") ||
-            STREQ(cmd, "ls")) {
+	    STREQ(cmd, "ls") ||
+	    STREQ(cmd, "clear")) {
                 sprintf(command, "%s", cmd);
                 for (i = 1; i < argcnt; i++) {
                         strcat(command, " ");

@@ -1833,6 +1833,10 @@ allocate_alias(int origin)
 	if (get_command_table_entry(args[2])) 
 		found = TRUE;
 
+	/* Accept the "clear" external command exceptionally. */
+	if (STREQ(args[2], "clear"))
+		found = TRUE;
+
 	if (!found) {
 		if (!strlen(args[2])) {
 			if (alias_exists(args[1])) {
