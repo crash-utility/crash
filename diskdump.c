@@ -142,13 +142,23 @@ int have_crash_notes(int cpu)
 	return TRUE;
 }
 
+int
+diskdump_is_cpu_prstatus_valid(int cpu)
+{
+	static int crash_notes_exists = -1;
+
+	if (crash_notes_exists == -1)
+		crash_notes_exists = kernel_symbol_exists("crash_notes");
+
+	return (!crash_notes_exists || have_crash_notes(cpu));
+}
+
 void
 map_cpus_to_prstatus_kdump_cmprs(void)
 {
 	void **nt_ptr;
 	int online, i, j, nrcpus;
 	size_t size;
-	int crash_notes_exists;
 
 	if (pc->flags2 & QEMU_MEM_DUMP_COMPRESSED)  /* notes exist for all cpus */
 		goto resize_note_pointers;
@@ -171,10 +181,9 @@ map_cpus_to_prstatus_kdump_cmprs(void)
 	 *  Re-populate the array with the notes mapping to online cpus
 	 */
 	nrcpus = (kt->kernel_NR_CPUS ? kt->kernel_NR_CPUS : NR_CPUS);
-	crash_notes_exists = kernel_symbol_exists("crash_notes");
 
 	for (i = 0, j = 0; i < nrcpus; i++) {
-		if (in_cpu_map(ONLINE_MAP, i) && (!crash_notes_exists || have_crash_notes(i))) {
+		if (in_cpu_map(ONLINE_MAP, i) && machdep->is_cpu_prstatus_valid(i)) {
 			dd->nt_prstatus_percpu[i] = nt_ptr[j++];
 			dd->num_prstatus_notes = 
 				MAX(dd->num_prstatus_notes, i+1);
@@ -1076,6 +1085,7 @@ diskdump_init(char *unused, FILE *fptr)
 	if (!DISKDUMP_VALID() && !KDUMP_CMPRS_VALID())
 		return FALSE;
 
+	machdep->is_cpu_prstatus_valid = diskdump_is_cpu_prstatus_valid;
 	dd->ofp = fptr;
 	return TRUE;
 }

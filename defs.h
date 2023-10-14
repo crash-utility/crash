@@ -1075,6 +1075,7 @@ struct machdep_table {
         void (*show_interrupts)(int, ulong *);
 	int (*is_page_ptr)(ulong, physaddr_t *);
 	int (*get_cpu_reg)(int, int, const char *, int, void *);
+	int (*is_cpu_prstatus_valid)(int cpu);
 };
 
 /*
@@ -7181,6 +7182,7 @@ int dumpfile_is_split(void);
 void show_split_dumpfiles(void);
 void x86_process_elf_notes(void *, unsigned long);
 void *diskdump_get_prstatus_percpu(int);
+int diskdump_is_cpu_prstatus_valid(int cpu);
 int have_crash_notes(int cpu);
 void map_cpus_to_prstatus_kdump_cmprs(void);
 void diskdump_display_regs(int, FILE *);

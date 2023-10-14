@@ -75,7 +75,6 @@ map_cpus_to_prstatus(void)
 	void **nt_ptr;
 	int online, i, j, nrcpus;
 	size_t size;
-	int crash_notes_exists;
 
 	if (pc->flags2 & QEMU_MEM_DUMP_ELF)  /* notes exist for all cpus */
 		return;
@@ -98,10 +97,9 @@ map_cpus_to_prstatus(void)
 	 *  Re-populate the array with the notes mapping to online cpus
 	 */
 	nrcpus = (kt->kernel_NR_CPUS ? kt->kernel_NR_CPUS : NR_CPUS);
-	crash_notes_exists = kernel_symbol_exists("crash_notes");
 
 	for (i = 0, j = 0; i < nrcpus; i++) {
-		if (in_cpu_map(ONLINE_MAP, i) && (!crash_notes_exists || have_crash_notes(i))) {
+		if (in_cpu_map(ONLINE_MAP, i) && machdep->is_cpu_prstatus_valid(i)) {
 			nd->nt_prstatus_percpu[i] = nt_ptr[j++];
 			nd->num_prstatus_notes =
 				MAX(nd->num_prstatus_notes, i+1);
@@ -735,6 +733,7 @@ netdump_init(char *unused, FILE *fptr)
 	if (!VMCORE_VALID())
 		return FALSE;
 
+	machdep->is_cpu_prstatus_valid = diskdump_is_cpu_prstatus_valid;
 	nd->ofp = fptr;
 
 	check_dumpfile_size(pc->dumpfile);

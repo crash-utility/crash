@@ -298,6 +298,15 @@ struct machine_specific book3e_machine_specific = {
 	.is_vmaddr = book3e_is_vmaddr,
 };
 
+/**
+ * No additional checks are required on PPC64, for checking if PRSTATUS notes
+ * is valid
+ */
+static int ppc64_is_cpu_prstatus_valid(int cpu)
+{
+	return TRUE;
+}
+
 #define SKIBOOT_BASE			0x30000000
 
 /*
@@ -400,6 +409,7 @@ ppc64_init(int when)
 		machdep->value_to_symbol = generic_machdep_value_to_symbol;
 		machdep->get_kvaddr_ranges = ppc64_get_kvaddr_ranges;
 		machdep->init_kernel_pgd = NULL;
+		machdep->is_cpu_prstatus_valid = ppc64_is_cpu_prstatus_valid;
 
 		if (symbol_exists("vmemmap_populate")) {
 			if (symbol_exists("vmemmap")) {
