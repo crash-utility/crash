@@ -27,6 +27,7 @@
 #include "diskdump.h"
 #include "xen_dom0.h"
 #include "vmcore.h"
+#include "maple_tree.h"
 
 #define BITMAP_SECT_LEN	4096
 
@@ -2877,11 +2878,16 @@ out:
 	return zram_buf;
 }
 
+static inline bool radix_tree_exceptional_entry(ulong entry)
+{
+	return entry & RADIX_TREE_EXCEPTIONAL_ENTRY;
+}
+
 static unsigned char *
 lookup_swap_cache(ulonglong pte_val, unsigned char *zram_buf)
 {
 	ulonglong swp_offset;
-	ulong swp_type, swp_space, page;
+	ulong swp_type, swp_space;
 	struct list_pair lp;
 	physaddr_t paddr;
 	static int is_xarray = -1;
@@ -2907,10 +2913,13 @@ lookup_swap_cache(ulonglong pte_val, unsigned char *zram_buf)
 	swp_space += (swp_offset >> SWAP_ADDRESS_SPACE_SHIFT) * SIZE(address_space);
 
 	lp.index = swp_offset;
-	if ((is_xarray ? do_xarray : do_radix_tree)(swp_space, RADIX_TREE_SEARCH, &lp)) {
-		readmem((ulong)lp.value, KVADDR, &page, sizeof(void *),
-				"swap_cache page", FAULT_ON_ERROR);
-		if (!is_page_ptr(page, &paddr)) {
+	if ((is_xarray ? do_xarray : do_radix_tree)
+		(swp_space+OFFSET(address_space_page_tree), RADIX_TREE_SEARCH, &lp)) {
+		if ((is_xarray ? xa_is_value : radix_tree_exceptional_entry)((ulong)lp.value)) {
+			/* ignore shadow values */
+			return NULL;
+		}
+		if (!is_page_ptr((ulong)lp.value, &paddr)) {
 			error(WARNING, "radix page: %lx: not a page pointer\n", lp.value);
 			return NULL;
 		}
