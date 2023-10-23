@@ -13,7 +13,8 @@ tar xvzmf gdb-10.2.tar.gz \
 	gdb-10.2/gdb/printcmd.c \
 	gdb-10.2/gdb/symfile.c \
 	gdb-10.2/gdb/Makefile.in \
-	gdb-10.2/gdb/dwarf2/read.c
+	gdb-10.2/gdb/dwarf2/read.c \
+	gdb-10.2/gdb/ada-lang.c
 
 exit 0
 
@@ -3145,3 +3146,14 @@ exit 0
                                      strcat(req->buf, buf);
                              }
                      }
+--- gdb-10.2/gdb/ada-lang.c.orig
++++ gdb-10.2/gdb/ada-lang.c
+@@ -1158,7 +1158,7 @@ ada_decode (const char *encoded)
+         i -= 1;
+       if (i > 1 && encoded[i] == '_' && encoded[i - 1] == '_')
+         len0 = i - 1;
+-      else if (encoded[i] == '$')
++      else if (i >= 0 && encoded[i] == '$')
+         len0 = i;
+     }
+ 
