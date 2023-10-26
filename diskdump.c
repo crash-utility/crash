@@ -3044,8 +3044,9 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 	readmem(zram_table_entry + OFFSET(zram_table_flag), KVADDR, &flags,
 		sizeof(void *), "zram_table_flag", FAULT_ON_ERROR);
 	if (!entry || (flags & ZRAM_FLAG_SAME_BIT)) {
+		int count;
 		ulong *same_buf = (ulong *)GETBUF(PAGESIZE());
-		for (int count = 0; count < PAGESIZE() / sizeof(ulong); count++) {
+		for (count = 0; count < PAGESIZE() / sizeof(ulong); count++) {
 			same_buf[count] = entry;
 		}
 		memcpy(buf, same_buf + off, len);

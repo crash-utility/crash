@@ -324,7 +324,7 @@ void
 xen_hyper_x86_pcpu_init(void)
 {
 	ulong cpu_info;
-	ulong init_tss_base, init_tss, stack_base = 0;
+	ulong init_tss_base, init_tss = 0, stack_base = 0;
 	ulong sp;
 	struct xen_hyper_pcpu_context *pcc;
 	char *buf, *bp;
