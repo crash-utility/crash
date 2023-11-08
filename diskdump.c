@@ -2757,6 +2757,8 @@ diskdump_device_dump_info(FILE *ofp)
 
 static ulong ZRAM_FLAG_SHIFT;
 static ulong ZRAM_FLAG_SAME_BIT;
+static ulong ZRAM_COMP_PRIORITY_BIT1;
+static ulong ZRAM_COMP_PRIORITY_MASK;
 
 static void
 zram_init(void)
@@ -2764,7 +2766,10 @@ zram_init(void)
 	long zram_flag_shift;
 
 	MEMBER_OFFSET_INIT(zram_mempoll, "zram", "mem_pool");
-	MEMBER_OFFSET_INIT(zram_compressor, "zram", "compressor");
+	if (THIS_KERNEL_VERSION >= LINUX(6, 1, 0))
+		MEMBER_OFFSET_INIT(zram_comp_algs, "zram", "comp_algs");
+	else
+		MEMBER_OFFSET_INIT(zram_compressor, "zram", "compressor");
 	MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "flags");
 	if (INVALID_MEMBER(zram_table_flag))
 		MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "value");
@@ -2782,6 +2787,8 @@ zram_init(void)
 
 	ZRAM_FLAG_SHIFT = 1 << zram_flag_shift;
 	ZRAM_FLAG_SAME_BIT = 1 << (zram_flag_shift+1);
+	ZRAM_COMP_PRIORITY_BIT1 = ZRAM_FLAG_SHIFT + 7;
+	ZRAM_COMP_PRIORITY_MASK = 0x3;
 
 	if (CRASHDEBUG(1))
 		fprintf(fp, "zram_flag_shift: %ld\n", zram_flag_shift);
@@ -2980,13 +2987,17 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 	unsigned char *outbuf = NULL;
 	ulong zram, zram_table_entry, sector, index, entry, flags, size,
 		outsize, off;
+	int comp_alg_unavail;
 
-	if (INVALID_MEMBER(zram_compressor)) {
+	comp_alg_unavail = (THIS_KERNEL_VERSION >= LINUX(6, 1, 0))
+		? INVALID_MEMBER(zram_comp_algs) : INVALID_MEMBER(zram_compressor);
+	if (comp_alg_unavail) {
 		zram_init();
-		if (INVALID_MEMBER(zram_compressor)) {
-			error(WARNING,
-			      "Some pages are swapped out to zram. "
-			      "Please run mod -s zram.\n");
+		comp_alg_unavail = (THIS_KERNEL_VERSION >= LINUX(6, 1, 0))
+			? INVALID_MEMBER(zram_comp_algs) : INVALID_MEMBER(zram_compressor);
+		if (comp_alg_unavail) {
+			error(WARNING, "some pages are swapped out to zram. "
+				"please run mod -s zram.\n");
 			return 0;
 		}
 	}
@@ -2997,8 +3008,30 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 	if (!get_disk_name_private_data(pte_val, vaddr, NULL, &zram))
 		return 0;
 
-	readmem(zram + OFFSET(zram_compressor), KVADDR, name,
-		sizeof(name), "zram compressor", FAULT_ON_ERROR);
+	if (THIS_KERNEL_VERSION >= LINUX(2, 6, 0)) {
+		swp_offset = (ulonglong)__swp_offset(pte_val);
+	} else {
+		swp_offset = (ulonglong)SWP_OFFSET(pte_val);
+	}
+
+	sector = swp_offset << (PAGESHIFT() - 9);
+	index = sector >> SECTORS_PER_PAGE_SHIFT;
+	readmem(zram, KVADDR, &zram_table_entry,
+		sizeof(void *), "zram_table_entry", FAULT_ON_ERROR);
+	zram_table_entry += (index * SIZE(zram_table_entry));
+	readmem(zram_table_entry + OFFSET(zram_table_flag), KVADDR, &flags,
+		sizeof(void *), "zram_table_flag", FAULT_ON_ERROR);
+	if (THIS_KERNEL_VERSION >= LINUX(6, 1, 0)) {
+		ulong comp_algs_addr;
+		uint32_t prio = (flags >> ZRAM_COMP_PRIORITY_BIT1) & ZRAM_COMP_PRIORITY_MASK;
+		readmem(zram + OFFSET(zram_comp_algs), KVADDR, &comp_algs_addr,
+			sizeof(comp_algs_addr), "zram comp_algs", FAULT_ON_ERROR);
+		comp_algs_addr += sizeof(const char *) * prio;
+		read_string(comp_algs_addr, name, sizeof(name));
+	} else {
+		readmem(zram + OFFSET(zram_compressor), KVADDR, name, sizeof(name),
+			"zram compressor", FAULT_ON_ERROR);
+	}
 	if (STREQ(name, "lzo")) {
 #ifdef LZO
 		if (!(dd->flags & LZO_SUPPORTED)) {
@@ -3019,12 +3052,6 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 		return 0;
 	}
 
-	if (THIS_KERNEL_VERSION >= LINUX(2, 6, 0)) {
-		swp_offset = (ulonglong)__swp_offset(pte_val);
-	} else {
-		swp_offset = (ulonglong)SWP_OFFSET(pte_val);
-	}
-
 	zram_buf = (unsigned char *)GETBUF(PAGESIZE());
 	/* lookup page from swap cache */
 	off = PAGEOFFSET(vaddr);
@@ -3034,15 +3061,8 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 		goto out;
 	}
 
-	sector = swp_offset << (PAGESHIFT() - 9);
-	index = sector >> SECTORS_PER_PAGE_SHIFT;
-	readmem(zram, KVADDR, &zram_table_entry,
-		sizeof(void *), "zram_table_entry", FAULT_ON_ERROR);
-	zram_table_entry += (index * SIZE(zram_table_entry));
 	readmem(zram_table_entry, KVADDR, &entry,
 		sizeof(void *), "entry of table", FAULT_ON_ERROR);
-	readmem(zram_table_entry + OFFSET(zram_table_flag), KVADDR, &flags,
-		sizeof(void *), "zram_table_flag", FAULT_ON_ERROR);
 	if (!entry || (flags & ZRAM_FLAG_SAME_BIT)) {
 		int count;
 		ulong *same_buf = (ulong *)GETBUF(PAGESIZE());
