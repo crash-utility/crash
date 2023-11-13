@@ -6301,6 +6301,31 @@ get_active_task(int cpu)
 	return NO_TASK;
 }
 
+/*
+ * Arrange the panic strings based on the severity of the panic
+ * events.
+ */
+static const char* panic_msg[] = {
+	"SysRq : Crash",
+	"SysRq : Trigger a crash",
+	"SysRq : Netdump",
+	"Kernel panic: ",
+	"Kernel panic - ",
+	"Kernel BUG at",
+	"kernel BUG at",
+	"Unable to handle kernel paging request",
+	"Unable to handle kernel NULL pointer dereference",
+	"BUG: unable to handle kernel ",
+	"general protection fault: ",
+	"double fault: ",
+	"divide error: ",
+	"stack segment: ",
+	"[Hardware Error]: ",
+	"Bad mode in ",
+	"Oops: ",
+};
+
+#define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
 
 /*
  *  Read the panic string.
@@ -6308,7 +6333,7 @@ get_active_task(int cpu)
 char *
 get_panicmsg(char *buf)
 {
-	int msg_found;
+	int msg_found, i;
 
         BZERO(buf, BUFSIZE);
 	msg_found = FALSE;
@@ -6332,76 +6357,27 @@ get_panicmsg(char *buf)
 	 *  active-task flag appropriately.  The message may or
 	 *  may not be used as the panic message.
 	 */
-        rewind(pc->tmpfile);
-        while (fgets(buf, BUFSIZE, pc->tmpfile)) {
-                if (strstr(buf, "SysRq : Crash") ||
-		    strstr(buf, "SysRq : Trigger a crash")) {
-			pc->flags |= SYSRQ;
-			break;
+	for (i = 0; i < ARRAY_SIZE(panic_msg); i++) {
+		rewind(pc->tmpfile);
+		while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+			if (strstr(buf, panic_msg[i])) {
+				msg_found = TRUE;
+				if (strstr(buf, "SysRq :"))
+					pc->flags |= SYSRQ;
+				goto found;
+			}
 		}
 	}
+
 	rewind(pc->tmpfile);
 	while (!msg_found && fgets(buf, BUFSIZE, pc->tmpfile)) {
-		if (strstr(buf, "general protection fault: ") ||
-		    strstr(buf, "double fault: ") ||
-		    strstr(buf, "divide error: ") ||
-		    strstr(buf, "stack segment: ")) {
-			msg_found = TRUE;
-			break;
-		}
-	}
-        rewind(pc->tmpfile);
-        while (!msg_found && fgets(buf, BUFSIZE, pc->tmpfile)) {
-                if (strstr(buf, "SysRq : Netdump") ||
-		    strstr(buf, "SysRq : Crash") ||
-		    strstr(buf, "SysRq : Trigger a crash")) {
-			pc->flags |= SYSRQ;
-                        msg_found = TRUE;
-			break;
-		}
-        }
-	rewind(pc->tmpfile);
-	while (!msg_found && fgets(buf, BUFSIZE, pc->tmpfile)) {
-	        if (strstr(buf, "Oops: ") ||
-		    strstr(buf, "Kernel BUG at") ||
-		    strstr(buf, "kernel BUG at") ||
-		    strstr(buf, "Unable to handle kernel paging request") ||
-		    strstr(buf, "Unable to handle kernel NULL pointer dereference") ||
-		    strstr(buf, "BUG: unable to handle kernel "))
-	        	msg_found = TRUE;
-	}
-        rewind(pc->tmpfile);
-        while (!msg_found && fgets(buf, BUFSIZE, pc->tmpfile)) {
-                if (strstr(buf, "sysrq") && 
-		    symbol_exists("sysrq_pressed")) { 
-			get_symbol_data("sysrq_pressed", sizeof(int), 
-				&msg_found);
-			break;
-		}
-        }
-	rewind(pc->tmpfile);
-	while (!msg_found && fgets(buf, BUFSIZE, pc->tmpfile)) {
-		if (strstr(buf, "Kernel panic: ") ||
-		    strstr(buf, "Kernel panic - ")) { 
-			msg_found = TRUE;
-			break;
-		}
-	}
-	rewind(pc->tmpfile);
-	while (!msg_found && fgets(buf, BUFSIZE, pc->tmpfile)) {
-		if (strstr(buf, "[Hardware Error]: ")) {
-			msg_found = TRUE;
-			break;
-		}
-	}
-	rewind(pc->tmpfile);
-	while (!msg_found && fgets(buf, BUFSIZE, pc->tmpfile)) {
-		if (strstr(buf, "Bad mode in ")) {
-			msg_found = TRUE;
+		if (strstr(buf, "sysrq") && symbol_exists("sysrq_pressed")) {
+			get_symbol_data("sysrq_pressed", sizeof(int), &msg_found);
 			break;
 		}
 	}
 
+found:
         close_tmpfile();
 
 	if (!msg_found)
