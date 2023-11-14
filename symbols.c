@@ -13295,7 +13295,7 @@ add_symbol_file_kallsyms(struct load_module *lm, struct gnu_request *req)
 			shift_string_right(req->buf, strlen(buf));
 			BCOPY(buf, req->buf, strlen(buf));
 			retval = TRUE;
-		} else {
+		} else if (lm->mod_init_module_ptr || !STRNEQ(section_name, ".init.")) {
 			sprintf(buf, " -s %s 0x%lx", section_name, section_vaddr);
 			while ((len + strlen(buf)) >= buflen) {
 				RESIZEBUF(req->buf, buflen, buflen * 2);
