@@ -2765,15 +2765,15 @@ zram_init(void)
 {
 	long zram_flag_shift;
 
-	MEMBER_OFFSET_INIT(zram_mempoll, "zram", "mem_pool");
+	MEMBER_OFFSET_INIT(zram_mem_pool, "zram", "mem_pool");
 	MEMBER_OFFSET_INIT(zram_compressor, "zram", "compressor");
 	if (INVALID_MEMBER(zram_compressor))
 		MEMBER_OFFSET_INIT(zram_comp_algs, "zram", "comp_algs");
-	MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "flags");
-	if (INVALID_MEMBER(zram_table_flag))
-		MEMBER_OFFSET_INIT(zram_table_flag, "zram_table_entry", "value");
+	MEMBER_OFFSET_INIT(zram_table_entry_flags, "zram_table_entry", "flags");
+	if (INVALID_MEMBER(zram_table_entry_flags))
+		MEMBER_OFFSET_INIT(zram_table_entry_flags, "zram_table_entry", "value");
 	STRUCT_SIZE_INIT(zram_table_entry, "zram_table_entry");
-	MEMBER_OFFSET_INIT(zspoll_size_class, "zs_pool", "size_class");
+	MEMBER_OFFSET_INIT(zs_pool_size_class, "zs_pool", "size_class");
 	MEMBER_OFFSET_INIT(size_class_size, "size_class", "size");
 	MEMBER_OFFSET_INIT(zspage_huge, "zspage", "huge");
 
@@ -2826,7 +2826,7 @@ zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
 	if (zs_magic != ZSPAGE_MAGIC)
 		error(FATAL, "zspage magic incorrect: %x\n", zs_magic);
 
-	class = pool + OFFSET(zspoll_size_class);
+	class = pool + OFFSET(zs_pool_size_class);
 	class += (class_idx * sizeof(void *));
 	readmem(class, KVADDR, &class, sizeof(void *), "size_class", FAULT_ON_ERROR);
 	readmem(class + OFFSET(size_class_size), KVADDR,
@@ -2987,9 +2987,9 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 	ulong zram, zram_table_entry, sector, index, entry, flags, size,
 		outsize, off;
 
-	if (INVALID_MEMBER(zram_mempoll)) {
+	if (INVALID_MEMBER(zram_mem_pool)) {
 		zram_init();
-		if (INVALID_MEMBER(zram_mempoll)) {
+		if (INVALID_MEMBER(zram_mem_pool)) {
 			error(WARNING,
 			      "Some pages are swapped out to zram. "
 			      "Please run mod -s zram.\n");
@@ -3013,8 +3013,8 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 	readmem(zram, KVADDR, &zram_table_entry,
 		sizeof(void *), "zram_table_entry", FAULT_ON_ERROR);
 	zram_table_entry += (index * SIZE(zram_table_entry));
-	readmem(zram_table_entry + OFFSET(zram_table_flag), KVADDR, &flags,
-		sizeof(void *), "zram_table_flag", FAULT_ON_ERROR);
+	readmem(zram_table_entry + OFFSET(zram_table_entry_flags), KVADDR, &flags,
+		sizeof(void *), "zram_table_entry.flags", FAULT_ON_ERROR);
 	if (VALID_MEMBER(zram_compressor))
 		readmem(zram + OFFSET(zram_compressor), KVADDR, name, sizeof(name),
 			"zram compressor", FAULT_ON_ERROR);
@@ -3072,8 +3072,8 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 		goto out;
 	}
 
-	readmem(zram + OFFSET(zram_mempoll), KVADDR, &zram,
-		sizeof(void *), "zram_mempoll", FAULT_ON_ERROR);
+	readmem(zram + OFFSET(zram_mem_pool), KVADDR, &zram,
+		sizeof(void *), "zram.mem_pool", FAULT_ON_ERROR);
 
 	obj_addr = zram_object_addr(zram, entry, zram_buf);
 	if (obj_addr == NULL) {

@@ -519,7 +519,7 @@ vm_init(void)
         	"swap_info_struct", "old_block_size");
 	MEMBER_OFFSET_INIT(swap_info_struct_bdev, "swap_info_struct", "bdev");
 
-	MEMBER_OFFSET_INIT(zspoll_size_class, "zs_pool", "size_class");
+	MEMBER_OFFSET_INIT(zs_pool_size_class, "zs_pool", "size_class");
 	MEMBER_OFFSET_INIT(size_class_size, "size_class", "size");
 
 	MEMBER_OFFSET_INIT(block_device_bd_inode, "block_device", "bd_inode");

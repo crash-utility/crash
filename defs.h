@@ -2112,13 +2112,13 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long bpf_prog_aux_name;
 	long page_private;
 	long swap_info_struct_bdev;
-	long zram_mempoll;
+	long zram_mem_pool;
 	long zram_compressor;
-	long zram_table_flag;
-	long zspoll_size_class;
+	long zram_table_entry_flags;
+	long zs_pool_size_class;
 	long size_class_size;
 	long gendisk_private_data;
-	long zram_table_entry;
+	long zram_table_entry;	/* unused; but cannot remove */
 	long module_core_size_rw;
 	long module_core_size_rx;
 	long module_init_size_rw;

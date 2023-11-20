@@ -10304,6 +10304,7 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(page_active));
         fprintf(fp, "            page_compound_head: %ld\n",
                 OFFSET(page_compound_head));
+        fprintf(fp, "                  page_private: %ld\n", OFFSET(page_private));
 
 	fprintf(fp, "        trace_print_flags_mask: %ld\n",
 		OFFSET(trace_print_flags_mask));
@@ -10330,6 +10331,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(swap_info_struct_inuse_pages));
         fprintf(fp, "swap_info_struct_old_block_size: %ld\n",
 		OFFSET(swap_info_struct_old_block_size));
+        fprintf(fp, "         swap_info_struct_bdev: %ld\n", OFFSET(swap_info_struct_bdev));
 	fprintf(fp, "         block_device_bd_inode: %ld\n",
 		OFFSET(block_device_bd_inode));
 	fprintf(fp, "          block_device_bd_list: %ld\n",
@@ -11359,6 +11361,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(gendisk_part0));
 	fprintf(fp, "                 gendisk_queue: %ld\n",
 		OFFSET(gendisk_queue));
+	fprintf(fp, "          gendisk_private_data: %ld\n", OFFSET(gendisk_private_data));
+
 	fprintf(fp, "                 hd_struct_dev: %ld\n",
 		OFFSET(hd_struct_dev));
 	fprintf(fp, "             hd_struct_dkstats: %ld\n",
@@ -11764,6 +11768,14 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "           maple_range_64_slot: %ld\n", OFFSET(maple_range_64_slot));
 	fprintf(fp, "            maple_metadata_end: %ld\n", OFFSET(maple_metadata_end));
 	fprintf(fp, "            maple_metadata_gap: %ld\n", OFFSET(maple_metadata_gap));
+
+	fprintf(fp, "                 zram_mem_pool: %ld\n", OFFSET(zram_mem_pool));
+	fprintf(fp, "               zram_compressor: %ld\n", OFFSET(zram_compressor));
+	fprintf(fp, "                zram_comp_algs: %ld\n", OFFSET(zram_comp_algs));
+	fprintf(fp, "        zram_table_entry_flags: %ld\n", OFFSET(zram_table_entry_flags));
+	fprintf(fp, "            zs_pool_size_class: %ld\n", OFFSET(zs_pool_size_class));
+	fprintf(fp, "               size_class_size: %ld\n", OFFSET(size_class_size));
+	fprintf(fp, "                   zspage_huge: %ld\n", OFFSET(zspage_huge));
 
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
