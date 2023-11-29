@@ -311,7 +311,7 @@ static struct s390x_cpu *s390x_cpu_get(struct bt_info *bt)
 	readmem(lowcore_ptr + cpu * sizeof(long), KVADDR,
 		&prefix, sizeof(long), "lowcore_ptr", FAULT_ON_ERROR);
 	for (i = 0; i < s390x_cpu_cnt; i++) {
-		if (s390x_cpu_vec[i].prefix == prefix)
+		if (s390x_cpu_vec[i].prefix == VTOP(prefix))
 			return &s390x_cpu_vec[i];
 	}
 	error(FATAL, "cannot determine CPU for task: %lx\n", bt->task);
@@ -985,12 +985,12 @@ int s390x_vtop(ulong table, ulong vaddr, physaddr_t *phys_addr, int verbose)
 						  verbose);
 		if (!entry)
 			return FALSE;
-		table = entry & ~0xfffULL;
+		table = PTOV(entry & ~0xfffULL);
 		/* Check if this a 2GB page */
 		if ((entry & 0x400ULL) && (level == 1)) {
 			/* Add the 2GB frame offset & return the final value. */
 			table &= ~0x7fffffffULL;
-			*phys_addr = table + (vaddr & 0x7fffffffULL);
+			*phys_addr = VTOP(table + (vaddr & 0x7fffffffULL));
 			return TRUE;
 		}
 		len = entry & 0x3ULL;
@@ -1001,12 +1001,12 @@ int s390x_vtop(ulong table, ulong vaddr, physaddr_t *phys_addr, int verbose)
 	if (entry & 0x400ULL) {
 		/* Add the 1MB page offset and return the final value. */
 		table &= ~0xfffffULL;
-		*phys_addr = table + (vaddr & 0xfffffULL);
+		*phys_addr = VTOP(table + (vaddr & 0xfffffULL));
 		return TRUE;
 	}
 
 	/* Get the page table entry */
-	entry = _kl_pg_table_deref_s390x(vaddr, entry & ~0x7ffULL, verbose);
+	entry = _kl_pg_table_deref_s390x(vaddr, PTOV(entry & ~0x7ffULL), verbose);
 	if (!entry)
 		return FALSE;
 
@@ -1033,7 +1033,7 @@ s390x_vmalloc_start(void)
 {
 	unsigned long highmem_addr,high_memory;
 	highmem_addr=symbol_value("high_memory");
-       	readmem(highmem_addr, PHYSADDR, &high_memory,sizeof(long),
+	readmem(highmem_addr, KVADDR, &high_memory,sizeof(long),
 		"highmem",FAULT_ON_ERROR);
 	return high_memory;
 }
