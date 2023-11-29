@@ -183,7 +183,7 @@ s390_dump_machdep_table(ulong arg)
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "             kvbase: %lx\n", machdep->kvbase);
-	fprintf(fp, "  identity_map_base: %lx\n", machdep->kvbase);
+	fprintf(fp, "  identity_map_base: %lx\n", machdep->identity_map_base);
 	fprintf(fp, "           pagesize: %d\n", machdep->pagesize);
 	fprintf(fp, "          pageshift: %d\n", machdep->pageshift);
 	fprintf(fp, "           pagemask: %llx\n", machdep->pagemask);
