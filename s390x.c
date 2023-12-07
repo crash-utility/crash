@@ -47,6 +47,7 @@
 #define S390X_PSW_MASK_PSTATE	0x0001000000000000UL
 
 #define S390X_LC_VMCORE_INFO	0xe0c
+#define S390X_LC_OS_INFO	0xe18
 
 /*
  * Flags for Region and Segment table entries.
@@ -168,6 +169,19 @@ static struct line_number_hook s390x_line_number_hooks[];
 static int s390x_is_uvaddr(ulong, struct task_context *);
 static int s390x_get_kvaddr_ranges(struct vaddr_range *);
 static int set_s390x_max_physmem_bits(void);
+static ulong s390x_generic_VTOP(ulong vaddr);
+static ulong s390x_generic_PTOV(ulong paddr);
+static int s390x_generic_IS_VMALLOC_ADDR(ulong vaddr);
+static ulong s390x_vr_VTOP(ulong vaddr);
+static ulong s390x_vr_PTOV(ulong paddr);
+static int s390x_vr_IS_VMALLOC_ADDR(ulong vaddr);
+static int s390x_vr_is_kvaddr(ulong);
+
+struct machine_specific s390x_machine_specific = {
+	.virt_to_phys = s390x_generic_VTOP,
+	.phys_to_virt = s390x_generic_PTOV,
+	.is_vmalloc_addr = s390x_generic_IS_VMALLOC_ADDR,
+};
 
 /*
  * struct lowcore name (old: "_lowcore", new: "lowcore")
@@ -546,6 +560,191 @@ static void s390x_check_kaslr(void)
 	free(vmcoreinfo);
 }
 
+#define OS_INFO_VERSION_MAJOR		1
+#define OS_INFO_VERSION_MINOR		1
+
+#define OS_INFO_VMCOREINFO		0
+#define OS_INFO_REIPL_BLOCK		1
+#define OS_INFO_FLAGS_ENTRY		2
+#define OS_INFO_RESERVED		3
+#define OS_INFO_IDENTITY_BASE		4
+#define OS_INFO_KASLR_OFFSET		5
+#define OS_INFO_KASLR_OFF_PHYS		6
+#define OS_INFO_VMEMMAP			7
+#define OS_INFO_AMODE31_START		8
+#define OS_INFO_AMODE31_END		9
+
+struct os_info_entry {
+	union {
+		__u64	addr;
+		__u64	val;
+	};
+	__u64	size;
+	__u32	csum;
+} __attribute__((packed));
+
+struct os_info {
+	__u64	magic;
+	__u32	csum;
+	__u16	version_major;
+	__u16	version_minor;
+	__u64	crashkernel_addr;
+	__u64	crashkernel_size;
+	struct	os_info_entry entry[10];
+	__u8	reserved[3864];
+} __attribute__((packed));
+
+struct vm_info {
+	__u64 __identity_base;
+	__u64 __kaslr_offset;
+	__u64 __kaslr_offset_phys;
+	__u64 amode31_start;
+	__u64 amode31_end;
+};
+
+static bool
+vmcoreinfo_read_u64(const char *key, __u64 *val)
+{
+	char *string;
+
+	string = pc->read_vmcoreinfo(key);
+	if (string) {
+		*val = strtoul(string, NULL, 16);
+		free(string);
+		return true;
+	}
+
+	return false;
+}
+
+static bool vmcoreinfo_read_vm_info(struct vm_info *_vm_info)
+{
+	struct vm_info vm_info;
+
+	if (!vmcoreinfo_read_u64("IDENTITYBASE",  &vm_info.__identity_base) ||
+	    !vmcoreinfo_read_u64("KERNELOFFSET",  &vm_info.__kaslr_offset) ||
+	    !vmcoreinfo_read_u64("KERNELOFFPHYS", &vm_info.__kaslr_offset_phys) ||
+	    !vmcoreinfo_read_u64("SAMODE31",      &vm_info.amode31_start) ||
+	    !vmcoreinfo_read_u64("EAMODE31",      &vm_info.amode31_end))
+		return false;
+
+	*_vm_info = vm_info;
+
+	return true;
+}
+
+static bool os_info_read_vm_info(struct vm_info *vm_info)
+{
+	struct os_info os_info;
+	ulong addr;
+
+	if (!readmem(S390X_LC_OS_INFO, PHYSADDR, &addr,
+		    sizeof(addr), "s390x os_info ptr",
+		    QUIET|RETURN_ON_ERROR))
+		return false;
+
+	if (addr == 0)
+		return true;
+
+	if (!readmem(addr, PHYSADDR, &os_info,
+		    offsetof(struct os_info, reserved), "s390x os_info header",
+		    QUIET|RETURN_ON_ERROR))
+		return false;
+
+	vm_info->__identity_base      = os_info.entry[OS_INFO_IDENTITY_BASE].val;
+	vm_info->__kaslr_offset       = os_info.entry[OS_INFO_KASLR_OFFSET].val;
+	vm_info->__kaslr_offset_phys  = os_info.entry[OS_INFO_KASLR_OFF_PHYS].val;
+	vm_info->amode31_start        = os_info.entry[OS_INFO_AMODE31_START].val;
+	vm_info->amode31_end          = os_info.entry[OS_INFO_AMODE31_END].val;
+
+	return true;
+}
+
+static bool vm_info_empty(struct vm_info *vm_info)
+{
+	return !vm_info->__kaslr_offset;
+}
+
+static bool s390x_init_vm(void)
+{
+	struct vm_info vm_info;
+
+	if (pc->flags & PROC_KCORE) {
+		if (!vmcoreinfo_read_vm_info(&vm_info))
+			return true;
+	} else {
+		if (!os_info_read_vm_info(&vm_info))
+			return false;
+	}
+	if (vm_info_empty(&vm_info))
+		return true;
+
+	machdep->identity_map_base		= vm_info.__identity_base;
+	machdep->kvbase				= vm_info.__kaslr_offset;
+	machdep->machspec->__kaslr_offset_phys	= vm_info.__kaslr_offset_phys;
+	machdep->machspec->amode31_start	= vm_info.amode31_start;
+	machdep->machspec->amode31_end		= vm_info.amode31_end;
+
+	machdep->is_kvaddr			= s390x_vr_is_kvaddr;
+	machdep->machspec->virt_to_phys		= s390x_vr_VTOP;
+	machdep->machspec->phys_to_virt		= s390x_vr_PTOV;
+	machdep->machspec->is_vmalloc_addr	= s390x_vr_IS_VMALLOC_ADDR;
+
+	return true;
+}
+
+static ulong s390x_generic_VTOP(ulong vaddr)
+{
+	return vaddr - machdep->kvbase;
+}
+
+static ulong s390x_generic_PTOV(ulong paddr)
+{
+	return paddr + machdep->kvbase;
+}
+
+static int s390x_generic_IS_VMALLOC_ADDR(ulong vaddr)
+{
+	return vt->vmalloc_start && vaddr >= vt->vmalloc_start;
+}
+
+static ulong s390x_vr_VTOP(ulong vaddr)
+{
+	if (vaddr < LOWCORE_SIZE)
+		return vaddr;
+	if ((vaddr < machdep->machspec->amode31_end) &&
+	    (vaddr >= machdep->machspec->amode31_start))
+		return vaddr;
+	if (vaddr < machdep->kvbase)
+		return vaddr - machdep->identity_map_base;
+	return vaddr - machdep->kvbase + machdep->machspec->__kaslr_offset_phys;
+}
+
+static ulong s390x_vr_PTOV(ulong paddr)
+{
+	return paddr + machdep->identity_map_base;
+}
+
+static int s390x_vr_IS_VMALLOC_ADDR(ulong vaddr)
+{
+	return (vaddr >= vt->vmalloc_start && vaddr < machdep->kvbase);
+}
+
+ulong s390x_VTOP(ulong vaddr)
+{
+	return machdep->machspec->virt_to_phys(vaddr);
+}
+
+ulong s390x_PTOV(ulong paddr)
+{
+	return machdep->machspec->phys_to_virt(paddr);
+}
+
+int s390x_IS_VMALLOC_ADDR(ulong vaddr)
+{
+	return machdep->machspec->is_vmalloc_addr(vaddr);
+}
+
 /*
  *  Do all necessary machine-specific setup here.  This is called several
  *  times during initialization.
@@ -560,6 +759,7 @@ s390x_init(int when)
 		machdep->process_elf_notes = s390x_process_elf_notes;
 		break;
 	case PRE_SYMTAB:
+		machdep->machspec = &s390x_machine_specific;
 		machdep->verify_symbol = s390x_verify_symbol;
 		if (pc->flags & KERNEL_DEBUG_QUERY)
 			return;
@@ -587,6 +787,8 @@ s390x_init(int when)
 		machdep->kvbase = 0;
 		machdep->identity_map_base = 0;
 		machdep->is_kvaddr =  generic_is_kvaddr;
+		if (!s390x_init_vm())
+			error(FATAL, "cannot initialize VM parameters.");
 		machdep->is_uvaddr =  s390x_is_uvaddr;
 		machdep->eframe_search = s390x_eframe_search;
 		machdep->back_trace = s390x_back_trace_cmd;
@@ -681,7 +883,9 @@ s390x_dump_machdep_table(ulong arg)
 	fprintf(fp, "         dis_filter: s390x_dis_filter()\n");
 	fprintf(fp, "           cmd_mach: s390x_cmd_mach()\n");
 	fprintf(fp, "       get_smp_cpus: s390x_get_smp_cpus()\n");
-	fprintf(fp, "          is_kvaddr: generic_is_kvaddr()\n");
+	fprintf(fp, "          is_kvaddr: %s()\n", machdep->is_kvaddr == s390x_vr_is_kvaddr ?
+					  "s390x_vr_is_kvaddr" :
+					  "generic_is_kvaddr");
 	fprintf(fp, "          is_uvaddr: s390x_is_uvaddr()\n");
 	fprintf(fp, "       verify_paddr: generic_verify_paddr()\n");
 	fprintf(fp, "  get_kvaddr_ranges: s390x_get_kvaddr_ranges()\n");
@@ -700,6 +904,12 @@ s390x_dump_machdep_table(ulong arg)
 	fprintf(fp, "   max_physmem_bits: %ld\n", machdep->max_physmem_bits);
 	fprintf(fp, "  section_size_bits: %ld\n", machdep->section_size_bits);
 	fprintf(fp, "           machspec: %lx\n", (ulong)machdep->machspec);
+}
+
+static int
+s390x_vr_is_kvaddr(ulong vaddr)
+{
+	return (vaddr < LOWCORE_SIZE) || (vaddr >= machdep->identity_map_base);
 }
 
 /*

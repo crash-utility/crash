@@ -4564,9 +4564,9 @@ struct efi_memory_desc_t {
 #define _64BIT_
 #define MACHINE_TYPE       "S390X"
 
-#define PTOV(X)            ((unsigned long)(X)+(machdep->kvbase))
-#define VTOP(X)            ((unsigned long)(X)-(machdep->kvbase))
-#define IS_VMALLOC_ADDR(X) (vt->vmalloc_start && (ulong)(X) >= vt->vmalloc_start)
+#define PTOV(X)            s390x_PTOV((ulong)(X))
+#define VTOP(X)            s390x_VTOP((ulong)(X))
+#define IS_VMALLOC_ADDR(X) s390x_IS_VMALLOC_ADDR(X)
 #define PTRS_PER_PTE    512
 #define PTRS_PER_PMD    1024
 #define PTRS_PER_PGD    2048
@@ -6827,7 +6827,21 @@ void get_s390_panicmsg(char *);
  *  s390x.c
  */
 #ifdef S390X
+
+struct machine_specific
+{
+	ulong (*virt_to_phys)(ulong vaddr);
+	ulong (*phys_to_virt)(ulong paddr);
+	int (*is_vmalloc_addr)(ulong vaddr);
+	ulong __kaslr_offset_phys;
+	ulong amode31_start;
+	ulong amode31_end;
+};
+
 void s390x_init(int);
+ulong s390x_PTOV(ulong);
+ulong s390x_VTOP(ulong);
+int s390x_IS_VMALLOC_ADDR(ulong);
 void s390x_dump_machdep_table(ulong);
 #define display_idt_table() \
         error(FATAL, "-d option is not applicable to S390X architecture\n")
