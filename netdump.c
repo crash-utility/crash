@@ -2578,6 +2578,8 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 				display_ELF_note(EM_PPC64, PRSTATUS_NOTE, note, nd->ofp);
 			if (machine_type("ARM64") && (note->n_type == NT_PRSTATUS))
 				display_ELF_note(EM_AARCH64, PRSTATUS_NOTE, note, nd->ofp);
+			if (machine_type("RISCV64") && (note->n_type == NT_PRSTATUS))
+				display_ELF_note(EM_RISCV, PRSTATUS_NOTE, note, nd->ofp);
 		}
 		for (i = lf = 0; i < note->n_descsz/sizeof(ulonglong); i++) {
 			if (((i%2)==0)) {
@@ -3399,6 +3401,80 @@ display_prstatus_arm64(void *note_ptr, FILE *ofp)
 		space(sp), pr->pr_reg[33], pr->pr_fpvalid);
 }
 
+struct riscv64_elf_siginfo {
+    int si_signo;
+    int si_code;
+    int si_errno;
+};
+
+struct riscv64_elf_prstatus {
+    struct riscv64_elf_siginfo pr_info;
+    short pr_cursig;
+    unsigned long pr_sigpend;
+    unsigned long pr_sighold;
+    pid_t pr_pid;
+    pid_t pr_ppid;
+    pid_t pr_pgrp;
+    pid_t pr_sid;
+    struct timeval pr_utime;
+    struct timeval pr_stime;
+    struct timeval pr_cutime;
+    struct timeval pr_cstime;
+/*  elf_gregset_t pr_reg; => typedef struct user_regs_struct elf_gregset_t; */
+    unsigned long pr_reg[32];
+    int pr_fpvalid;
+};
+
+static void
+display_prstatus_riscv64(void *note_ptr, FILE *ofp)
+{
+	struct riscv64_elf_prstatus *pr;
+	Elf64_Nhdr *note;
+	int sp;
+
+	note = (Elf64_Nhdr *)note_ptr;
+	pr = (struct riscv64_elf_prstatus *)(
+		(char *)note + sizeof(Elf64_Nhdr) + note->n_namesz);
+	pr = (struct riscv64_elf_prstatus *)roundup((ulong)pr, 4);
+	sp = nd->num_prstatus_notes ? 25 : 22;
+
+	fprintf(ofp,
+		"%ssi.signo: %d  si.code: %d  si.errno: %d\n"
+		"%scursig: %d  sigpend: %lx  sighold: %lx\n"
+		"%spid: %d  ppid: %d  pgrp: %d  sid:%d\n"
+		"%sutime: %01lld.%06d  stime: %01lld.%06d\n"
+		"%scutime: %01lld.%06d  cstime: %01lld.%06d\n",
+		space(sp), pr->pr_info.si_signo, pr->pr_info.si_code, pr->pr_info.si_errno,
+		space(sp), pr->pr_cursig, pr->pr_sigpend, pr->pr_sighold,
+		space(sp), pr->pr_pid, pr->pr_ppid, pr->pr_pgrp, pr->pr_sid,
+		space(sp), (long long)pr->pr_utime.tv_sec, (int)pr->pr_utime.tv_usec,
+		(long long)pr->pr_stime.tv_sec, (int)pr->pr_stime.tv_usec,
+		space(sp), (long long)pr->pr_cutime.tv_sec, (int)pr->pr_cutime.tv_usec,
+		(long long)pr->pr_cstime.tv_sec, (int)pr->pr_cstime.tv_usec);
+	fprintf(ofp,
+		"%sepc: %016lx   ra: %016lx   sp: %016lx\n"
+		"%s gp: %016lx   tp: %016lx   t0: %016lx\n"
+		"%s t1: %016lx   t2: %016lx   s0: %016lx\n"
+		"%s s1: %016lx   a0: %016lx   a1: %016lx\n"
+		"%s a2: %016lx   a3: %016lx   a4: %016lx\n"
+		"%s a5: %016lx   a6: %016lx   a7: %016lx\n"
+		"%s s2: %016lx   s3: %016lx   s4: %016lx\n"
+		"%s s5: %016lx   s6: %016lx   s7: %016lx\n"
+		"%s s8: %016lx   s9: %016lx  s10: %016lx\n"
+		"%ss11: %016lx   t3: %016lx   t4: %016lx\n"
+		"%s t5: %016lx   t6: %016lx\n",
+		space(sp), pr->pr_reg[0], pr->pr_reg[1], pr->pr_reg[2],
+		space(sp), pr->pr_reg[3], pr->pr_reg[4], pr->pr_reg[5],
+		space(sp), pr->pr_reg[6], pr->pr_reg[7], pr->pr_reg[8],
+		space(sp), pr->pr_reg[9], pr->pr_reg[10], pr->pr_reg[11],
+		space(sp), pr->pr_reg[12], pr->pr_reg[13], pr->pr_reg[14],
+		space(sp), pr->pr_reg[15], pr->pr_reg[16], pr->pr_reg[17],
+		space(sp), pr->pr_reg[18], pr->pr_reg[19], pr->pr_reg[20],
+		space(sp), pr->pr_reg[21], pr->pr_reg[22], pr->pr_reg[23],
+		space(sp), pr->pr_reg[24], pr->pr_reg[25], pr->pr_reg[26],
+		space(sp), pr->pr_reg[27], pr->pr_reg[28], pr->pr_reg[29],
+		space(sp), pr->pr_reg[30], pr->pr_reg[31]);
+}
 
 void
 display_ELF_note(int machine, int type, void *note, FILE *ofp)
@@ -3446,6 +3522,14 @@ display_ELF_note(int machine, int type, void *note, FILE *ofp)
 		{
 		case PRSTATUS_NOTE:
 			display_prstatus_arm64(note, ofp);
+			break;
+		}
+		break;
+	case EM_RISCV:
+		switch (type)
+		{
+		case PRSTATUS_NOTE:
+			display_prstatus_riscv64(note, ofp);
 			break;
 		}
 		break;
