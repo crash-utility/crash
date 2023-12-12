@@ -747,10 +747,13 @@ riscv64_back_trace_cmd(struct bt_info *bt)
 {
 	struct riscv64_unwind_frame current, previous;
 	struct stackframe curr_frame;
+	struct riscv64_register * regs;
 	int level = 0;
 
 	if (bt->flags & BT_REGS_NOT_FOUND)
 		return;
+
+	regs = (struct riscv64_register *) bt->machdep;
 
 	current.pc = bt->instptr;
 	current.sp = bt->stkptr;
@@ -788,8 +791,16 @@ riscv64_back_trace_cmd(struct bt_info *bt)
 		    sizeof(curr_frame), "get stack frame", RETURN_ON_ERROR))
 			return;
 
-		previous.pc = curr_frame.ra;
-		previous.fp = curr_frame.fp;
+		/* correct PC and FP of the second frame when the first frame has no callee */
+
+		if (regs && (regs->regs[RISCV64_REGS_EPC] == current.pc) && curr_frame.fp & 0x7){
+			previous.pc = regs->regs[RISCV64_REGS_RA];
+			previous.fp = curr_frame.ra;
+		} else {
+			previous.pc = curr_frame.ra;
+			previous.fp = curr_frame.fp;
+		}
+
 		previous.sp = current.fp;
 
 		riscv64_dump_backtrace_entry(bt, symbol, &current, &previous, level++);
