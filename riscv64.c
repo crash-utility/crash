@@ -35,6 +35,7 @@ static int riscv64_kvtop(struct task_context *tc, ulong kvaddr,
 static void riscv64_cmd_mach(void);
 static void riscv64_stackframe_init(void);
 static void riscv64_back_trace_cmd(struct bt_info *bt);
+static int riscv64_eframe_search(struct bt_info *bt);
 static int riscv64_get_dumpfile_stack_frame(struct bt_info *bt,
 					     ulong *nip, ulong *ksp);
 static void riscv64_get_stack_frame(struct bt_info *bt, ulong *pcp,
@@ -51,6 +52,8 @@ static int riscv64_get_elf_notes(void);
 static void riscv64_get_va_range(struct machine_specific *ms);
 static void riscv64_get_va_bits(struct machine_specific *ms);
 static void riscv64_get_struct_page_size(struct machine_specific *ms);
+static void riscv64_print_exception_frame(struct bt_info *, ulong , int );
+static int riscv64_is_kernel_exception_frame(struct bt_info *, ulong );
 
 #define REG_FMT 	"%016lx"
 #define SZ_2G		0x80000000
@@ -210,6 +213,7 @@ riscv64_dump_machdep_table(ulong arg)
 		machdep->memsize, machdep->memsize);
 	fprintf(fp, "               bits: %d\n", machdep->bits);
 	fprintf(fp, "         back_trace: riscv64_back_trace_cmd()\n");
+	fprintf(fp, "      eframe_search: riscv64_eframe_search()\n");
 	fprintf(fp, "    processor_speed: riscv64_processor_speed()\n");
 	fprintf(fp, "              uvtop: riscv64_uvtop()\n");
 	fprintf(fp, "              kvtop: riscv64_kvtop()\n");
@@ -1398,6 +1402,7 @@ riscv64_init(int when)
 		machdep->cmd_mach = riscv64_cmd_mach;
 		machdep->get_stack_frame = riscv64_get_stack_frame;
 		machdep->back_trace = riscv64_back_trace_cmd;
+		machdep->eframe_search = riscv64_eframe_search;
 
 		machdep->vmalloc_start = riscv64_vmalloc_start;
 		machdep->processor_speed = riscv64_processor_speed;
@@ -1452,25 +1457,10 @@ riscv64_init(int when)
 	}
 }
 
-/*
- * 'help -r' command output
- */
-void
-riscv64_display_regs_from_elf_notes(int cpu, FILE *ofp)
+/* bool pt_regs : pass 1 to dump pt_regs , pass 0 to dump user_regs_struct */
+static void
+riscv64_dump_pt_regs(struct riscv64_register *regs, FILE *ofp, bool pt_regs)
 {
-	const struct machine_specific *ms = machdep->machspec;
-	struct riscv64_register *regs;
-
-	if (!ms->crash_task_regs) {
-		error(INFO, "registers not collected for cpu %d\n", cpu);
-		return;
-	}
-
-	regs = &ms->crash_task_regs[cpu];
-	if (!regs->regs[RISCV64_REGS_SP] && !regs->regs[RISCV64_REGS_EPC]) {
-		error(INFO, "registers not collected for cpu %d\n", cpu);
-		return;
-	}
 
 	/* Print riscv64 32 regs */
 	fprintf(ofp,
@@ -1496,6 +1486,171 @@ riscv64_display_regs_from_elf_notes(int cpu, FILE *ofp)
 		regs->regs[24], regs->regs[25], regs->regs[26],
 		regs->regs[27], regs->regs[28], regs->regs[29],
 		regs->regs[30], regs->regs[31]);
+
+	if (pt_regs)
+		fprintf(ofp,
+		" status: " REG_FMT " badaddr: " REG_FMT "\n"
+		"  cause: " REG_FMT " orig_a0: " REG_FMT "\n",
+		regs->regs[32], regs->regs[33], regs->regs[34],
+		regs->regs[35]);
+}
+
+/*
+ * 'help -r' command output
+ */
+void
+riscv64_display_regs_from_elf_notes(int cpu, FILE *ofp)
+{
+	const struct machine_specific *ms = machdep->machspec;
+	struct riscv64_register *regs;
+
+	if (!ms->crash_task_regs) {
+		error(INFO, "registers not collected for cpu %d\n", cpu);
+		return;
+	}
+
+	regs = &ms->crash_task_regs[cpu];
+	if (!regs->regs[RISCV64_REGS_SP] && !regs->regs[RISCV64_REGS_EPC]) {
+		error(INFO, "registers not collected for cpu %d\n", cpu);
+		return;
+	}
+
+	riscv64_dump_pt_regs(regs, ofp, 0);
+}
+
+#define USER_MODE	(0)
+#define KERNEL_MODE	(1)
+
+static void
+riscv64_print_exception_frame(struct bt_info *bt, ulong ptr, int mode)
+{
+
+	struct syment *sp;
+	ulong PC, RA, SP, offset;
+	struct riscv64_register *regs;
+
+	regs = (struct riscv64_register *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(ptr))];
+
+	PC = regs->regs[RISCV64_REGS_EPC];
+	RA = regs->regs[RISCV64_REGS_RA];
+	SP = regs->regs[RISCV64_REGS_SP];
+
+	switch (mode) {
+	case USER_MODE:
+		fprintf(fp,
+		    "     PC: %016lx   RA: %016lx   SP: %016lx\n"
+		    "     ORIG_A0: %016lx   SYSCALLNO: %016lx\n",
+		    PC, RA, SP, regs->regs[35], regs->regs[17]);
+
+		break;
+
+	case KERNEL_MODE:
+		fprintf(fp, "     PC: %016lx  ", PC);
+		if (is_kernel_text(PC) && (sp = value_search(PC, &offset))) {
+			fprintf(fp, "[%s", sp->name);
+			if (offset)
+				fprintf(fp, (*gdb_output_radix == 16) ?
+					"+0x%lx" : "+%ld", offset);
+			fprintf(fp, "]\n");
+		} else
+			fprintf(fp, "[unknown or invalid address]\n");
+
+		fprintf(fp, "     RA: %016lx  ", RA);
+		if (is_kernel_text(RA) && (sp = value_search(RA, &offset))) {
+			fprintf(fp, "[%s", sp->name);
+			if (offset)
+				fprintf(fp, (*gdb_output_radix == 16) ?
+					"+0x%lx" : "+%ld", offset);
+			fprintf(fp, "]\n");
+		} else
+			fprintf(fp, "[unknown or invalid address]\n");
+
+		fprintf(fp, "     SP: %016lx  CAUSE: %016lx\n",
+			SP, regs->regs[RISCV64_REGS_CAUSE]);
+
+		break;
+	}
+
+	riscv64_dump_pt_regs(regs, fp, 1);
+
+}
+
+static int
+riscv64_is_kernel_exception_frame(struct bt_info *bt, ulong stkptr)
+{
+	struct riscv64_register *regs;
+
+	if (stkptr > STACKSIZE() && !INSTACK(stkptr, bt)) {
+		if (CRASHDEBUG(1))
+			error(WARNING, "stkptr: %lx is outside the kernel stack range\n", stkptr);
+		return FALSE;
+	}
+
+	regs = (struct riscv64_register *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(stkptr))];
+
+	if (INSTACK(regs->regs[RISCV64_REGS_SP], bt) &&
+	    INSTACK(regs->regs[RISCV64_REGS_FP], bt) &&
+	    is_kernel_text(regs->regs[RISCV64_REGS_RA]) &&
+	    is_kernel_text(regs->regs[RISCV64_REGS_EPC]) &&
+	    ((regs->regs[RISCV64_REGS_STATUS] >> 8) & 0x1) && // sstatus.SPP != 0
+	    !((regs->regs[RISCV64_REGS_CAUSE] >> 63) & 0x1 ) && // scause.Interrupt != 1
+	    !(regs->regs[RISCV64_REGS_CAUSE] == 0x00000008UL)) { // scause != ecall from U-mode
+
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static int
+riscv64_dump_kernel_eframes(struct bt_info *bt)
+{
+	ulong ptr;
+	int count;
+
+	/*
+	 * use old_regs to avoid the identical contiguous kernel exception frames
+	 * created by Linux handle_exception() path ending at riscv_crash_save_regs()
+	 */
+	struct riscv64_register *regs, *old_regs;
+
+	count = 0;
+	old_regs = NULL;
+
+	for (ptr = bt->stackbase; ptr < bt->stacktop - SIZE(pt_regs); ptr++) {
+
+		regs = (struct riscv64_register *)&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(ptr))];
+
+		if (riscv64_is_kernel_exception_frame(bt, ptr)){
+			if (!old_regs || (old_regs &&
+			    memcmp(old_regs, regs, sizeof(struct riscv64_register))) != 0){
+				old_regs = regs;
+				fprintf(fp, "\nKERNEL-MODE EXCEPTION FRAME AT: %lx\n", ptr);
+				riscv64_print_exception_frame(bt, ptr, KERNEL_MODE);
+				count++;
+			}
+		}
+	}
+
+	return count;
+}
+
+static int
+riscv64_eframe_search(struct bt_info *bt)
+{
+	ulong ptr;
+	int count;
+
+	count = riscv64_dump_kernel_eframes(bt);
+
+	if (is_kernel_thread(bt->tc->task))
+		return count;
+
+	ptr = bt->stacktop - SIZE(pt_regs);
+	fprintf(fp, "%sUSER-MODE EXCEPTION FRAME AT: %lx\n", count++ ? "\n" : "", ptr);
+	riscv64_print_exception_frame(bt, ptr, USER_MODE);
+
+	return count;
 }
 
 #else /* !RISCV64 */

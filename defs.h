@@ -7011,15 +7011,14 @@ int riscv64_IS_VMALLOC_ADDR(ulong);
 #define display_idt_table() \
 	error(FATAL, "-d option is not applicable to RISCV64 architecture\n")
 
-/* from arch/riscv/include/asm/ptrace.h */
+/*
+ * regs[0,31] : struct user_regs_struct
+ * 		from arch/riscv/include/uapi/asm/ptrace.h
+ * regs[0,35] : struct pt_regs
+ * 		from arch/riscv/include/asm/ptrace.h
+ */
 struct riscv64_register {
 	ulong regs[36];
-};
-
-struct riscv64_pt_regs {
-	ulong badvaddr;
-	ulong cause;
-	ulong epc;
 };
 
 struct riscv64_unwind_frame {
@@ -7085,6 +7084,8 @@ struct machine_specific {
 #define RISCV64_REGS_RA   1
 #define RISCV64_REGS_SP   2
 #define RISCV64_REGS_FP   8
+#define RISCV64_REGS_STATUS	32
+#define RISCV64_REGS_CAUSE	34
 
 #endif /* RISCV64 */
 
