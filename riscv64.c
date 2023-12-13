@@ -33,6 +33,7 @@ static int riscv64_uvtop(struct task_context *tc, ulong vaddr,
 static int riscv64_kvtop(struct task_context *tc, ulong kvaddr,
 			  physaddr_t *paddr, int verbose);
 static void riscv64_cmd_mach(void);
+static void riscv64_irq_stack_init(void);
 static void riscv64_stackframe_init(void);
 static void riscv64_back_trace_cmd(struct bt_info *bt);
 static int riscv64_eframe_search(struct bt_info *bt);
@@ -54,9 +55,15 @@ static void riscv64_get_va_bits(struct machine_specific *ms);
 static void riscv64_get_struct_page_size(struct machine_specific *ms);
 static void riscv64_print_exception_frame(struct bt_info *, ulong , int );
 static int riscv64_is_kernel_exception_frame(struct bt_info *, ulong );
+static int riscv64_on_irq_stack(int , ulong);
+static int riscv64_on_process_stack(struct bt_info *, ulong );
+static void riscv64_set_process_stack(struct bt_info *);
+static void riscv64_set_irq_stack(struct bt_info *);
 
 #define REG_FMT 	"%016lx"
 #define SZ_2G		0x80000000
+#define USER_MODE	(0)
+#define KERNEL_MODE	(1)
 
 /*
  * Holds registers during the crash.
@@ -191,11 +198,14 @@ riscv64_verify_symbol(const char *name, ulong value, char type)
 void
 riscv64_dump_machdep_table(ulong arg)
 {
-	int others = 0;
+	const struct machine_specific *ms = machdep->machspec;
+	int others = 0, i = 0;
 
 	fprintf(fp, "              flags: %lx (", machdep->flags);
 	if (machdep->flags & KSYMS_START)
 		fprintf(fp, "%sKSYMS_START", others++ ? "|" : "");
+	if (machdep->flags & IRQ_STACKS)
+		fprintf(fp, "%sIRQ_STACKS", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "             kvbase: %lx\n", machdep->kvbase);
@@ -251,6 +261,15 @@ riscv64_dump_machdep_table(ulong arg)
 	fprintf(fp, "   max_physmem_bits: %ld\n", machdep->max_physmem_bits);
 	fprintf(fp, "  sections_per_root: %ld\n", machdep->sections_per_root);
 	fprintf(fp, "           machspec: %lx\n", (ulong)machdep->machspec);
+	if (machdep->flags & IRQ_STACKS) {
+		fprintf(fp, "        irq_stack_size: %ld\n", ms->irq_stack_size);
+		for (i = 0; i < kt->cpus; i++)
+			fprintf(fp, "         irq_stacks[%d]: %lx\n",
+				i, ms->irq_stacks[i]);
+	} else {
+		fprintf(fp, "        irq_stack_size: (unused)\n");
+		fprintf(fp, "            irq_stacks: (unused)\n");
+	}
 }
 
 static ulong
@@ -665,6 +684,111 @@ riscv64_display_full_frame(struct bt_info *bt, struct riscv64_unwind_frame *curr
 	fprintf(fp, "\n");
 }
 
+/*
+ * Gather IRQ stack values.
+ */
+static void
+riscv64_irq_stack_init(void)
+{
+	int i;
+	struct syment *sp;
+	struct gnu_request request, *req;
+	struct machine_specific *ms = machdep->machspec;
+	ulong p, sz;
+	req = &request;
+
+	if (symbol_exists("irq_stack_ptr") &&
+	    (sp = per_cpu_symbol_search("irq_stack_ptr")) &&
+	    get_symbol_type("irq_stack_ptr", NULL, req)) {
+		if (CRASHDEBUG(1)) {
+			fprintf(fp, "irq_stack_ptr: \n");
+			fprintf(fp, "  type: %x, %s\n",
+				(int)req->typecode,
+				(req->typecode == TYPE_CODE_PTR) ?
+						"TYPE_CODE_PTR" : "other");
+			fprintf(fp, "  target_typecode: %x, %s\n",
+				(int)req->target_typecode,
+				req->target_typecode == TYPE_CODE_INT ?
+						"TYPE_CODE_INT" : "other");
+			fprintf(fp, "  target_length: %ld\n",
+						req->target_length);
+			fprintf(fp, "  length: %ld\n", req->length);
+		}
+
+		if (!(ms->irq_stacks = (ulong *)malloc((size_t)(kt->cpus * sizeof(ulong)))))
+			error(FATAL, "cannot malloc irq_stack addresses\n");
+
+		/*
+		 * find IRQ_STACK_SIZE (i.e. THREAD_SIZE) via thread_union.stack
+		 * or set STACKSIZE() as default.
+		 */
+		if (MEMBER_EXISTS("thread_union", "stack")) {
+			if ((sz = MEMBER_SIZE("thread_union", "stack")) > 0)
+				ms->irq_stack_size = sz;
+		} else
+			ms->irq_stack_size = machdep->stacksize;
+
+		machdep->flags |= IRQ_STACKS;
+
+		for (i = 0; i < kt->cpus; i++) {
+			p = kt->__per_cpu_offset[i] + sp->value;
+			if (CRASHDEBUG(1))
+				fprintf(fp, " IRQ stack pointer[%d] is  %lx\n", i, p);
+			readmem(p, KVADDR, &(ms->irq_stacks[i]), sizeof(ulong),
+				"IRQ stack pointer", RETURN_ON_ERROR);
+		}
+	}
+}
+
+static int
+riscv64_on_irq_stack(int cpu, ulong stkptr)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong * stacks = ms->irq_stacks;
+	ulong stack_size = ms->irq_stack_size;
+
+	if ((cpu >= kt->cpus) || (stacks == NULL) || !stack_size)
+		return FALSE;
+
+	if ((stkptr >= stacks[cpu]) &&
+	    (stkptr < (stacks[cpu] + stack_size)))
+		return TRUE;
+
+	return FALSE;
+}
+
+static int
+riscv64_on_process_stack(struct bt_info *bt, ulong stkptr)
+{
+	ulong stackbase, stacktop;
+
+	stackbase = GET_STACKBASE(bt->task);
+	stacktop = GET_STACKTOP(bt->task);
+
+	if ((stkptr >= stackbase) && (stkptr < stacktop))
+		return TRUE;
+
+	return FALSE;
+}
+
+static void
+riscv64_set_irq_stack(struct bt_info *bt)
+{
+	struct machine_specific *ms = machdep->machspec;
+
+	bt->stackbase = ms->irq_stacks[bt->tc->processor];
+	bt->stacktop = bt->stackbase + ms->irq_stack_size;
+	alter_stackbuf(bt);
+}
+
+static void
+riscv64_set_process_stack(struct bt_info *bt)
+{
+	bt->stackbase = GET_STACKBASE(bt->task);
+	bt->stacktop = GET_STACKTOP(bt->task);
+	alter_stackbuf(bt);
+}
+
 static void
 riscv64_stackframe_init(void)
 {
@@ -751,13 +875,18 @@ riscv64_back_trace_cmd(struct bt_info *bt)
 {
 	struct riscv64_unwind_frame current, previous;
 	struct stackframe curr_frame;
-	struct riscv64_register * regs;
+	struct riscv64_register *regs, *irq_regs;
 	int level = 0;
 
 	if (bt->flags & BT_REGS_NOT_FOUND)
 		return;
 
 	regs = (struct riscv64_register *) bt->machdep;
+
+	if (riscv64_on_irq_stack(bt->tc->processor, bt->frameptr)) {
+		riscv64_set_irq_stack(bt);
+		bt->flags |= BT_IRQSTACK;
+	}
 
 	current.pc = bt->instptr;
 	current.sp = bt->stkptr;
@@ -812,6 +941,35 @@ riscv64_back_trace_cmd(struct bt_info *bt)
 		current.pc = previous.pc;
 		current.fp = previous.fp;
 		current.sp = previous.sp;
+
+		/*
+		 * When backtracing to do_irq(), find the original FP of do_irq()
+		 * and then use the saved pt_regs in process stack to continue
+		 */
+		if ((bt->flags & BT_IRQSTACK) &&
+		    !riscv64_on_irq_stack(bt->tc->processor, current.fp)){
+			if (riscv64_on_process_stack(bt, current.fp)){
+
+				frameptr = (struct stackframe *)current.fp - 1;
+
+				if (!readmem((ulong)frameptr, KVADDR, &curr_frame,
+				    sizeof(curr_frame), "get do_irq stack frame", RETURN_ON_ERROR))
+					return;
+
+				riscv64_set_process_stack(bt);
+
+				irq_regs = (struct riscv64_register *)
+					&bt->stackbuf[(ulong)(STACK_OFFSET_TYPE(curr_frame.fp))];
+
+				current.pc = irq_regs->regs[RISCV64_REGS_EPC];
+				current.fp = irq_regs->regs[RISCV64_REGS_FP];
+				current.sp = irq_regs->regs[RISCV64_REGS_SP];
+
+				bt->flags &= ~BT_IRQSTACK;
+				riscv64_print_exception_frame(bt, curr_frame.fp, KERNEL_MODE);
+				fprintf(fp, "--- <IRQ stack> ---\n");
+			}
+		}
 
 		if (CRASHDEBUG(8))
 			fprintf(fp, "next %d pc %#lx sp %#lx fp %lx\n",
@@ -1423,6 +1581,8 @@ riscv64_init(int when)
 	case POST_GDB:
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+
+		riscv64_irq_stack_init();
 		riscv64_stackframe_init();
 		riscv64_page_type_init();
 
@@ -1517,9 +1677,6 @@ riscv64_display_regs_from_elf_notes(int cpu, FILE *ofp)
 
 	riscv64_dump_pt_regs(regs, ofp, 0);
 }
-
-#define USER_MODE	(0)
-#define KERNEL_MODE	(1)
 
 static void
 riscv64_print_exception_frame(struct bt_info *bt, ulong ptr, int mode)
@@ -1639,7 +1796,33 @@ static int
 riscv64_eframe_search(struct bt_info *bt)
 {
 	ulong ptr;
-	int count;
+	int count, c;
+	struct machine_specific *ms = machdep->machspec;
+
+	if (bt->flags & BT_EFRAME_SEARCH2) {
+		if (!(machdep->flags & IRQ_STACKS))
+			error(FATAL, "IRQ stacks do not exist in this kernel\n");
+
+		for (c = 0; c < kt->cpus; c++) {
+			if ((bt->flags & BT_CPUMASK) &&
+			    !(NUM_IN_BITMAP(bt->cpumask, c)))
+				continue;
+
+			fprintf(fp, "CPU %d IRQ STACK: ", c);
+			bt->stackbase = ms->irq_stacks[c];
+			bt->stacktop = bt->stackbase + ms->irq_stack_size;
+			alter_stackbuf(bt);
+
+			count = riscv64_dump_kernel_eframes(bt);
+
+			if (count)
+				fprintf(fp, "\n");
+			else
+				fprintf(fp, "(none found)\n\n");
+		}
+
+		return 0;
+	}
 
 	count = riscv64_dump_kernel_eframes(bt);
 
