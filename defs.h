@@ -3655,6 +3655,9 @@ typedef signed int s32;
 #define VM_L5_2M	(0x100)
 #define VM_L5_1G	(0x200)
 #define IRQ_STACKS	(0x400)
+#define OVERFLOW_STACKS     (0x800)
+
+#define RISCV64_OVERFLOW_STACK_SIZE (1 << 12)
 
 #define VM_FLAGS	(VM_L3_4K | VM_L3_2M | VM_L3_1G | \
 			 VM_L4_4K | VM_L4_2M | VM_L4_1G | \
@@ -7061,6 +7064,9 @@ struct machine_specific {
 	struct riscv64_register *crash_task_regs;
 	ulong irq_stack_size;
 	ulong *irq_stacks;
+
+	ulong overflow_stack_size;
+	ulong *overflow_stacks;
 };
 /* from arch/riscv/include/asm/pgtable-bits.h */
 #define _PAGE_PRESENT	(machdep->machspec->_page_present)
