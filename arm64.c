@@ -92,6 +92,7 @@ static void arm64_get_crash_notes(void);
 static void arm64_calc_VA_BITS(void);
 static int arm64_is_uvaddr(ulong, struct task_context *);
 static void arm64_calc_KERNELPACMASK(void);
+static int arm64_get_vmcoreinfo(unsigned long *vaddr, const char *label, int base);
 
 struct kernel_range {
 	unsigned long modules_vaddr, modules_end;
@@ -124,7 +125,6 @@ void
 arm64_init(int when)
 {
 	ulong value;
-	char *string;
 	struct machine_specific *ms;
 
 #if defined(__x86_64__)
@@ -160,11 +160,8 @@ arm64_init(int when)
 		if (!ms->kimage_voffset && STREQ(pc->live_memsrc, "/dev/crash"))
 			ioctl(pc->mfd, DEV_CRASH_ARCH_DATA, &ms->kimage_voffset);
 
-		if (!ms->kimage_voffset &&
-		    (string = pc->read_vmcoreinfo("NUMBER(kimage_voffset)"))) {
-			ms->kimage_voffset = htol(string, QUIET, NULL);
-			free(string);
-		}
+		if (!ms->kimage_voffset)
+			arm64_get_vmcoreinfo(&ms->kimage_voffset, "NUMBER(kimage_voffset)", NUM_HEX);
 
 		if (ms->kimage_voffset ||
 		    (ACTIVE() && (symbol_value_from_proc_kallsyms("kimage_voffset") != BADVAL))) {
@@ -185,11 +182,8 @@ arm64_init(int when)
 		if (kernel_symbol_exists("kimage_voffset"))
 			machdep->flags |= NEW_VMEMMAP;
 
-		if (!machdep->pagesize && 
-		    (string = pc->read_vmcoreinfo("PAGESIZE"))) {
-			machdep->pagesize = atoi(string);
-			free(string);
-		}
+		if (!machdep->pagesize && arm64_get_vmcoreinfo(&value, "PAGESIZE", NUM_DEC))
+			machdep->pagesize = (unsigned int)value;
 
 		if (!machdep->pagesize) {
 			/*
@@ -443,9 +437,8 @@ arm64_init(int when)
 		arm64_get_section_size_bits();
 
 		if (!machdep->max_physmem_bits) {
-			if ((string = pc->read_vmcoreinfo("NUMBER(MAX_PHYSMEM_BITS)"))) {
-				machdep->max_physmem_bits = atol(string);
-				free(string);
+			if (arm64_get_vmcoreinfo(&machdep->max_physmem_bits, "NUMBER(MAX_PHYSMEM_BITS)", NUM_DEC)) {
+				/* nothing */
 			} else if (machdep->machspec->VA_BITS == 52)  /* guess */
 				machdep->max_physmem_bits = _MAX_PHYSMEM_BITS_52;
 			else if (THIS_KERNEL_VERSION >= LINUX(3,17,0)) 
@@ -573,16 +566,28 @@ static int arm64_get_struct_page_max_shift(struct machine_specific *ms)
 }
 
 /* Return TRUE if we succeed, return FALSE on failure. */
-static int arm64_get_vmcoreinfo_ul(unsigned long *vaddr, const char* label)
+static int
+arm64_get_vmcoreinfo(unsigned long *vaddr, const char *label, int base)
 {
+	int err = 0;
 	char *string = pc->read_vmcoreinfo(label);
 
 	if (!string)
 		return FALSE;
 
-	*vaddr  = strtoul(string, NULL, 0);
+	switch (base) {
+	case NUM_HEX:
+		*vaddr  = strtoul(string, NULL, 16);
+		break;
+	case NUM_DEC:
+		*vaddr  = strtoul(string, NULL, 10);
+		break;
+	default:
+		err++;
+		error(INFO, "Unknown type:%#x, (NUM_HEX|NUM_DEC)\n", base);
+	}
 	free(string);
-	return TRUE;
+	return err ? FALSE: TRUE;
 }
 
 /*
@@ -594,21 +599,21 @@ static struct kernel_range *arm64_get_range_v5_18(struct machine_specific *ms)
 	struct kernel_range *r = &tmp_range;
 
 	/* Get the MODULES_VADDR ~ MODULES_END */
-	if (!arm64_get_vmcoreinfo_ul(&r->modules_vaddr, "NUMBER(MODULES_VADDR)"))
+	if (!arm64_get_vmcoreinfo(&r->modules_vaddr, "NUMBER(MODULES_VADDR)", NUM_HEX))
 		return NULL;
-	if (!arm64_get_vmcoreinfo_ul(&r->modules_end, "NUMBER(MODULES_END)"))
+	if (!arm64_get_vmcoreinfo(&r->modules_end, "NUMBER(MODULES_END)", NUM_HEX))
 		return NULL;
 
 	/* Get the VMEMMAP_START ~ VMEMMAP_END */
-	if (!arm64_get_vmcoreinfo_ul(&r->vmemmap_vaddr, "NUMBER(VMEMMAP_START)"))
+	if (!arm64_get_vmcoreinfo(&r->vmemmap_vaddr, "NUMBER(VMEMMAP_START)", NUM_HEX))
 		return NULL;
-	if (!arm64_get_vmcoreinfo_ul(&r->vmemmap_end, "NUMBER(VMEMMAP_END)"))
+	if (!arm64_get_vmcoreinfo(&r->vmemmap_end, "NUMBER(VMEMMAP_END)", NUM_HEX))
 		return NULL;
 
 	/* Get the VMALLOC_START ~ VMALLOC_END */
-	if (!arm64_get_vmcoreinfo_ul(&r->vmalloc_start_addr, "NUMBER(VMALLOC_START)"))
+	if (!arm64_get_vmcoreinfo(&r->vmalloc_start_addr, "NUMBER(VMALLOC_START)", NUM_HEX))
 		return NULL;
-	if (!arm64_get_vmcoreinfo_ul(&r->vmalloc_end, "NUMBER(VMALLOC_END)"))
+	if (!arm64_get_vmcoreinfo(&r->vmalloc_end, "NUMBER(VMALLOC_END)", NUM_HEX))
 		return NULL;
 
 	return r;
@@ -888,12 +893,7 @@ range_failed:
 /* Get the size of struct page {} */
 static void arm64_get_struct_page_size(struct machine_specific *ms)
 {
-	char *string;
-
-	string = pc->read_vmcoreinfo("SIZE(page)");
-	if (string)
-		ms->struct_page_size = atol(string);
-	free(string);
+	arm64_get_vmcoreinfo(&ms->struct_page_size, "SIZE(page)", NUM_DEC);
 }
 
 /*
@@ -1469,16 +1469,12 @@ arm64_calc_phys_offset(void)
 		physaddr_t paddr;
 		ulong vaddr;
 		struct syment *sp;
-		char *string;
 
 		if ((machdep->flags & NEW_VMEMMAP) &&
 		    ms->kimage_voffset && (sp = kernel_symbol_search("memstart_addr"))) {
 			if (pc->flags & PROC_KCORE) {
-				if ((string = pc->read_vmcoreinfo("NUMBER(PHYS_OFFSET)"))) {
-					ms->phys_offset = htol(string, QUIET, NULL);
-					free(string);
+				if (arm64_get_vmcoreinfo(&ms->phys_offset, "NUMBER(PHYS_OFFSET)", NUM_HEX))
 					return;
-				}
 				vaddr = symbol_value_from_proc_kallsyms("memstart_addr");
 				if (vaddr == BADVAL)
 					vaddr = sp->value;
@@ -1560,9 +1556,8 @@ arm64_get_section_size_bits(void)
 	} else
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 
-	if ((string = pc->read_vmcoreinfo("NUMBER(SECTION_SIZE_BITS)"))) {
-		machdep->section_size_bits = atol(string);
-		free(string);
+	if (arm64_get_vmcoreinfo(&machdep->section_size_bits, "NUMBER(SECTION_SIZE_BITS)", NUM_DEC)) {
+		/* nothing */
 	} else if (kt->ikconfig_flags & IKCONFIG_AVAIL) {
 		if ((ret = get_kernel_config("CONFIG_MEMORY_HOTPLUG", NULL)) == IKCONFIG_Y) {
 			if ((ret = get_kernel_config("CONFIG_HOTPLUG_SIZE_BITS", &string)) == IKCONFIG_STR)
@@ -1581,15 +1576,11 @@ arm64_get_section_size_bits(void)
 static int
 arm64_kdump_phys_base(ulong *phys_offset)
 {
-	char *string;
 	struct syment *sp;
 	physaddr_t paddr;
 
-	if ((string = pc->read_vmcoreinfo("NUMBER(PHYS_OFFSET)"))) {
-		*phys_offset = htol(string, QUIET, NULL);
-		free(string);
+	if (arm64_get_vmcoreinfo(phys_offset, "NUMBER(PHYS_OFFSET)", NUM_HEX))
 		return TRUE;
-	}
 
 	if ((machdep->flags & NEW_VMEMMAP) &&
 	    machdep->machspec->kimage_voffset &&
@@ -4592,10 +4583,9 @@ static int
 arm64_set_va_bits_by_tcr(void)
 {
 	ulong value;
-	char *string;
 
-	if ((string = pc->read_vmcoreinfo("NUMBER(TCR_EL1_T1SZ)")) ||
-	    (string = pc->read_vmcoreinfo("NUMBER(tcr_el1_t1sz)"))) {
+	if (arm64_get_vmcoreinfo(&value, "NUMBER(TCR_EL1_T1SZ)", NUM_HEX) ||
+		arm64_get_vmcoreinfo(&value, "NUMBER(tcr_el1_t1sz)", NUM_HEX)) {
 		/* See ARMv8 ARM for the description of
 		 * TCR_EL1.T1SZ and how it can be used
 		 * to calculate the vabits_actual
@@ -4604,10 +4594,9 @@ arm64_set_va_bits_by_tcr(void)
 		 * Basically:
 		 * vabits_actual = 64 - T1SZ;
 		 */
-		value = 64 - strtoll(string, NULL, 0);
+		value = 64 - value;
 		if (CRASHDEBUG(1))
 			fprintf(fp,  "vmcoreinfo : vabits_actual: %ld\n", value);
-		free(string);
 		machdep->machspec->VA_BITS_ACTUAL = value;
 		machdep->machspec->VA_BITS = value;
 		machdep->machspec->VA_START = _VA_START(machdep->machspec->VA_BITS_ACTUAL);
@@ -4623,13 +4612,8 @@ arm64_calc_VA_BITS(void)
 	int bitval;
 	struct syment *sp;
 	ulong vabits_actual, value;
-	char *string;
 
-	if ((string = pc->read_vmcoreinfo("NUMBER(VA_BITS)"))) {
-		value = atol(string);
-		free(string);
-		machdep->machspec->CONFIG_ARM64_VA_BITS = value;
-	}
+	arm64_get_vmcoreinfo(&machdep->machspec->CONFIG_ARM64_VA_BITS, "NUMBER(VA_BITS)", NUM_DEC);
 
 	if (kernel_symbol_exists("vabits_actual")) {
 		if (pc->flags & PROC_KCORE) {
@@ -4754,9 +4738,7 @@ arm64_calc_virtual_memory_ranges(void)
 	ulong PUD_SIZE = UNINITIALIZED;
 
 	if (!machdep->machspec->CONFIG_ARM64_VA_BITS) {
-		if ((string = pc->read_vmcoreinfo("NUMBER(VA_BITS)"))) {
-			value = atol(string);
-			free(string);
+		if (arm64_get_vmcoreinfo(&value, "NUMBER(VA_BITS)", NUM_DEC)) {
 			machdep->machspec->CONFIG_ARM64_VA_BITS = value;
 		} else if (kt->ikconfig_flags & IKCONFIG_AVAIL) {
 			if ((ret = get_kernel_config("CONFIG_ARM64_VA_BITS",
@@ -4852,11 +4834,8 @@ arm64_swp_offset(ulong pte)
 static void arm64_calc_KERNELPACMASK(void)
 {
 	ulong value;
-	char *string;
 
-	if ((string = pc->read_vmcoreinfo("NUMBER(KERNELPACMASK)"))) {
-		value = htol(string, QUIET, NULL);
-		free(string);
+	if (arm64_get_vmcoreinfo(&value, "NUMBER(KERNELPACMASK)", NUM_HEX)) {
 		machdep->machspec->CONFIG_ARM64_KERNELPACMASK = value;
 		if (CRASHDEBUG(1))
 			fprintf(fp, "CONFIG_ARM64_KERNELPACMASK: %lx\n", value);
