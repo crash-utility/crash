@@ -6888,8 +6888,6 @@ char *help_kmem[] = {
 "            members of the associated page struct are displayed.",
 "   address  when used with -c, the address must be a page pointer address;",
 "            the page_hash_table entry containing the page is displayed.",
-"   address  when used with -l, the address must be a page pointer address;",
-"            the page address is displayed if it is contained with the list.",
 "   address  when used with -v, the address can be a mapped kernel virtual",
 "            address or physical address; the mapped region containing the",
 "            address is displayed.\n",
