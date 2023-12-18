@@ -152,6 +152,28 @@ static void arm64_calc_kernel_start(void)
 	ms->kimage_end = (sp ? sp->value : 0);
 }
 
+static int
+arm64_vmemmap_is_page_ptr(ulong addr, physaddr_t *phys)
+{
+	ulong size = SIZE(page);
+	ulong pfn, nr;
+
+
+	if (IS_SPARSEMEM() && (machdep->flags & VMEMMAP) &&
+	    (addr >= VMEMMAP_VADDR && addr <= VMEMMAP_END) &&
+	    !((addr - VMEMMAP_VADDR) % size)) {
+
+		pfn = (addr - machdep->machspec->vmemmap) / size;
+		nr = pfn_to_section_nr(pfn);
+		if (valid_section_nr(nr)) {
+			if (phys)
+				*phys = PTOB(pfn);
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
 /*
  * Do all necessary machine-specific setup here. This is called several times
  * during initialization.
@@ -420,6 +442,9 @@ arm64_init(int when)
 
 		machdep->stacksize = ARM64_STACK_SIZE;
 		machdep->flags |= VMEMMAP;
+		/* If vmemmap exists, it means kernel enabled CONFIG_SPARSEMEM_VMEMMAP */
+		if (arm64_get_vmcoreinfo(&ms->vmemmap, "SYMBOL(vmemmap)", NUM_HEX))
+			machdep->is_page_ptr = arm64_vmemmap_is_page_ptr;
 
 		machdep->uvtop = arm64_uvtop;
 		machdep->is_uvaddr = arm64_is_uvaddr;
@@ -1136,6 +1161,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "         vmemmap_vaddr: %016lx\n", ms->vmemmap_vaddr);
 	fprintf(fp, "           vmemmap_end: %016lx\n", ms->vmemmap_end);
 	if (machdep->flags & NEW_VMEMMAP) {
+		fprintf(fp, "               vmemmap: %016lx\n", ms->vmemmap);
 		fprintf(fp, "           kimage_text: %016lx\n", ms->kimage_text);
 		fprintf(fp, "            kimage_end: %016lx\n", ms->kimage_end);
 		fprintf(fp, "        kimage_voffset: %016lx\n", ms->kimage_voffset);
