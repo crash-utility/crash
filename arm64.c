@@ -102,6 +102,41 @@ struct kernel_range {
 static struct kernel_range *arm64_get_va_range(struct machine_specific *ms);
 static void arm64_get_struct_page_size(struct machine_specific *ms);
 
+/* mte tag shift bit */
+#define MTE_TAG_SHIFT		56
+/* native kernel pointers tag */
+#define KASAN_TAG_KERNEL	0xFF
+/* minimum value for random tags */
+#define KASAN_TAG_MIN		0xF0
+/* right shift the tag to MTE_TAG_SHIFT bit */
+#define mte_tag_shifted(tag)	((ulong)(tag) << MTE_TAG_SHIFT)
+/* get the top byte value of the original kvaddr */
+#define mte_tag_get(addr)	(unsigned char)((ulong)(addr) >> MTE_TAG_SHIFT)
+/* reset the top byte to get an untaggged kvaddr */
+#define mte_tag_reset(addr)	(((ulong)addr & ~mte_tag_shifted(KASAN_TAG_KERNEL)) | \
+					mte_tag_shifted(KASAN_TAG_KERNEL))
+
+static inline bool is_mte_kvaddr(ulong addr)
+{
+	/* check for ARM64_MTE enabled */
+	if (!(machdep->flags & ARM64_MTE))
+		return false;
+
+	/* check the validity of HW Tag-Based kvaddr */
+	if (mte_tag_get(addr) >= KASAN_TAG_MIN && mte_tag_get(addr) < KASAN_TAG_KERNEL)
+		return true;
+
+	return false;
+}
+
+static int arm64_is_kvaddr(ulong addr)
+{
+	if (is_mte_kvaddr(addr))
+		return (mte_tag_reset(addr) >= (ulong)(machdep->kvbase));
+
+	return (addr >= (ulong)(machdep->kvbase));
+}
+
 static void arm64_calc_kernel_start(void)
 {
 	struct machine_specific *ms = machdep->machspec;
@@ -181,6 +216,9 @@ arm64_init(int when)
 	case PRE_GDB:
 		if (kernel_symbol_exists("kimage_voffset"))
 			machdep->flags |= NEW_VMEMMAP;
+
+		if (kernel_symbol_exists("cpu_enable_mte"))
+			machdep->flags |= ARM64_MTE;
 
 		if (!machdep->pagesize && arm64_get_vmcoreinfo(&value, "PAGESIZE", NUM_DEC))
 			machdep->pagesize = (unsigned int)value;
@@ -262,7 +300,7 @@ arm64_init(int when)
 			machdep->kvbase = ARM64_VA_START;
 			ms->userspace_top = ARM64_USERSPACE_TOP;
 		}
-		machdep->is_kvaddr = generic_is_kvaddr;
+		machdep->is_kvaddr = arm64_is_kvaddr;
 		machdep->kvtop = arm64_kvtop;
 
 		/* The defaults */
@@ -975,6 +1013,8 @@ arm64_dump_machdep_table(ulong arg)
 		fprintf(fp, "%sFLIPPED_VM", others++ ? "|" : "");
 	if (machdep->flags & HAS_PHYSVIRT_OFFSET)
 		fprintf(fp, "%sHAS_PHYSVIRT_OFFSET", others++ ? "|" : "");
+	if (machdep->flags & ARM64_MTE)
+		fprintf(fp, "%sARM64_MTE", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "              kvbase: %lx\n", machdep->kvbase);
@@ -1023,7 +1063,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "          dis_filter: arm64_dis_filter()\n");
 	fprintf(fp, "            cmd_mach: arm64_cmd_mach()\n");
 	fprintf(fp, "        get_smp_cpus: arm64_get_smp_cpus()\n");
-	fprintf(fp, "           is_kvaddr: generic_is_kvaddr()\n");
+	fprintf(fp, "           is_kvaddr: arm64_is_kvaddr()\n");
 	fprintf(fp, "           is_uvaddr: arm64_is_uvaddr()\n");
 	fprintf(fp, "     value_to_symbol: generic_machdep_value_to_symbol()\n");
 	fprintf(fp, "     init_kernel_pgd: arm64_init_kernel_pgd\n");
@@ -1633,6 +1673,9 @@ ulong arm64_PTOV(ulong paddr)
 ulong
 arm64_VTOP(ulong addr)
 {
+	if (is_mte_kvaddr(addr))
+		addr = mte_tag_reset(addr);
+
 	if (machdep->flags & NEW_VMEMMAP) {
 		if (machdep->machspec->VA_START &&
 		    (addr >= machdep->machspec->kimage_text) &&
@@ -4562,7 +4605,10 @@ int
 arm64_IS_VMALLOC_ADDR(ulong vaddr)
 {
 	struct machine_specific *ms = machdep->machspec;
-	
+
+	if (is_mte_kvaddr(vaddr))
+		vaddr = mte_tag_reset(vaddr);
+
 	if ((machdep->flags & NEW_VMEMMAP) &&
 	    (vaddr >= machdep->machspec->kimage_text) &&
 	    (vaddr <= machdep->machspec->kimage_end))

@@ -3348,6 +3348,7 @@ typedef signed int s32;
 #define FLIPPED_VM    (0x400)
 #define HAS_PHYSVIRT_OFFSET (0x800)
 #define OVERFLOW_STACKS     (0x1000)
+#define ARM64_MTE     (0x2000)
 
 /*
  * Get kimage_voffset from /dev/crash
