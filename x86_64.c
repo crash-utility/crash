@@ -8649,7 +8649,7 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp, char *stack_
 				if (CRASHDEBUG(1))
 					fprintf(fp, "rsp: %lx prev_sp: %lx framesize: %d\n",
 							rsp, prev_sp, framesize);
-			} else if ((korc->sp_reg == ORC_REG_BP) && bt->bptr) {
+			} else if ((korc->sp_reg == ORC_REG_BP) && bt->bptr && INSTACK(bt->bptr, bt)) {
 				prev_sp = bt->bptr + korc->sp_offset;
 				framesize = (prev_sp - (rsp + 8) - 8);
 				if (CRASHDEBUG(1))
