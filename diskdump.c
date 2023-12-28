@@ -2648,6 +2648,9 @@ diskdump_display_regs(int cpu, FILE *ofp)
 
 	if (machine_type("MIPS64"))
 		mips64_display_regs_from_elf_notes(cpu, ofp);
+
+	if (machine_type("LOONGARCH64"))
+		loongarch64_display_regs_from_elf_notes(cpu, ofp);
 }
 
 void
@@ -2659,7 +2662,7 @@ dump_registers_for_compressed_kdump(void)
 	    !(machine_type("X86") || machine_type("X86_64") ||
 	      machine_type("ARM64") || machine_type("PPC64") ||
 	      machine_type("MIPS") || machine_type("MIPS64") ||
-	      machine_type("RISCV64")))
+	      machine_type("RISCV64") || machine_type("LOONGARCH64")))
 		error(FATAL, "-r option not supported for this dumpfile\n");
 
 	if (machine_type("ARM64") && (kt->cpus != dd->num_prstatus_notes))

@@ -2961,6 +2961,8 @@ display_regs_from_elf_notes(int cpu, FILE *ofp)
 		mips64_display_regs_from_elf_notes(cpu, ofp);
 	} else if (machine_type("RISCV64")) {
 		riscv64_display_regs_from_elf_notes(cpu, ofp);
+	} else if (machine_type("LOONGARCH64")) {
+		loongarch64_display_regs_from_elf_notes(cpu, ofp);
 	}
 }
 
@@ -2972,7 +2974,7 @@ dump_registers_for_elf_dumpfiles(void)
         if (!(machine_type("X86") || machine_type("X86_64") || 
 	    machine_type("ARM64") || machine_type("PPC64") ||
 	    machine_type("MIPS") || machine_type("MIPS64") ||
-	    machine_type("RISCV64")))
+	    machine_type("RISCV64") || machine_type("LOONGARCH64")))
                 error(FATAL, "-r option not supported for this dumpfile\n");
 
 	if (NETDUMP_DUMPFILE()) {
