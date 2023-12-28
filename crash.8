@@ -491,7 +491,7 @@ Search for the kernel source code in directory instead of in the
 standard location that is compiled into the debuginfo data.
 .TP
 .BI --kaslr \ offset | auto
-If an x86_64 kernel was configured with 
+If an x86, x86_64, s390x or loongarch64 kernel was configured with
 .B CONFIG_RANDOMIZE_BASE,
 the offset value is equal to the difference between the symbol values 
 compiled into the vmlinux file and their relocated KASLR values.  If set to
