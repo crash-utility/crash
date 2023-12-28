@@ -2976,9 +2976,11 @@ store_module_kallsyms_v2(struct load_module *lm, int start, int curr,
 		/*
 		 * On ARM/ARM64 we have linker mapping symbols like '$a'
 		 * or '$x' for ARM64, and '$d'.
+		 * On LoongArch we have linker mapping symbols like '.L'
+		 * or 'L0'.
 		 * Make sure that these don't end up into our symbol list.
 		 */
-		if ((machine_type("ARM") || machine_type("ARM64")) &&
+		if ((machine_type("ARM") || machine_type("ARM64") || machine_type("LOONGARCH64")) &&
 		    !machdep->verify_symbol(nameptr, ec->st_value, ec->st_info))
 			continue;
 
@@ -4229,6 +4231,11 @@ is_kernel(char *file)
 				goto bailout;
 			break;
 
+		case EM_LOONGARCH:
+			if (machine_type_mismatch(file, "LOONGARCH64", NULL, 0))
+				goto bailout;
+			break;
+
 		default:
 			if (machine_type_mismatch(file, "(unknown)", NULL, 0))
 				goto bailout;
@@ -4280,6 +4287,11 @@ is_kernel(char *file)
 
 		case EM_RISCV:
 			if (machine_type_mismatch(file, "RISCV64", NULL, 0))
+				goto bailout;
+			break;
+
+		case EM_LOONGARCH:
+			if (machine_type_mismatch(file, "LOONGARCH64", NULL, 0))
 				goto bailout;
 			break;
 
@@ -4545,6 +4557,11 @@ is_shared_object(char *file)
 
 		case EM_RISCV:
 			if (machine_type("RISCV64"))
+				return TRUE;
+			break;
+
+		case EM_LOONGARCH:
+			if (machine_type("LOONGARCH64"))
 				return TRUE;
 			break;
 		}

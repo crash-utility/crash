@@ -114,7 +114,7 @@ typedef struct _dump_header_s {
 	struct new_utsname   dh_utsname;
 
 	/* the dump registers */
-#if !defined(IA64) && !defined(S390) && !defined(S390X) && !defined(ARM64) && !defined(RISCV64)
+#if !defined(IA64) && !defined(S390) && !defined(S390X) && !defined(ARM64) && !defined(RISCV64) && !defined(LOONGARCH64)
 	struct pt_regs       dh_regs;
 #endif
 

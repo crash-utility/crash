@@ -43,6 +43,7 @@ static void get_netdump_regs_arm(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_arm64(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_mips(struct bt_info *, ulong *, ulong *);
 static void get_netdump_regs_riscv(struct bt_info *, ulong *, ulong *);
+static void get_netdump_regs_loongarch64(struct bt_info *, ulong *, ulong *);
 static void check_dumpfile_size(char *);
 static int proc_kcore_init_32(FILE *, int);
 static int proc_kcore_init_64(FILE *, int);
@@ -62,6 +63,7 @@ static char *vmcoreinfo_read_string(const char *);
  */
 #define READ_PAGESIZE_FROM_VMCOREINFO() \
 	(machine_type("IA64") || machine_type("PPC64") || machine_type("PPC") || machine_type("ARM64"))
+
 
 /*
  * kdump installs NT_PRSTATUS elf notes only to the cpus
@@ -306,6 +308,12 @@ is_netdump(char *file, ulong source_query)
 
 		case EM_RISCV:
 			if (machine_type_mismatch(file, "RISCV64", NULL,
+			    source_query))
+				goto bailout;
+			break;
+
+		case EM_LOONGARCH:
+			if (machine_type_mismatch(file, "LOONGARCH64", NULL,
 			    source_query))
 				goto bailout;
 			break;
@@ -1493,6 +1501,9 @@ dump_Elf32_Ehdr(Elf32_Ehdr *elf)
 	case EM_MIPS:
 		netdump_print("(EM_MIPS)\n");
 		break;
+	case EM_LOONGARCH:
+		netdump_print("(EM_LOONGARCH)\n");
+		break;
 	default:
 		netdump_print("(unsupported)\n");
 		break;
@@ -1655,6 +1666,9 @@ dump_Elf64_Ehdr(Elf64_Ehdr *elf)
 	case EM_AARCH64:
                 netdump_print("(EM_AARCH64)\n");
                 break;
+	case EM_LOONGARCH:
+		netdump_print("(EM_LOONGARCH)\n");
+		break;
         default:
                 netdump_print("(unsupported)\n");
                 break;
@@ -2684,6 +2698,9 @@ get_netdump_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 
 	case EM_RISCV:
 		get_netdump_regs_riscv(bt, eip, esp);
+		break;
+	case EM_LOONGARCH:
+		return get_netdump_regs_loongarch64(bt, eip, esp);
 		break;
 
 	default:
@@ -3974,6 +3991,12 @@ get_netdump_regs_mips(struct bt_info *bt, ulong *eip, ulong *esp)
 
 static void
 get_netdump_regs_riscv(struct bt_info *bt, ulong *eip, ulong *esp)
+{
+	machdep->get_stack_frame(bt, eip, esp);
+}
+
+static void
+get_netdump_regs_loongarch64(struct bt_info *bt, ulong *eip, ulong *esp)
 {
 	machdep->get_stack_frame(bt, eip, esp);
 }

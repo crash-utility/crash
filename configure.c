@@ -108,6 +108,7 @@ void add_extra_lib(char *);
 #undef SPARC64
 #undef MIPS64
 #undef RISCV64
+#undef LOONGARCH64
 
 #define UNKNOWN 0
 #define X86     1
@@ -124,6 +125,7 @@ void add_extra_lib(char *);
 #define SPARC64 12
 #define MIPS64  13
 #define RISCV64 14
+#define LOONGARCH64    15
 
 #define TARGET_X86    "TARGET=X86"
 #define TARGET_ALPHA  "TARGET=ALPHA"
@@ -139,6 +141,7 @@ void add_extra_lib(char *);
 #define TARGET_MIPS64 "TARGET=MIPS64"
 #define TARGET_SPARC64 "TARGET=SPARC64"
 #define TARGET_RISCV64 "TARGET=RISCV64"
+#define TARGET_LOONGARCH64	"TARGET=LOONGARCH64"
 
 #define TARGET_CFLAGS_X86    "TARGET_CFLAGS=-D_FILE_OFFSET_BITS=64"
 #define TARGET_CFLAGS_ALPHA  "TARGET_CFLAGS="
@@ -163,6 +166,8 @@ void add_extra_lib(char *);
 #define TARGET_CFLAGS_SPARC64         "TARGET_CFLAGS="
 #define TARGET_CFLAGS_RISCV64         "TARGET_CFLAGS="
 #define TARGET_CFLAGS_RISCV64_ON_X86_64	"TARGET_CFLAGS="
+#define TARGET_CFLAGS_LOONGARCH64     "TARGET_CFLAGS="
+#define TARGET_CFLAGS_LOONGARCH64_ON_X86_64	"TARGET_CFLAGS="
 
 #define GDB_TARGET_DEFAULT        "GDB_CONF_FLAGS="
 #define GDB_TARGET_ARM_ON_X86     "GDB_CONF_FLAGS=--target=arm-elf-linux"
@@ -174,6 +179,7 @@ void add_extra_lib(char *);
 #define GDB_TARGET_MIPS_ON_X86     "GDB_CONF_FLAGS=--target=mipsel-elf-linux"
 #define GDB_TARGET_MIPS_ON_X86_64  "GDB_CONF_FLAGS=--target=mipsel-elf-linux CFLAGS=-m32 CXXFLAGS=-m32"
 #define GDB_TARGET_RISCV64_ON_X86_64  "GDB_CONF_FLAGS=--target=riscv64-unknown-linux-gnu"
+#define GDB_TARGET_LOONGARCH64_ON_X86_64  "GDB_CONF_FLAGS=--target=loongarch64-unknown-linux-gnu"
      
 /*
  *  The original plan was to allow the use of a particular version
@@ -413,6 +419,9 @@ get_current_configuration(struct supported_gdb_version *sp)
 #if defined(__riscv) && (__riscv_xlen == 64)
 	target_data.target = RISCV64;
 #endif
+#ifdef __loongarch64
+	target_data.target = LOONGARCH64;
+#endif
 
 	set_initial_target(sp);
 
@@ -472,6 +481,12 @@ get_current_configuration(struct supported_gdb_version *sp)
 			 *  Build an RISCV64 crash binary on an X86_64 host.
 			 */
 			target_data.target = RISCV64;
+		} else if ((target_data.target == X86_64) &&
+			(name_to_target((char *)target_data.target_as_param) == LOONGARCH64)) {
+			/*
+			 *  Build an LOONGARCH64 crash binary on an X86_64 host.
+			 */
+			target_data.target = LOONGARCH64;
 		} else {
 			fprintf(stderr,
 			    "\ntarget=%s is not supported on the %s host architecture\n\n",
@@ -511,6 +526,14 @@ get_current_configuration(struct supported_gdb_version *sp)
 		if ((target_data.initial_gdb_target == MIPS64) &&
 		    (target_data.target != MIPS64))
 			arch_mismatch(sp);
+
+		if ((target_data.initial_gdb_target == LOONGARCH64) &&
+			(target_data.target != LOONGARCH64)) {
+			if (target_data.target == X86_64)
+				target_data.target = LOONGARCH64;
+			else
+				arch_mismatch(sp);
+		}
 
 		if ((target_data.initial_gdb_target == RISCV64) &&
 		    (target_data.target != RISCV64)) {
@@ -686,6 +709,9 @@ show_configuration(void)
 	case RISCV64:
 		printf("TARGET: RISCV64\n");
 		break;
+	case LOONGARCH64:
+		printf("TARGET: LOONGARCH64\n");
+		break;
 	}
 
 	if (strlen(target_data.program)) {
@@ -810,6 +836,14 @@ build_configure(struct supported_gdb_version *sp)
 			gdb_conf_flags = GDB_TARGET_RISCV64_ON_X86_64;
 		} else
 			target_CFLAGS = TARGET_CFLAGS_RISCV64;
+		break;
+	case LOONGARCH64:
+		target = TARGET_LOONGARCH64;
+		if (target_data.host == X86_64) {
+			target_CFLAGS = TARGET_CFLAGS_LOONGARCH64_ON_X86_64;
+			gdb_conf_flags = GDB_TARGET_LOONGARCH64_ON_X86_64;
+		} else
+			target_CFLAGS = TARGET_CFLAGS_LOONGARCH64;
 		break;
 	}
 
@@ -1408,7 +1442,7 @@ make_spec_file(struct supported_gdb_version *sp)
 	printf("Vendor: Red Hat, Inc.\n");
 	printf("Packager: Dave Anderson <anderson@redhat.com>\n");
 	printf("ExclusiveOS: Linux\n");
-	printf("ExclusiveArch: %%{ix86} alpha ia64 ppc ppc64 ppc64pseries ppc64iseries x86_64 s390 s390x arm aarch64 ppc64le mips mipsel mips64el sparc64 riscv64\n");
+	printf("ExclusiveArch: %%{ix86} alpha ia64 ppc ppc64 ppc64pseries ppc64iseries x86_64 s390 s390x arm aarch64 ppc64le mips mipsel mips64el sparc64 riscv64 loongarch64\n");
 	printf("Buildroot: %%{_tmppath}/%%{name}-root\n");
 	printf("BuildRequires: ncurses-devel zlib-devel bison\n");
 	printf("Requires: binutils\n");
@@ -1649,6 +1683,8 @@ set_initial_target(struct supported_gdb_version *sp)
 		target_data.initial_gdb_target = SPARC64;
 	else if (strncmp(buf, "RISCV64", strlen("RISCV64")) == 0)
 		target_data.initial_gdb_target = RISCV64;
+	else if (strncmp(buf, "LOONGARCH64", strlen("LOONGARCH64")) == 0)
+		target_data.initial_gdb_target = LOONGARCH64;
 }
 
 char *
@@ -1670,6 +1706,7 @@ target_to_name(int target)
 	case MIPS64: return("MIPS64");
 	case SPARC64: return("SPARC64");
 	case RISCV64: return("RISCV64");
+	case LOONGARCH64: return("LOONGARCH64");
 	}
 
 	return "UNKNOWN";
@@ -1738,6 +1775,10 @@ name_to_target(char *name)
 		return RISCV64;
 	else if (strncmp(name, "riscv64", strlen("riscv64")) == 0)
 		return RISCV64;
+	else if (strncmp(name, "loongarch64", strlen("loongarch64")) == 0)
+		return LOONGARCH64;
+	else if (strncmp(name, "LOONGARCH64", strlen("LOONGARCH64")) == 0)
+		return LOONGARCH64;
 
 	return UNKNOWN;
 }

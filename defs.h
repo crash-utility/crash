@@ -76,7 +76,7 @@
 #if !defined(X86) && !defined(X86_64) && !defined(ALPHA) && !defined(PPC) && \
     !defined(IA64) && !defined(PPC64) && !defined(S390) && !defined(S390X) && \
     !defined(ARM) && !defined(ARM64) && !defined(MIPS) && !defined(MIPS64) && \
-    !defined(RISCV64) && !defined(SPARC64)
+    !defined(RISCV64) && !defined(LOONGARCH64) && !defined(SPARC64)
 #ifdef __alpha__
 #define ALPHA
 #endif
@@ -121,6 +121,9 @@
 #if defined(__riscv) && (__riscv_xlen == 64)
 #define RISCV64
 #endif
+#ifdef __loongarch64
+#define LOONGARCH64
+#endif
 #endif
 
 #ifdef X86
@@ -163,6 +166,9 @@
 #define NR_CPUS  (4096)
 #endif
 #ifdef RISCV64
+#define NR_CPUS  (256)
+#endif
+#ifdef LOONGARCH64
 #define NR_CPUS  (256)
 #endif
 
@@ -3723,6 +3729,48 @@ typedef signed int s32;
 
 #endif  /* RISCV64 */
 
+/* fix compilation errors due to elf.h version. */
+#ifndef EM_LOONGARCH
+#define EM_LOONGARCH   258
+#endif
+
+#ifdef LOONGARCH64
+#define	_64BIT_
+#define MACHINE_TYPE		"LOONGARCH64"
+
+#define PAGEBASE(X)		(((ulong)(X)) & (ulong)machdep->pagemask)
+
+#define IS_XKPRANGE(X)		(((X) >= 0x8000000000000000lu) && \
+				((X) < 0xc000000000000000lu))
+
+#define PTOV(X)			((ulong)(X) + 0x9000000000000000lu)
+#define VTOP(X)			((ulong)(X) & 0x0000fffffffffffflu)
+
+#define IS_VMALLOC_ADDR(X) (vt->vmalloc_start && (ulong)(X) >= vt->vmalloc_start)
+
+#define DEFAULT_MODULES_VADDR	0xffff800000000000lu
+#define MODULES_VADDR		(machdep->machspec->modules_vaddr)
+#define MODULES_END		(machdep->machspec->modules_end)
+#define VMALLOC_START		(machdep->machspec->vmalloc_start_addr)
+#define VMALLOC_END		(machdep->machspec->vmalloc_end)
+
+#define __SWP_TYPE_SHIFT	16
+#define __SWP_TYPE_BITS		8
+#define __SWP_TYPE_MASK		((1 << __SWP_TYPE_BITS) - 1)
+#define __SWP_OFFSET_SHIFT	(__SWP_TYPE_BITS + __SWP_TYPE_SHIFT)
+
+#define SWP_TYPE(entry)		(((entry) >> __SWP_TYPE_SHIFT) & __SWP_TYPE_MASK)
+#define SWP_OFFSET(entry)	((entry) >> __SWP_OFFSET_SHIFT)
+
+#define __swp_type(entry)	SWP_TYPE(entry)
+#define __swp_offset(entry)	SWP_OFFSET(entry)
+
+#define TIF_SIGPENDING		(1)
+
+#define _SECTION_SIZE_BITS	28
+#define _MAX_PHYSMEM_BITS	48
+#endif  /* LOONGARCH64 */
+
 #ifdef X86
 #define _32BIT_
 #define MACHINE_TYPE       "X86"
@@ -4775,6 +4823,10 @@ struct machine_specific {
 #define MAX_HEXADDR_STRLEN (16)
 #define UVADDR_PRLEN       (16)
 #endif
+#ifdef LOONGARCH64
+#define MAX_HEXADDR_STRLEN (16)
+#define UVADDR_PRLEN       (16)
+#endif
 
 #define BADADDR  ((ulong)(-1))
 #define BADVAL   ((ulong)(-1))
@@ -5396,6 +5448,9 @@ void dump_build_data(void);
 #ifdef SPARC64
 #define machdep_init(X) sparc64_init(X)
 #endif
+#ifdef LOONGARCH64
+#define machdep_init(X) loongarch64_init(X)
+#endif
 int clean_exit(int);
 int untrusted_file(FILE *, char *);
 char *readmem_function_name(void);
@@ -5887,6 +5942,10 @@ void display_help_screen(char *);
 #ifdef RISCV64
 #define dump_machdep_table(X) riscv64_dump_machdep_table(X)
 #endif
+#ifdef LOONGARCH64
+#define dump_machdep_table(X) loongarch64_dump_machdep_table(X)
+#endif
+
 extern char *help_pointer[];
 extern char *help_alias[];
 extern char *help_ascii[];
@@ -7108,6 +7167,107 @@ int sparc64_vmalloc_addr(ulong);
 #define display_idt_table() \
 	error(FATAL, "The -d option is not applicable to sparc64.\n")
 #endif
+
+/*
+ * loongarch64.c
+ */
+void loongarch64_display_regs_from_elf_notes(int, FILE *);
+#ifdef LOONGARCH64
+void loongarch64_init(int);
+void loongarch64_dump_machdep_table(ulong);
+
+#define display_idt_table() \
+	error(FATAL, "-d option is not applicable to LOONGARCH64 architecture\n")
+
+
+#define KSYMS_START     (0x1)
+
+struct machine_specific {
+	ulong phys_base;
+	ulong vmalloc_start_addr;
+	ulong modules_vaddr;
+	ulong modules_end;
+
+	struct loongarch64_pt_regs *crash_task_regs;
+};
+
+/*
+ * Basic page table format:
+ *
+ *   63  62 61       PALEN-1            12      10 9  8 7 6 5 4 3 2 1 0
+ * +----+--+--+------+--------------------+----+--+--+-+-+-+---+---+-+-+
+ * |RPLV|NX|NR|      |  PA[PALEN-1:12]    |    |SP|PN|W|P|G|MAT|PLV|D|V|
+ * +----+--+--+------+--------------------+----+--+--+-+-+-+---+---+-+-+
+ *
+ *
+ * Huge page table format:
+ *
+ *   63  62 61       PALEN-1            12      10 9  8 7 6 5 4 3 2 1 0
+ * +----+--+--+------+-----------------+--+----+--+--+-+-+-+---+---+-+-+
+ * |RPLV|NX|NR|      |  PA[PALEN-1:12] | G|    |SP|PN|W|P|H|MAT|PLV|D|V|
+ * +----+--+--+------+-----------------+--+----+--+--+-+-+-+---+---+-+-+
+ *
+ */
+/* from arch/loongarch/include/asm/pgtable-bits.h */
+
+/* Page table bits */
+#define	_PAGE_VALID_SHIFT	0
+#define	_PAGE_ACCESSED_SHIFT	0  /* Reuse Valid for Accessed */
+#define	_PAGE_DIRTY_SHIFT	1
+#define	_PAGE_PLV_SHIFT		2  /* 2~3, two bits */
+#define	_CACHE_SHIFT		4  /* 4~5, two bits */
+#define	_PAGE_GLOBAL_SHIFT	6
+#define	_PAGE_HUGE_SHIFT	6  /* HUGE is a PMD bit */
+#define	_PAGE_PRESENT_SHIFT	7
+#define	_PAGE_WRITE_SHIFT	8
+#define	_PAGE_MODIFIED_SHIFT	9
+#define	_PAGE_PROTNONE_SHIFT	10
+#define	_PAGE_SPECIAL_SHIFT	11
+#define	_PAGE_HGLOBAL_SHIFT	12 /* HGlobal is a PMD bit */
+#define	_PAGE_PFN_SHIFT		12
+#define	_PAGE_SWP_EXCLUSIVE_SHIFT 23
+#define	_PAGE_PFN_END_SHIFT	48
+#define	_PAGE_PRESENT_INVALID_SHIFT 60
+#define	_PAGE_NO_READ_SHIFT	61
+#define	_PAGE_NO_EXEC_SHIFT	62
+#define	_PAGE_RPLV_SHIFT	63
+
+#ifndef _ULCAST_
+#define _ULCAST_ (unsigned long)
+#endif
+
+/* Used by software */
+#define _PAGE_PRESENT		(_ULCAST_(1) << _PAGE_PRESENT_SHIFT)
+#define _PAGE_PRESENT_INVALID	(_ULCAST_(1) << _PAGE_PRESENT_INVALID_SHIFT)
+#define _PAGE_WRITE		(_ULCAST_(1) << _PAGE_WRITE_SHIFT)
+#define _PAGE_ACCESSED		(_ULCAST_(1) << _PAGE_ACCESSED_SHIFT)
+#define _PAGE_MODIFIED		(_ULCAST_(1) << _PAGE_MODIFIED_SHIFT)
+#define _PAGE_PROTNONE		(_ULCAST_(1) << _PAGE_PROTNONE_SHIFT)
+#define _PAGE_SPECIAL		(_ULCAST_(1) << _PAGE_SPECIAL_SHIFT)
+
+/* We borrow bit 23 to store the exclusive marker in swap PTEs. */
+#define _PAGE_SWP_EXCLUSIVE	(_ULCAST_(1) << _PAGE_SWP_EXCLUSIVE_SHIFT)
+
+/* Used by TLB hardware (placed in EntryLo*) */
+#define _PAGE_VALID		(_ULCAST_(1) << _PAGE_VALID_SHIFT)
+#define _PAGE_DIRTY		(_ULCAST_(1) << _PAGE_DIRTY_SHIFT)
+#define _PAGE_PLV		(_ULCAST_(3) << _PAGE_PLV_SHIFT)
+#define _PAGE_GLOBAL		(_ULCAST_(1) << _PAGE_GLOBAL_SHIFT)
+#define _PAGE_HUGE		(_ULCAST_(1) << _PAGE_HUGE_SHIFT)
+#define _PAGE_HGLOBAL		(_ULCAST_(1) << _PAGE_HGLOBAL_SHIFT)
+#define _PAGE_NO_READ		(_ULCAST_(1) << _PAGE_NO_READ_SHIFT)
+#define _PAGE_NO_EXEC		(_ULCAST_(1) << _PAGE_NO_EXEC_SHIFT)
+#define _PAGE_RPLV		(_ULCAST_(1) << _PAGE_RPLV_SHIFT)
+#define _CACHE_MASK		(_ULCAST_(3) << _CACHE_SHIFT)
+#define _PFN_SHIFT		(PAGESHIFT() - 12 + _PAGE_PFN_SHIFT)
+
+#define _PAGE_USER	(PLV_USER << _PAGE_PLV_SHIFT)
+#define _PAGE_KERN	(PLV_KERN << _PAGE_PLV_SHIFT)
+
+#define _PFN_MASK (~((_ULCAST_(1) << (_PFN_SHIFT)) - 1) & \
+		  ((_ULCAST_(1) << (_PAGE_PFN_END_SHIFT)) - 1))
+
+#endif /* LOONGARCH64 */
 
 /*
  *  netdump.c 
