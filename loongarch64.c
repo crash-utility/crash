@@ -46,6 +46,8 @@ static int loongarch64_uvtop(struct task_context *tc, ulong vaddr,
 			physaddr_t *paddr, int verbose);
 static int loongarch64_kvtop(struct task_context *tc, ulong kvaddr,
 			physaddr_t *paddr, int verbose);
+static int loongarch64_translate_pte(ulong pte, void *physaddr,
+			ulonglong pte64);
 
 /*
  * 3 Levels paging       PAGE_SIZE=16KB
@@ -79,6 +81,110 @@ typedef struct { ulong pte; } pte_t;
 #define LOONGARCH64_CPU_RIXI	(1UL << 23)	/* CPU has TLB Read/eXec Inhibit */
 
 static struct machine_specific loongarch64_machine_specific = { 0 };
+
+/*
+ * Check and print the flags on the page
+ */
+static void
+check_page_flags(ulong pte)
+{
+#define CHECK_PAGE_FLAG(flag)				\
+	if ((_PAGE_##flag) && (pte & _PAGE_##flag))	\
+		fprintf(fp, "%s" #flag, others++ ? "|" : "")
+
+	int others = 0;
+	fprintf(fp, "(");
+
+	if (pte) {
+		CHECK_PAGE_FLAG(VALID);
+		CHECK_PAGE_FLAG(DIRTY);
+		CHECK_PAGE_FLAG(PLV);
+
+		/* Determine whether it is a huge page format */
+		if (pte & _PAGE_HGLOBAL) {
+			CHECK_PAGE_FLAG(HUGE);
+			CHECK_PAGE_FLAG(HGLOBAL);
+		} else {
+			CHECK_PAGE_FLAG(GLOBAL);
+		}
+
+		CHECK_PAGE_FLAG(PRESENT);
+		CHECK_PAGE_FLAG(WRITE);
+		CHECK_PAGE_FLAG(PROTNONE);
+		CHECK_PAGE_FLAG(SPECIAL);
+		CHECK_PAGE_FLAG(NO_READ);
+		CHECK_PAGE_FLAG(NO_EXEC);
+		CHECK_PAGE_FLAG(RPLV);
+	} else {
+		fprintf(fp, "no mapping");
+	}
+
+	fprintf(fp, ")\n");
+}
+
+/*
+ * Translate a PTE, returning TRUE if the page is present.
+ * If a physaddr pointer is passed in, don't print anything.
+ */
+static int
+loongarch64_translate_pte(ulong pte, void *physaddr, ulonglong unused)
+{
+	char ptebuf[BUFSIZE];
+	char physbuf[BUFSIZE];
+	char buf1[BUFSIZE];
+	char buf2[BUFSIZE];
+	char buf3[BUFSIZE];
+	char *arglist[MAXARGS];
+	int page_present;
+	int c, len1, len2, len3;
+	ulong paddr;
+
+	paddr = PTOB(pte >> _PFN_SHIFT);
+	page_present = !!(pte & _PAGE_PRESENT);
+
+	if (physaddr) {
+		*(ulong *)physaddr = paddr;
+		return page_present;
+	}
+
+	sprintf(ptebuf, "%lx", pte);
+	len1 = MAX(strlen(ptebuf), strlen("PTE"));
+	fprintf(fp, "%s  ", mkstring(buf1, len1, CENTER | LJUST, "PTE"));
+
+	if (!page_present) {
+		swap_location(pte, buf1);
+		if ((c = parse_line(buf1, arglist)) != 3)
+			error(FATAL, "cannot determine swap location\n");
+
+		len2 = MAX(strlen(arglist[0]), strlen("SWAP"));
+		len3 = MAX(strlen(arglist[2]), strlen("OFFSET"));
+
+		fprintf(fp, "%s  %s\n",
+			mkstring(buf2, len2, CENTER|LJUST, "SWAP"),
+			mkstring(buf3, len3, CENTER|LJUST, "OFFSET"));
+
+		strcpy(buf2, arglist[0]);
+		strcpy(buf3, arglist[2]);
+		fprintf(fp, "%s  %s  %s\n",
+			mkstring(ptebuf, len1, CENTER|RJUST, NULL),
+			mkstring(buf2, len2, CENTER|RJUST, NULL),
+			mkstring(buf3, len3, CENTER|RJUST, NULL));
+		return page_present;
+	}
+
+	sprintf(physbuf, "%lx", paddr);
+	len2 = MAX(strlen(physbuf), strlen("PHYSICAL"));
+	fprintf(fp, "%s  ", mkstring(buf1, len2, CENTER | LJUST, "PHYSICAL"));
+
+	fprintf(fp, "FLAGS\n");
+	fprintf(fp, "%s  %s  ",
+		mkstring(ptebuf, len1, CENTER | RJUST, NULL),
+		mkstring(physbuf, len2, CENTER | RJUST, NULL));
+
+	check_page_flags(pte);
+
+	return page_present;
+}
 
 /*
  * Identify and print the segment name to which the virtual address belongs
@@ -146,6 +252,21 @@ loongarch64_pgd_vtop(ulong *pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		fprintf(fp, "  PTE: %016lx => %016lx\n", (ulong)pte_ptr, pte_val);
 	if (!pte_val)
 		goto no_page;
+
+	if (!(pte_val & _PAGE_PRESENT)) {
+		if (verbose) {
+			fprintf(fp, "\n");
+			loongarch64_translate_pte((ulong)pte_val, 0, pte_val);
+		}
+		return FALSE;
+	}
+
+	*paddr = PTOB(pte_val >> _PFN_SHIFT) + PAGEOFFSET(vaddr);
+
+	if (verbose) {
+		fprintf(fp, " PAGE: %016lx\n\n", PAGEBASE(*paddr));
+		loongarch64_translate_pte(pte_val, 0, 0);
+	}
 
 	return TRUE;
 no_page:
@@ -347,6 +468,7 @@ loongarch64_init(int when)
 		machdep->processor_speed = loongarch64_processor_speed;
 		machdep->get_stackbase = generic_get_stackbase;
 		machdep->get_stacktop = generic_get_stacktop;
+		machdep->translate_pte = loongarch64_translate_pte;
 		machdep->memory_size = generic_memory_size;
 		machdep->is_task_addr = loongarch64_is_task_addr;
 		machdep->get_smp_cpus = loongarch64_get_smp_cpus;
