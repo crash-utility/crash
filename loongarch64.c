@@ -51,6 +51,28 @@ static int loongarch64_translate_pte(ulong pte, void *physaddr,
 
 static void loongarch64_cmd_mach(void);
 static void loongarch64_display_machine_stats(void);
+
+static void loongarch64_back_trace_cmd(struct bt_info *bt);
+static void loongarch64_analyze_function(ulong start, ulong offset,
+			struct loongarch64_unwind_frame *current,
+			struct loongarch64_unwind_frame *previous);
+static void loongarch64_dump_backtrace_entry(struct bt_info *bt,
+			struct syment *sym, struct loongarch64_unwind_frame *current,
+			struct loongarch64_unwind_frame *previous, int level);
+static void loongarch64_dump_exception_stack(struct bt_info *bt, char *pt_regs);
+static int loongarch64_is_exception_entry(struct syment *sym);
+static void loongarch64_display_full_frame(struct bt_info *bt,
+			struct loongarch64_unwind_frame *current,
+			struct loongarch64_unwind_frame *previous);
+static void loongarch64_stackframe_init(void);
+static void loongarch64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp);
+static int loongarch64_get_dumpfile_stack_frame(struct bt_info *bt,
+			ulong *nip, ulong *ksp);
+static int loongarch64_get_frame(struct bt_info *bt, ulong *pcp, ulong *spp);
+static int loongarch64_init_active_task_regs(void);
+static int loongarch64_get_crash_notes(void);
+static int loongarch64_get_elf_notes(void);
+
 /*
  * 3 Levels paging       PAGE_SIZE=16KB
  *  PGD  |  PMD  |  PTE  |  OFFSET  |
@@ -82,7 +104,24 @@ typedef struct { ulong pte; } pte_t;
 
 #define LOONGARCH64_CPU_RIXI	(1UL << 23)	/* CPU has TLB Read/eXec Inhibit */
 
+#define LOONGARCH64_EF_R0		0
+#define LOONGARCH64_EF_RA		1
+#define LOONGARCH64_EF_SP		3
+#define LOONGARCH64_EF_FP		22
+#define LOONGARCH64_EF_CSR_EPC		32
+#define LOONGARCH64_EF_CSR_BADVADDR	33
+#define LOONGARCH64_EF_CSR_CRMD		34
+#define LOONGARCH64_EF_CSR_PRMD		35
+#define LOONGARCH64_EF_CSR_EUEN		36
+#define LOONGARCH64_EF_CSR_ECFG		37
+#define LOONGARCH64_EF_CSR_ESTAT	38
+
 static struct machine_specific loongarch64_machine_specific = { 0 };
+
+/*
+ * Holds registers during the crash.
+ */
+static struct loongarch64_pt_regs *panic_task_regs;
 
 /*
  * Check and print the flags on the page
@@ -390,6 +429,621 @@ loongarch64_display_machine_stats(void)
 }
 
 /*
+ * Unroll a kernel stack.
+ */
+static void
+loongarch64_back_trace_cmd(struct bt_info *bt)
+{
+	struct loongarch64_unwind_frame current, previous;
+	struct loongarch64_pt_regs *regs;
+	char pt_regs[SIZE(pt_regs)];
+	int level = 0;
+	int invalid_ok = 1;
+
+	if (bt->flags & BT_REGS_NOT_FOUND)
+		return;
+
+	previous.sp = previous.pc = previous.ra = 0;
+
+	current.pc = bt->instptr;
+	current.sp = bt->stkptr;
+	current.ra = 0;
+
+	if (!INSTACK(current.sp, bt))
+		return;
+
+	if (bt->machdep) {
+		regs = (struct loongarch64_pt_regs *)bt->machdep;
+		previous.pc = current.ra = regs->regs[LOONGARCH64_EF_RA];
+	}
+
+	while (current.sp <= bt->stacktop - 32 - SIZE(pt_regs)) {
+		struct syment *symbol = NULL;
+		ulong offset;
+
+		if (CRASHDEBUG(8))
+			fprintf(fp, "level %d pc %#lx ra %#lx sp %lx\n",
+				level, current.pc, current.ra, current.sp);
+
+		if (!IS_KVADDR(current.pc) && !invalid_ok)
+			return;
+
+		symbol = value_search(current.pc, &offset);
+		if (!symbol && !invalid_ok) {
+			error(FATAL, "PC is unknown symbol (%lx)", current.pc);
+			return;
+		}
+		invalid_ok = 0;
+
+		/*
+		 * If we get an address which points to the start of a
+		 * function, then it could one of the following:
+		 *
+		 *  - we are dealing with a noreturn function.  The last call
+		 *    from a noreturn function has an ra which points to the
+		 *    start of the function after it.  This is common in the
+		 *    oops callchain because of die() which is annotated as
+		 *    noreturn.
+		 *
+		 *  - we have taken an exception at the start of this function.
+		 *    In this case we already have the RA in current.ra.
+		 *
+		 *  - we are in one of these routines which appear with zero
+		 *    offset in manually-constructed stack frames:
+		 *
+		 *    * ret_from_exception
+		 *    * ret_from_irq
+		 *    * ret_from_fork
+		 *    * ret_from_kernel_thread
+		 */
+		if (symbol && !STRNEQ(symbol->name, "ret_from") && !offset &&
+			!current.ra && current.sp < bt->stacktop - 32 - SIZE(pt_regs)) {
+			if (CRASHDEBUG(8))
+				fprintf(fp, "zero offset at %s, try previous symbol\n",
+					symbol->name);
+
+			symbol = value_search(current.pc - 4, &offset);
+			if (!symbol) {
+				error(FATAL, "PC is unknown symbol (%lx)", current.pc);
+				return;
+			}
+		}
+
+		if (symbol && loongarch64_is_exception_entry(symbol)) {
+
+			GET_STACK_DATA(current.sp, pt_regs, sizeof(pt_regs));
+			regs = (struct loongarch64_pt_regs *) (pt_regs + OFFSET(pt_regs_regs));
+			previous.ra = regs->regs[LOONGARCH64_EF_RA];
+			previous.sp = regs->regs[LOONGARCH64_EF_SP];
+			current.ra = regs->csr_epc;
+
+			if (CRASHDEBUG(8))
+				fprintf(fp, "exception pc %#lx ra %#lx sp %lx\n",
+					previous.pc, previous.ra, previous.sp);
+
+			/* The PC causing the exception may have been invalid */
+			invalid_ok = 1;
+		} else if (symbol) {
+			loongarch64_analyze_function(symbol->value, offset, &current, &previous);
+		} else {
+			/*
+			 * The current PC is invalid. Assume that the code
+			 * jumped through a invalid pointer and that the SP has
+			 * not been adjusted.
+			 */
+			previous.sp = current.sp;
+		}
+
+		if (symbol)
+			loongarch64_dump_backtrace_entry(bt, symbol, &current, &previous, level++);
+
+		current.pc = current.ra;
+		current.sp = previous.sp;
+		current.ra = previous.ra;
+
+		if (CRASHDEBUG(8))
+			fprintf(fp, "next %d pc %#lx ra %#lx sp %lx\n",
+				level, current.pc, current.ra, current.sp);
+
+		previous.sp = previous.pc = previous.ra = 0;
+	}
+}
+
+static void
+loongarch64_analyze_function(ulong start, ulong offset,
+		      struct loongarch64_unwind_frame *current,
+		      struct loongarch64_unwind_frame *previous)
+{
+	ulong i;
+	ulong rapos = 0;
+	ulong spadjust = 0;
+	uint32_t *funcbuf, *ip;
+
+	if (CRASHDEBUG(8))
+		fprintf(fp, "%s: start %#lx offset %#lx\n",
+			__func__, start, offset);
+
+	if (!offset) {
+		previous->sp = current->sp;
+		return;
+	}
+
+	ip = funcbuf = (uint32_t *)GETBUF(offset);
+	if (!readmem(start, KVADDR, funcbuf, offset,
+		     "loongarch64_analyze_function", RETURN_ON_ERROR)) {
+		FREEBUF(funcbuf);
+		error(WARNING, "Cannot read function at %16lx\n", start);
+		return;
+	}
+
+	for (i = 0; i < offset; i += 4) {
+		ulong insn = *ip & 0xffffffff;
+		ulong si12 = (insn >> 10) & 0xfff;	/* bit[10:21] */
+
+		if (CRASHDEBUG(8))
+			fprintf(fp, "insn @ %#lx = %#lx\n", start + i, insn);
+
+		if ((insn & 0xffc003ff) == 0x02800063 || /* addi.w sp,sp,si12 */
+		    (insn & 0xffc003ff) == 0x02c00063) { /* addi.d sp,sp,si12 */
+			if (!(si12 & 0x800)) /* si12 < 0 */
+				break;
+			spadjust += 0x1000 - si12;
+			if (CRASHDEBUG(8))
+				fprintf(fp, "si12 =%lu ,spadjust = %lu\n", si12, spadjust);
+		} else if ((insn & 0xffc003ff) == 0x29800061 || /* st.w ra,sp,si12 */
+			   (insn & 0xffc003ff) == 0x29c00061) { /* st.d ra,sp,si12 */
+			rapos = current->sp + si12;
+			if (CRASHDEBUG(8))
+				fprintf(fp, "rapos %lx\n", rapos);
+			break;
+		}
+
+		ip++;
+	}
+
+	FREEBUF(funcbuf);
+
+	previous->sp = current->sp + spadjust;
+
+	if (rapos && !readmem(rapos, KVADDR, &current->ra,
+			      sizeof(current->ra), "RA from stack",
+			      RETURN_ON_ERROR)) {
+		error(FATAL, "Cannot read RA from stack %lx", rapos);
+		return;
+	}
+}
+
+static void
+loongarch64_dump_backtrace_entry(struct bt_info *bt, struct syment *sym,
+			struct loongarch64_unwind_frame *current,
+			struct loongarch64_unwind_frame *previous, int level)
+{
+	const char *name = sym ? sym->name : "(invalid)";
+	struct load_module *lm;
+	char *name_plus_offset = NULL;
+	struct syment *symp;
+	ulong symbol_offset;
+	char buf[BUFSIZE];
+	char pt_regs[SIZE(pt_regs)];
+
+	if (bt->flags & BT_SYMBOL_OFFSET) {
+		symp = value_search(current->pc, &symbol_offset);
+
+		if (symp && symbol_offset)
+			name_plus_offset =
+				value_to_symstr(current->pc, buf, bt->radix);
+	}
+
+	fprintf(fp, "%s#%d [%016lx] %s at %016lx", level < 10 ? " " : "", level,
+		current->sp, name_plus_offset ? name_plus_offset : name,
+		current->pc);
+
+	if (module_symbol(current->pc, NULL, &lm, NULL, 0))
+		fprintf(fp, " [%s]", lm->mod_name);
+
+	fprintf(fp, "\n");
+
+	/*
+	 * 'bt -l', get a line number associated with a current pc address.
+	 */
+	if (bt->flags & BT_LINE_NUMBERS) {
+		get_line_number(current->pc, buf, FALSE);
+		if (strlen(buf))
+			fprintf(fp, "    %s\n", buf);
+	}
+
+	if (sym && loongarch64_is_exception_entry(sym)) {
+		GET_STACK_DATA(current->sp, &pt_regs, SIZE(pt_regs));
+		loongarch64_dump_exception_stack(bt, pt_regs);
+	}
+
+	/* bt -f */
+	if (bt->flags & BT_FULL) {
+		fprintf(fp, "    "
+			"[PC: %016lx RA: %016lx SP: %016lx SIZE: %ld]\n",
+			current->pc, current->ra, current->sp,
+			previous->sp - current->sp);
+		loongarch64_display_full_frame(bt, current, previous);
+	}
+}
+
+static void
+loongarch64_dump_exception_stack(struct bt_info *bt, char *pt_regs)
+{
+	struct loongarch64_pt_regs *regs;
+	int i;
+	char buf[BUFSIZE];
+
+	regs = (struct loongarch64_pt_regs *) (pt_regs + OFFSET(pt_regs_regs));
+
+	for (i = 0; i < 32; i += 4) {
+		fprintf(fp, "    $%2d      : %016lx %016lx %016lx %016lx\n",
+			i, regs->regs[i], regs->regs[i+1],
+			regs->regs[i+2], regs->regs[i+3]);
+	}
+
+	value_to_symstr(regs->csr_epc, buf, 16);
+	fprintf(fp, "    epc      : %016lx %s\n", regs->csr_epc, buf);
+
+	value_to_symstr(regs->regs[LOONGARCH64_EF_RA], buf, 16);
+	fprintf(fp, "    ra       : %016lx %s\n", regs->regs[LOONGARCH64_EF_RA], buf);
+
+	fprintf(fp, "    CSR crmd : %016lx\n", regs->csr_crmd);
+	fprintf(fp, "    CSR prmd : %016lx\n", regs->csr_prmd);
+	fprintf(fp, "    CSR ecfg : %016lx\n", regs->csr_ecfg);
+	fprintf(fp, "    CSR estat: %016lx\n", regs->csr_estat);
+	fprintf(fp, "    CSR euen : %016lx\n", regs->csr_euen);
+
+	fprintf(fp, "    BadVA    : %016lx\n", regs->csr_badvaddr);
+}
+
+static int
+loongarch64_is_exception_entry(struct syment *sym)
+{
+	return STREQ(sym->name, "ret_from_exception") ||
+		STREQ(sym->name, "ret_from_irq") ||
+		STREQ(sym->name, "work_resched") ||
+		STREQ(sym->name, "handle_sys");
+}
+
+/*
+ * 'bt -f' commend output
+ * Display all stack data contained in a frame
+ */
+static void
+loongarch64_display_full_frame(struct bt_info *bt, struct loongarch64_unwind_frame *current,
+			  struct loongarch64_unwind_frame *previous)
+{
+	int i, u_idx;
+	ulong *up;
+	ulong words, addr;
+	char buf[BUFSIZE];
+
+	if (previous->sp < current->sp)
+		return;
+
+	if (!(INSTACK(previous->sp, bt) && INSTACK(current->sp, bt)))
+		return;
+
+	words = (previous->sp - current->sp) / sizeof(ulong) + 1;
+	addr = current->sp;
+	u_idx = (current->sp - bt->stackbase) / sizeof(ulong);
+
+	for (i = 0; i < words; i++, u_idx++) {
+		if (!(i & 1))
+			fprintf(fp, "%s    %lx: ", i ? "\n" : "", addr);
+
+		up = (ulong *)(&bt->stackbuf[u_idx*sizeof(ulong)]);
+		fprintf(fp, "%s ", format_stack_entry(bt, buf, *up, 0));
+		addr += sizeof(ulong);
+	}
+	fprintf(fp, "\n");
+}
+
+static void
+loongarch64_stackframe_init(void)
+{
+	long task_struct_thread = MEMBER_OFFSET("task_struct", "thread");
+	long thread_reg03_sp = MEMBER_OFFSET("thread_struct", "reg03");
+	long thread_reg01_ra = MEMBER_OFFSET("thread_struct", "reg01");
+
+	if ((task_struct_thread == INVALID_OFFSET) ||
+	    (thread_reg03_sp == INVALID_OFFSET) ||
+	    (thread_reg01_ra == INVALID_OFFSET)) {
+		error(FATAL,
+		      "cannot determine thread_struct offsets\n");
+		return;
+	}
+
+	ASSIGN_OFFSET(task_struct_thread_reg03) =
+		task_struct_thread + thread_reg03_sp;
+	ASSIGN_OFFSET(task_struct_thread_reg01) =
+		task_struct_thread + thread_reg01_ra;
+
+	MEMBER_OFFSET_INIT(elf_prstatus_pr_reg, "elf_prstatus", "pr_reg");
+	STRUCT_SIZE_INIT(note_buf, "note_buf_t");
+}
+
+/*
+ * Get a stack frame combination of pc and ra from the most relevant spot.
+ */
+static void
+loongarch64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
+{
+	ulong ksp, nip;
+	int ret = 0;
+
+	nip = ksp = 0;
+	bt->machdep = NULL;
+
+	if (DUMPFILE() && is_task_active(bt->task)) {
+		ret = loongarch64_get_dumpfile_stack_frame(bt, &nip, &ksp);
+	}
+	else {
+		ret = loongarch64_get_frame(bt, &nip, &ksp);
+	}
+
+	if (!ret)
+		error(WARNING, "cannot determine starting stack frame for task %lx\n",
+			bt->task);
+
+	if (pcp)
+		*pcp = nip;
+	if (spp)
+		*spp = ksp;
+}
+
+/*
+ * Get the starting point for the active cpu in a diskdump.
+ */
+static int
+loongarch64_get_dumpfile_stack_frame(struct bt_info *bt, ulong *nip, ulong *ksp)
+{
+	const struct machine_specific *ms = machdep->machspec;
+	struct loongarch64_pt_regs *regs;
+	ulong epc, sp;
+
+	if (!ms->crash_task_regs) {
+		bt->flags |= BT_REGS_NOT_FOUND;
+		return FALSE;
+	}
+
+	/*
+	 * We got registers for panic task from crash_notes. Just return them.
+	 */
+	regs = &ms->crash_task_regs[bt->tc->processor];
+	epc = regs->csr_epc;
+	sp = regs->regs[LOONGARCH64_EF_SP];
+
+	if (!epc && !sp) {
+		bt->flags |= BT_REGS_NOT_FOUND;
+		return FALSE;
+	}
+
+	if (nip)
+		*nip = epc;
+	if (ksp)
+		*ksp = sp;
+
+	bt->machdep = regs;
+
+	return TRUE;
+}
+
+/*
+ * Do the work for loongarch64_get_stack_frame() for non-active tasks.
+ * Get SP and PC values for idle tasks.
+ */
+static int
+loongarch64_get_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
+{
+	if (!bt->tc || !(tt->flags & THREAD_INFO))
+		return FALSE;
+
+	if (!readmem(bt->task + OFFSET(task_struct_thread_reg01),
+		     KVADDR, pcp, sizeof(*pcp),
+		     "thread_struct.regs01",
+		     RETURN_ON_ERROR)) {
+		return FALSE;
+	}
+
+	if (!readmem(bt->task + OFFSET(task_struct_thread_reg03),
+		     KVADDR, spp, sizeof(*spp),
+		     "thread_struct.regs03",
+		     RETURN_ON_ERROR)) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+static int
+loongarch64_init_active_task_regs(void)
+{
+	int retval;
+
+	retval = loongarch64_get_crash_notes();
+	if (retval == TRUE)
+		return retval;
+
+	return loongarch64_get_elf_notes();
+}
+
+/*
+ * Retrieve task registers for the time of the crash.
+ */
+static int
+loongarch64_get_crash_notes(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong crash_notes;
+	Elf64_Nhdr *note;
+	ulong offset;
+	char *buf, *p;
+	ulong *notes_ptrs;
+	ulong i;
+
+	/*
+	 * crash_notes contains per cpu memory for storing cpu states
+	 * in case of system crash.
+	 */
+	if (!symbol_exists("crash_notes"))
+		return FALSE;
+
+	crash_notes = symbol_value("crash_notes");
+
+	notes_ptrs = (ulong *)GETBUF(kt->cpus*sizeof(notes_ptrs[0]));
+
+	/*
+	 * Read crash_notes for the first CPU. crash_notes are in standard ELF
+	 * note format.
+	 */
+	if (!readmem(crash_notes, KVADDR, &notes_ptrs[kt->cpus-1],
+	    sizeof(notes_ptrs[kt->cpus-1]), "crash_notes",
+		     RETURN_ON_ERROR)) {
+		error(WARNING, "cannot read crash_notes\n");
+		FREEBUF(notes_ptrs);
+		return FALSE;
+	}
+
+	if (symbol_exists("__per_cpu_offset")) {
+
+		/*
+		 * Add __per_cpu_offset for each cpu to form the pointer to the notes
+		 */
+		for (i = 0; i < kt->cpus; i++)
+			notes_ptrs[i] = notes_ptrs[kt->cpus-1] + kt->__per_cpu_offset[i];
+	}
+
+	buf = GETBUF(SIZE(note_buf));
+
+	if (!(panic_task_regs = calloc((size_t)kt->cpus, sizeof(*panic_task_regs))))
+		error(FATAL, "cannot calloc panic_task_regs space\n");
+
+	for (i = 0; i < kt->cpus; i++) {
+
+		if (!readmem(notes_ptrs[i], KVADDR, buf, SIZE(note_buf), "note_buf_t",
+			     RETURN_ON_ERROR)) {
+			error(WARNING,
+				"cannot find NT_PRSTATUS note for cpu: %d\n", i);
+			goto fail;
+		}
+
+		/*
+		 * Do some sanity checks for this note before reading registers from it.
+		 */
+		note = (Elf64_Nhdr *)buf;
+		p = buf + sizeof(Elf64_Nhdr);
+
+		/*
+		 * dumpfiles created with qemu won't have crash_notes, but there will
+		 * be elf notes; dumpfiles created by kdump do not create notes for
+		 * offline cpus.
+		 */
+		if (note->n_namesz == 0 && (DISKDUMP_DUMPFILE() || KDUMP_DUMPFILE())) {
+			if (DISKDUMP_DUMPFILE())
+				note = diskdump_get_prstatus_percpu(i);
+			else if (KDUMP_DUMPFILE())
+				note = netdump_get_prstatus_percpu(i);
+			if (note) {
+				/*
+				 * SIZE(note_buf) accounts for a "final note", which is a
+				 * trailing empty elf note header.
+				 */
+				long notesz = SIZE(note_buf) - sizeof(Elf64_Nhdr);
+
+				if (sizeof(Elf64_Nhdr) + roundup(note->n_namesz, 4) +
+				    note->n_descsz == notesz)
+					BCOPY((char *)note, buf, notesz);
+			} else {
+				error(WARNING,
+					"cannot find NT_PRSTATUS note for cpu: %d\n", i);
+				continue;
+			}
+		}
+
+		/*
+		 * Check the sanity of NT_PRSTATUS note only for each online cpu.
+		 */
+		if (note->n_type != NT_PRSTATUS) {
+			error(WARNING, "invalid NT_PRSTATUS note (n_type != NT_PRSTATUS)\n");
+			goto fail;
+		}
+		if (!STRNEQ(p, "CORE")) {
+			error(WARNING, "invalid NT_PRSTATUS note (name != \"CORE\"\n");
+			goto fail;
+		}
+
+		/*
+		 * Find correct location of note data. This contains elf_prstatus
+		 * structure which has registers etc. for the crashed task.
+		 */
+		offset = sizeof(Elf64_Nhdr);
+		offset = roundup(offset + note->n_namesz, 4);
+		p = buf + offset; /* start of elf_prstatus */
+
+		BCOPY(p + OFFSET(elf_prstatus_pr_reg), &panic_task_regs[i],
+		      sizeof(panic_task_regs[i]));
+	}
+
+	/*
+	 * And finally we have the registers for the crashed task. This is
+	 * used later on when dumping backtrace.
+	 */
+	ms->crash_task_regs = panic_task_regs;
+
+	FREEBUF(buf);
+	FREEBUF(notes_ptrs);
+	return TRUE;
+
+fail:
+	FREEBUF(buf);
+	FREEBUF(notes_ptrs);
+	free(panic_task_regs);
+	return FALSE;
+}
+
+static int
+loongarch64_get_elf_notes(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+	int i;
+
+	if (!DISKDUMP_DUMPFILE() && !KDUMP_DUMPFILE())
+		return FALSE;
+
+	panic_task_regs = calloc(kt->cpus, sizeof(*panic_task_regs));
+	if (!panic_task_regs)
+		error(FATAL, "cannot calloc panic_task_regs space\n");
+
+	for (i = 0; i < kt->cpus; i++) {
+		Elf64_Nhdr *note = NULL;
+		size_t len;
+
+		if (DISKDUMP_DUMPFILE())
+			note = diskdump_get_prstatus_percpu(i);
+		else if (KDUMP_DUMPFILE())
+			note = netdump_get_prstatus_percpu(i);
+
+		if (!note) {
+			error(WARNING,
+			      "cannot find NT_PRSTATUS note for cpu: %d\n", i);
+			continue;
+		}
+
+		len = sizeof(Elf64_Nhdr);
+		len = roundup(len + note->n_namesz, 4);
+
+		BCOPY((char *)note + len + OFFSET(elf_prstatus_pr_reg),
+		      &panic_task_regs[i], sizeof(panic_task_regs[i]));
+	}
+
+	ms->crash_task_regs = panic_task_regs;
+
+	return TRUE;
+}
+
+/*
  * Accept or reject a symbol from the kernel namelist.
  */
 static int
@@ -429,7 +1083,7 @@ loongarch64_get_page_size(void)
 static ulong
 loongarch64_vmalloc_start(void)
 {
-	return 0;
+	return first_vmalloc_address();
 }
 
 /*
@@ -520,6 +1174,8 @@ loongarch64_init(int when)
 		machdep->uvtop = loongarch64_uvtop;
 		machdep->kvtop = loongarch64_kvtop;
 		machdep->cmd_mach = loongarch64_cmd_mach;
+		machdep->back_trace = loongarch64_back_trace_cmd;
+		machdep->get_stack_frame = loongarch64_get_stack_frame;
 		machdep->vmalloc_start = loongarch64_vmalloc_start;
 		machdep->processor_speed = loongarch64_processor_speed;
 		machdep->get_stackbase = generic_get_stackbase;
@@ -536,11 +1192,21 @@ loongarch64_init(int when)
 	case POST_GDB:
 		machdep->section_size_bits = _SECTION_SIZE_BITS;
 		machdep->max_physmem_bits = _MAX_PHYSMEM_BITS;
+		loongarch64_stackframe_init();
 		if (!machdep->hz)
 			machdep->hz = 250;
 		break;
 
 	case POST_VM:
+		/*
+		 * crash_notes contains machine specific information about the
+		 * crash. In particular, it contains CPU registers at the time
+		 * of the crash. We need this information to extract correct
+		 * backtraces from the panic task.
+		 */
+		if (!ACTIVE() && !loongarch64_init_active_task_regs())
+			error(WARNING,"cannot retrieve registers for active task%s\n\n",
+				kt->cpus > 1 ? "s" : "");
 		break;
 	}
 }

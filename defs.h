@@ -2234,6 +2234,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long irq_data_irq;
 	long zspage_huge;
 	long zram_comp_algs;
+	long task_struct_thread_reg01;
+	long task_struct_thread_reg03;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

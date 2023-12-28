@@ -9815,6 +9815,10 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(task_struct_thread_esp));
         fprintf(fp, "        task_struct_thread_ksp: %ld\n",
                 OFFSET(task_struct_thread_ksp));
+		fprintf(fp, "      task_struct_thread_reg01: %ld\n",
+				OFFSET(task_struct_thread_reg01));
+		fprintf(fp, "      task_struct_thread_reg03: %ld\n",
+				OFFSET(task_struct_thread_reg03));
         fprintf(fp, "      task_struct_thread_reg29: %ld\n",
                 OFFSET(task_struct_thread_reg29));
         fprintf(fp, "      task_struct_thread_reg31: %ld\n",
