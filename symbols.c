@@ -5561,7 +5561,7 @@ value_search_module_6_4(ulong value, ulong *offset)
 			sp = lm->symtable[t];
 			sp_end = lm->symend[t];
 
-			if (value < sp->value)
+			if (value < sp->value || value > sp_end->value)
 				continue;
 
 			splast = NULL;
@@ -5645,6 +5645,9 @@ retry:
 
 		if (sp->value > value)   /* invalid -- between modules */
 			break;
+
+		if (sp_end->value < value) /* not within the module */
+			continue;
 
 	       /*
 		*  splast will contain the last module symbol encountered.
