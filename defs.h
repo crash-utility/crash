@@ -2239,6 +2239,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long mnt_namespace_mounts;
 	long mnt_namespace_nr_mounts;
 	long mount_mnt_node;
+	long log_caller_id;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -6108,12 +6109,13 @@ void dump_log(int);
 void parse_kernel_version(char *);
 
 #define LOG_LEVEL(v) ((v) & 0x07)
-#define SHOW_LOG_LEVEL (0x1)
-#define SHOW_LOG_DICT  (0x2)
-#define SHOW_LOG_TEXT  (0x4)
-#define SHOW_LOG_AUDIT (0x8)
-#define SHOW_LOG_CTIME (0x10)
-#define SHOW_LOG_SAFE  (0x20)
+#define SHOW_LOG_LEVEL    (0x1)
+#define SHOW_LOG_DICT     (0x2)
+#define SHOW_LOG_TEXT     (0x4)
+#define SHOW_LOG_AUDIT    (0x8)
+#define SHOW_LOG_CTIME   (0x10)
+#define SHOW_LOG_SAFE    (0x20)
+#define SHOW_LOG_CALLER  (0x40)
 void set_cpu(int);
 void clear_machdep_cache(void);
 struct stack_hook *gather_text_list(struct bt_info *);
@@ -7587,6 +7589,10 @@ int calc_kaslr_offset(ulong *, ulong *);
  * printk.c
  */
 void dump_lockless_record_log(int);
+
+/* caller_id default and max character sizes based on pid field size */
+#define PID_CHARS_MAX 16        /* Max Number of PID characters */
+#define PID_CHARS_DEFAULT 8     /* Default number of PID characters */
 
 /*
  *  gnu_binutils.c

@@ -4024,7 +4024,7 @@ NULL
 char *help_log[] = {
 "log",
 "dump system message buffer",
-"[-Ttdmas]",
+"[-Ttdmasc]",
 "  This command dumps the kernel log_buf contents in chronological order.  The",
 "  command supports the older log_buf formats, which may or may not contain a",
 "  timestamp inserted prior to each message, as well as the newer variable-length", 
@@ -4047,7 +4047,11 @@ char *help_log[] = {
 "        been copied out to the user-space audit daemon.",
 "    -s  Dump the printk logs remaining in kernel safe per-CPU buffers that",
 "        have not been flushed out to log_buf.",
-" ",        
+"    -c  Display the caller id field that identifies either the thread id or",
+"        the CPU id (if in CPU context) that called printk(), if available.",
+"        Generally available on Linux 5.1 to 5.9 kernels configured with",
+"        CONFIG_PRINTK_CALLER or Linux 5.10 and later kernels.",
+" ",
 "\nEXAMPLES",
 "  Dump the kernel message buffer:\n",
 "    %s> log",
@@ -4215,6 +4219,17 @@ char *help_log[] = {
 "    CPU: 0  ADDR: ffff8ca4fbc1ad00 LEN: 0  MESSAGE_LOST: 0",
 "      (empty)",
 "    ...",
+" ",
+"  Display the caller id that identifies the thread id of the task (begins",
+"  with 'T') or the processor id (begins with 'C' for in CPU context) that",
+"  called printk(), if available.\n",
+"    %s> log -c",
+"    ...",
+"    [    0.014179] [     T1] Secure boot disabled",
+"    [    0.014179] [    T29] RAMDISK: [mem 0x3cf4f000-0x437bbfff]",
+"    [    0.198789] [     C0] DMAR: DRHD: handling fault status reg 3",
+"    ...",
+
 NULL               
 };
 

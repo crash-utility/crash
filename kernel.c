@@ -5089,7 +5089,7 @@ cmd_log(void)
 
 	msg_flags = 0;
 
-        while ((c = getopt(argcnt, args, "Ttdmas")) != EOF) {
+        while ((c = getopt(argcnt, args, "Ttdmasc")) != EOF) {
                 switch(c)
                 {
 		case 'T':
@@ -5109,6 +5109,9 @@ cmd_log(void)
 			break;
 		case 's':
 			msg_flags |= SHOW_LOG_SAFE;
+			break;
+		case 'c':
+			msg_flags |= SHOW_LOG_CALLER;
 			break;
                 default:
                         argerrs++;
@@ -5369,6 +5372,25 @@ dump_log_entry(char *logptr, int msg_flags)
 		fprintf(fp, "%s", buf);
 	}
 
+	/*
+	 * The PRINTK_CALLER id field was introduced with Linux-5.1 so if
+	 * requested, Kernel version >= 5.1 and field exists print caller_id.
+	 */
+	if (msg_flags & SHOW_LOG_CALLER &&
+			VALID_MEMBER(log_caller_id)) {
+		const unsigned int cpuid = 0x80000000;
+		char cbuf[PID_CHARS_MAX];
+		unsigned int cid;
+
+		/* Get id type, isolate just id value in cid for print */
+		cid = UINT(logptr + OFFSET(log_caller_id));
+		sprintf(cbuf, "%c%d", (cid & cpuid) ? 'C' : 'T', cid & ~cpuid);
+		sprintf(buf, "[%*s] ", PID_CHARS_DEFAULT, cbuf);
+
+		ilen += strlen(buf);
+		fprintf(fp, "%s", buf);
+	}
+
 	level = LOG_LEVEL(level);
 
 	if (msg_flags & SHOW_LOG_LEVEL) {
@@ -5424,6 +5446,7 @@ dump_variable_length_record_log(int msg_flags)
 			 * from log to printk_log.  See 62e32ac3505a0cab.
 			 */
 			log_struct_name = "printk_log";
+			MEMBER_OFFSET_INIT(log_caller_id, "printk_log", "caller_id");
 		} else 
 			log_struct_name = "log";
 

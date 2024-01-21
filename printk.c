@@ -9,6 +9,7 @@ struct prb_map {
 	unsigned long desc_ring_count;
 	char *descs;
 	char *infos;
+	unsigned int pid_max_chars;
 
 	char *text_data_ring;
 	unsigned long text_data_ring_size;
@@ -162,6 +163,24 @@ dump_record(struct prb_map *m, unsigned long id, int msg_flags)
 		fprintf(fp, "%s", buf);
 	}
 
+	/*
+	 * The lockless ringbuffer introduced in Linux-5.10 always has
+	 * the caller_id field available, so if requested, print it.
+	 */
+	if (msg_flags & SHOW_LOG_CALLER) {
+		const unsigned int cpuid = 0x80000000;
+		char cbuf[PID_CHARS_MAX];
+		unsigned int cid;
+
+		/* Get id type, isolate id value in cid for print */
+		cid = UINT(info + OFFSET(printk_info_caller_id));
+		sprintf(cbuf, "%c%d", (cid & cpuid) ? 'C' : 'T', cid & ~cpuid);
+		sprintf(buf, "[%*s] ", m->pid_max_chars, cbuf);
+
+		ilen += strlen(buf);
+		fprintf(fp, "%s", buf);
+	}
+
 	if (msg_flags & SHOW_LOG_LEVEL) {
 		level = UCHAR(info + OFFSET(printk_info_level)) >> 5;
 		sprintf(buf, "<%x>", level);
@@ -260,6 +279,21 @@ dump_lockless_record_log(int msg_flags)
 		     "prb_text_data_ring contents", RETURN_ON_ERROR|QUIET)) {
 		error(WARNING, "\ncannot read prb_text_data_ring contents\n");
 		goto out_text_data;
+	}
+
+	/* If caller_id was requested, get the pid_max value for print */
+	if (msg_flags & SHOW_LOG_CALLER) {
+		unsigned int pidmax;
+
+		get_symbol_data("pid_max", sizeof(pidmax), &pidmax);
+		if (pidmax <= 99999)
+			m.pid_max_chars = 6;
+		else if (pidmax <= 999999)
+			m.pid_max_chars = 7;
+		else
+			m.pid_max_chars = PID_CHARS_DEFAULT;
+	} else {
+		m.pid_max_chars = PID_CHARS_DEFAULT;
 	}
 
 	/* ready to go */

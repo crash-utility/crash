@@ -11550,6 +11550,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(log_level));
 	fprintf(fp, "               log_flags_level: %ld\n",
 		OFFSET(log_flags_level));
+	fprintf(fp, "                 log_caller_id: %ld\n", OFFSET(log_caller_id));
 
 	fprintf(fp, "               printk_info_seq: %ld\n", OFFSET(printk_info_seq));
 	fprintf(fp, "           printk_info_ts_nseq: %ld\n", OFFSET(printk_info_ts_nsec));
