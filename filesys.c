@@ -1634,6 +1634,31 @@ get_mount_list(int *cntptr, struct task_context *namespace_context)
 			&mnt_ns, sizeof(void *), "nsproxy mnt_ns", 
 			RETURN_ON_ERROR|QUIET))
 			error(FATAL, "cannot determine mount list location!\n");
+
+		/* Linux 6.8 and later keep list of mounts in an rbtree. */
+		if (VALID_MEMBER(mnt_namespace_nr_mounts)) {
+			uint nr_mounts;
+			ulong *mntlist, *l;
+			struct rb_root *mounts;
+			struct rb_node *node;
+
+			readmem(mnt_ns + OFFSET(mnt_namespace_nr_mounts), KVADDR, &nr_mounts,
+				sizeof(uint), "mnt_namespace.nr_mounts", FAULT_ON_ERROR);
+
+			if (!nr_mounts)
+				return NULL;
+
+			mounts = (struct rb_root *)(mnt_ns + OFFSET(mnt_namespace_mounts));
+
+			mntlist = (ulong *)GETBUF(sizeof(ulong) * nr_mounts);
+			l = mntlist;
+			for (node = rb_first(mounts); node; l++, node = rb_next(node))
+				*l = (ulong)node - OFFSET(mount_mnt_node);
+
+			*cntptr = nr_mounts;
+			return mntlist;
+		}
+
         	if (!readmem(mnt_ns + OFFSET(mnt_namespace_root), KVADDR, 
 			&root, sizeof(void *), "mnt_namespace root", 
 			RETURN_ON_ERROR|QUIET))
@@ -2063,6 +2088,10 @@ vfs_init(void)
 		MEMBER_OFFSET_INIT(nsproxy_mnt_ns, "nsproxy", "mnt_ns");
         	MEMBER_OFFSET_INIT(mnt_namespace_root, "mnt_namespace", "root");
         	MEMBER_OFFSET_INIT(mnt_namespace_list, "mnt_namespace", "list");
+		/* Linux 6.8 and later */
+		MEMBER_OFFSET_INIT(mnt_namespace_mounts, "mnt_namespace", "mounts");
+		MEMBER_OFFSET_INIT(mnt_namespace_nr_mounts, "mnt_namespace", "nr_mounts");
+		MEMBER_OFFSET_INIT(mount_mnt_node, "mount", "mnt_node");
 	} else if (THIS_KERNEL_VERSION >= LINUX(2,4,20)) {
 		if (CRASHDEBUG(2))
 			fprintf(fp, "hardwiring namespace stuff\n");

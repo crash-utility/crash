@@ -2236,6 +2236,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long zram_comp_algs;
 	long task_struct_thread_reg01;
 	long task_struct_thread_reg03;
+	long mnt_namespace_mounts;
+	long mnt_namespace_nr_mounts;
+	long mount_mnt_node;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

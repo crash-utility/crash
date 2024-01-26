@@ -9925,6 +9925,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(mnt_namespace_root));
 	fprintf(fp, "            mnt_namespace_list: %ld\n",
 		OFFSET(mnt_namespace_list));
+	fprintf(fp, "          mnt_namespace_mounts: %ld\n", OFFSET(mnt_namespace_mounts));
+	fprintf(fp, "       mnt_namespace_nr_mounts: %ld\n", OFFSET(mnt_namespace_nr_mounts));
 
 	fprintf(fp, "             pid_namespace_idr: %ld\n",
 		OFFSET(pid_namespace_idr));
@@ -10581,6 +10583,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(mount_mnt_devname));
 	fprintf(fp, "                     mount_mnt: %ld\n",
 		OFFSET(mount_mnt));
+	fprintf(fp, "                mount_mnt_node: %ld\n", OFFSET(mount_mnt_node));
 	fprintf(fp, "                namespace_root: %ld\n",
 			OFFSET(namespace_root));
 	fprintf(fp, "                namespace_list: %ld\n",
