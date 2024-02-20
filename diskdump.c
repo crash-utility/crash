@@ -3069,6 +3069,21 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 		      " with lzo library\n");
 		return 0;
 #endif
+	} else if (STREQ(name, "lzo-rle")) {
+#ifdef LZO
+		if (!(dd->flags & LZO_SUPPORTED)) {
+			if (lzo_init() == LZO_E_OK)
+				dd->flags |= LZO_SUPPORTED;
+			else
+				return 0;
+		}
+		decompressor = (void *)&lzorle_decompress_safe;
+#else
+		error(WARNING,
+		      "zram decompress error: this executable needs to be built"
+		      " with lzo-rle library\n");
+		return 0;
+#endif
 	} else { /* todo: support more compressor */
 		error(WARNING, "only the lzo compressor is supported\n");
 		return 0;

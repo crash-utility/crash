@@ -74,7 +74,8 @@ CFILES=main.c tools.c global_data.c memory.c filesys.c help.c task.c \
 	xen_hyper.c xen_hyper_command.c xen_hyper_global_data.c \
 	xen_hyper_dump_tables.c kvmdump.c qemu.c qemu-load.c sadump.c ipcs.c \
 	ramdump.c vmware_vmss.c vmware_guestdump.c \
-	xen_dom0.c kaslr_helper.c sbitmap.c maple_tree.c
+	xen_dom0.c kaslr_helper.c sbitmap.c maple_tree.c \
+	lzorle_decompress.c
 
 SOURCE_FILES=${CFILES} ${GENERIC_HFILES} ${MCORE_HFILES} \
 	${REDHAT_CFILES} ${REDHAT_HFILES} ${UNWIND_HFILES} \
@@ -94,7 +95,8 @@ OBJECT_FILES=main.o tools.o global_data.o memory.o filesys.o help.o task.o \
 	xen_hyper.o xen_hyper_command.o xen_hyper_global_data.o \
 	xen_hyper_dump_tables.o kvmdump.o qemu.o qemu-load.o sadump.o ipcs.o \
 	ramdump.o vmware_vmss.o vmware_guestdump.o \
-	xen_dom0.o kaslr_helper.o sbitmap.o maple_tree.o
+	xen_dom0.o kaslr_helper.o sbitmap.o maple_tree.o \
+	lzorle_decompress.o
 
 MEMORY_DRIVER_FILES=memory_driver/Makefile memory_driver/crash.c memory_driver/README
 
@@ -545,6 +547,9 @@ bpf.o: ${GENERIC_HFILES} bpf.c
 
 maple_tree.o: ${GENERIC_HFILES} ${MAPLE_TREE_HFILES} maple_tree.c
 	${CC} -c ${CRASH_CFLAGS} maple_tree.c ${WARNING_OPTIONS} ${WARNING_ERROR}
+
+lzorle_decompress.o: lzorle_decompress.c
+	${CC} -c ${CRASH_CFLAGS} lzorle_decompress.c ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 ${PROGRAM}: force
 	@$(MAKE) all

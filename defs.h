@@ -51,6 +51,7 @@
 #include <regex.h>
 #ifdef LZO
 #include <lzo/lzo1x.h>
+#include "lzorle_decompress.h"
 #endif
 #ifdef SNAPPY
 #include <snappy-c.h>
