@@ -28,6 +28,7 @@
 #include "xen_dom0.h"
 #include "vmcore.h"
 #include "maple_tree.h"
+#include "lzorle_decompress.h"
 
 #define BITMAP_SECT_LEN	4096
 
@@ -3069,6 +3070,8 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 		      " with lzo library\n");
 		return 0;
 #endif
+	} else if (STREQ(name, "lzo-rle")) {
+		decompressor = (void *)&lzorle_decompress_safe;
 	} else { /* todo: support more compressor */
 		error(WARNING, "only the lzo compressor is supported\n");
 		return 0;
