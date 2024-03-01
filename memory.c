@@ -17220,11 +17220,20 @@ first_vmalloc_address(void)
 {
 	static ulong vmalloc_start = 0;
         ulong vm_struct, vmap_area;
+	char *vmalloc_start_string;
 
 	if (DUMPFILE() && vmalloc_start)
 		return vmalloc_start;
 
-	if (vt->flags & USE_VMAP_AREA) {
+	/*
+	 * 'vmap_area_list' and 'vmlist' in Linux 6.9 and later kernels might be
+	 * empty, prefer NUMBER(VMALLOC_START) if exported in vmcoreinfo.
+	 */
+	vmalloc_start_string = pc->read_vmcoreinfo("NUMBER(VMALLOC_START)");
+	if (vmalloc_start_string) {
+		vmalloc_start = htol(vmalloc_start_string, QUIET, NULL);
+		free(vmalloc_start_string);
+	} else if (vt->flags & USE_VMAP_AREA) {
 		get_symbol_data("vmap_area_list", sizeof(void *), &vmap_area);
 		if (!vmap_area)
 			return 0;
