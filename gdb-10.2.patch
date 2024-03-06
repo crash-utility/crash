@@ -16094,3 +16094,27 @@ exit 0
 +{
 +  loongarch_elf_fpregset.collect_regset (NULL, regcache, regno, fpregset, sizeof (prfpregset_t));
 +}
+--- gdb-10.2/gdb/minsyms.c.orig
++++ gdb-10.2/gdb/minsyms.c
+@@ -535,7 +535,9 @@ lookup_minimal_symbol_linkage (const char *name, struct objfile *objf)
+ 	{
+ 	  if (strcmp (msymbol->linkage_name (), name) == 0
+ 	      && (MSYMBOL_TYPE (msymbol) == mst_data
+-		  || MSYMBOL_TYPE (msymbol) == mst_bss))
++		  || MSYMBOL_TYPE (msymbol) == mst_bss
++		  || MSYMBOL_TYPE (msymbol) == mst_file_bss
++		  || MSYMBOL_TYPE (msymbol) == mst_file_data))
+ 	    return {msymbol, objfile};
+ 	}
+     }
+--- gdb-10.2/gdb/symtab.h.orig
++++ gdb-10.2/gdb/symtab.h
+@@ -1110,7 +1110,7 @@ struct symbol : public general_symbol_info, public allocate_on_obstack
+       is_objfile_owned (1),
+       is_argument (0),
+       is_inlined (0),
+-      maybe_copied (0),
++      maybe_copied (1), /* The objfile potentially supports copy relocations. */
+       subclass (SYMBOL_NONE)
+     {
+       /* We can't use an initializer list for members of a base class, and
