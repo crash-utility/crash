@@ -18,6 +18,10 @@ tar xvzmf gdb-10.2.tar.gz \
 	gdb-10.2/gdb/objfiles.h \
 	gdb-10.2/bfd/elf-bfd.h
 
+# For newly added gdb files, remove them to be its original state.
+
+rm -f gdb-10.2/gdb/loongarch-linux-tdep.c
+
 exit 0
 
 --- gdb-10.2/Makefile.in.orig
@@ -16057,3 +16061,36 @@ exit 0
  m10200-dis.c
  m10200-opc.c
  m10300-dis.c
+--- gdb-10.2/gdb/loongarch-linux-tdep.c.orig
++++ gdb-10.2/gdb/loongarch-linux-tdep.c
+@@ -707,3 +707,30 @@ _initialize_loongarch_linux_tdep ()
+   gdbarch_register_osabi (bfd_arch_loongarch, bfd_mach_loongarch64,
+                           GDB_OSABI_LINUX, loongarch_linux_init_abi);
+ }
++
++/* Wrapper functions.  These are only used by libthread_db.  */
++#include <sys/procfs.h>
++extern void supply_gregset (struct regcache *regcache,const prgregset_t *gregset);
++extern void fill_gregset (const struct regcache *regcache, prgregset_t *gregset, int regno);
++extern void supply_fpregset (struct regcache *regcache, const prfpregset_t *fpregset);
++extern void fill_fpregset (const struct regcache *regcache, prfpregset_t *fpregset, int regno);
++
++void supply_gregset (struct regcache *regcache, const prgregset_t *gregset)
++{
++  loongarch_elf_gregset.supply_regset (NULL, regcache, -1, gregset, sizeof (prgregset_t));
++}
++
++void fill_gregset (const struct regcache *regcache, prgregset_t *gregset, int regno)
++{
++  loongarch_elf_gregset.collect_regset (NULL, regcache, regno, gregset, sizeof (prgregset_t));
++}
++
++void supply_fpregset (struct regcache *regcache, const prfpregset_t *fpregset)
++{
++  loongarch_elf_fpregset.supply_regset (NULL, regcache, -1, fpregset, sizeof (prfpregset_t));
++}
++
++void fill_fpregset (const struct regcache *regcache, prfpregset_t *fpregset, int regno)
++{
++  loongarch_elf_fpregset.collect_regset (NULL, regcache, regno, fpregset, sizeof (prfpregset_t));
++}
