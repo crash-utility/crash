@@ -3589,7 +3589,7 @@ exit 0
      m32c_elf32_vec)		 tb="$tb elf32-m32c.lo elf32.lo $elf" ;;
      m32r_elf32_vec)		 tb="$tb elf32-m32r.lo elf32.lo $elf" ;;
      m32r_elf32_le_vec)		 tb="$tb elf32-m32r.lo elf32.lo $elf" ;;
---- gdb-10.2/bfd/cpu-loongarch.c.orig
+--- /dev/null
 +++ gdb-10.2/bfd/cpu-loongarch.c
 @@ -0,0 +1,61 @@
 +/* BFD support for LoongArch.
@@ -3836,7 +3836,7 @@ exit 0
  
  bfd_boolean
  _bfd_elf_is_function_type (unsigned int type)
---- gdb-10.2/bfd/elfnn-loongarch.c.orig
+--- /dev/null
 +++ gdb-10.2/bfd/elfnn-loongarch.c
 @@ -0,0 +1,4128 @@
 +/* LoongArch-specific support for NN-bit ELF.
@@ -7967,7 +7967,7 @@ exit 0
 +#define elf_backend_hash_symbol elf_loongarch64_hash_symbol
 +
 +#include "elfNN-target.h"
---- gdb-10.2/bfd/elfxx-loongarch.c.orig
+--- /dev/null
 +++ gdb-10.2/bfd/elfxx-loongarch.c
 @@ -0,0 +1,1618 @@
 +/* LoongArch-specific support for ELF.
@@ -9588,7 +9588,7 @@ exit 0
 +  return ((loongarch_reloc_howto_type *)
 +	  howto)->adjust_reloc_bits(howto, fix_val);
 +}
---- gdb-10.2/bfd/elfxx-loongarch.h.orig
+--- /dev/null
 +++ gdb-10.2/bfd/elfxx-loongarch.h
 @@ -0,0 +1,45 @@
 +/* LoongArch-specific backend routines.
@@ -9841,7 +9841,7 @@ exit 0
  	m32r-linux-nat.c \
  	m32r-linux-tdep.c \
  	m32r-tdep.c \
---- gdb-10.2/gdb/arch/loongarch.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/arch/loongarch.c
 @@ -0,0 +1,75 @@
 +/* Copyright (C) 2021 Free Software Foundation, Inc.
@@ -9919,7 +9919,7 @@ exit 0
 +{
 +    return loongarch_create_target_description (rlen, flen, 0, 0, 0);
 +}
---- gdb-10.2/gdb/arch/loongarch.h.orig
+--- /dev/null
 +++ gdb-10.2/gdb/arch/loongarch.h
 @@ -0,0 +1,35 @@
 +/*
@@ -10059,7 +10059,7 @@ exit 0
  	riscv/32bit-cpu.xml \
  	riscv/32bit-fpu.xml \
  	riscv/64bit-cpu.xml \
---- gdb-10.2/gdb/features/loongarch/base32.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/base32.c
 @@ -0,0 +1,48 @@
 +/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
@@ -10110,7 +10110,7 @@ exit 0
 +  tdesc_create_reg (feature, "badv", regnum++, 1, "general", 32, "code_ptr");
 +  return regnum;
 +}
---- gdb-10.2/gdb/features/loongarch/base32.xml.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/base32.xml
 @@ -0,0 +1,46 @@
 +<?xml version="1.0"?>
@@ -10159,7 +10159,7 @@ exit 0
 +  <reg name="pc" bitsize="32" type="code_ptr" group="general"/>
 +  <reg name="badv" bitsize="32" type="code_ptr" group="general"/>
 +</feature>
---- gdb-10.2/gdb/features/loongarch/base64.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/base64.c
 @@ -0,0 +1,48 @@
 +/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
@@ -10210,7 +10210,7 @@ exit 0
 +  tdesc_create_reg (feature, "badv", regnum++, 1, "general", 64, "code_ptr");
 +  return regnum;
 +}
---- gdb-10.2/gdb/features/loongarch/base64.xml.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/base64.xml
 @@ -0,0 +1,46 @@
 +<?xml version="1.0"?>
@@ -10259,7 +10259,7 @@ exit 0
 +  <reg name="pc" bitsize="64" type="code_ptr" group="general"/>
 +  <reg name="badv" bitsize="64" type="code_ptr" group="general"/>
 +</feature>
---- gdb-10.2/gdb/features/loongarch/fpu32.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/fpu32.c
 @@ -0,0 +1,54 @@
 +/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
@@ -10316,7 +10316,7 @@ exit 0
 +  tdesc_create_reg (feature, "fcsr", regnum++, 1, "float", 32, "uint32");
 +  return regnum;
 +}
---- gdb-10.2/gdb/features/loongarch/fpu32.xml.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/fpu32.xml
 @@ -0,0 +1,53 @@
 +<?xml version="1.0"?>
@@ -10372,7 +10372,7 @@ exit 0
 +  <reg name="fcc7" bitsize="8" type="uint8" group="float"/>
 +  <reg name="fcsr" bitsize="32" type="uint32" group="float"/>
 +</feature>
---- gdb-10.2/gdb/features/loongarch/fpu64.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/fpu64.c
 @@ -0,0 +1,62 @@
 +/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
@@ -10437,7 +10437,7 @@ exit 0
 +  tdesc_create_reg (feature, "fcsr", regnum++, 1, "float", 32, "uint32");
 +  return regnum;
 +}
---- gdb-10.2/gdb/features/loongarch/fpu64.xml.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/fpu64.xml
 @@ -0,0 +1,58 @@
 +<?xml version="1.0"?>
@@ -10498,7 +10498,7 @@ exit 0
 +  <reg name="fcc7" bitsize="8" type="uint8" group="float"/>
 +  <reg name="fcsr" bitsize="32" type="uint32" group="float"/>
 +</feature>
---- gdb-10.2/gdb/features/loongarch/lasx.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/lasx.c
 @@ -0,0 +1,80 @@
 +/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
@@ -10581,7 +10581,7 @@ exit 0
 +  tdesc_create_reg (feature, "xr31", regnum++, 1, "lasx", 256, "lasxv");
 +  return regnum;
 +}
---- gdb-10.2/gdb/features/loongarch/lasx.xml.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/lasx.xml
 @@ -0,0 +1,59 @@
 +<?xml version="1.0"?>
@@ -10643,7 +10643,7 @@ exit 0
 +  <reg name="xr30" bitsize="256" type="lasxv" group="lasx"/>
 +  <reg name="xr31" bitsize="256" type="lasxv" group="lasx"/>
 +</feature>
---- gdb-10.2/gdb/features/loongarch/lbt32.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/lbt32.c
 @@ -0,0 +1,19 @@
 +/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
@@ -10665,7 +10665,7 @@ exit 0
 +  tdesc_create_reg (feature, "x86_top", regnum++, 1, "lbt", 8, "uint8");
 +  return regnum;
 +}
---- gdb-10.2/gdb/features/loongarch/lbt32.xml.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/lbt32.xml
 @@ -0,0 +1,17 @@
 +<?xml version="1.0"?>
@@ -10685,7 +10685,7 @@ exit 0
 +  <reg name="EFLAG" bitsize="32" type="uint32" group="lbt"/>
 +  <reg name="x86_top" bitsize="8" type="uint8" group="lbt"/>
 +</feature>
---- gdb-10.2/gdb/features/loongarch/lbt64.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/lbt64.c
 @@ -0,0 +1,19 @@
 +/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
@@ -10707,7 +10707,7 @@ exit 0
 +  tdesc_create_reg (feature, "x86_top", regnum++, 1, "lbt", 8, "uint8");
 +  return regnum;
 +}
---- gdb-10.2/gdb/features/loongarch/lbt64.xml.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/lbt64.xml
 @@ -0,0 +1,17 @@
 +<?xml version="1.0"?>
@@ -10727,7 +10727,7 @@ exit 0
 +  <reg name="EFLAG" bitsize="32" type="uint32" group="lbt"/>
 +  <reg name="x86_top" bitsize="8" type="uint8" group="lbt"/>
 +</feature>
---- gdb-10.2/gdb/features/loongarch/lsx.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/lsx.c
 @@ -0,0 +1,80 @@
 +/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
@@ -10810,7 +10810,7 @@ exit 0
 +  tdesc_create_reg (feature, "vr31", regnum++, 1, "lsx", 128, "lsxv");
 +  return regnum;
 +}
---- gdb-10.2/gdb/features/loongarch/lsx.xml.orig
+--- /dev/null
 +++ gdb-10.2/gdb/features/loongarch/lsx.xml
 @@ -0,0 +1,59 @@
 +<?xml version="1.0"?>
@@ -10872,7 +10872,7 @@ exit 0
 +  <reg name="vr30" bitsize="128" type="lsxv" group="lsx"/>
 +  <reg name="vr31" bitsize="128" type="lsxv" group="lsx"/>
 +</feature>
---- gdb-10.2/gdb/loongarch-linux-tdep.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/loongarch-linux-tdep.c
 @@ -0,0 +1,709 @@
 +/* Target-dependent code for GNU/Linux LoongArch.
@@ -11584,7 +11584,7 @@ exit 0
 +  gdbarch_register_osabi (bfd_arch_loongarch, bfd_mach_loongarch64,
 +                          GDB_OSABI_LINUX, loongarch_linux_init_abi);
 +}
---- gdb-10.2/gdb/loongarch-linux-tdep.h.orig
+--- /dev/null
 +++ gdb-10.2/gdb/loongarch-linux-tdep.h
 @@ -0,0 +1,48 @@
 +/* GNU/Linux on LoongArch target support, prototypes.
@@ -11635,7 +11635,7 @@ exit 0
 +extern const struct regset loongarch_elf_lasxregset;
 +
 +#endif
---- gdb-10.2/gdb/loongarch-tdep.c.orig
+--- /dev/null
 +++ gdb-10.2/gdb/loongarch-tdep.c
 @@ -0,0 +1,1926 @@
 +/* Target-dependent code for GNU/Linux LoongArch.
@@ -13564,7 +13564,7 @@ exit 0
 +When non-zero, loongarch specific debugging is enabled."),
 +			     NULL, NULL, &setdebuglist, &showdebuglist);
 +}
---- gdb-10.2/gdb/loongarch-tdep.h.orig
+--- /dev/null
 +++ gdb-10.2/gdb/loongarch-tdep.h
 @@ -0,0 +1,61 @@
 +/* Target-dependent code for GNU/Linux LoongArch.
@@ -13735,7 +13735,7 @@ exit 0
  #define NT_SIGINFO	0x53494749	/* Fields of siginfo_t.  */
  #define NT_FILE		0x46494c45	/* Description of mapped files.  */
  
---- gdb-10.2/include/elf/loongarch.h.orig
+--- /dev/null
 +++ gdb-10.2/include/elf/loongarch.h
 @@ -0,0 +1,267 @@
 +/* Copyright (C) 2021-2022 Free Software Foundation, Inc.
@@ -14005,7 +14005,7 @@ exit 0
 +  (!((EF_LOONGARCH_ABI(abi) & EF_LOONGARCH_ABI_FLOAT_MASK) ^ EF_LOONGARCH_ABI_DOUBLE_FLOAT_MASK))
 +
 +#endif /* _ELF_LOONGARCH_H */
---- gdb-10.2/include/opcode/loongarch.h.orig
+--- /dev/null
 +++ gdb-10.2/include/opcode/loongarch.h
 @@ -0,0 +1,239 @@
 +/* LoongArch assembler/disassembler support.
@@ -14343,7 +14343,7 @@ exit 0
  
  extern disassembler_ftype csky_get_disassembler (bfd *);
  extern disassembler_ftype rl78_get_disassembler (bfd *);
---- gdb-10.2/opcodes/loongarch-coder.c.orig
+--- /dev/null
 +++ gdb-10.2/opcodes/loongarch-coder.c
 @@ -0,0 +1,481 @@
 +/* LoongArch opcode support.
@@ -14827,7 +14827,7 @@ exit 0
 +      *dest++ = *src++;
 +    }
 +}
---- gdb-10.2/opcodes/loongarch-dis.c.orig
+--- /dev/null
 +++ gdb-10.2/opcodes/loongarch-dis.c
 @@ -0,0 +1,342 @@
 +/* LoongArch opcode support.
@@ -15172,7 +15172,7 @@ exit 0
 +  my_disinfo.target = pc;
 +  disassemble_one (insn, &my_disinfo);
 +}
---- gdb-10.2/opcodes/loongarch-opc.c.orig
+--- /dev/null
 +++ gdb-10.2/opcodes/loongarch-opc.c
 @@ -0,0 +1,870 @@
 +/* LoongArch opcode support.
