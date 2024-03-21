@@ -6397,6 +6397,11 @@ x86_64_ORC_init(void)
 		NULL
 	};
 	struct ORC_data *orc;
+        unsigned char orc_header[20];
+        const uint8_t orc_hash_6_4[20] = {
+		0xfe, 0x5d, 0x32, 0xbf, 0x58, 0x1b, 0xd6, 0x3b, 0x2c, 0xa9,
+		0xa5, 0xc6, 0x5b, 0xa5, 0xa6, 0x25, 0xea, 0xb3, 0xfe, 0x24,
+	};
 
 	if (machdep->flags & FRAMEPOINTER)
 		return;
@@ -6460,8 +6465,10 @@ x86_64_ORC_init(void)
 
 	orc->has_signal = MEMBER_EXISTS("orc_entry", "signal");	/* added at 6.3 */
 	orc->has_end = MEMBER_EXISTS("orc_entry", "end");	/* removed at 6.4 */
-
-	if (orc->has_signal && !orc->has_end)
+	if (try_get_symbol_data("orc_header", sizeof(orc_header), orc_header) &&
+	    memcmp(orc_header, orc_hash_6_4, 20) == 0) {
+		machdep->flags |= ORC_6_4;
+	} else if (orc->has_signal && !orc->has_end)
 		machdep->flags |= ORC_6_4;
 
 	machdep->flags |= ORC;
