@@ -5577,6 +5577,9 @@ value_search_module_6_4(ulong value, ulong *offset)
 			continue;
 
 		for_each_mod_mem_type(t) {
+			if (!lm->symtable[t])
+				continue;
+
 			sp = lm->symtable[t];
 			sp_end = lm->symend[t];
 
