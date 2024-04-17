@@ -1628,7 +1628,14 @@ arm64_get_section_size_bits(void)
 		if ((ret = get_kernel_config("CONFIG_MEMORY_HOTPLUG", NULL)) == IKCONFIG_Y) {
 			if ((ret = get_kernel_config("CONFIG_HOTPLUG_SIZE_BITS", &string)) == IKCONFIG_STR)
 				machdep->section_size_bits = atol(string);
-		} 
+		}
+
+		/* arm64: reduce section size for sparsemem */
+		if ((ret = get_kernel_config("CONFIG_ARM64_4K_PAGES", NULL)) == IKCONFIG_Y
+			|| (ret = get_kernel_config("CONFIG_ARM64_16K_PAGES", NULL)) == IKCONFIG_Y)
+			machdep->section_size_bits = _SECTION_SIZE_BITS_5_12;
+		else if ((ret = get_kernel_config("CONFIG_ARM64_64K_PAGES", NULL)) == IKCONFIG_Y)
+			machdep->section_size_bits = _SECTION_SIZE_BITS_5_12_64K;
 	}
 
 	if (CRASHDEBUG(1))
