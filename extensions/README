@@ -1,0 +1,9 @@
+
+
+## trace parse
+how to use:
++1. install trace:https://github.com/fujitsu/crash-trace
++2. generate trace.data:trace dump -t
++3. install trace-cmd:git@github.com:rostedt/trace-cmd.git
++4. parse trace.data:trace-cmd report
+
