@@ -7407,26 +7407,24 @@ ulong try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulon
 #define SECTORS_PER_PAGE        (1 << SECTORS_PER_PAGE_SHIFT)
 
 struct zspage {
-    struct {
-        unsigned int fullness : 2;
-        unsigned int class : 9;
-        unsigned int isolated : 3;
-        unsigned int magic : 8;
+    union {
+        unsigned int flag_bits;
+        struct {
+            unsigned int fullness : 2;
+            unsigned int class : 9;
+            unsigned int isolated : 3;
+            unsigned int magic : 8;
+        } v0;
+        struct {
+            unsigned int huge : 1;
+            unsigned int fullness : 2;
+            unsigned int class : 9;
+            unsigned int isolated : 3;
+            unsigned int magic : 8;
+        } v5_17;
     };
     unsigned int inuse;
     unsigned int freeobj;
-};
-
-struct zspage_5_17 {
-	struct {
-		unsigned int huge : 1;
-		unsigned int fullness : 2;
-		unsigned int class : 9;
-		unsigned int isolated : 3;
-		unsigned int magic : 8;
-	};
-	unsigned int inuse;
-	unsigned int freeobj;
 };
 
 /*
