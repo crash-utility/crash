@@ -10167,6 +10167,8 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "               vmap_area_flags: %ld\n", 
 		OFFSET(vmap_area_flags));
 	fprintf(fp, "          vmap_area_purge_list: %ld\n", OFFSET(vmap_area_purge_list));
+	fprintf(fp, "                vmap_node_busy: %ld\n", OFFSET(vmap_node_busy));
+	fprintf(fp, "                  rb_list_head: %ld\n", OFFSET(rb_list_head));
 
 	fprintf(fp, "         module_size_of_struct: %ld\n", 
 		OFFSET(module_size_of_struct));
@@ -12041,6 +12043,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(task_group));
 	fprintf(fp, "                     vmap_area: %ld\n",
 		SIZE(vmap_area));
+	fprintf(fp, "                     vmap_node: %ld\n", SIZE(vmap_node));
 	fprintf(fp, "            hrtimer_clock_base: %ld\n",
 		SIZE(hrtimer_clock_base));
 	fprintf(fp, "                  hrtimer_base: %ld\n",
