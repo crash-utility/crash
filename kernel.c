@@ -3822,9 +3822,21 @@ module_init(void)
 		case KALLSYMS_V2:
 			if (THIS_KERNEL_VERSION >= LINUX(2,6,27)) {
 				numksyms = UINT(modbuf + OFFSET(module_num_symtab));
-				if (MODULE_MEMORY())
-					/* check mem[MOD_TEXT].size only */
-					size = UINT(modbuf + OFFSET(module_mem) + OFFSET(module_memory_size));
+				if (MODULE_MEMORY()) {
+					/*
+					 * The mem[MOD_TEXT].size may be zero, lets count
+					 * the module size as below.
+					*/
+					int t;
+					size = 0;
+					for_each_mod_mem_type(t) {
+						if (t == MOD_INIT_TEXT)
+							break;
+						size += UINT(modbuf + OFFSET(module_mem) +
+								SIZE(module_memory) * t +
+								OFFSET(module_memory_size));
+					}
+				}
 				else
 					size = UINT(modbuf + MODULE_OFFSET2(module_core_size, rx));
 			} else {
@@ -3927,7 +3939,7 @@ verify_modules(void)
 
                 for (i = 0, found = FALSE; i < kt->mods_installed; i++) {
                         lm = &st->load_modules[i];
-			if (!kvtop(NULL, lm->mod_base, &paddr, 0)) {
+			if (lm->mod_base && !kvtop(NULL, lm->mod_base, &paddr, 0)) {
 				irregularities++;
                                 break;
 			}
