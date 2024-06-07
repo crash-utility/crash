@@ -11847,6 +11847,7 @@ dump_offset_table(char *spec, ulong makestruct)
         fprintf(fp, "             task_struct_flags: %ld\n", SIZE(task_struct_flags));
         fprintf(fp, "            task_struct_policy: %ld\n", SIZE(task_struct_policy));
         fprintf(fp, "                   thread_info: %ld\n", SIZE(thread_info));
+        fprintf(fp, "                    fred_frame: %ld\n", SIZE(fred_frame));
         fprintf(fp, "                 softirq_state: %ld\n", 
 		SIZE(softirq_state));
         fprintf(fp, "                softirq_action: %ld\n", 

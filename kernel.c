@@ -668,6 +668,7 @@ kernel_init()
 	STRUCT_SIZE_INIT(softirq_state, "softirq_state");
 	STRUCT_SIZE_INIT(softirq_action, "softirq_action");
 	STRUCT_SIZE_INIT(desc_struct, "desc_struct");
+	STRUCT_SIZE_INIT(fred_frame, "fred_frame");
 
 	STRUCT_SIZE_INIT(char_device_struct, "char_device_struct");
 	if (VALID_STRUCT(char_device_struct)) {
