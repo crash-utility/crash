@@ -2242,6 +2242,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long log_caller_id;
 	long vmap_node_busy;
 	long rb_list_head;
+	long file_f_inode;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

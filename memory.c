@@ -16075,6 +16075,8 @@ dump_swap_info(ulong swapflags, ulong *totalswap_pages, ulong *totalused_pages)
 	char buf3[BUFSIZE];
 	char buf4[BUFSIZE];
 	char buf5[BUFSIZE];
+	int swap_file_is_file =
+		STREQ(MEMBER_TYPE_NAME("swap_info_struct", "swap_file"), "file");
 
 	if (!symbol_exists("nr_swapfiles"))
 		error(FATAL, "nr_swapfiles doesn't exist in this kernel!\n");
@@ -16118,9 +16120,21 @@ dump_swap_info(ulong swapflags, ulong *totalswap_pages, ulong *totalused_pages)
 		swap_file = ULONG(vt->swap_info_struct + 
 			OFFSET(swap_info_struct_swap_file));
 
-                swap_device = INT(vt->swap_info_struct +
-                        OFFSET_OPTION(swap_info_struct_swap_device, 
-			swap_info_struct_old_block_size));
+		/* Linux 6.10 and later */
+		if (INVALID_MEMBER(swap_info_struct_swap_device) &&
+		    INVALID_MEMBER(swap_info_struct_old_block_size) &&
+		    swap_file_is_file) {
+			ulong inode;
+			ushort mode;
+			readmem(swap_file + OFFSET(file_f_inode), KVADDR, &inode,
+				sizeof(ulong), "swap_file.f_inode", FAULT_ON_ERROR);
+			readmem(inode + OFFSET(inode_i_mode), KVADDR, &mode,
+				sizeof(ushort), "inode.i_mode", FAULT_ON_ERROR);
+			swap_device = S_ISBLK(mode);
+		} else
+			swap_device = INT(vt->swap_info_struct +
+				OFFSET_OPTION(swap_info_struct_swap_device,
+				swap_info_struct_old_block_size));
 
                 pages = INT(vt->swap_info_struct +
                         OFFSET(swap_info_struct_pages));
@@ -16161,8 +16175,12 @@ dump_swap_info(ulong swapflags, ulong *totalswap_pages, ulong *totalused_pages)
                         		OFFSET(swap_info_struct_swap_vfsmnt));
 				get_pathname(swap_file, buf, BUFSIZE, 
 					1, vfsmnt);
-			} else if (VALID_MEMBER
-				(swap_info_struct_old_block_size)) {
+			} else if (VALID_MEMBER(swap_info_struct_old_block_size) ||
+				    swap_file_is_file) {
+				/*
+				 * Linux 6.10 and later kernels do not have old_block_size,
+				 * but this still should work, if swap_file is file.
+				 */
 				devname = vfsmount_devname(file_to_vfsmnt(swap_file), 
 					buf1, BUFSIZE);
 				get_pathname(file_to_dentry(swap_file), 
