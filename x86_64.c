@@ -4086,7 +4086,7 @@ in_exception_stack:
 
         if (!irq_eframe && !is_kernel_thread(bt->tc->task) &&
             (GET_STACKBASE(bt->tc->task) == bt->stackbase)) {
-		long stack_padding_size = SIZE(fred_frame) > 0 ? (2*8) : 0;
+		long stack_padding_size = VALID_SIZE(fred_frame) ? (2*8) : 0;
 		user_mode_eframe = bt->stacktop - SIZE(pt_regs);
 		if (last_process_stack_eframe < user_mode_eframe)
                 	x86_64_exception_frame(EFRAME_PRINT, 0, bt->stackbuf +
@@ -4408,7 +4408,7 @@ in_exception_stack:
 
         if (!irq_eframe && !is_kernel_thread(bt->tc->task) &&
             (GET_STACKBASE(bt->tc->task) == bt->stackbase)) {
-		long stack_padding_size = SIZE(fred_frame) > 0 ? (2*8) : 0;
+		long stack_padding_size = VALID_SIZE(fred_frame) ? (2*8) : 0;
 		user_mode_eframe = bt->stacktop - SIZE(pt_regs);
 		if (last_process_stack_eframe < user_mode_eframe)
                 	x86_64_exception_frame(EFRAME_PRINT, 0, bt->stackbuf +
