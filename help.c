@@ -8511,12 +8511,12 @@ display_version(void)
 static 
 char *version_info[] = {
 
-"Copyright (C) 2002-2022  Red Hat, Inc.",
+"Copyright (C) 2002-2024  Red Hat, Inc.",
 "Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation", 
 "Copyright (C) 1999-2006  Hewlett-Packard Co",
 "Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited",
 "Copyright (C) 2006, 2007  VA Linux Systems Japan K.K.",
-"Copyright (C) 2005, 2011, 2020-2022  NEC Corporation",
+"Copyright (C) 2005, 2011, 2020-2024  NEC Corporation",
 "Copyright (C) 1999, 2002, 2007  Silicon Graphics, Inc.",
 "Copyright (C) 1999, 2000, 2001, 2002  Mission Critical Linux, Inc.",
 "Copyright (C) 2015, 2021  VMware, Inc.",

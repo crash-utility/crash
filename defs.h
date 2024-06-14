@@ -2240,6 +2240,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long mnt_namespace_nr_mounts;
 	long mount_mnt_node;
 	long log_caller_id;
+	long vmap_node_busy;
+	long rb_list_head;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2414,6 +2416,8 @@ struct size_table {         /* stash of commonly-used sizes */
 	long maple_tree;
 	long maple_node;
 	long module_memory;
+	long fred_frame;
+	long vmap_node;
 };
 
 struct array_table {
@@ -2678,6 +2682,7 @@ struct vm_table {                /* kernel VM-related data */
 #define SLAB_OVERLOAD_PAGE    (0x8000000)
 #define SLAB_CPU_CACHE       (0x10000000)
 #define SLAB_ROOT_CACHES     (0x20000000)
+#define USE_VMAP_NODES       (0x40000000)
 
 #define IS_FLATMEM()		(vt->flags & FLATMEM)
 #define IS_DISCONTIGMEM()	(vt->flags & DISCONTIGMEM)
@@ -7407,26 +7412,24 @@ ulong try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulon
 #define SECTORS_PER_PAGE        (1 << SECTORS_PER_PAGE_SHIFT)
 
 struct zspage {
-    struct {
-        unsigned int fullness : 2;
-        unsigned int class : 9;
-        unsigned int isolated : 3;
-        unsigned int magic : 8;
+    union {
+        unsigned int flag_bits;
+        struct {
+            unsigned int fullness : 2;
+            unsigned int class : 9;
+            unsigned int isolated : 3;
+            unsigned int magic : 8;
+        } v0;
+        struct {
+            unsigned int huge : 1;
+            unsigned int fullness : 2;
+            unsigned int class : 9;
+            unsigned int isolated : 3;
+            unsigned int magic : 8;
+        } v5_17;
     };
     unsigned int inuse;
     unsigned int freeobj;
-};
-
-struct zspage_5_17 {
-	struct {
-		unsigned int huge : 1;
-		unsigned int fullness : 2;
-		unsigned int class : 9;
-		unsigned int isolated : 3;
-		unsigned int magic : 8;
-	};
-	unsigned int inuse;
-	unsigned int freeobj;
 };
 
 /*

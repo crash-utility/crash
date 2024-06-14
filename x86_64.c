@@ -4086,10 +4086,11 @@ in_exception_stack:
 
         if (!irq_eframe && !is_kernel_thread(bt->tc->task) &&
             (GET_STACKBASE(bt->tc->task) == bt->stackbase)) {
+		long stack_padding_size = VALID_SIZE(fred_frame) ? (2*8) : 0;
 		user_mode_eframe = bt->stacktop - SIZE(pt_regs);
 		if (last_process_stack_eframe < user_mode_eframe)
                 	x86_64_exception_frame(EFRAME_PRINT, 0, bt->stackbuf +
-                        	(bt->stacktop - bt->stackbase) - SIZE(pt_regs),
+				(bt->stacktop - stack_padding_size - bt->stackbase) - SIZE(pt_regs),
                         	bt, ofp);
 	}
 
@@ -4407,10 +4408,11 @@ in_exception_stack:
 
         if (!irq_eframe && !is_kernel_thread(bt->tc->task) &&
             (GET_STACKBASE(bt->tc->task) == bt->stackbase)) {
+		long stack_padding_size = VALID_SIZE(fred_frame) ? (2*8) : 0;
 		user_mode_eframe = bt->stacktop - SIZE(pt_regs);
 		if (last_process_stack_eframe < user_mode_eframe)
                 	x86_64_exception_frame(EFRAME_PRINT, 0, bt->stackbuf +
-                        	(bt->stacktop - bt->stackbase) - SIZE(pt_regs),
+				(bt->stacktop - stack_padding_size - bt->stackbase) - SIZE(pt_regs),
                         	bt, ofp);
 	}
 
@@ -6623,13 +6625,14 @@ x86_64_irq_eframe_link_init(void)
 
 /*
  *  Calculate and verify the IRQ exception frame location from the 
- *  stack reference at the top of the IRQ stack, possibly adjusting
- *  the ms->irq_eframe_link value.
+ *  stack reference at the top of the IRQ stack, keep ms->irq_eframe_link
+ *  as the most likely value, and try a few sizes around it.
  */
 static ulong
 x86_64_irq_eframe_link(ulong stkref, struct bt_info *bt, FILE *ofp)
 {
 	ulong irq_eframe;
+	int i, try[] = { 8, -8, 16, -16 };
 
 	if (x86_64_exception_frame(EFRAME_VERIFY, stkref, 0, bt, ofp))
 		return stkref;
@@ -6639,9 +6642,9 @@ x86_64_irq_eframe_link(ulong stkref, struct bt_info *bt, FILE *ofp)
 	if (x86_64_exception_frame(EFRAME_VERIFY, irq_eframe, 0, bt, ofp))
 		return irq_eframe;
 
-	if (x86_64_exception_frame(EFRAME_VERIFY, irq_eframe+8, 0, bt, ofp)) {
-		machdep->machspec->irq_eframe_link -= 8;
-		return (irq_eframe + 8);
+	for (i = 0; i < sizeof(try)/sizeof(int); i++) {
+		if (x86_64_exception_frame(EFRAME_VERIFY, irq_eframe+try[i], 0, bt, ofp))
+			return (irq_eframe + try[i]);
 	}
 
 	return irq_eframe;

@@ -496,10 +496,17 @@ task_init(void)
 	    	((len = SIZE(thread_union)) != STACKSIZE())) {
 		machdep->stacksize = len;
 	} else if (!VALID_SIZE(thread_union) && !VALID_SIZE(task_union)) {
-		if (kernel_symbol_exists("__start_init_task") &&
-		    kernel_symbol_exists("__end_init_task")) {
+		len = 0;
+		if (kernel_symbol_exists("__start_init_stack") &&
+		   kernel_symbol_exists("__end_init_stack")) {
+			len = symbol_value("__end_init_stack");
+			len -= symbol_value("__start_init_stack");
+		} else if (kernel_symbol_exists("__start_init_task") &&
+			kernel_symbol_exists("__end_init_task")) {
 			len = symbol_value("__end_init_task");
 			len -= symbol_value("__start_init_task");
+		}
+		if (len) {
 			ASSIGN_SIZE(thread_union) = len;
 			machdep->stacksize = len;
 		}

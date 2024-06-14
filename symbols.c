@@ -619,9 +619,9 @@ strip_symbol_end(const char *name, char *buf)
  *  or in /proc/kallsyms on a live system.
  *
  *  Setting KASLR_CHECK will trigger a search for "module_load_offset"
- *  during the initial symbol sort operation, and if found, will
- *  set (RELOC_AUTO|KASLR).  On live systems, the search is done
- *  here by checking /proc/kallsyms.
+ *  or "kaslr_regions" during the initial symbol sort operation, and
+ *  if found, will set (RELOC_AUTO|KASLR).  On live systems, the search
+ *  is done here by checking /proc/kallsyms.
  */
 static void
 kaslr_init(void)
@@ -646,7 +646,8 @@ kaslr_init(void)
 		st->_stext_vmlinux = UNINITIALIZED;
 
 	if (ACTIVE() &&   /* Linux 3.15 */
-	    (symbol_value_from_proc_kallsyms("module_load_offset") != BADVAL)) {
+	    ((symbol_value_from_proc_kallsyms("kaslr_regions") != BADVAL) ||
+	    (symbol_value_from_proc_kallsyms("module_load_offset") != BADVAL))) {
 		kt->flags2 |= (RELOC_AUTO|KASLR);
 		st->_stext_vmlinux = UNINITIALIZED;
 	}
@@ -10167,6 +10168,8 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "               vmap_area_flags: %ld\n", 
 		OFFSET(vmap_area_flags));
 	fprintf(fp, "          vmap_area_purge_list: %ld\n", OFFSET(vmap_area_purge_list));
+	fprintf(fp, "                vmap_node_busy: %ld\n", OFFSET(vmap_node_busy));
+	fprintf(fp, "                  rb_list_head: %ld\n", OFFSET(rb_list_head));
 
 	fprintf(fp, "         module_size_of_struct: %ld\n", 
 		OFFSET(module_size_of_struct));
@@ -11847,6 +11850,7 @@ dump_offset_table(char *spec, ulong makestruct)
         fprintf(fp, "             task_struct_flags: %ld\n", SIZE(task_struct_flags));
         fprintf(fp, "            task_struct_policy: %ld\n", SIZE(task_struct_policy));
         fprintf(fp, "                   thread_info: %ld\n", SIZE(thread_info));
+        fprintf(fp, "                    fred_frame: %ld\n", SIZE(fred_frame));
         fprintf(fp, "                 softirq_state: %ld\n", 
 		SIZE(softirq_state));
         fprintf(fp, "                softirq_action: %ld\n", 
@@ -12040,6 +12044,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		SIZE(task_group));
 	fprintf(fp, "                     vmap_area: %ld\n",
 		SIZE(vmap_area));
+	fprintf(fp, "                     vmap_node: %ld\n", SIZE(vmap_node));
 	fprintf(fp, "            hrtimer_clock_base: %ld\n",
 		SIZE(hrtimer_clock_base));
 	fprintf(fp, "                  hrtimer_base: %ld\n",
@@ -14247,7 +14252,9 @@ numeric_forward(const void *P_x, const void *P_y)
 			st->_stext_vmlinux = valueof(y);
 	}
 	if (kt->flags2 & KASLR_CHECK) {
-		if (STREQ(x->name, "module_load_offset") || 
+		if (STREQ(x->name, "kaslr_regions") ||
+		    STREQ(y->name, "kaslr_regions") ||
+		    STREQ(x->name, "module_load_offset") ||
 		    STREQ(y->name, "module_load_offset")) {
 			kt->flags2 &= ~KASLR_CHECK;
 			kt->flags2 |= (RELOC_AUTO|KASLR);

@@ -28,6 +28,7 @@
 #include "xen_dom0.h"
 #include "vmcore.h"
 #include "maple_tree.h"
+#include "lzorle_decompress.h"
 
 #define BITMAP_SECT_LEN	4096
 
@@ -2819,7 +2820,6 @@ zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
 {
 	ulong obj, off, class, page, zspage;
 	struct zspage zspage_s;
-	struct zspage_5_17 zspage_5_17_s;
 	physaddr_t paddr;
 	unsigned int obj_idx, class_idx, size;
 	ulong pages[2], sizes[2];
@@ -2833,15 +2833,13 @@ zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
 	readmem(page + OFFSET(page_private), KVADDR, &zspage,
 			sizeof(void *), "page_private", FAULT_ON_ERROR);
 
+	readmem(zspage, KVADDR, &zspage_s, sizeof(struct zspage), "zspage", FAULT_ON_ERROR);
 	if (VALID_MEMBER(zspage_huge)) {
-		readmem(zspage, KVADDR, &zspage_5_17_s,
-			sizeof(struct zspage_5_17), "zspage_5_17", FAULT_ON_ERROR);
-		class_idx = zspage_5_17_s.class;
-		zs_magic = zspage_5_17_s.magic;
+		class_idx = zspage_s.v5_17.class;
+		zs_magic = zspage_s.v5_17.magic;
 	} else {
-		readmem(zspage, KVADDR, &zspage_s, sizeof(struct zspage), "zspage", FAULT_ON_ERROR);
-		class_idx = zspage_s.class;
-		zs_magic = zspage_s.magic;
+		class_idx = zspage_s.v0.class;
+		zs_magic = zspage_s.v0.magic;
 	}
 
 	if (zs_magic != ZSPAGE_MAGIC)
@@ -2887,7 +2885,7 @@ zram_object_addr(ulong pool, ulong handle, unsigned char *zram_buf)
 
 out:
 	if (VALID_MEMBER(zspage_huge)) {
-		if (!zspage_5_17_s.huge)
+		if (!zspage_s.v5_17.huge)
 			return (zram_buf + ZS_HANDLE_SIZE);
 	} else {
 		readmem(page, KVADDR, &obj, sizeof(void *), "page flags", FAULT_ON_ERROR);
@@ -3069,6 +3067,8 @@ try_zram_decompress(ulonglong pte_val, unsigned char *buf, ulong len, ulonglong 
 		      " with lzo library\n");
 		return 0;
 #endif
+	} else if (STREQ(name, "lzo-rle")) {
+		decompressor = (void *)&lzorle_decompress_safe;
 	} else { /* todo: support more compressor */
 		error(WARNING, "only the lzo compressor is supported\n");
 		return 0;

@@ -235,6 +235,7 @@ static void dump_slab_objects(struct meminfo *);
 static void dump_slab_objects_percpu(struct meminfo *);
 static void dump_vmlist(struct meminfo *);
 static void dump_vmap_area(struct meminfo *);
+static int get_vmap_area_list_from_nodes(ulong **);
 static int dump_page_lists(struct meminfo *);
 static void dump_kmeminfo(void);
 static int page_to_phys(ulong, physaddr_t *); 
@@ -433,9 +434,15 @@ vm_init(void)
 	if (VALID_MEMBER(vmap_area_va_start) &&
 	    VALID_MEMBER(vmap_area_va_end) &&
 	    VALID_MEMBER(vmap_area_list) &&
-	    VALID_MEMBER(vmap_area_vm) &&
-	    kernel_symbol_exists("vmap_area_list"))
-		vt->flags |= USE_VMAP_AREA;
+	    VALID_MEMBER(vmap_area_vm)) {
+		if (kernel_symbol_exists("vmap_nodes")) {
+			STRUCT_SIZE_INIT(vmap_node, "vmap_node");
+			MEMBER_OFFSET_INIT(vmap_node_busy, "vmap_node", "busy");
+			MEMBER_OFFSET_INIT(rb_list_head, "rb_list", "head");
+			vt->flags |= USE_VMAP_NODES;
+		} else if (kernel_symbol_exists("vmap_area_list"))
+			vt->flags |= USE_VMAP_AREA;
+	}
 
 	if (kernel_symbol_exists("hstates")) {
 		STRUCT_SIZE_INIT(hstate, "hstate");
@@ -8957,7 +8964,7 @@ dump_vmlist(struct meminfo *vi)
 	physaddr_t paddr;
 	int mod_vmlist;
 
-	if (vt->flags & USE_VMAP_AREA) {
+	if (vt->flags & (USE_VMAP_AREA|USE_VMAP_NODES)) {
 		dump_vmap_area(vi);
 		return;
 	}
@@ -9067,6 +9074,77 @@ next_entry:
 		vi->retval = verified;
 }
 
+static int
+sort_by_va_start(const void *arg1, const void *arg2)
+{
+	ulong va_start1, va_start2;
+
+	readmem(*(ulong *)arg1 + OFFSET(vmap_area_va_start), KVADDR, &va_start1,
+		sizeof(void *), "vmap_area.va_start", FAULT_ON_ERROR);
+	readmem(*(ulong *)arg2 + OFFSET(vmap_area_va_start), KVADDR, &va_start2,
+		sizeof(void *), "vmap_area.va_start", FAULT_ON_ERROR);
+
+	return va_start1 < va_start2 ? -1 : (va_start1 == va_start2 ? 0 : 1);
+}
+
+/* Linux 6.9 and later kernels use "vmap_nodes". */
+static int
+get_vmap_area_list_from_nodes(ulong **list_ptr)
+{
+	int i, cnt, c;
+	struct list_data list_data, *ld = &list_data;
+	uint nr_vmap_nodes;
+	ulong vmap_nodes, list_head;
+	ulong *list, *ptr;
+
+	get_symbol_data("nr_vmap_nodes", sizeof(uint), &nr_vmap_nodes);
+	get_symbol_data("vmap_nodes", sizeof(ulong), &vmap_nodes);
+
+	/* count up all vmap_areas. */
+	cnt = 0;
+	for (i = 0; i < nr_vmap_nodes; i++) {
+		BZERO(ld, sizeof(struct list_data));
+		list_head = vmap_nodes + SIZE(vmap_node) * i +
+				OFFSET(vmap_node_busy) + OFFSET(rb_list_head);
+		readmem(list_head, KVADDR, &ld->start, sizeof(void *),
+				"rb_list.head", FAULT_ON_ERROR);
+		ld->list_head_offset = OFFSET(vmap_area_list);
+		ld->end = list_head;
+		c = do_list(ld);
+		if (c < 0)
+			return -1;
+
+		cnt += c;
+	}
+
+	list = ptr = (ulong *)GETBUF(sizeof(void *) * cnt);
+
+	/* gather all vmap_areas into a list. */
+	for (i = 0; i < nr_vmap_nodes; i++) {
+		BZERO(ld, sizeof(struct list_data));
+		ld->flags = LIST_ALLOCATE;
+		list_head = vmap_nodes + SIZE(vmap_node) * i +
+				OFFSET(vmap_node_busy) + OFFSET(rb_list_head);
+		readmem(list_head, KVADDR, &ld->start, sizeof(void *),
+				"rb_list.head", FAULT_ON_ERROR);
+		ld->list_head_offset = OFFSET(vmap_area_list);
+		ld->end = list_head;
+		c = do_list(ld);
+		if (c < 0)
+			return -1;
+
+		memcpy(ptr, ld->list_ptr, sizeof(void *) * c);
+		ptr += c;
+
+		FREEBUF(ld->list_ptr);
+	}
+
+	qsort(list, cnt, sizeof(void *), sort_by_va_start);
+
+	*list_ptr = list;
+	return cnt;
+}
+
 static void
 dump_vmap_area(struct meminfo *vi)
 {
@@ -9080,25 +9158,36 @@ dump_vmap_area(struct meminfo *vi)
 	char buf2[BUFSIZE];
 	char buf3[BUFSIZE];
 	char buf4[BUFSIZE];
+	ulong *list_ptr;
 
 #define VM_VM_AREA 0x4   /* mm/vmalloc.c */
 
-	vmap_area_buf = GETBUF(SIZE(vmap_area));
 	start = count = verified = size = 0;
 
-	ld = &list_data;
-	BZERO(ld, sizeof(struct list_data));
-	ld->flags = LIST_HEAD_FORMAT|LIST_HEAD_POINTER|LIST_ALLOCATE;
-	get_symbol_data("vmap_area_list", sizeof(void *), &ld->start);
-	ld->list_head_offset = OFFSET(vmap_area_list);
-	ld->end = symbol_value("vmap_area_list");
-	cnt = do_list(ld);
-	if (cnt < 0) {
-		FREEBUF(vmap_area_buf);
-		error(WARNING, "invalid/corrupt vmap_area_list\n"); 
-		vi->retval = 0;
-		return;
+	if (vt->flags & USE_VMAP_NODES) {
+		cnt = get_vmap_area_list_from_nodes(&list_ptr);
+		if (cnt < 0) {
+			error(WARNING, "invalid/corrupt vmap_nodes.busy list\n");
+			vi->retval = 0;
+			return;
+		}
+	} else {
+		ld = &list_data;
+		BZERO(ld, sizeof(struct list_data));
+		ld->flags = LIST_HEAD_FORMAT|LIST_HEAD_POINTER|LIST_ALLOCATE;
+		get_symbol_data("vmap_area_list", sizeof(void *), &ld->start);
+		ld->list_head_offset = OFFSET(vmap_area_list);
+		ld->end = symbol_value("vmap_area_list");
+		cnt = do_list(ld);
+		if (cnt < 0) {
+			error(WARNING, "invalid/corrupt vmap_area_list\n");
+			vi->retval = 0;
+			return;
+		}
+		list_ptr = ld->list_ptr;
 	}
+
+	vmap_area_buf = GETBUF(SIZE(vmap_area));
 
 	for (i = 0; i < cnt; i++) {
 		if (!(pc->curcmd_flags & HEADER_PRINTED) && (i == 0) && 
@@ -9116,7 +9205,7 @@ dump_vmap_area(struct meminfo *vi)
 			pc->curcmd_flags |= HEADER_PRINTED;
 		}
 
-		readmem(ld->list_ptr[i], KVADDR, vmap_area_buf,
+		readmem(list_ptr[i], KVADDR, vmap_area_buf,
                         SIZE(vmap_area), "vmap_area struct", FAULT_ON_ERROR); 
 
 		if (VALID_MEMBER(vmap_area_flags) &&
@@ -9158,7 +9247,7 @@ dump_vmap_area(struct meminfo *vi)
 			} 	
 			fprintf(fp, "%s%s  %s%s  %s - %s  %7ld\n",
 				mkstring(buf1,VADDR_PRLEN, LONG_HEX|CENTER|LJUST,
-				MKSTR(ld->list_ptr[i])), space(MINSPACE-1),
+				MKSTR(list_ptr[i])), space(MINSPACE-1),
 				mkstring(buf2,VADDR_PRLEN, LONG_HEX|CENTER|LJUST,
 				MKSTR(vm_struct)), space(MINSPACE-1),
 				mkstring(buf3, VADDR_PRLEN, LONG_HEX|RJUST,
@@ -9179,14 +9268,14 @@ dump_vmap_area(struct meminfo *vi)
 					if (vi->flags & GET_PHYS_TO_VMALLOC) {
 						vi->retval = pcheck +
 						    PAGEOFFSET(vi->spec_addr);
-						FREEBUF(ld->list_ptr);
+						FREEBUF(list_ptr);
 						return;
 				        } else
 						fprintf(fp,
 						"%s%s  %s%s  %s - %s  %7ld\n",
 						mkstring(buf1,VADDR_PRLEN, 
 						LONG_HEX|CENTER|LJUST,
-						MKSTR(ld->list_ptr[i])), 
+						MKSTR(list_ptr[i])),
 						space(MINSPACE-1),
 						mkstring(buf2, VADDR_PRLEN,
 						LONG_HEX|CENTER|LJUST,
@@ -9204,7 +9293,7 @@ dump_vmap_area(struct meminfo *vi)
 	}
 
 	FREEBUF(vmap_area_buf);
-	FREEBUF(ld->list_ptr);
+	FREEBUF(list_ptr);
 
 	if (vi->flags & GET_HIGHEST)
 		vi->retval = start+size;
@@ -14001,6 +14090,8 @@ dump_vm_table(int verbose)
 		fprintf(fp, "%sSLAB_ROOT_CACHES", others++ ? "|" : "");\
 	if (vt->flags & USE_VMAP_AREA)
 		fprintf(fp, "%sUSE_VMAP_AREA", others++ ? "|" : "");\
+	if (vt->flags & USE_VMAP_NODES)
+		fprintf(fp, "%sUSE_VMAP_NODES", others++ ? "|" : "");\
 	if (vt->flags & CONFIG_NUMA)
 		fprintf(fp, "%sCONFIG_NUMA", others++ ? "|" : "");\
 	if (vt->flags & VM_EVENT)
