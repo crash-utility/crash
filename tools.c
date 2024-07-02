@@ -3370,6 +3370,7 @@ cmd_list(void)
 			break;
 
 		case 'r':
+			ld->flags |= LIST_HEAD_FORMAT;
 			ld->flags |= LIST_HEAD_REVERSE;
 			break;
 
