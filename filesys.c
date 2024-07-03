@@ -2038,6 +2038,7 @@ vfs_init(void)
 	MEMBER_OFFSET_INIT(file_f_dentry, "file", "f_dentry");
 	MEMBER_OFFSET_INIT(file_f_vfsmnt, "file", "f_vfsmnt");
 	MEMBER_OFFSET_INIT(file_f_count, "file", "f_count");
+	MEMBER_OFFSET_INIT(file_f_inode, "file", "f_inode");
 	MEMBER_OFFSET_INIT(path_mnt, "path", "mnt");
 	MEMBER_OFFSET_INIT(path_dentry, "path", "dentry");
 	if (INVALID_MEMBER(file_f_dentry)) {

@@ -10522,6 +10522,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(file_f_count));
         fprintf(fp, "                   file_f_path: %ld\n", 
 		OFFSET(file_f_path));
+        fprintf(fp, "                  file_f_inode: %ld\n", OFFSET(file_f_inode));
         fprintf(fp, "                      path_mnt: %ld\n", 
 		OFFSET(path_mnt));
         fprintf(fp, "                   path_dentry: %ld\n", 
