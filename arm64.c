@@ -4923,7 +4923,6 @@ arm64_swp_offset(ulong pte)
 	return pte;
 }
 
-
 static void arm64_calc_KERNELPACMASK(void)
 {
 	ulong value;
