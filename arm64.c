@@ -92,6 +92,7 @@ static void arm64_get_crash_notes(void);
 static void arm64_calc_VA_BITS(void);
 static int arm64_is_uvaddr(ulong, struct task_context *);
 static void arm64_calc_KERNELPACMASK(void);
+static void arm64_recalc_KERNELPACMASK(void);
 static int arm64_get_vmcoreinfo(unsigned long *vaddr, const char *label, int base);
 
 struct kernel_range {
@@ -499,6 +500,7 @@ arm64_init(int when)
 
 		arm64_get_section_size_bits();
 
+
 		if (!machdep->max_physmem_bits) {
 			if (arm64_get_vmcoreinfo(&machdep->max_physmem_bits, "NUMBER(MAX_PHYSMEM_BITS)", NUM_DEC)) {
 				/* nothing */
@@ -580,6 +582,18 @@ arm64_init(int when)
 
 		if (!machdep->hz)
 			machdep->hz = 100;
+
+		/*
+		* In the case of using ramdump rather than vmcore,
+		* Will fail to parse out KERNELPAC.
+		* So let's try again from kconfig to ensure if PAC enabled.
+		* If yes, then we use vabits to figure it out.
+		* gki related commit url:
+		* https://lore.kernel.org/all/20230412160134.306148-4-mark.rutland@arm.com/
+		*/
+		if(!machdep->machspec->CONFIG_ARM64_KERNELPACMASK)
+			arm64_recalc_KERNELPACMASK();
+
 
 		arm64_irq_stack_init();
 		arm64_overflow_stack_init();
@@ -4910,6 +4924,7 @@ arm64_swp_offset(ulong pte)
 	return pte;
 }
 
+
 static void arm64_calc_KERNELPACMASK(void)
 {
 	ulong value;
@@ -4918,6 +4933,28 @@ static void arm64_calc_KERNELPACMASK(void)
 		machdep->machspec->CONFIG_ARM64_KERNELPACMASK = value;
 		if (CRASHDEBUG(1))
 			fprintf(fp, "CONFIG_ARM64_KERNELPACMASK: %lx\n", value);
+	}
+}
+
+
+#define GENMASK_UL(h, l) \
+    (((~0UL) << (l)) & (~0UL >> (BITS_PER_LONG - 1 - (h))))
+
+static void arm64_recalc_KERNELPACMASK(void){
+	int ret = IKCONFIG_N;
+
+	if (kt->ikconfig_flags & IKCONFIG_AVAIL){
+		/* arm64: check pac already enabled yet.*/
+		if ((ret = get_kernel_config("CONFIG_ARM64_PTR_AUTH", NULL)) == IKCONFIG_Y
+			&& (ret = get_kernel_config("CONFIG_ARM64_PTR_AUTH_KERNEL", NULL)) == IKCONFIG_Y){
+			if (machdep->machspec->VA_BITS_ACTUAL){
+				machdep->machspec->CONFIG_ARM64_KERNELPACMASK =
+					GENMASK_UL(63, machdep->machspec->VA_BITS_ACTUAL);
+				if (CRASHDEBUG(1))
+					fprintf(fp, "CONFIG_ARM64_KERNELPACMASK: %lx\n",
+						machdep->machspec->CONFIG_ARM64_KERNELPACMASK);
+			}
+		}
 	}
 }
 
