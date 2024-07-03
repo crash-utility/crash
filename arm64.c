@@ -500,7 +500,6 @@ arm64_init(int when)
 
 		arm64_get_section_size_bits();
 
-
 		if (!machdep->max_physmem_bits) {
 			if (arm64_get_vmcoreinfo(&machdep->max_physmem_bits, "NUMBER(MAX_PHYSMEM_BITS)", NUM_DEC)) {
 				/* nothing */
