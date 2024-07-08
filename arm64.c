@@ -93,6 +93,7 @@ static void arm64_calc_VA_BITS(void);
 static int arm64_is_uvaddr(ulong, struct task_context *);
 static void arm64_calc_KERNELPACMASK(void);
 static int arm64_get_vmcoreinfo(unsigned long *vaddr, const char *label, int base);
+static ulong arm64_set_irq_stack_size(struct machine_specific *ms);
 
 struct kernel_range {
 	unsigned long modules_vaddr, modules_end;
@@ -2223,8 +2224,14 @@ arm64_irq_stack_init(void)
 		if (MEMBER_EXISTS("thread_union", "stack")) { 
 			if ((sz = MEMBER_SIZE("thread_union", "stack")) > 0)
 				ms->irq_stack_size = sz;
-		} else
-			ms->irq_stack_size = ARM64_IRQ_STACK_SIZE;
+		} else {
+			ulong res = arm64_set_irq_stack_size(ms);
+			if (res > 0){
+				ms->irq_stack_size = res;
+			} else {
+				ms->irq_stack_size = ARM64_IRQ_STACK_SIZE;
+			}
+		}
 
 		machdep->flags |= IRQ_STACKS;
 
@@ -4919,6 +4926,44 @@ static void arm64_calc_KERNELPACMASK(void)
 		if (CRASHDEBUG(1))
 			fprintf(fp, "CONFIG_ARM64_KERNELPACMASK: %lx\n", value);
 	}
+}
+
+static ulong arm64_set_irq_stack_size(struct machine_specific *ms)
+{
+	char *string;
+	int ret;
+	int KASAN_THREAD_SHIFT = 0;
+	int MIN_THREAD_SHIFT;
+	ulong ARM64_PAGE_SHIFT;
+	ulong THREAD_SHIFT = 0;
+	ulong THREAD_SIZE;
+	if (kt->ikconfig_flags & IKCONFIG_AVAIL) {
+		if ((ret = get_kernel_config("CONFIG_KASAN_GENERIC", NULL) == IKCONFIG_Y) ||
+			(ret = get_kernel_config("CONFIG_KASAN_SW_TAGS", NULL) == IKCONFIG_Y)) {
+				KASAN_THREAD_SHIFT = 1;
+			}
+	}
+	MIN_THREAD_SHIFT = 14 + KASAN_THREAD_SHIFT;
+
+	if (kt->ikconfig_flags & IKCONFIG_AVAIL) {
+		if ((ret = get_kernel_config("CONFIG_VMAP_STACK", NULL)) == IKCONFIG_Y){
+			if ((ret = get_kernel_config("CONFIG_ARM64_PAGE_SHIFT", &string)) == IKCONFIG_STR){
+				ARM64_PAGE_SHIFT = atol(string);
+			}
+			if (MIN_THREAD_SHIFT < ARM64_PAGE_SHIFT){
+				THREAD_SHIFT = ARM64_PAGE_SHIFT;
+			} else {
+				THREAD_SHIFT = MIN_THREAD_SHIFT;
+			}
+		}	
+	}
+
+	if (THREAD_SHIFT == 0) {
+		return -1;
+	}
+
+	THREAD_SIZE = ((1UL) << THREAD_SHIFT);
+	return THREAD_SIZE;
 }
 
 #endif  /* ARM64 */
