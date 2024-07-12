@@ -727,7 +727,7 @@ extensions: make_configure
 	@$(MAKE) do_extensions
 
 do_extensions:
-	@$(MAKE) -C extensions -i TARGET=$(TARGET) TARGET_CFLAGS="$(TARGET_CFLAGS)" GDB=$(GDB) GDB_FLAGS=$(GDB_FLAGS)
+	@$(MAKE) -C extensions -i TARGET=$(TARGET) TARGET_CFLAGS="$(CFLAGS) $(TARGET_CFLAGS)" GDB=$(GDB) GDB_FLAGS=$(GDB_FLAGS)
 
 memory_driver: make_configure 
 	@$(MAKE) -C memory_driver -i
