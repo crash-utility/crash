@@ -3303,6 +3303,21 @@ typedef signed int s32;
 #define PGDIR_OFFSET_48VA(X) (((ulong)(X)) & (PGDIR_SIZE_48VA - 1))
 
 /*
+ * 3-levels / 16K pages
+ * 47-bit VA
+ */
+#define PTRS_PER_PGD_L3_16K   ((1UL) << (47 - 36))
+#define PTRS_PER_PMD_L3_16K   (2048)
+#define PTRS_PER_PTE_L3_16K   (2048)
+#define PGDIR_SHIFT_L3_16K    (36)
+#define PGDIR_SIZE_L3_16K     ((1UL) << PGDIR_SHIFT_L3_16K)
+#define PGDIR_MASK_L3_16K     (~(PGDIR_SIZE_L3_16K-1))
+#define PMD_SHIFT_L3_16K      (25)
+#define PMD_SIZE_L3_16K       (1UL << PMD_SHIFT_L3_16K)
+#define PMD_MASK_L3_16K       (~(PMD_SIZE_L3_16K-1))
+#define PGDIR_OFFSET_L3_16K(X) (((ulong)(X)) & ((machdep->ptrs_per_pgd * 8) - 1))
+
+/*
  * 3-levels / 64K pages
  */
 #define PTRS_PER_PGD_L3_64K  (64)
@@ -3367,6 +3382,7 @@ typedef signed int s32;
 #define HAS_PHYSVIRT_OFFSET (0x800)
 #define OVERFLOW_STACKS     (0x1000)
 #define ARM64_MTE     (0x2000)
+#define VM_L3_16K     (0x4000)
 
 /*
  * Get kimage_voffset from /dev/crash
