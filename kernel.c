@@ -7362,7 +7362,7 @@ void
 generic_get_irq_affinity(int irq)
 {
 	ulong irq_desc_addr;
-	long len;
+	long len, len_cpumask;
 	ulong affinity_ptr;
 	ulong *affinity;
 	ulong tmp_addr;
@@ -7382,8 +7382,10 @@ generic_get_irq_affinity(int irq)
 	if (!action)
 		return;
 
-	if ((len = STRUCT_SIZE("cpumask_t")) < 0)
-		len = DIV_ROUND_UP(kt->cpus, BITS_PER_LONG) * sizeof(ulong);
+	len = DIV_ROUND_UP(kt->cpus, BITS_PER_LONG) * sizeof(ulong);
+	len_cpumask = STRUCT_SIZE("cpumask_t");
+	if (len_cpumask > 0)
+		len = len_cpumask > len ? len : len_cpumask;
 
 	affinity = (ulong *)GETBUF(len);
 	if (VALID_MEMBER(irq_common_data_affinity))
