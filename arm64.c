@@ -2814,7 +2814,7 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 	low  = frame->sp;
 	high = (low + stack_mask) & ~(stack_mask);
 
-	if (fp < low || fp > high || fp & 0xf)
+	if (fp < low || fp > high || fp & 0xf || !INSTACK(fp, bt))
 		return FALSE;
 
 	frame->sp = fp + 0x10;
@@ -3024,7 +3024,7 @@ arm64_unwind_frame_v2(struct bt_info *bt, struct arm64_stackframe *frame,
 	low  = frame->sp;
 	high = (low + stack_mask) & ~(stack_mask);
 
-	if (fp < low || fp > high || fp & 0xf)
+	if (fp < low || fp > high || fp & 0xf || !INSTACK(fp, bt))
 		return FALSE;
 
 	if (CRASHDEBUG(1))
