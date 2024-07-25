@@ -92,6 +92,7 @@ static void arm64_get_crash_notes(void);
 static void arm64_calc_VA_BITS(void);
 static int arm64_is_uvaddr(ulong, struct task_context *);
 static void arm64_calc_KERNELPACMASK(void);
+static void arm64_recalc_KERNELPACMASK(void);
 static int arm64_get_vmcoreinfo(unsigned long *vaddr, const char *label, int base);
 
 struct kernel_range {
@@ -580,6 +581,16 @@ arm64_init(int when)
 
 		if (!machdep->hz)
 			machdep->hz = 100;
+
+
+		/*
+		 * Let's calculate the KERNELPACMASK value based on the
+		 * vabits, see:
+		 * arch/arm64/kernel/vmcore_info.c
+		 * arch/arm64/include/asm/pointer_auth.h
+		 */
+		if(!machdep->machspec->CONFIG_ARM64_KERNELPACMASK)
+			arm64_recalc_KERNELPACMASK();
 
 		arm64_irq_stack_init();
 		arm64_overflow_stack_init();
@@ -2814,7 +2825,7 @@ arm64_unwind_frame(struct bt_info *bt, struct arm64_stackframe *frame)
 	low  = frame->sp;
 	high = (low + stack_mask) & ~(stack_mask);
 
-	if (fp < low || fp > high || fp & 0xf)
+	if (fp < low || fp > high || fp & 0xf || !INSTACK(fp, bt))
 		return FALSE;
 
 	frame->sp = fp + 0x10;
@@ -3024,7 +3035,7 @@ arm64_unwind_frame_v2(struct bt_info *bt, struct arm64_stackframe *frame,
 	low  = frame->sp;
 	high = (low + stack_mask) & ~(stack_mask);
 
-	if (fp < low || fp > high || fp & 0xf)
+	if (fp < low || fp > high || fp & 0xf || !INSTACK(fp, bt))
 		return FALSE;
 
 	if (CRASHDEBUG(1))
@@ -4919,6 +4930,24 @@ static void arm64_calc_KERNELPACMASK(void)
 		machdep->machspec->CONFIG_ARM64_KERNELPACMASK = value;
 		if (CRASHDEBUG(1))
 			fprintf(fp, "CONFIG_ARM64_KERNELPACMASK: %lx\n", value);
+	}
+}
+
+#define GENMASK_UL(h, l) \
+    (((~0UL) << (l)) & (~0UL >> (BITS_PER_LONG - 1 - (h))))
+
+static void arm64_recalc_KERNELPACMASK(void){
+	/*
+	 * Check if PAC is enabled according to the existence of
+	 * kernel symbol 'ptrauth_keys_kernel'.
+	 */
+	if (STRUCT_EXISTS("ptrauth_keys_kernel") &&
+			machdep->machspec->VA_BITS_ACTUAL){
+		machdep->machspec->CONFIG_ARM64_KERNELPACMASK =
+			GENMASK_UL(63, machdep->machspec->VA_BITS_ACTUAL);
+		if (CRASHDEBUG(1))
+			fprintf(fp, "CONFIG_ARM64_KERNELPACMASK: %lx\n",
+				machdep->machspec->CONFIG_ARM64_KERNELPACMASK);
 	}
 }
 
