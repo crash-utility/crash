@@ -160,7 +160,6 @@ arm64_vmemmap_is_page_ptr(ulong addr, physaddr_t *phys)
 	ulong size = SIZE(page);
 	ulong pfn, nr;
 
-
 	if (IS_SPARSEMEM() && (machdep->flags & VMEMMAP) &&
 	    (addr >= VMEMMAP_VADDR && addr <= VMEMMAP_END) &&
 	    !((addr - VMEMMAP_VADDR) % size)) {
@@ -174,6 +173,25 @@ arm64_vmemmap_is_page_ptr(ulong addr, physaddr_t *phys)
 		}
 	}
 	return FALSE;
+}
+
+static void arm64_get_vmemmap_page_ptr(void)
+{
+	struct machine_specific *ms = machdep->machspec;
+
+	/* If vmemmap exists, it means kernel enabled CONFIG_SPARSEMEM_VMEMMAP */
+	if (arm64_get_vmcoreinfo(&ms->vmemmap, "SYMBOL(vmemmap)", NUM_HEX))
+		goto out;
+
+	/* The global symbol of vmemmap is removed since kernel commit 7bc1a0f9e1765 */
+	if (kernel_symbol_exists("vmemmap"))
+		ms->vmemmap = symbol_value("vmemmap");
+	else
+		ms->vmemmap = ms->vmemmap_vaddr - ((ms->phys_offset >> machdep->pageshift) * ms->struct_page_size);
+
+out:
+	if (ms->vmemmap)
+		machdep->is_page_ptr = arm64_vmemmap_is_page_ptr;
 }
 
 /*
@@ -463,10 +481,6 @@ arm64_init(int when)
 
 		machdep->stacksize = ARM64_STACK_SIZE;
 		machdep->flags |= VMEMMAP;
-		/* If vmemmap exists, it means kernel enabled CONFIG_SPARSEMEM_VMEMMAP */
-		if (arm64_get_vmcoreinfo(&ms->vmemmap, "SYMBOL(vmemmap)", NUM_HEX))
-			machdep->is_page_ptr = arm64_vmemmap_is_page_ptr;
-
 		machdep->uvtop = arm64_uvtop;
 		machdep->is_uvaddr = arm64_is_uvaddr;
 		machdep->eframe_search = arm64_eframe_search;
@@ -518,6 +532,7 @@ arm64_init(int when)
 		if (!ms->struct_page_size)
 			arm64_calc_virtual_memory_ranges();
 
+		arm64_get_vmemmap_page_ptr();
 		arm64_get_section_size_bits();
 
 		if (!machdep->max_physmem_bits) {
@@ -4947,6 +4962,7 @@ arm64_calc_virtual_memory_ranges(void)
 		return;
 
 	STRUCT_SIZE_INIT(page, "page");
+	ms->struct_page_size = SIZE(page);
 
         switch (machdep->flags & (VM_L2_64K|VM_L3_64K|VM_L3_4K|VM_L4_4K))
         {
@@ -4974,7 +4990,8 @@ arm64_calc_virtual_memory_ranges(void)
 		vmemmap_start = (-vmemmap_size - MEGABYTES(2));
 		ms->vmalloc_end = vmalloc_end - 1;
 		ms->vmemmap_vaddr = vmemmap_start;
-		ms->vmemmap_end = -1;
+		ms->vmemmap_end = vmemmap_start + vmemmap_size;
+
 		return;
 	}
 
