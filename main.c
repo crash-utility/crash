@@ -229,7 +229,7 @@ main(int argc, char **argv)
 				if (!machine_type("X86_64") &&
 				    !machine_type("ARM64") && !machine_type("X86") &&
 				    !machine_type("S390X") && !machine_type("RISCV64") &&
-+				    !machine_type("LOONGARCH64"))
+				    !machine_type("LOONGARCH64"))
 					error(INFO, "--kaslr not valid "
 						"with this machine type.\n");
 				else if (STREQ(optarg, "auto"))
