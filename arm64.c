@@ -95,6 +95,7 @@ static int arm64_is_uvaddr(ulong, struct task_context *);
 static void arm64_calc_KERNELPACMASK(void);
 static void arm64_recalc_KERNELPACMASK(void);
 static int arm64_get_vmcoreinfo(unsigned long *vaddr, const char *label, int base);
+static ulong arm64_set_irq_stack_size(void);
 
 struct kernel_range {
 	unsigned long modules_vaddr, modules_end;
@@ -2355,8 +2356,10 @@ arm64_irq_stack_init(void)
 		if (MEMBER_EXISTS("thread_union", "stack")) { 
 			if ((sz = MEMBER_SIZE("thread_union", "stack")) > 0)
 				ms->irq_stack_size = sz;
-		} else
-			ms->irq_stack_size = ARM64_IRQ_STACK_SIZE;
+		} else {
+			ulong res = arm64_set_irq_stack_size();
+			ms->irq_stack_size = (res > 0) ? res : ARM64_IRQ_STACK_SIZE;
+		}
 
 		machdep->flags |= IRQ_STACKS;
 
@@ -5071,6 +5074,57 @@ static void arm64_recalc_KERNELPACMASK(void){
 			fprintf(fp, "CONFIG_ARM64_KERNELPACMASK: %lx\n",
 				machdep->machspec->CONFIG_ARM64_KERNELPACMASK);
 	}
+}
+
+static ulong arm64_set_irq_stack_size(void)
+{
+	int min_thread_shift = 14;
+	ulong thread_shift = 0;
+	char buf1[BUFSIZE];
+	char *pos1, *pos2;
+	int errflag = 0;
+
+	if (kernel_symbol_exists("vmcoreinfo_data") &&
+		kernel_symbol_exists("vmcoreinfo_size")) {
+		/*
+		 * Referring to arch/arm64/include/asm/memory.h
+		 */
+		if (kernel_symbol_exists("kasan_enable_current"))
+			min_thread_shift += 1;
+
+		if (MEMBER_EXISTS("task_struct", "stack_vm_area") &&
+			(min_thread_shift < machdep->pageshift))
+			thread_shift = machdep->pageshift;
+		else
+			thread_shift = min_thread_shift;
+	} else {
+		sprintf(buf1, "x/32i vectors");
+		open_tmpfile();
+		if (!gdb_pass_through(buf1, pc->tmpfile, GNU_RETURN_ON_ERROR))
+			goto out;
+
+		rewind(pc->tmpfile);
+		while (fgets(buf1, BUFSIZE, pc->tmpfile)) {
+			if ((pos1 = strstr(buf1, "tbnz"))) {
+				if ((pos2 = strchr(pos1, '#'))) {
+					pos2 += 1;
+					for (pos1 = pos2; *pos2 != '\0' && *pos2 != ','; pos2++);
+					*pos2 = '\0';
+					thread_shift = stol(pos1, RETURN_ON_ERROR|QUIET, &errflag);
+					if (errflag)
+						thread_shift = 0;
+					break;
+				}
+			}
+		}
+out:
+		close_tmpfile();
+	}
+
+	if (thread_shift)
+		return ((1UL) << thread_shift);
+
+	return 0;
 }
 
 #endif  /* ARM64 */
