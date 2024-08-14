@@ -1797,7 +1797,10 @@ static void s390x_back_trace_cmd(struct bt_info *bt)
 				      cpu, lowcore, &low, &high);
 			sp = show_trace(bt, cnt, sp, low, high);
 		}
-		get_int_stack("panic_stack", cpu, lowcore, &low, &high);
+		if (MEMBER_EXISTS("lowcore", "nodat_stack"))
+			get_int_stack("nodat_stack", cpu, lowcore, &low, &high);
+		else
+			get_int_stack("panic_stack", cpu, lowcore, &low, &high);
 		sp = show_trace(bt, cnt, sp, low, high);
 		get_int_stack("async_stack", cpu, lowcore, &low, &high);
 		sp = show_trace(bt, cnt, sp, low, high);
