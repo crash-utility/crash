@@ -1184,7 +1184,7 @@ arm64_dump_machdep_table(ulong arg)
 	else
 		fprintf(fp, "%lx\n", machdep->last_pud_read);
 	fprintf(fp, "       last_pmd_read: ");
-	if (PAGESIZE() == 65536)
+	if ((machdep->flags & VM_L2_64K) || (machdep->flags & VM_L2_16K))
 		fprintf(fp, "(not used)\n");
 	else
 		fprintf(fp, "%lx\n", machdep->last_pmd_read);
