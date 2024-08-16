@@ -1177,9 +1177,7 @@ arm64_dump_machdep_table(ulong arg)
 	fprintf(fp, "   line_number_hooks: (not used)\n");
 	fprintf(fp, "       last_pgd_read: %lx\n", machdep->last_pgd_read);
 	fprintf(fp, "       last_pud_read: ");
-	if ((PAGESIZE() == 65536) ||
-		(PAGESIZE() == 16384) ||
-	    ((PAGESIZE() == 4096) && !(machdep->flags & VM_L4_4K)))
+	if (!(machdep->flags & VM_L4_4K))
 		fprintf(fp, "(not used)\n");
 	else
 		fprintf(fp, "%lx\n", machdep->last_pud_read);
