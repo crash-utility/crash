@@ -805,6 +805,22 @@ restart:
 			goto err;
 		}
 	} else {
+		struct stat sbuf;
+		if (fstat(dd->dfd, &sbuf) != 0) {
+			error(INFO, "Cannot fstat the dump file\n");
+			goto err;
+		}
+
+		/*
+		 * For memory regions mapped with the mmap(), attempts access to
+		 * a page of the buffer that lies beyond the end of the mapped file,
+		 * which may cause SIGBUS(see the mmap() man page).
+		 */
+		if (bitmap_len + offset > sbuf.st_size) {
+			error(INFO, "Mmap: Beyond the end of mapped file, corrupted?\n");
+			goto err;
+		}
+
 		dd->bitmap = mmap(NULL, bitmap_len, PROT_READ,
 					MAP_SHARED, dd->dfd, offset);
 		if (dd->bitmap == MAP_FAILED)
