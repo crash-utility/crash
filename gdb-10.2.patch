@@ -16118,3 +16118,67 @@ exit 0
        subclass (SYMBOL_NONE)
      {
        /* We can't use an initializer list for members of a base class, and
+--- gdb-10.2/gdbsupport/enum-flags.h.orig
++++ gdb-10.2/gdbsupport/enum-flags.h
+@@ -81,9 +81,12 @@
+ template<typename T>
+ struct enum_underlying_type
+ {
++  DIAGNOSTIC_PUSH
++  DIAGNOSTIC_IGNORE_ENUM_CONSTEXPR_CONVERSION
+   typedef typename
+     integer_for_size<sizeof (T), static_cast<bool>(T (-1) < T (0))>::type
+     type;
++  DIAGNOSTIC_POP
+ };
+
+ template <typename E>
+
+--- gdb-10.2/include/diagnostics.h.orig
++++ gdb-10.2/include/diagnostics.h
+@@ -61,6 +61,24 @@
+ # define DIAGNOSTIC_IGNORE_FORMAT_NONLITERAL \
+   DIAGNOSTIC_IGNORE ("-Wformat-nonliteral")
+
++# if __has_warning ("-Wuser-defined-warnings")
++#  define DIAGNOSTIC_IGNORE_USER_DEFINED_WARNINGS \
++   DIAGNOSTIC_IGNORE ("-Wuser-defined-warnings")
++# endif
++
++# if __has_warning ("-Wunused-but-set-variable")
++#  define DIAGNOSTIC_IGNORE_UNUSED_BUT_SET_VARIABLE \
++   DIAGNOSTIC_IGNORE ("-Wunused-but-set-variable")
++# endif
++
++# define DIAGNOSTIC_ERROR_SWITCH \
++  DIAGNOSTIC_ERROR ("-Wswitch")
++
++# if __has_warning ("-Wenum-constexpr-conversion")
++#  define DIAGNOSTIC_IGNORE_ENUM_CONSTEXPR_CONVERSION \
++   DIAGNOSTIC_IGNORE ("-Wenum-constexpr-conversion")
++# endif
++
+ #elif defined (__GNUC__) /* GCC */
+
+ # if __GNUC__ >= 7
+@@ -100,4 +118,20 @@
+ # define DIAGNOSTIC_IGNORE_FORMAT_NONLITERAL
+ #endif
+
++#ifndef DIAGNOSTIC_IGNORE_USER_DEFINED_WARNINGS
++# define DIAGNOSTIC_IGNORE_USER_DEFINED_WARNINGS
++#endif
++
++#ifndef DIAGNOSTIC_IGNORE_UNUSED_BUT_SET_VARIABLE
++# define DIAGNOSTIC_IGNORE_UNUSED_BUT_SET_VARIABLE
++#endif
++
++#ifndef DIAGNOSTIC_ERROR_SWITCH
++# define DIAGNOSTIC_ERROR_SWITCH
++#endif
++
++#ifndef DIAGNOSTIC_IGNORE_ENUM_CONSTEXPR_CONVERSION
++# define DIAGNOSTIC_IGNORE_ENUM_CONSTEXPR_CONVERSION
++#endif
++
+ #endif /* DIAGNOSTICS_H */
