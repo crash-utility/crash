@@ -1881,8 +1881,9 @@ arm64_uvtop(struct task_context *tc, ulong uvaddr, physaddr_t *paddr, int verbos
 
 #define PTE_ADDR_LOW   ((((1UL) << (48 - machdep->pageshift)) - 1) << machdep->pageshift)
 #define PTE_ADDR_HIGH  ((0xfUL) << 12)
+#define PTE_ADDR_HIGH_SHIFT 36
 #define PTE_TO_PHYS(pteval)  (machdep->max_physmem_bits == 52 ? \
-	(((pteval & PTE_ADDR_LOW) | ((pteval & PTE_ADDR_HIGH) << 36))) : (pteval & PTE_ADDR_LOW))
+	(((pteval & PTE_ADDR_LOW) | ((pteval & PTE_ADDR_HIGH) << PTE_ADDR_HIGH_SHIFT))) : (pteval & PTE_ADDR_LOW))
 
 #define PUD_TYPE_MASK   3
 #define PUD_TYPE_SECT   1
@@ -1900,15 +1901,15 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	ulong *pgd_base, *pgd_ptr, pgd_val;
 	ulong *pte_base, *pte_ptr, pte_val;
 
-        if (verbose)
-                fprintf(fp, "PAGE DIRECTORY: %lx\n", pgd);
+	if (verbose)
+		fprintf(fp, "PAGE DIRECTORY: %lx\n", pgd);
 
 	pgd_base = (ulong *)pgd;
 	FILL_PGD(pgd_base, KVADDR, machdep->ptrs_per_pgd * sizeof(ulong));
 	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L2_64K) & (machdep->ptrs_per_pgd - 1));
-        pgd_val = ULONG(machdep->pgd + PAGEOFFSET(pgd_ptr));
-        if (verbose) 
-                fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
+	pgd_val = ULONG(machdep->pgd + PAGEOFFSET(pgd_ptr));
+	if (verbose)
+		fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
 	if (!pgd_val)
 		goto no_page;
 
@@ -1918,7 +1919,7 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	 */
 
 	if ((pgd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = (pgd_val & SECTION_PAGE_MASK_512MB) & PHYS_MASK;
+		ulong sectionbase = PTE_TO_PHYS(pgd_val & SECTION_PAGE_MASK_512MB);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (512MB%s)\n\n", sectionbase,
 				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
@@ -1928,17 +1929,17 @@ arm64_vtop_2level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		return TRUE;
 	}
 
-	pte_base = (ulong *)PTOV(pgd_val & PHYS_MASK & (s32)machdep->pagemask);
+	pte_base = (ulong *)PTOV(PTE_TO_PHYS(pgd_val));
 	FILL_PTBL(pte_base, KVADDR, PTRS_PER_PTE_L2_64K * sizeof(ulong));
 	pte_ptr = pte_base + (((vaddr) >> machdep->pageshift) & (PTRS_PER_PTE_L2_64K - 1));
-        pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
-        if (verbose) 
-                fprintf(fp, "   PTE: %lx => %lx\n", (ulong)pte_ptr, pte_val);
+	pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
+	if (verbose)
+		fprintf(fp, "   PTE: %lx => %lx\n", (ulong)pte_ptr, pte_val);
 	if (!pte_val)
 		goto no_page;
 
 	if (pte_val & PTE_VALID) {
-		*paddr = (PAGEBASE(pte_val) & PHYS_MASK) + PAGEOFFSET(vaddr);
+		*paddr = PTE_TO_PHYS(pte_val) + PAGEOFFSET(vaddr);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  %s\n\n", PAGEBASE(*paddr),
 				IS_ZEROPAGE(PAGEBASE(*paddr)) ? "(ZERO PAGE)" : "");
@@ -1966,15 +1967,15 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	ulong *pmd_base, *pmd_ptr, pmd_val;
 	ulong *pte_base, *pte_ptr, pte_val;
 
-        if (verbose)
-                fprintf(fp, "PAGE DIRECTORY: %lx\n", pgd);
+	if (verbose)
+		fprintf(fp, "PAGE DIRECTORY: %lx\n", pgd);
 
 	pgd_base = (ulong *)pgd;
 	FILL_PGD(pgd_base, KVADDR, machdep->ptrs_per_pgd * sizeof(ulong));
 	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L3_64K) & (machdep->ptrs_per_pgd - 1));
-        pgd_val = ULONG(machdep->pgd + PGDIR_OFFSET_L3_64K(pgd_ptr));
-        if (verbose)
-                fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
+	pgd_val = ULONG(machdep->pgd + PGDIR_OFFSET_L3_64K(pgd_ptr));
+	if (verbose)
+		fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
 	if (!pgd_val)
 		goto no_page;
 
@@ -1985,14 +1986,14 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	pmd_base = (ulong *)PTOV(PTE_TO_PHYS(pgd_val));
 	FILL_PMD(pmd_base, KVADDR, PTRS_PER_PMD_L3_64K * sizeof(ulong));
 	pmd_ptr = pmd_base + (((vaddr) >> PMD_SHIFT_L3_64K) & (PTRS_PER_PMD_L3_64K - 1));
-        pmd_val = ULONG(machdep->pmd + PAGEOFFSET(pmd_ptr));
-        if (verbose)
-                fprintf(fp, "   PMD: %lx => %lx\n", (ulong)pmd_ptr, pmd_val);
+	pmd_val = ULONG(machdep->pmd + PAGEOFFSET(pmd_ptr));
+	if (verbose)
+		fprintf(fp, "   PMD: %lx => %lx\n", (ulong)pmd_ptr, pmd_val);
 	if (!pmd_val)
 		goto no_page;
 
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = PTE_TO_PHYS(pmd_val) & SECTION_PAGE_MASK_512MB;
+		ulong sectionbase = PTE_TO_PHYS(pmd_val & SECTION_PAGE_MASK_512MB);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (512MB%s)\n\n", sectionbase,
 				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
@@ -2005,9 +2006,9 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	pte_base = (ulong *)PTOV(PTE_TO_PHYS(pmd_val));
 	FILL_PTBL(pte_base, KVADDR, PTRS_PER_PTE_L3_64K * sizeof(ulong));
 	pte_ptr = pte_base + (((vaddr) >> machdep->pageshift) & (PTRS_PER_PTE_L3_64K - 1));
-        pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
-        if (verbose)
-                fprintf(fp, "   PTE: %lx => %lx\n", (ulong)pte_ptr, pte_val);
+	pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
+	if (verbose)
+		fprintf(fp, "   PTE: %lx => %lx\n", (ulong)pte_ptr, pte_val);
 	if (!pte_val)
 		goto no_page;
 
@@ -2045,7 +2046,7 @@ arm64_vtop_2level_16k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	pgd_base = (ulong *)pgd;
 	FILL_PGD(pgd_base, KVADDR, machdep->ptrs_per_pgd * sizeof(ulong));
 	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L2_16K) & (machdep->ptrs_per_pgd - 1));
-	pgd_val = ULONG(machdep->pgd + PAGEOFFSET(pgd_ptr));
+	pgd_val = ULONG(machdep->pgd + PGDIR_OFFSET_L2_16K(pgd_ptr));
 	if (verbose)
 		fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
 	if (!pgd_val)
@@ -2057,7 +2058,7 @@ arm64_vtop_2level_16k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	 */
 
 	if ((pgd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = (pgd_val & SECTION_PAGE_MASK_32MB) & PHYS_MASK;
+		ulong sectionbase = PTE_TO_PHYS(pgd_val & SECTION_PAGE_MASK_32MB);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (32MB%s)\n\n", sectionbase,
 				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
@@ -2067,7 +2068,7 @@ arm64_vtop_2level_16k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		return TRUE;
 	}
 
-	pte_base = (ulong *)PTOV(pgd_val & PHYS_MASK & (s32)machdep->pagemask);
+	pte_base = (ulong *)PTOV(PTE_TO_PHYS(pgd_val));
 	FILL_PTBL(pte_base, KVADDR, PTRS_PER_PTE_L2_16K * sizeof(ulong));
 	pte_ptr = pte_base + (((vaddr) >> machdep->pageshift) & (PTRS_PER_PTE_L2_16K - 1));
 	pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
@@ -2077,7 +2078,7 @@ arm64_vtop_2level_16k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		goto no_page;
 
 	if (pte_val & PTE_VALID) {
-		*paddr = (PAGEBASE(pte_val) & PHYS_MASK) + PAGEOFFSET(vaddr);
+		*paddr = PTE_TO_PHYS(pte_val) + PAGEOFFSET(vaddr);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  %s\n\n", PAGEBASE(*paddr),
 				IS_ZEROPAGE(PAGEBASE(*paddr)) ? "(ZERO PAGE)" : "");
@@ -2130,7 +2131,7 @@ arm64_vtop_3level_16k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		goto no_page;
 
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = PTE_TO_PHYS(pmd_val) & SECTION_PAGE_MASK_32MB;
+		ulong sectionbase = PTE_TO_PHYS(pmd_val & SECTION_PAGE_MASK_32MB);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (32MB%s)\n\n", sectionbase,
 				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
@@ -2184,14 +2185,14 @@ arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	pgd_base = (ulong *)pgd;
 	FILL_PGD(pgd_base, KVADDR, PTRS_PER_PGD_L3_4K * sizeof(ulong));
 	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L3_4K) & (PTRS_PER_PGD_L3_4K - 1));
-        pgd_val = ULONG(machdep->pgd + PAGEOFFSET(pgd_ptr));
-        if (verbose) 
-                fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
+	pgd_val = ULONG(machdep->pgd + PAGEOFFSET(pgd_ptr));
+	if (verbose)
+		fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
 	if (!pgd_val)
 		goto no_page;
 
 	if ((pgd_val & PUD_TYPE_MASK) == PUD_TYPE_SECT) {
-		ulong sectionbase = (pgd_val & SECTION_PAGE_MASK_1GB) & PHYS_MASK;
+		ulong sectionbase = PTE_TO_PHYS(pgd_val & SECTION_PAGE_MASK_1GB);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (1GB)\n\n", sectionbase);
 			arm64_translate_pte(pgd_val, 0, 0);
@@ -2203,17 +2204,17 @@ arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	 * #define __PAGETABLE_PUD_FOLDED 
 	 */
 
-	pmd_base = (ulong *)PTOV(pgd_val & PHYS_MASK & (s32)machdep->pagemask);
+	pmd_base = (ulong *)PTOV(PTE_TO_PHYS(pgd_val));
 	FILL_PMD(pmd_base, KVADDR, PTRS_PER_PMD_L3_4K * sizeof(ulong));
 	pmd_ptr = pmd_base + (((vaddr) >> PMD_SHIFT_L3_4K) & (PTRS_PER_PMD_L3_4K - 1));
-        pmd_val = ULONG(machdep->pmd + PAGEOFFSET(pmd_ptr));
-        if (verbose) 
-                fprintf(fp, "   PMD: %lx => %lx\n", (ulong)pmd_ptr, pmd_val);
+	pmd_val = ULONG(machdep->pmd + PAGEOFFSET(pmd_ptr));
+	if (verbose)
+		fprintf(fp, "   PMD: %lx => %lx\n", (ulong)pmd_ptr, pmd_val);
 	if (!pmd_val)
 		goto no_page;
 
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = (pmd_val & SECTION_PAGE_MASK_2MB) & PHYS_MASK;
+		ulong sectionbase = PTE_TO_PHYS(pmd_val & SECTION_PAGE_MASK_2MB);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (2MB%s)\n\n", sectionbase,
 				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
@@ -2223,17 +2224,17 @@ arm64_vtop_3level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		return TRUE;
 	}
 
-	pte_base = (ulong *)PTOV(pmd_val & PHYS_MASK & (s32)machdep->pagemask);
+	pte_base = (ulong *)PTOV(PTE_TO_PHYS(pmd_val));
 	FILL_PTBL(pte_base, KVADDR, PTRS_PER_PTE_L3_4K * sizeof(ulong));
 	pte_ptr = pte_base + (((vaddr) >> machdep->pageshift) & (PTRS_PER_PTE_L3_4K - 1));
-        pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
-        if (verbose) 
-                fprintf(fp, "   PTE: %lx => %lx\n", (ulong)pte_ptr, pte_val);
+	pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
+	if (verbose)
+		fprintf(fp, "   PTE: %lx => %lx\n", (ulong)pte_ptr, pte_val);
 	if (!pte_val)
 		goto no_page;
 
 	if (pte_val & PTE_VALID) {
-		*paddr = (PAGEBASE(pte_val) & PHYS_MASK) + PAGEOFFSET(vaddr);
+		*paddr = PTE_TO_PHYS(pte_val) + PAGEOFFSET(vaddr);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  %s\n\n", PAGEBASE(*paddr),
 				IS_ZEROPAGE(PAGEBASE(*paddr)) ? "(ZERO PAGE)" : "");
@@ -2262,30 +2263,29 @@ arm64_vtop_4level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	ulong *pmd_base, *pmd_ptr, pmd_val;
 	ulong *pte_base, *pte_ptr, pte_val;
 
-        if (verbose)
-                fprintf(fp, "PAGE DIRECTORY: %lx\n", pgd);
+	if (verbose)
+		fprintf(fp, "PAGE DIRECTORY: %lx\n", pgd);
 
 	pgd_base = (ulong *)pgd;
 	FILL_PGD(pgd_base, KVADDR, PTRS_PER_PGD_L4_4K * sizeof(ulong));
 	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L4_4K) & (PTRS_PER_PGD_L4_4K - 1));
-        pgd_val = ULONG(machdep->pgd + PGDIR_OFFSET_48VA(pgd_ptr));
-        if (verbose)
-                fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
+	pgd_val = ULONG(machdep->pgd + PGDIR_OFFSET_48VA(pgd_ptr));
+	if (verbose)
+		fprintf(fp, "   PGD: %lx => %lx\n", (ulong)pgd_ptr, pgd_val);
 	if (!pgd_val)
 		goto no_page;
 
-	pud_base = (ulong *)PTOV(pgd_val & PHYS_MASK & PGDIR_MASK_48VA);
-
+	pud_base = (ulong *)PTOV(PTE_TO_PHYS(pgd_val));
 	FILL_PUD(pud_base, KVADDR, PTRS_PER_PUD_L4_4K * sizeof(ulong));
 	pud_ptr = pud_base + (((vaddr) >> PUD_SHIFT_L4_4K) & (PTRS_PER_PUD_L4_4K - 1));
-        pud_val = ULONG(machdep->pud + PAGEOFFSET(pud_ptr));
-        if (verbose)
-                fprintf(fp, "   PUD: %lx => %lx\n", (ulong)pud_ptr, pud_val);
+	pud_val = ULONG(machdep->pud + PAGEOFFSET(pud_ptr));
+	if (verbose)
+		fprintf(fp, "   PUD: %lx => %lx\n", (ulong)pud_ptr, pud_val);
 	if (!pud_val)
 		goto no_page;
 
 	if ((pud_val & PUD_TYPE_MASK) == PUD_TYPE_SECT) {
-		ulong sectionbase = (pud_val & SECTION_PAGE_MASK_1GB) & PHYS_MASK;
+		ulong sectionbase = PTE_TO_PHYS(pud_val & SECTION_PAGE_MASK_1GB);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (1GB)\n\n", sectionbase);
 			arm64_translate_pte(pud_val, 0, 0);
@@ -2294,17 +2294,17 @@ arm64_vtop_4level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		return TRUE;
 	}
 
-	pmd_base = (ulong *)PTOV(pud_val & PHYS_MASK & (s32)machdep->pagemask);
+	pmd_base = (ulong *)PTOV(PTE_TO_PHYS(pud_val));
 	FILL_PMD(pmd_base, KVADDR, PTRS_PER_PMD_L4_4K * sizeof(ulong));
 	pmd_ptr = pmd_base + (((vaddr) >> PMD_SHIFT_L4_4K) & (PTRS_PER_PMD_L4_4K - 1));
-        pmd_val = ULONG(machdep->pmd + PAGEOFFSET(pmd_ptr));
-        if (verbose)
-                fprintf(fp, "   PMD: %lx => %lx\n", (ulong)pmd_ptr, pmd_val);
+	pmd_val = ULONG(machdep->pmd + PAGEOFFSET(pmd_ptr));
+	if (verbose)
+		fprintf(fp, "   PMD: %lx => %lx\n", (ulong)pmd_ptr, pmd_val);
 	if (!pmd_val)
 		goto no_page;
 
 	if ((pmd_val & PMD_TYPE_MASK) == PMD_TYPE_SECT) {
-		ulong sectionbase = (pmd_val & SECTION_PAGE_MASK_2MB) & PHYS_MASK;
+		ulong sectionbase = PTE_TO_PHYS(pmd_val & SECTION_PAGE_MASK_2MB);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  (2MB%s)\n\n", sectionbase,
 				IS_ZEROPAGE(sectionbase) ? ", ZERO PAGE" : "");
@@ -2314,17 +2314,17 @@ arm64_vtop_4level_4k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 		return TRUE;
 	}
 
-	pte_base = (ulong *)PTOV(pmd_val & PHYS_MASK & (s32)machdep->pagemask);
+	pte_base = (ulong *)PTOV(PTE_TO_PHYS(pmd_val));
 	FILL_PTBL(pte_base, KVADDR, PTRS_PER_PTE_L4_4K * sizeof(ulong));
 	pte_ptr = pte_base + (((vaddr) >> machdep->pageshift) & (PTRS_PER_PTE_L4_4K - 1));
-        pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
-        if (verbose)
-                fprintf(fp, "   PTE: %lx => %lx\n", (ulong)pte_ptr, pte_val);
+	pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_ptr));
+	if (verbose)
+		fprintf(fp, "   PTE: %lx => %lx\n", (ulong)pte_ptr, pte_val);
 	if (!pte_val)
 		goto no_page;
 
 	if (pte_val & PTE_VALID) {
-		*paddr = (PAGEBASE(pte_val) & PHYS_MASK) + PAGEOFFSET(vaddr);
+		*paddr = PTE_TO_PHYS(pte_val) + PAGEOFFSET(vaddr);
 		if (verbose) {
 			fprintf(fp, "  PAGE: %lx  %s\n\n", PAGEBASE(*paddr),
 				IS_ZEROPAGE(PAGEBASE(*paddr)) ? "(ZERO PAGE)" : "");

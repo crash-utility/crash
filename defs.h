@@ -3311,6 +3311,7 @@ typedef signed int s32;
 #define PGDIR_SHIFT_L2_16K   (25)
 #define PGDIR_SIZE_L2_16K    ((1UL) << PGDIR_SHIFT_L2_16K)
 #define PGDIR_MASK_L2_16K    (~(PGDIR_SIZE_L2_16K-1))
+#define PGDIR_OFFSET_L2_16K(X) (((ulong)(X)) & ((machdep->ptrs_per_pgd * 8) - 1))
 
 /*
  * 3-levels / 16K pages
