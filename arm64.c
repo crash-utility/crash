@@ -445,6 +445,10 @@ arm64_init(int when)
 			break;
 
 		case 65536:
+			/*
+			 * idmap_ptrs_per_pgd has been removed since Linux-v6.0-rc1, see:
+			 * commit ebd9aea1f27e ("arm64: head: drop idmap_ptrs_per_pgd")
+			 */
 			if (kernel_symbol_exists("idmap_ptrs_per_pgd") &&
 			    readmem(symbol_value("idmap_ptrs_per_pgd"), KVADDR,
 			    &value, sizeof(ulong), "idmap_ptrs_per_pgd", QUIET|RETURN_ON_ERROR))
@@ -452,8 +456,14 @@ arm64_init(int when)
 		
 			if (machdep->machspec->VA_BITS > PGDIR_SHIFT_L3_64K) {
 				machdep->flags |= VM_L3_64K;
-				if (!machdep->ptrs_per_pgd)
-					machdep->ptrs_per_pgd = PTRS_PER_PGD_L3_64K;
+				if (!machdep->ptrs_per_pgd) {
+					if (machdep->machspec->VA_BITS == 52)
+						machdep->ptrs_per_pgd = PTRS_PER_PGD_L3_64K_52;
+					else if (machdep->machspec->VA_BITS == 48)
+						machdep->ptrs_per_pgd = PTRS_PER_PGD_L3_64K_48;
+					else
+						error(FATAL, "wrong VA_BITS for 64K page.");
+				}
 				if ((machdep->pgd =
 				    (char *)malloc(machdep->ptrs_per_pgd * 8)) == NULL)
 					error(FATAL, "cannot malloc pgd space.");
@@ -1972,6 +1982,10 @@ arm64_vtop_3level_64k(ulong pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 
 	pgd_base = (ulong *)pgd;
 	FILL_PGD(pgd_base, KVADDR, machdep->ptrs_per_pgd * sizeof(ulong));
+	/*
+	 * Use machdep->ptrs_per_pgd to mask vaddr instead of using macro, because
+	 * 48-bits and 52-bits have different size of ptrs_per_pgd.
+	 */
 	pgd_ptr = pgd_base + (((vaddr) >> PGDIR_SHIFT_L3_64K) & (machdep->ptrs_per_pgd - 1));
 	pgd_val = ULONG(machdep->pgd + PGDIR_OFFSET_L3_64K(pgd_ptr));
 	if (verbose)

@@ -3333,7 +3333,8 @@ typedef signed int s32;
  * 3-levels / 64K pages
  * 48-bit, 52-bit VA
  */
-#define PTRS_PER_PGD_L3_64K  (64)
+#define PTRS_PER_PGD_L3_64K_48  ((1UL) << (48 - 42))
+#define PTRS_PER_PGD_L3_64K_52  ((1UL) << (52 - 42))
 #define PTRS_PER_PMD_L3_64K  (8192)
 #define PTRS_PER_PTE_L3_64K  (8192)
 #define PGDIR_SHIFT_L3_64K   (42)
