@@ -8143,6 +8143,42 @@ enum x86_64_regnum {
         LAST_REGNUM
 };
 
+enum arm64_regnum {
+	X0_REGNUM,
+	X1_REGNUM,
+	X2_REGNUM,
+	X3_REGNUM,
+	X4_REGNUM,
+	X5_REGNUM,
+	X6_REGNUM,
+	X7_REGNUM,
+	X8_REGNUM,
+	X9_REGNUM,
+	X10_REGNUM,
+	X11_REGNUM,
+	X12_REGNUM,
+	X13_REGNUM,
+	X14_REGNUM,
+	X15_REGNUM,
+	X16_REGNUM,
+	X17_REGNUM,
+	X18_REGNUM,
+	X19_REGNUM,
+	X20_REGNUM,
+	X21_REGNUM,
+	X22_REGNUM,
+	X23_REGNUM,
+	X24_REGNUM,
+	X25_REGNUM,
+	X26_REGNUM,
+	X27_REGNUM,
+	X28_REGNUM,
+	X29_REGNUM,
+	X30_REGNUM,
+	SP_REGNUM,
+	PC_REGNUM,
+};
+
 /*
  * Register numbers to make crash_target->fetch_registers()
  * ---> machdep->get_current_task_reg() work properly.
