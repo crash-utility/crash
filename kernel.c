@@ -157,6 +157,7 @@ kernel_init()
         if (!(kt->cpu_flags = (ulong *)calloc(NR_CPUS, sizeof(ulong))))
                 error(FATAL, "cannot malloc cpu_flags array");
 
+	STRUCT_SIZE_INIT(cpumask_t, "cpumask_t");
 	cpu_maps_init();
 
 	kt->stext = symbol_value("_stext");
@@ -914,9 +915,9 @@ cpu_map_size(const char *type)
 	struct gnu_request req;
 
         if (LKCD_KERNTYPES()) {
-                if ((len = STRUCT_SIZE("cpumask_t")) < 0)
-                        error(FATAL, "cannot determine type cpumask_t\n");
-		return len;
+		if (INVALID_SIZE(cpumask_t))
+			error(FATAL, "cannot determine type cpumask_t\n");
+		return SIZE(cpumask_t);
 	}
 
 	sprintf(map_symbol, "cpu_%s_map", type);
@@ -926,11 +927,9 @@ cpu_map_size(const char *type)
 		return len;
 	}
 
-	len = STRUCT_SIZE("cpumask_t");
-	if (len < 0)
+	if (INVALID_SIZE(cpumask_t))
 		return sizeof(ulong);
-	else
-		return len;
+	return SIZE(cpumask_t);
 }
 
 /*
@@ -953,8 +952,10 @@ cpu_maps_init(void)
 		{ ACTIVE_MAP, "active" },
 	};
 
-	if ((len = STRUCT_SIZE("cpumask_t")) < 0)
+	if (INVALID_SIZE(cpumask_t))
 		len = sizeof(ulong);
+	else
+		len = SIZE(cpumask_t);
 
 	buf = GETBUF(len);
 
@@ -7383,7 +7384,7 @@ generic_get_irq_affinity(int irq)
 		return;
 
 	len = DIV_ROUND_UP(kt->cpus, BITS_PER_LONG) * sizeof(ulong);
-	len_cpumask = STRUCT_SIZE("cpumask_t");
+	len_cpumask = VALID_SIZE(cpumask_t) ? SIZE(cpumask_t) : 0;
 	if (len_cpumask > 0)
 		len = len_cpumask > len ? len : len_cpumask;
 

@@ -12094,6 +12094,7 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "                    maple_node: %ld\n", SIZE(maple_node));
 
 	fprintf(fp, "                percpu_counter: %ld\n", SIZE(percpu_counter));
+	fprintf(fp, "                     cpumask_t: %ld\n", SIZE(cpumask_t));
 
         fprintf(fp, "\n                   array_table:\n");
 	/*
