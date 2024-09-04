@@ -982,6 +982,7 @@ struct bt_info {
 	ulong eframe_ip;
 	ulong radix;
 	ulong *cpumask;
+	bool need_free;
 };
 
 #define STACK_OFFSET_TYPE(OFF) \
@@ -6162,6 +6163,7 @@ int load_module_symbols_helper(char *);
 void unlink_module(struct load_module *);
 int check_specified_module_tree(char *, char *);
 int is_system_call(char *, ulong);
+void get_dumpfile_regs(struct bt_info*, ulong*, ulong*);
 void generic_dump_irq(int);
 void generic_get_irq_affinity(int);
 void generic_show_interrupts(int, ulong *);
@@ -6261,6 +6263,7 @@ ulong cpu_map_addr(const char *type);
 #define BT_REGS_NOT_FOUND (0x4000000000000ULL)
 #define BT_OVERFLOW_STACK (0x8000000000000ULL)
 #define BT_SKIP_IDLE     (0x10000000000000ULL)
+#define BT_NO_PRINT_REGS (0x20000000000000ULL)
 #define BT_SYMBOL_OFFSET   (BT_SYMBOLIC_ARGS)
 
 #define BT_REF_HEXVAL         (0x1)
@@ -7966,6 +7969,7 @@ extern unsigned char *gdb_prettyprint_arrays;
 extern unsigned int *gdb_repeat_count_threshold;
 extern unsigned char *gdb_stop_print_at_null;
 extern unsigned int *gdb_output_radix;
+int is_kvaddr(ulong);
 
 /*
  *  gdb/top.c
@@ -8066,6 +8070,13 @@ extern int have_full_symbols(void);
 #define XEN_HYPERVISOR_ARCH 
 #endif
 
+#ifndef offsetof
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#endif
+#define FIELD_SIZEOF(t, f) (sizeof(((t*)0)->f))
+#define REG_SEQ(TYPE, MEMBER) \
+	(offsetof(struct TYPE, MEMBER) / FIELD_SIZEOF(struct TYPE, MEMBER))
+
 /*
  * Register numbers must be in sync with gdb/features/i386/64bit-core.c
  * to make crash_target->fetch_registers() ---> machdep->get_cpu_reg()
@@ -8113,6 +8124,126 @@ enum x86_64_regnum {
         FOOFF_REGNUM,
         FOP_REGNUM,
         LAST_REGNUM
+};
+
+/*
+ * Register numbers to make crash_target->fetch_registers()
+ * ---> machdep->get_current_task_reg() work properly.
+ *
+ *  These register numbers and names are given according to output of
+ *  `rs6000_register_name`, because that is what was being used by
+ *  crash_target::fetch_registers in case of PPC64
+ */
+enum ppc64_regnum {
+	PPC64_R0_REGNUM = 0,
+	PPC64_R1_REGNUM,
+	PPC64_R2_REGNUM,
+	PPC64_R3_REGNUM,
+	PPC64_R4_REGNUM,
+	PPC64_R5_REGNUM,
+	PPC64_R6_REGNUM,
+	PPC64_R7_REGNUM,
+	PPC64_R8_REGNUM,
+	PPC64_R9_REGNUM,
+	PPC64_R10_REGNUM,
+	PPC64_R11_REGNUM,
+	PPC64_R12_REGNUM,
+	PPC64_R13_REGNUM,
+	PPC64_R14_REGNUM,
+	PPC64_R15_REGNUM,
+	PPC64_R16_REGNUM,
+	PPC64_R17_REGNUM,
+	PPC64_R18_REGNUM,
+	PPC64_R19_REGNUM,
+	PPC64_R20_REGNUM,
+	PPC64_R21_REGNUM,
+	PPC64_R22_REGNUM,
+	PPC64_R23_REGNUM,
+	PPC64_R24_REGNUM,
+	PPC64_R25_REGNUM,
+	PPC64_R26_REGNUM,
+	PPC64_R27_REGNUM,
+	PPC64_R28_REGNUM,
+	PPC64_R29_REGNUM,
+	PPC64_R30_REGNUM,
+	PPC64_R31_REGNUM,
+
+	PPC64_F0_REGNUM = 32,
+	PPC64_F1_REGNUM,
+	PPC64_F2_REGNUM,
+	PPC64_F3_REGNUM,
+	PPC64_F4_REGNUM,
+	PPC64_F5_REGNUM,
+	PPC64_F6_REGNUM,
+	PPC64_F7_REGNUM,
+	PPC64_F8_REGNUM,
+	PPC64_F9_REGNUM,
+	PPC64_F10_REGNUM,
+	PPC64_F11_REGNUM,
+	PPC64_F12_REGNUM,
+	PPC64_F13_REGNUM,
+	PPC64_F14_REGNUM,
+	PPC64_F15_REGNUM,
+	PPC64_F16_REGNUM,
+	PPC64_F17_REGNUM,
+	PPC64_F18_REGNUM,
+	PPC64_F19_REGNUM,
+	PPC64_F20_REGNUM,
+	PPC64_F21_REGNUM,
+	PPC64_F22_REGNUM,
+	PPC64_F23_REGNUM,
+	PPC64_F24_REGNUM,
+	PPC64_F25_REGNUM,
+	PPC64_F26_REGNUM,
+	PPC64_F27_REGNUM,
+	PPC64_F28_REGNUM,
+	PPC64_F29_REGNUM,
+	PPC64_F30_REGNUM,
+	PPC64_F31_REGNUM,
+
+	PPC64_PC_REGNUM = 64,
+	PPC64_MSR_REGNUM = 65,
+	PPC64_CR_REGNUM = 66,
+	PPC64_LR_REGNUM = 67,
+	PPC64_CTR_REGNUM = 68,
+	PPC64_XER_REGNUM = 69,
+	PPC64_FPSCR_REGNUM = 70,
+
+	PPC64_VR0_REGNUM = 106,
+	PPC64_VR1_REGNUM,
+	PPC64_VR2_REGNUM,
+	PPC64_VR3_REGNUM,
+	PPC64_VR4_REGNUM,
+	PPC64_VR5_REGNUM,
+	PPC64_VR6_REGNUM,
+	PPC64_VR7_REGNUM,
+	PPC64_VR8_REGNUM,
+	PPC64_VR9_REGNUM,
+	PPC64_VR10_REGNUM,
+	PPC64_VR11_REGNUM,
+	PPC64_VR12_REGNUM,
+	PPC64_VR13_REGNUM,
+	PPC64_VR14_REGNUM,
+	PPC64_VR15_REGNUM,
+	PPC64_VR16_REGNUM,
+	PPC64_VR17_REGNUM,
+	PPC64_VR18_REGNUM,
+	PPC64_VR19_REGNUM,
+	PPC64_VR20_REGNUM,
+	PPC64_VR21_REGNUM,
+	PPC64_VR22_REGNUM,
+	PPC64_VR23_REGNUM,
+	PPC64_VR24_REGNUM,
+	PPC64_VR25_REGNUM,
+	PPC64_VR26_REGNUM,
+	PPC64_VR27_REGNUM,
+	PPC64_VR28_REGNUM,
+	PPC64_VR29_REGNUM,
+	PPC64_VR30_REGNUM,
+	PPC64_VR31_REGNUM,
+
+	PPC64_VSCR_REGNUM = 138,
+	PPC64_VRSAVE_REGNU = 139
 };
 
 /* crash_target.c */

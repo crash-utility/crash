@@ -3535,6 +3535,39 @@ get_lkcd_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 	machdep->get_stack_frame(bt, eip, esp);
 }
 
+void
+get_dumpfile_regs(struct bt_info *bt, ulong *eip, ulong *esp)
+{
+	bt->flags |= BT_NO_PRINT_REGS;
+
+	if (NETDUMP_DUMPFILE())
+		get_netdump_regs(bt, eip, esp);
+	else if (KDUMP_DUMPFILE())
+		get_kdump_regs(bt, eip, esp);
+	else if (DISKDUMP_DUMPFILE())
+		get_diskdump_regs(bt, eip, esp);
+	else if (KVMDUMP_DUMPFILE())
+		get_kvmdump_regs(bt, eip, esp);
+	else if (LKCD_DUMPFILE())
+		get_lkcd_regs(bt, eip, esp);
+	else if (XENDUMP_DUMPFILE())
+		get_xendump_regs(bt, eip, esp);
+	else if (SADUMP_DUMPFILE())
+		get_sadump_regs(bt, eip, esp);
+	else if (VMSS_DUMPFILE())
+		get_vmware_vmss_regs(bt, eip, esp);
+	else if (REMOTE_PAUSED()) {
+		if (!is_task_active(bt->task) || !get_remote_regs(bt, eip, esp))
+			machdep->get_stack_frame(bt, eip, esp);
+	} else
+		machdep->get_stack_frame(bt, eip, esp);
+
+	bt->flags &= ~BT_NO_PRINT_REGS;
+
+	bt->instptr = *eip;
+	bt->stkptr = *esp;
+}
+
 
 /*
  *  Store the head of the kernel module list for future use.

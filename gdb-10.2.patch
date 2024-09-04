@@ -16,7 +16,9 @@ tar xvzmf gdb-10.2.tar.gz \
 	gdb-10.2/gdb/dwarf2/read.c \
 	gdb-10.2/gdb/ada-lang.c \
 	gdb-10.2/gdb/objfiles.h \
-	gdb-10.2/bfd/elf-bfd.h
+	gdb-10.2/bfd/elf-bfd.h \
+	gdb-10.2/gdb/stack.c \
+	gdb-10.2/gdb/ui-file.h
 
 # For newly added gdb files, remove them to be its original state.
 
@@ -16118,3 +16120,99 @@ exit 0
        subclass (SYMBOL_NONE)
      {
        /* We can't use an initializer list for members of a base class, and
+--- gdb-10.2/gdb/ui-file.h.orig
++++ gdb-10.2/gdb/ui-file.h
+@@ -195,6 +195,7 @@ public:
+ 
+   bool can_emit_style_escape () override;
+ 
++  FILE *get_stream(void);
+   /* Sets the internal stream to FILE, and saves the FILE's file
+      descriptor in M_FD.  */
+   void set_stream (FILE *file);
+--- gdb-10.2/gdb/ui-file.c.orig
++++ gdb-10.2/gdb/ui-file.c
+@@ -161,6 +161,12 @@ stdio_file::~stdio_file ()
+     fclose (m_file);
+ }
+ 
++FILE*
++stdio_file::get_stream(void)
++{
++  return m_file;
++}
++
+ void
+ stdio_file::set_stream (FILE *file)
+ {
+--- gdb-10.2/gdb/symtab.c.orig
++++ gdb-10.2/gdb/symtab.c
+@@ -6964,8 +6964,12 @@ void
+ gdb_command_funnel_1(struct gnu_request *req)
+ {
+         struct symbol *sym;
++        FILE *original_stdout_stream = nullptr;
++        FILE *original_stderr_stream = nullptr;
+ 
+         if (req->command != GNU_VERSION && req->command != GNU_USER_PRINT_OPTION) {
++                original_stdout_stream = (dynamic_cast< stdio_file * >gdb_stdout)->get_stream();
++                original_stderr_stream = (dynamic_cast< stdio_file * >gdb_stderr)->get_stream();
+                 (dynamic_cast<stdio_file *>gdb_stdout)->set_stream(req->fp);
+                 (dynamic_cast<stdio_file *>gdb_stderr)->set_stream(req->fp);
+         }
+@@ -7068,6 +7072,12 @@ gdb_command_funnel_1(struct gnu_request *req)
+                 req->flags |= GNU_COMMAND_FAILED;
+                 break;
+         }
++
++        /* Restore the streams gdb output was using */
++        if (original_stdout_stream)
++            (dynamic_cast<stdio_file *>gdb_stdout)->set_stream(original_stdout_stream);
++        if (original_stderr_stream)
++            (dynamic_cast<stdio_file *>gdb_stderr)->set_stream(original_stderr_stream);
+ }
+ 
+ /*
+--- gdb-10.2/gdb/stack.c.orig
++++ gdb-10.2/gdb/stack.c
+@@ -1990,6 +1990,11 @@
+ /* Print briefly all stack frames or just the innermost COUNT_EXP
+    frames.  */
+ 
++#ifdef CRASH_MERGE
++extern "C" int is_kvaddr(ulong);
++extern "C" int gdb_CRASHDEBUG(ulong);
++#endif
++
+ static void
+ backtrace_command_1 (const frame_print_options &fp_opts,
+ 		     const backtrace_cmd_options &bt_opts,
+@@ -2082,6 +2086,17 @@
+ 	     hand, perhaps the code does or could be fixed to make sure
+ 	     the frame->prev field gets set to NULL in that case).  */
+ 
++#ifdef CRASH_MERGE
++	  CORE_ADDR pc = 0;
++	  get_frame_pc_if_available (fi, &pc);
++	  if (!is_kvaddr(pc)) {
++	    if (gdb_CRASHDEBUG(1)) {
++	      printf_filtered (_("Backtrace stopped: due to non-kernel addr: 0x%lx\n"),pc);
++	    }
++	    fi = NULL;
++	    break;
++	  }
++#endif
+ 	  print_frame_info (fp_opts, fi, 1, LOCATION, 1, 0);
+ 	  if ((flags & PRINT_LOCALS) != 0)
+ 	    {
+--- gdb-10.2/gdb/stack.c.orig
++++ gdb-10.2/gdb/stack.c
+@@ -2127,7 +2127,7 @@
+ 	  enum unwind_stop_reason reason;
+ 
+ 	  reason = get_frame_unwind_stop_reason (trailing);
+-	  if (reason >= UNWIND_FIRST_ERROR)
++	  if (reason >= UNWIND_FIRST_ERROR && gdb_CRASHDEBUG(1))
+ 	    printf_filtered (_("Backtrace stopped: %s\n"),
+ 			     frame_stop_reason_string (trailing));
+ 	}
