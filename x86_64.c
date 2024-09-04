@@ -126,7 +126,7 @@ static int x86_64_get_framesize(struct bt_info *, ulong, ulong, char *);
 static void x86_64_framesize_debug(struct bt_info *);
 static void x86_64_get_active_set(void);
 static int x86_64_get_kvaddr_ranges(struct vaddr_range *);
-static int x86_64_get_cpu_reg(int, int, const char *, int, void *);
+static int x86_64_get_cpu_reg(int, const char *, int, void *);
 static int x86_64_verify_paddr(uint64_t);
 static void GART_init(void);
 static void x86_64_exception_stacks_init(void);
@@ -195,7 +195,7 @@ x86_64_init(int when)
 		machdep->machspec->irq_eframe_link = UNINITIALIZED;
 		machdep->machspec->irq_stack_gap = UNINITIALIZED;
 		machdep->get_kvaddr_ranges = x86_64_get_kvaddr_ranges;
-		machdep->get_cpu_reg = x86_64_get_cpu_reg;
+		machdep->get_current_task_reg = x86_64_get_cpu_reg;
                 if (machdep->cmdline_args[0])
                         parse_cmdline_args();
 		if ((string = pc->read_vmcoreinfo("relocate"))) {
@@ -9077,14 +9077,22 @@ x86_64_get_kvaddr_ranges(struct vaddr_range *vrp)
 }
 
 static int
-x86_64_get_cpu_reg(int cpu, int regno, const char *name,
+x86_64_get_cpu_reg(int regno, const char *name,
                    int size, void *value)
 {
-        if (regno >= LAST_REGNUM)
-                return FALSE;
+	struct task_context *tc;
 
-        if (VMSS_DUMPFILE())
-                return vmware_vmss_get_cpu_reg(cpu, regno, name, size, value);
+	tc = CURRENT_CONTEXT();
+	if (!tc)
+		return FALSE;
+	
+	if (regno >= LAST_REGNUM)
+		return FALSE;
+	/*
+	* Task is active, grab CPU's registers
+	*/
+	if (is_task_active(tc->task) && VMSS_DUMPFILE())
+		return vmware_vmss_get_cpu_reg(tc->processor, regno, name, size, value);
 
         return FALSE;
 }

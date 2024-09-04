@@ -1871,7 +1871,7 @@ cmd_set(void)
 				return;
 
 			if (ACTIVE()) {
-				set_context(tt->this_task, NO_PID);
+				set_context(tt->this_task, NO_PID, TRUE);
 				show_context(CURRENT_CONTEXT());
 				return;
 			}
@@ -1880,7 +1880,7 @@ cmd_set(void)
                 		error(INFO, "no panic task found!\n");
 				return;
 			}
-        		set_context(tt->panic_task, NO_PID);
+			set_context(tt->panic_task, NO_PID, TRUE);
 			show_context(CURRENT_CONTEXT());
 			return;
 
@@ -2559,14 +2559,14 @@ cmd_set(void)
 	                case STR_PID:
                                 pid = value;
                                 task = NO_TASK;
-                        	if (set_context(task, pid))
+                                if (set_context(task, pid, TRUE))
                                 	show_context(CURRENT_CONTEXT());
 	                        break;
 	
 	                case STR_TASK:
                                 task = value;
                                 pid = NO_PID;
-                                if (set_context(task, pid))
+                                if (set_context(task, pid, TRUE))
                                         show_context(CURRENT_CONTEXT()); 
 	                        break;
 	
