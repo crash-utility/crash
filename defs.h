@@ -2245,6 +2245,20 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long rb_list_head;
 	long file_f_inode;
 	long page_page_type;
+	long inactive_task_frame_r15;
+	long inactive_task_frame_r14;
+	long inactive_task_frame_r13;
+	long inactive_task_frame_r12;
+	long inactive_task_frame_flags;
+	long inactive_task_frame_si;
+	long inactive_task_frame_di;
+	long inactive_task_frame_bx;
+	long thread_struct_es;
+	long thread_struct_ds;
+	long thread_struct_fsbase;
+	long thread_struct_gsbase;
+	long thread_struct_fs;
+	long thread_struct_gs;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -8079,7 +8093,7 @@ extern int have_full_symbols(void);
 
 /*
  * Register numbers must be in sync with gdb/features/i386/64bit-core.c
- * to make crash_target->fetch_registers() ---> machdep->get_cpu_reg()
+ * to make crash_target->fetch_registers() ---> machdep->get_current_task_reg()
  * working properly.
  */
 enum x86_64_regnum {
@@ -8123,6 +8137,9 @@ enum x86_64_regnum {
         FOSEG_REGNUM,
         FOOFF_REGNUM,
         FOP_REGNUM,
+        FS_BASE_REGNUM = 152,
+        GS_BASE_REGNUM,
+        ORIG_RAX_REGNUM,
         LAST_REGNUM
 };
 

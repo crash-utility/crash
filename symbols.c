@@ -11815,6 +11815,20 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "            zs_pool_size_class: %ld\n", OFFSET(zs_pool_size_class));
 	fprintf(fp, "               size_class_size: %ld\n", OFFSET(size_class_size));
 	fprintf(fp, "                   zspage_huge: %ld\n", OFFSET(zspage_huge));
+	fprintf(fp, "       inactive_task_frame_r15: %ld\n", OFFSET(inactive_task_frame_r15));
+	fprintf(fp, "       inactive_task_frame_r14: %ld\n", OFFSET(inactive_task_frame_r14));
+	fprintf(fp, "       inactive_task_frame_r13: %ld\n", OFFSET(inactive_task_frame_r13));
+	fprintf(fp, "       inactive_task_frame_r12: %ld\n", OFFSET(inactive_task_frame_r12));
+	fprintf(fp, "     inactive_task_frame_flags: %ld\n", OFFSET(inactive_task_frame_flags));
+	fprintf(fp, "        inactive_task_frame_si: %ld\n", OFFSET(inactive_task_frame_si));
+	fprintf(fp, "        inactive_task_frame_di: %ld\n", OFFSET(inactive_task_frame_di));
+	fprintf(fp, "        inactive_task_frame_bx: %ld\n", OFFSET(inactive_task_frame_bx));
+	fprintf(fp, "              thread_struct_es: %ld\n", OFFSET(thread_struct_es));
+	fprintf(fp, "              thread_struct_ds: %ld\n", OFFSET(thread_struct_ds));
+	fprintf(fp, "          thread_struct_fsbase: %ld\n", OFFSET(thread_struct_fsbase));
+	fprintf(fp, "          thread_struct_gsbase: %ld\n", OFFSET(thread_struct_gsbase));
+	fprintf(fp, "              thread_struct_fs: %ld\n", OFFSET(thread_struct_fs));
+	fprintf(fp, "              thread_struct_gs: %ld\n", OFFSET(thread_struct_gs));
 
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
