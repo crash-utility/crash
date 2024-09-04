@@ -8703,6 +8703,8 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp, char *stack_
 
         rewind(pc->tmpfile2);
         while (fgets(buf, BUFSIZE, pc->tmpfile2)) {
+		if (STRNEQ(buf, "=>"))
+			shift_string_left(buf, 2);
 		strcpy(buf2, buf);
 
 		if (CRASHDEBUG(3))
