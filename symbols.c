@@ -10339,6 +10339,8 @@ dump_offset_table(char *spec, ulong makestruct)
         fprintf(fp, "            page_compound_head: %ld\n",
                 OFFSET(page_compound_head));
         fprintf(fp, "                  page_private: %ld\n", OFFSET(page_private));
+	fprintf(fp, "                page_page_type: %ld\n",
+		OFFSET(page_page_type));
 
 	fprintf(fp, "        trace_print_flags_mask: %ld\n",
 		OFFSET(trace_print_flags_mask));

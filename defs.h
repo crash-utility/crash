@@ -2243,6 +2243,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long vmap_node_busy;
 	long rb_list_head;
 	long file_f_inode;
+	long page_page_type;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2651,6 +2652,7 @@ struct vm_table {                /* kernel VM-related data */
 	ulong max_mem_section_nr;
 	ulong zero_paddr;
 	ulong huge_zero_paddr;
+	uint page_type_base;
 };
 
 #define NODES                       (0x1)
@@ -2684,6 +2686,11 @@ struct vm_table {                /* kernel VM-related data */
 #define SLAB_CPU_CACHE       (0x10000000)
 #define SLAB_ROOT_CACHES     (0x20000000)
 #define USE_VMAP_NODES       (0x40000000)
+/*
+ * The SLAB_PAGEFLAGS flag is introduced to detect the change of
+ * PG_slab's type from a page flag to a page type.
+ */
+#define SLAB_PAGEFLAGS       (0x80000000)
 
 #define IS_FLATMEM()		(vt->flags & FLATMEM)
 #define IS_DISCONTIGMEM()	(vt->flags & DISCONTIGMEM)
