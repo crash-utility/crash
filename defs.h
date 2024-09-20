@@ -3269,8 +3269,9 @@ typedef signed int s32;
 
 /*
  * 3-levels / 4K pages
+ * 39-bit VA
  */
-#define PTRS_PER_PGD_L3_4K   (512)
+#define PTRS_PER_PGD_L3_4K   ((1UL) << (39 - 30))
 #define PTRS_PER_PMD_L3_4K   (512)
 #define PTRS_PER_PTE_L3_4K   (512)
 #define PGDIR_SHIFT_L3_4K    (30)
@@ -3306,11 +3307,12 @@ typedef signed int s32;
  * 2-levels / 16K pages
  * 36-bit VA
  */
-#define PTRS_PER_PGD_L2_16K  (2048)
+#define PTRS_PER_PGD_L2_16K  ((1UL) << (36 - 25))
 #define PTRS_PER_PTE_L2_16K  (2048)
 #define PGDIR_SHIFT_L2_16K   (25)
 #define PGDIR_SIZE_L2_16K    ((1UL) << PGDIR_SHIFT_L2_16K)
 #define PGDIR_MASK_L2_16K    (~(PGDIR_SIZE_L2_16K-1))
+#define PGDIR_OFFSET_L2_16K(X) (((ulong)(X)) & ((machdep->ptrs_per_pgd * 8) - 1))
 
 /*
  * 3-levels / 16K pages
@@ -3328,9 +3330,30 @@ typedef signed int s32;
 #define PGDIR_OFFSET_L3_16K(X) (((ulong)(X)) & ((machdep->ptrs_per_pgd * 8) - 1))
 
 /*
- * 3-levels / 64K pages
+ * 4-levels / 16K pages
+ * 48-bit VA
  */
-#define PTRS_PER_PGD_L3_64K  (64)
+#define PTRS_PER_PGD_L4_16K   ((1UL) << (48 - 47))
+#define PTRS_PER_PUD_L4_16K   (2048)
+#define PTRS_PER_PMD_L4_16K   (2048)
+#define PTRS_PER_PTE_L4_16K   (2048)
+#define PGDIR_SHIFT_L4_16K    (47)
+#define PGDIR_SIZE_L4_16K     ((1UL) << PGDIR_SHIFT_L4_16K)
+#define PGDIR_MASK_L4_16K     (~(PGDIR_SIZE_L4_16K-1))
+#define PUD_SHIFT_L4_16K      (36)
+#define PUD_SIZE_L4_16K       ((1UL) << PUD_SHIFT_L4_16K)
+#define PUD_MASK_L4_16K       (~(PUD_SIZE_L4_16K-1))
+#define PMD_SHIFT_L4_16K      (25)
+#define PMD_SIZE_L4_16K       (1UL << PMD_SHIFT_L4_16K)
+#define PMD_MASK_L4_16K       (~(PMD_SIZE_L4_16K-1))
+#define PGDIR_OFFSET_L4_16K(X) (((ulong)(X)) & ((machdep->ptrs_per_pgd * 8) - 1))
+
+/*
+ * 3-levels / 64K pages
+ * 48-bit, 52-bit VA
+ */
+#define PTRS_PER_PGD_L3_64K_48  ((1UL) << (48 - 42))
+#define PTRS_PER_PGD_L3_64K_52  ((1UL) << (52 - 42))
 #define PTRS_PER_PMD_L3_64K  (8192)
 #define PTRS_PER_PTE_L3_64K  (8192)
 #define PGDIR_SHIFT_L3_64K   (42)
@@ -3343,8 +3366,9 @@ typedef signed int s32;
 
 /*
  * 2-levels / 64K pages
+ * 42-bit VA
  */
-#define PTRS_PER_PGD_L2_64K  (8192)
+#define PTRS_PER_PGD_L2_64K  ((1UL) << (42 - 29))
 #define PTRS_PER_PTE_L2_64K  (8192)
 #define PGDIR_SHIFT_L2_64K   (29)
 #define PGDIR_SIZE_L2_64K    ((1UL) << PGDIR_SHIFT_L2_64K)
@@ -3394,6 +3418,7 @@ typedef signed int s32;
 #define ARM64_MTE     (0x2000)
 #define VM_L3_16K     (0x4000)
 #define VM_L2_16K     (0x8000)
+#define VM_L4_16K     (0x10000)
 
 /*
  * Get kimage_voffset from /dev/crash

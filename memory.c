@@ -19637,7 +19637,8 @@ do_slab_slub(struct meminfo *si, int verbose)
 	int i, free_objects, cpu_slab, is_free, node;
 	ulong p, q;
 #define SLAB_RED_ZONE 0x00000400UL
-	ulong flags, red_left_pad;
+	ulong flags;
+	uint red_left_pad;
 
 	if (!si->slab) {
 		if (CRASHDEBUG(1))
@@ -19727,7 +19728,7 @@ do_slab_slub(struct meminfo *si, int verbose)
 	if (VALID_MEMBER(kmem_cache_red_left_pad)) {
 		flags = ULONG(si->cache_buf + OFFSET(kmem_cache_flags));
 		if (flags & SLAB_RED_ZONE)
-			red_left_pad = ULONG(si->cache_buf + OFFSET(kmem_cache_red_left_pad));
+			red_left_pad = UINT(si->cache_buf + OFFSET(kmem_cache_red_left_pad));
 	}
 
 	for (p = vaddr; p < vaddr + objects * si->size; p += si->size) {
