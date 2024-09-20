@@ -8781,7 +8781,8 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp, char *stack_
 			if (CRASHDEBUG(2) || (bt->flags & BT_FRAMESIZE_DEBUG))
 				fprintf(fp, "%s\t[framesize: %d]\n", 
 					strip_linefeeds(buf2), framesize);
-		} else if (STRNEQ(arglist[instr], "retq")) {
+		} else if (STRNEQ(arglist[instr], "retq") ||
+		           STRNEQ(arglist[instr], "ret")) {
 			if (!exception) {
 				framesize = max;
 				if (CRASHDEBUG(2) || (bt->flags & BT_FRAMESIZE_DEBUG))
