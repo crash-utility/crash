@@ -619,7 +619,7 @@ strip_symbol_end(const char *name, char *buf)
  *  or in /proc/kallsyms on a live system.
  *
  *  Setting KASLR_CHECK will trigger a search for "module_load_offset"
- *  or "kaslr_regions" during the initial symbol sort operation, and
+ *  or "kaslr_get_random_long" during the initial symbol sort operation, and
  *  if found, will set (RELOC_AUTO|KASLR).  On live systems, the search
  *  is done here by checking /proc/kallsyms.
  */
@@ -646,7 +646,7 @@ kaslr_init(void)
 		st->_stext_vmlinux = UNINITIALIZED;
 
 	if (ACTIVE() &&   /* Linux 3.15 */
-	    ((symbol_value_from_proc_kallsyms("kaslr_regions") != BADVAL) ||
+	    ((symbol_value_from_proc_kallsyms("kaslr_get_random_long") != BADVAL) ||
 	    (symbol_value_from_proc_kallsyms("module_load_offset") != BADVAL))) {
 		kt->flags2 |= (RELOC_AUTO|KASLR);
 		st->_stext_vmlinux = UNINITIALIZED;
@@ -14255,8 +14255,8 @@ numeric_forward(const void *P_x, const void *P_y)
 			st->_stext_vmlinux = valueof(y);
 	}
 	if (kt->flags2 & KASLR_CHECK) {
-		if (STREQ(x->name, "kaslr_regions") ||
-		    STREQ(y->name, "kaslr_regions") ||
+		if (STREQ(x->name, "kaslr_get_random_long") ||
+		    STREQ(y->name, "kaslr_get_random_long") ||
 		    STREQ(x->name, "module_load_offset") ||
 		    STREQ(y->name, "module_load_offset")) {
 			kt->flags2 &= ~KASLR_CHECK;
