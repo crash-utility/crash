@@ -6392,6 +6392,11 @@ get_panicmsg(char *buf)
 			get_symbol_data("sysrq_pressed", sizeof(int), &msg_found);
 			break;
 		}
+
+		/*
+		 *  Try to search panic string in panic keywords
+		 */
+		search_panic_task_by_keywords(buf, &msg_found);
 	}
 
 found:
