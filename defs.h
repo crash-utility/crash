@@ -5269,8 +5269,8 @@ enum type_code {
   TYPE_CODE_STRUCT,             /* C struct or Pascal record */
   TYPE_CODE_UNION,              /* C union or Pascal variant part */
   TYPE_CODE_ENUM,               /* Enumeration type */
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2)
-#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2)
+#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_13_2)
+#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_13_2)
   TYPE_CODE_FLAGS,              /* Bit flags type */
 #endif
   TYPE_CODE_FUNC,               /* Function type */

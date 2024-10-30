@@ -17,7 +17,7 @@
 
 #include "defs.h"
 
-#ifndef GDB_10_2
+#if !defined(GDB_10_2) && !defined(GDB_13_2)
 static void exit_after_gdb_info(void);
 #endif
 static int is_restricted_command(char *, ulong);
@@ -71,7 +71,7 @@ gdb_main_loop(int argc, char **argv)
 	}
 
         optind = 0;
-#ifndef GDB_10_2
+#if !defined(GDB_10_2) && !defined(GDB_13_2)
 #if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
         command_loop_hook = main_loop;
 #else
@@ -122,7 +122,7 @@ void
 display_gdb_banner(void)
 {
 	optind = 0;
-#ifndef GDB_10_2
+#if !defined(GDB_10_2) && !defined(GDB_13_2)
 #if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
         command_loop_hook = exit_after_gdb_info;
 #else
@@ -134,7 +134,7 @@ display_gdb_banner(void)
 	gdb_main_entry(2, args);
 }
 
-#ifndef GDB_10_2
+#if !defined(GDB_10_2) && !defined(GDB_13_2)
 static void
 exit_after_gdb_info(void)
 {
@@ -300,7 +300,7 @@ retry:
 	sprintf(req->buf, "set width 0");
 	gdb_interface(req);
 
-#ifdef GDB_10_2
+#if defined(GDB_10_2) || defined(GDB_13_2)
 	req->command = GNU_PASS_THROUGH;
 	req->name = NULL, req->flags = 0;
 	sprintf(req->buf, "set max-value-size unlimited");

@@ -116,7 +116,8 @@ crash_target_init (void)
   /* Own the target until it is successfully pushed.  */
   target_ops_up target_holder (target);
 
-  push_target (std::move (target_holder));
+  // push_target (std::move (target_holder));
+  current_inferior()->push_target (std::move (target_holder));
 
   inferior_appeared (current_inferior (), CRASH_INFERIOR_PID);
   for (int i = 0; i < nr_cpus; i++)

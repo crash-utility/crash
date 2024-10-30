@@ -17,7 +17,7 @@
 
 #include "defs.h"
 #include <elf.h>
-#if defined(GDB_7_6) || defined(GDB_10_2)
+#if defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_13_2)
 #define __CONFIG_H__ 1
 #include "config.h"
 #endif
@@ -479,7 +479,7 @@ separate_debug_file_exists(const char *name, unsigned long crc, int *exists)
 #ifdef GDB_5_3
     		file_crc = calc_crc32(file_crc, buffer, count);
 #else
-#if defined(GDB_7_6) || defined(GDB_10_2)
+#if defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_13_2)
     		file_crc = bfd_calc_gnu_debuglink_crc32(file_crc, 
 			(unsigned char *)buffer, count);
 #else

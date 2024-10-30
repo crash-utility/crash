@@ -23,7 +23,7 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include "xendump.h"
-#if defined(GDB_7_6) || defined(GDB_10_2)
+#if defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_13_2)
 #define __CONFIG_H__ 1
 #include "config.h"
 #endif
