@@ -215,6 +215,8 @@ char *program_usage_info[] = {
     "    Dump the contents of the kernel log buffer.  A kernel namelist",
     "    argument is not necessary, but the dumpfile must contain the",
     "    VMCOREINFO data taken from the original /proc/vmcore ELF header.",
+    "    Note: this option is deprecated and will no longer work for",
+    "    kernel(>=v5.10).",
     "",
     "  --no_kallsyms",
     "    Do not use kallsyms-generated symbol information contained within",
