@@ -9832,12 +9832,32 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(task_struct_thread_reg29));
         fprintf(fp, "      task_struct_thread_reg31: %ld\n",
                 OFFSET(task_struct_thread_reg31));
-	fprintf(fp, " task_struct_thread_context_fp: %ld\n",
-		OFFSET(task_struct_thread_context_fp));
-	fprintf(fp, " task_struct_thread_context_sp: %ld\n",
-		OFFSET(task_struct_thread_context_sp));
-	fprintf(fp, " task_struct_thread_context_pc: %ld\n",
-		OFFSET(task_struct_thread_context_pc));
+        fprintf(fp, "task_struct_thread_context_x19: %ld\n",
+                OFFSET(task_struct_thread_context_x19));
+        fprintf(fp, "task_struct_thread_context_x20: %ld\n",
+                OFFSET(task_struct_thread_context_x20));
+        fprintf(fp, "task_struct_thread_context_x21: %ld\n",
+                OFFSET(task_struct_thread_context_x21));
+        fprintf(fp, "task_struct_thread_context_x22: %ld\n",
+                OFFSET(task_struct_thread_context_x22));
+        fprintf(fp, "task_struct_thread_context_x23: %ld\n",
+                OFFSET(task_struct_thread_context_x23));
+        fprintf(fp, "task_struct_thread_context_x24: %ld\n",
+                OFFSET(task_struct_thread_context_x24));
+        fprintf(fp, "task_struct_thread_context_x25: %ld\n",
+                OFFSET(task_struct_thread_context_x25));
+        fprintf(fp, "task_struct_thread_context_x26: %ld\n",
+                OFFSET(task_struct_thread_context_x26));
+        fprintf(fp, "task_struct_thread_context_x27: %ld\n",
+                OFFSET(task_struct_thread_context_x27));
+        fprintf(fp, "task_struct_thread_context_x28: %ld\n",
+                OFFSET(task_struct_thread_context_x28));
+        fprintf(fp, " task_struct_thread_context_fp: %ld\n",
+                OFFSET(task_struct_thread_context_fp));
+        fprintf(fp, " task_struct_thread_context_sp: %ld\n",
+                OFFSET(task_struct_thread_context_sp));
+        fprintf(fp, " task_struct_thread_context_pc: %ld\n",
+                OFFSET(task_struct_thread_context_pc));
 	fprintf(fp, "         task_struct_processor: %ld\n", 
 		OFFSET(task_struct_processor));
 	fprintf(fp, "            task_struct_p_pptr: %ld\n",

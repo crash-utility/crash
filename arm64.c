@@ -2725,6 +2725,9 @@ arm64_stackframe_init(void)
 	long task_struct_thread;
 	long thread_struct_cpu_context;
 	long context_sp, context_pc, context_fp;
+	long context_x19, context_x20, context_x21, context_x22;
+	long context_x23, context_x24, context_x25, context_x26;
+	long context_x27, context_x28;
 	struct syment *sp1, *sp1n, *sp2, *sp2n, *sp3, *sp3n;
 
 	STRUCT_SIZE_INIT(note_buf, "note_buf_t");
@@ -2809,6 +2812,16 @@ arm64_stackframe_init(void)
 	context_sp = MEMBER_OFFSET("cpu_context", "sp");
 	context_fp = MEMBER_OFFSET("cpu_context", "fp");
 	context_pc = MEMBER_OFFSET("cpu_context", "pc");
+	context_x19 = MEMBER_OFFSET("cpu_context", "x19");
+	context_x20 = MEMBER_OFFSET("cpu_context", "x20");
+	context_x21 = MEMBER_OFFSET("cpu_context", "x21");
+	context_x22 = MEMBER_OFFSET("cpu_context", "x22");
+	context_x23 = MEMBER_OFFSET("cpu_context", "x23");
+	context_x24 = MEMBER_OFFSET("cpu_context", "x24");
+	context_x25 = MEMBER_OFFSET("cpu_context", "x25");
+	context_x26 = MEMBER_OFFSET("cpu_context", "x26");
+	context_x27 = MEMBER_OFFSET("cpu_context", "x27");
+	context_x28 = MEMBER_OFFSET("cpu_context", "x28");
 	if (context_sp == INVALID_OFFSET) {
 		error(INFO, "cannot determine cpu_context.sp offset\n");
 		return;
@@ -2827,6 +2840,26 @@ arm64_stackframe_init(void)
 		task_struct_thread + thread_struct_cpu_context + context_fp;
 	ASSIGN_OFFSET(task_struct_thread_context_pc) =
 		task_struct_thread + thread_struct_cpu_context + context_pc;
+	ASSIGN_OFFSET(task_struct_thread_context_x19) =
+		task_struct_thread + thread_struct_cpu_context + context_x19;
+	ASSIGN_OFFSET(task_struct_thread_context_x20) =
+		task_struct_thread + thread_struct_cpu_context + context_x20;
+	ASSIGN_OFFSET(task_struct_thread_context_x21) =
+		task_struct_thread + thread_struct_cpu_context + context_x21;
+	ASSIGN_OFFSET(task_struct_thread_context_x22) =
+		task_struct_thread + thread_struct_cpu_context + context_x22;
+	ASSIGN_OFFSET(task_struct_thread_context_x23) =
+		task_struct_thread + thread_struct_cpu_context + context_x23;
+	ASSIGN_OFFSET(task_struct_thread_context_x24) =
+		task_struct_thread + thread_struct_cpu_context + context_x24;
+	ASSIGN_OFFSET(task_struct_thread_context_x25) =
+		task_struct_thread + thread_struct_cpu_context + context_x25;
+	ASSIGN_OFFSET(task_struct_thread_context_x26) =
+		task_struct_thread + thread_struct_cpu_context + context_x26;
+	ASSIGN_OFFSET(task_struct_thread_context_x27) =
+		task_struct_thread + thread_struct_cpu_context + context_x27;
+	ASSIGN_OFFSET(task_struct_thread_context_x28) =
+		task_struct_thread + thread_struct_cpu_context + context_x28;
 }
 
 #define KERNEL_MODE (1)
@@ -4251,6 +4284,16 @@ arm64_get_stackframe(struct bt_info *bt, struct arm64_stackframe *frame)
 	frame->sp = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_sp));
 	frame->pc = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_pc));
 	frame->fp = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_fp));
+	frame->x19 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x19));
+	frame->x20 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x20));
+	frame->x21 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x21));
+	frame->x22 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x22));
+	frame->x23 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x23));
+	frame->x24 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x24));
+	frame->x25 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x25));
+	frame->x26 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x26));
+	frame->x27 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x27));
+	frame->x28 = ULONG(tt->task_struct + OFFSET(task_struct_thread_context_x28));
 
 	return TRUE;
 }
@@ -4275,10 +4318,29 @@ arm64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 		ur_bitmap->ur.pc = stackframe.pc;
 		ur_bitmap->ur.sp = stackframe.sp;
 		ur_bitmap->ur.regs[29] = stackframe.fp;
+		ur_bitmap->ur.regs[28] = stackframe.x28;
+		ur_bitmap->ur.regs[27] = stackframe.x27;
+		ur_bitmap->ur.regs[26] = stackframe.x26;
+		ur_bitmap->ur.regs[25] = stackframe.x25;
+		ur_bitmap->ur.regs[24] = stackframe.x24;
+		ur_bitmap->ur.regs[23] = stackframe.x23;
+		ur_bitmap->ur.regs[22] = stackframe.x22;
+		ur_bitmap->ur.regs[21] = stackframe.x21;
+		ur_bitmap->ur.regs[20] = stackframe.x20;
+		ur_bitmap->ur.regs[19] = stackframe.x19;
 		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, pc));
 		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, sp));
-		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0])
-						+ X29_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X29_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X28_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X27_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X26_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X25_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X24_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X23_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X22_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X21_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X20_REGNUM - X0_REGNUM);
+		SET_BIT(ur_bitmap->bitmap, REG_SEQ(arm64_pt_regs, regs[0]) + X19_REGNUM - X0_REGNUM);
 		bt->machdep = ur_bitmap;
 		bt->need_free = TRUE;
 	}
