@@ -1233,6 +1233,9 @@ mod_symname_hash_install(struct syment *spn)
 		return;
 	}
 	for (; sp; sp = sp->name_hash_next) {
+		if (spn == sp)
+			return;
+
 		if (!sp->name_hash_next ||
 		    spn->value < sp->name_hash_next->value) {
 			spn->name_hash_next = sp->name_hash_next;
@@ -2196,7 +2199,7 @@ store_module_symbols_6_4(ulong total, int mods_installed)
 			if (!lm->mem[t].size)
 				continue;
 
-			st->ext_module_symtable[mcnt].value = lm->mem[t].base + lm->mem[t].size;
+			st->ext_module_symtable[mcnt].value = lm->mem[t].base + lm->mem[t].size - 1;
 			st->ext_module_symtable[mcnt].type = 'm';
 			st->ext_module_symtable[mcnt].flags |= MODULE_SYMBOL;
 			sprintf(buf2, "%s%s", module_tag[t].end, mod_name);
