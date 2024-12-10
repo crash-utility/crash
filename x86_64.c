@@ -1538,11 +1538,8 @@ x86_64_ist_init(void)
 				if (ms->stkinfo.ebase[c][i])
 					ms->stkinfo.ebase[c][i] -= ms->stkinfo.esize[i];
 
-				ms->stkinfo.available[c][i] = TRUE;
 				/* VC stack can be unmapped if SEV-ES is disabled or not supported. */
-				if (STREQ(ms->stkinfo.exception_stacks[i], "VC") &&
-				    !accessible(ms->stkinfo.ebase[c][i]))
-					ms->stkinfo.available[c][i] = FALSE;
+				ms->stkinfo.available[c][i] = accessible(ms->stkinfo.ebase[c][i]);
 			}
 		}
 
