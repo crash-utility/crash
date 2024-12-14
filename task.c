@@ -11238,6 +11238,8 @@ check_stack_overflow(void)
 		}
 
 		if (VALID_MEMBER(thread_info_cpu)) {
+			int cpus = get_cpus_present();
+
 			switch (cpu_size)
 			{
 			case 1:
@@ -11253,12 +11255,12 @@ check_stack_overflow(void)
 				cpu = 0;
 				break;
 			}
-			if (cpu >= kt->cpus) {
+			if (cpu >= cpus) {
 				if (!overflow)
 					print_task_header(fp, tc, 0);
 				fprintf(fp, 
 				    "  possible stack overflow: thread_info.cpu: %d >= %d\n",
-					cpu, kt->cpus);
+					cpu, cpus);
 				overflow++; total++;
 			}
 		}
