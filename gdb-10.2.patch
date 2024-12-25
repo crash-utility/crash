@@ -16216,3 +16216,26 @@ exit 0
  	    printf_filtered (_("Backtrace stopped: %s\n"),
  			     frame_stop_reason_string (trailing));
  	}
+--- gdb-10.2/gdb/frame.c.orig
++++ gdb-10.2/gdb/frame.c
+@@ -944,6 +944,10 @@ frame_find_by_id (struct frame_id id)
+   return NULL;
+ }
+
++#ifdef CRASH_MERGE
++extern "C" void crash_decode_ptrauth_pc(ulong* pc);
++#endif
++
+ static CORE_ADDR
+ frame_unwind_pc (struct frame_info *this_frame)
+ {
+@@ -974,6 +978,9 @@ frame_unwind_pc (struct frame_info *this_frame)
+       try
+	{
+	  pc = gdbarch_unwind_pc (prev_gdbarch, this_frame);
++#ifdef CRASH_MERGE
++	  crash_decode_ptrauth_pc(&pc);
++#endif
+	  pc_p = true;
+	}
+       catch (const gdb_exception_error &ex)
