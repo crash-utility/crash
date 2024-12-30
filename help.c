@@ -6301,7 +6301,7 @@ char *help__list[] = {
 "    ffff88005ac10180",
 "      comm = \"crash\"",
 "",
-"  To display a liked list whose head node and other nodes are embedded within",
+"  To display a linked list whose head node and other nodes are embedded within",
 "  either same or different data structures resulting in different offsets for",
 "  head node and other nodes, e.g. dentry.d_subdirs and dentry.d_child, the",
 "  -O option can be used:",
