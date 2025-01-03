@@ -5816,15 +5816,16 @@ display_sys_stats(void)
 				pc->kvmdump_mapfile);
 	}
 	
-	if (machine_type("PPC64"))
-		fprintf(fp, "        CPUS: %d\n", get_cpus_to_display());
-	else {
-		fprintf(fp, "        CPUS: %d", kt->cpus);
-		if (kt->cpus - get_cpus_to_display())
-			fprintf(fp, " [OFFLINE: %d]", 
-				kt->cpus - get_cpus_to_display());
-		fprintf(fp, "\n");
-	}
+	int number_cpus_to_display = get_cpus_to_display();
+	int number_cpus_present = get_cpus_present();
+	if (!number_cpus_present)
+		number_cpus_present = kt->cpus;
+
+	fprintf(fp, "        CPUS: %d", number_cpus_present);
+	if (number_cpus_present > number_cpus_to_display)
+		fprintf(fp, " [OFFLINE: %d]",
+			number_cpus_present - number_cpus_to_display);
+	fprintf(fp, "\n");
 
 	if (ACTIVE())
 		get_xtime(&kt->date);
