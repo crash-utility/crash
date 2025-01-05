@@ -72,6 +72,12 @@
      After the kernel is re-compiled, the uncompressed "vmlinux" kernel
      that is created in the top-level kernel build directory must be saved.
 
+  o  Requirements for building:
+      Fedora: make gcc gcc-c++ ncurses-devel zlib-devel lzo-devel snappy-devel bison wget patch texinfo libzstd-devel
+      Ubuntu/Debian: make gcc g++ libncurses-dev zlib1g-dev liblzo2-dev libsnappy-dev bison wget patch texinfo libzstd-dev
+      Arch Linux: make gcc ncurses zlib lzo snappy bison wget patch texinfo zstd
+      openSUSE: make gcc gcc-c++ ncurses-devel zlib-devel lzo-devel snappy-devel bison wget patch texinfo libzstd-devel
+
   To build the crash utility: 
 
     $ tar -xf crash-8.0.6.tar.gz
