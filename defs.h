@@ -2269,6 +2269,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long task_struct_thread_context_x26;
 	long task_struct_thread_context_x27;
 	long task_struct_thread_context_x28;
+	long neigh_table_hash_heads;
+	long neighbour_hash;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

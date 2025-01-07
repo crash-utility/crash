@@ -169,6 +169,11 @@ net_init(void)
 				"neigh_hash_table", "hash_shift");
 			MEMBER_OFFSET_INIT(neigh_table_hash_buckets,
 				"neigh_hash_table", "hash_buckets");
+			/* Linux 6.13 and later */
+			if (INVALID_MEMBER(neigh_table_hash_buckets)) {
+				MEMBER_OFFSET_INIT(neigh_table_hash_heads, "neigh_hash_table", "hash_heads");
+				MEMBER_OFFSET_INIT(neighbour_hash, "neighbour", "hash");
+			}
 		} else {
 			MEMBER_OFFSET_INIT(neigh_table_hash_buckets,
 				"neigh_table", "hash_buckets");
@@ -698,9 +703,13 @@ dump_arp(void)
 		"neigh_table key_len", FAULT_ON_ERROR);
 
 	if (VALID_MEMBER(neigh_table_nht_ptr)) {
-		readmem(nht + OFFSET(neigh_table_hash_buckets),
-			KVADDR, &hash, sizeof(hash),
-			"neigh_hash_table hash_buckets ptr", FAULT_ON_ERROR);
+		/* Linux 6.13 and later */
+		if (VALID_MEMBER(neigh_table_hash_heads))
+			readmem(nht + OFFSET(neigh_table_hash_heads), KVADDR, &hash,
+				sizeof(hash), "neigh_hash_table hash_heads ptr", FAULT_ON_ERROR);
+		else
+			readmem(nht + OFFSET(neigh_table_hash_buckets), KVADDR, &hash,
+				sizeof(hash), "neigh_hash_table hash_buckets ptr", FAULT_ON_ERROR);
 
 		readmem(hash, KVADDR, hash_buckets, hash_bytes,
 			"neigh_hash_table hash_buckets", FAULT_ON_ERROR);
@@ -831,8 +840,15 @@ print_neighbour_q(ulong addr, int key_len)
 
 		arp_state_to_flags(state);
 
-		readmem(addr + OFFSET(neighbour_next), KVADDR, 
-			&addr, sizeof(addr), "neighbour next", FAULT_ON_ERROR);
+		/* Linux 6.13 and later kernels use hlist. */
+		if (VALID_MEMBER(neighbour_hash)) {
+			readmem(addr + OFFSET(neighbour_hash), KVADDR, &addr,
+				sizeof(addr), "neighbour hash", FAULT_ON_ERROR);
+			if (addr)
+				addr -= OFFSET(neighbour_hash);
+		} else
+			readmem(addr + OFFSET(neighbour_next), KVADDR, &addr,
+				sizeof(addr), "neighbour next", FAULT_ON_ERROR);
 	}
 
 	FREEBUF(ha_buf);

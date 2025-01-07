@@ -11028,6 +11028,7 @@ dump_offset_table(char *spec, ulong makestruct)
 
         fprintf(fp, "                neighbour_next: %ld\n", 
 		OFFSET(neighbour_next));
+        fprintf(fp, "                neighbour_hash: %ld\n", OFFSET(neighbour_hash));
         fprintf(fp, "         neighbour_primary_key: %ld\n", 
 		OFFSET(neighbour_primary_key));
         fprintf(fp, "                  neighbour_ha: %ld\n", 
@@ -11038,6 +11039,7 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(neighbour_nud_state));
         fprintf(fp, "      neigh_table_hash_buckets: %ld\n",
 		OFFSET(neigh_table_hash_buckets));
+        fprintf(fp, "        neigh_table_hash_heads: %ld\n", OFFSET(neigh_table_hash_heads));
         fprintf(fp, "         neigh_table_hash_mask: %ld\n",
 		OFFSET(neigh_table_hash_mask));
         fprintf(fp, "        neigh_table_hash_shift: %ld\n",
