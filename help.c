@@ -6817,7 +6817,7 @@ NULL
 char *help_kmem[] = {
 "kmem",
 "kernel memory",
-"[-f|-F|-c|-C|-i|-v|-V|-n|-z|-o|-h] [-p | -m member[,member]]\n"
+"[-f|-F|-c|-C|-i[=shared]|-v|-V|-n|-z|-o|-h] [-p | -m member[,member]]\n"
 "       [[-s|-S|-S=cpu[s]|-r] [slab] [-I slab[,slab]]] [-g [flags]] [[-P] address]]",
 "  This command displays information about the use of kernel memory.\n",
 "        -f  displays the contents of the system free memory headers.",
@@ -6825,7 +6825,9 @@ char *help_kmem[] = {
 "        -F  same as -f, but also dumps all pages linked to that header.",
 "        -c  walks through the page_hash_table and verifies page_cache_size.",
 "        -C  same as -c, but also dumps all pages in the page_hash_table.",
-"        -i  displays general memory usage information",
+"        -i  displays general memory usage information.",
+"            Note: SHARED is no longer printed (too slow on large memory systems)",
+"            unless specifying \"-i=shared\".",
 "        -v  displays the mapped virtual memory regions allocated by vmalloc().",
 "        -V  displays the kernel vm_stat table if it exists, or in more recent",
 "            kernels, the vm_zone_stat, vm_node_stat and vm_numa_stat tables,",

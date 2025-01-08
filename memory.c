@@ -237,7 +237,7 @@ static void dump_vmlist(struct meminfo *);
 static void dump_vmap_area(struct meminfo *);
 static int get_vmap_area_list_from_nodes(ulong **);
 static int dump_page_lists(struct meminfo *);
-static void dump_kmeminfo(void);
+static void dump_kmeminfo(struct meminfo *);
 static int page_to_phys(ulong, physaddr_t *); 
 static void display_memory(ulonglong, long, ulong, int, void *); 
 static char *show_opt_string(struct searchinfo *);
@@ -5109,7 +5109,7 @@ cmd_kmem(void)
 	BZERO(&value[0], sizeof(ulonglong)*MAXARGS);
 	pc->curcmd_flags &= ~HEADER_PRINTED;
 
-        while ((c = getopt(argcnt, args, "gI:sS::rFfm:pvczCinl:L:PVoh")) != EOF) {
+        while ((c = getopt(argcnt, args, "gI:sS::rFfm:pvczCi::nl:L:PVoh")) != EOF) {
                 switch(c)
 		{
 		case 'V':
@@ -5126,6 +5126,9 @@ cmd_kmem(void)
 
 		case 'i': 
 			iflag = 1;
+			if (optarg && strcmp(optarg, "=shared") == 0) {
+				meminfo.flags = GET_SHARED_PAGES;
+			}
 			break;
 
 		case 'h': 
@@ -5412,7 +5415,7 @@ cmd_kmem(void)
 	}
 
 	if (iflag == 1)
-		dump_kmeminfo();
+		dump_kmeminfo(&meminfo);
 
 	if (pflag == 1)
 		dump_mem_map(&meminfo);
@@ -8517,7 +8520,7 @@ bailout:
 char *kmeminfo_hdr = "                 PAGES        TOTAL      PERCENTAGE\n";
 
 static void
-dump_kmeminfo(void)
+dump_kmeminfo(struct meminfo *mi)
 {
 	int i, len;
 	ulong totalram_pages;
@@ -8548,18 +8551,23 @@ dump_kmeminfo(void)
         ulong get_buffers;
         ulong get_slabs;
 	char buf[BUFSIZE];
-
-
-	BZERO(&meminfo, sizeof(struct meminfo));
-	meminfo.flags = GET_ALL;
-	dump_mem_map(&meminfo);
-	get_totalram = meminfo.get_totalram;
-	shared_pages = meminfo.get_shared;
-	get_buffers = meminfo.get_buffers;
-	get_slabs = meminfo.get_slabs;
+	ulong flags;
 
 	/*
-	 *  If vm_stat array exists, override page search info.
+	 * By default, we will no longer call dump_mem_map() as this is too
+	 * slow for large memory systems. If we have to call it (eg. missing
+	 * important information such as slabs or total ram), we will also
+	 * collect shared pages. Otherwise, we won't print shared pages unless
+	 * the caller explicitly requested shared pages ("kmem -i=shared").
+	 */
+	flags = mi->flags;
+	shared_pages = 0;
+	get_totalram = 0;
+	get_buffers = 0;
+	get_slabs = 0;
+
+	/*
+	 *  If vm_stat array does not exists, then set mem map flag.
 	 */
 	if (vm_stat_init()) {
 		if (dump_vm_stat("NR_SLAB", &nr_slab, 0))
@@ -8574,9 +8582,10 @@ dump_kmeminfo(void)
 			if (dump_vm_stat("NR_SLAB_UNRECLAIMABLE_B", &nr_slab, 0))
 				get_slabs += nr_slab;
 		}
+	} else {
+		flags |= GET_SLAB_PAGES;
 	}
 
-	fprintf(fp, "%s", kmeminfo_hdr);
 	/*
 	 *  Get total RAM based upon how the various versions of si_meminfo()
          *  have done it, latest to earliest:
@@ -8588,9 +8597,32 @@ dump_kmeminfo(void)
 	    symbol_exists("_totalram_pages")) {
 		totalram_pages = vt->totalram_pages ? 
 			vt->totalram_pages : get_totalram; 
-	} else 
-		totalram_pages = get_totalram;
+	} else {
+		flags |= GET_TOTALRAM_PAGES;
+		totalram_pages = 0;
+	}
 
+	/*
+	 * If the caller wants shared pages or if we are missing important data
+	 * (ie. slab or totalram) then go through the slow dump_mem_map() path.
+	 */
+	if (flags) {
+		BZERO(&meminfo, sizeof(struct meminfo));
+		meminfo.flags = GET_ALL;
+		dump_mem_map(&meminfo);
+		/* Update the missing information */
+		if (flags & GET_SLAB_PAGES) {
+			get_slabs = meminfo.get_slabs;
+		}
+		if (flags & GET_TOTALRAM_PAGES) {
+			get_totalram = meminfo.get_totalram;
+			totalram_pages = get_totalram;
+		}
+		shared_pages = meminfo.get_shared;
+		get_buffers = meminfo.get_buffers;
+	}
+
+	fprintf(fp, "%s", kmeminfo_hdr);
 	fprintf(fp, "%13s  %7ld  %11s         ----\n", "TOTAL MEM", 
 		totalram_pages, pages_to_size(totalram_pages, buf));
 
@@ -8615,9 +8647,11 @@ dump_kmeminfo(void)
          *  differently than the kernel -- it just tallies the non-reserved
          *  pages that have a count of greater than 1.
 	 */
-        pct = (shared_pages * 100)/totalram_pages;
-        fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
-		"SHARED", shared_pages, pages_to_size(shared_pages, buf), pct);
+	if (flags & GET_SHARED_PAGES) {
+            pct = (shared_pages * 100)/totalram_pages;
+            fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
+			"SHARED", shared_pages, pages_to_size(shared_pages, buf), pct);
+	}
 
 	subtract_buffer_pages = 0;
 	if (symbol_exists("buffermem_pages")) { 
