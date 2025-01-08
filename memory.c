@@ -374,6 +374,8 @@ static bool page_slab(ulong page, ulong flags)
 	if (vt->flags & SLAB_PAGEFLAGS) {
 		if ((flags >> vt->PG_slab) & 1)
 			return TRUE;
+
+		return FALSE;
 	}
 
 	if (VALID_MEMBER(page_page_type)) {
