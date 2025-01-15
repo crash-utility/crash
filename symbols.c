@@ -2079,6 +2079,8 @@ store_module_symbols_6_4(ulong total, int mods_installed)
 				strbuf = NULL;
 			}
 		}
+		else
+			strbuf = NULL;
 
 
 		for (i = 0; i < nsyms; i++) {
