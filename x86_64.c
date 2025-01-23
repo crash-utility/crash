@@ -5009,16 +5009,11 @@ static void
 x86_64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 {
 	struct user_regs_bitmap_struct *ur_bitmap;
-	ulong pcp_save = *pcp;
-	ulong spp_save = *spp;
-	ulong sp;
+	ulong sp = 0;
 
 	if (bt->flags & BT_SKIP_IDLE)
 		bt->flags &= ~BT_SKIP_IDLE;
-	if (pcp)
-		*pcp = x86_64_get_pc(bt);
-	if (spp)
-		sp = *spp = x86_64_get_sp(bt);
+
 	ur_bitmap = (struct user_regs_bitmap_struct *)GETBUF(sizeof(*ur_bitmap));
 	memset(ur_bitmap, 0, sizeof(*ur_bitmap));
 
@@ -5091,31 +5086,36 @@ x86_64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 			if (bt->flags & BT_DUMPFILE_SEARCH) {
 				FREEBUF(ur_bitmap);
 				bt->need_free = FALSE;
-				*pcp = pcp_save;
-				*spp = spp_save;
 				return x86_64_get_dumpfile_stack_frame(bt, pcp, spp);
 			}
 		}
 	} else {
 		if (!is_task_active(bt->task)) {
-			readmem(*spp, KVADDR, &(ur_bitmap->ur.bp),
-				sizeof(ulong), "ur_bitmap->ur.bp", FAULT_ON_ERROR);
-			SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, bp);
+			if (spp) {
+				*spp = x86_64_get_sp(bt);
+				readmem(*spp, KVADDR, &(ur_bitmap->ur.bp),
+					sizeof(ulong), "ur_bitmap->ur.bp", FAULT_ON_ERROR);
+				SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, bp);
+			}
 		} else {
 			if (bt->flags & BT_DUMPFILE_SEARCH) {
 				FREEBUF(ur_bitmap);
 				bt->need_free = FALSE;
-				*pcp = pcp_save;
-				*spp = spp_save;
 				return x86_64_get_dumpfile_stack_frame(bt, pcp, spp);
 			}
 		}
 	}
 
-	ur_bitmap->ur.ip = *pcp;
-	ur_bitmap->ur.sp = sp;
-	SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, ip);
-	SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, sp);
+	if (pcp) {
+		*pcp = x86_64_get_pc(bt);
+		ur_bitmap->ur.ip = *pcp;
+		SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, ip);
+	}
+	if (spp) {
+		*spp = x86_64_get_sp(bt);
+		ur_bitmap->ur.sp = sp + *spp;
+		SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, sp);
+	}
 
 	bt->machdep = ur_bitmap;
 	bt->need_free = TRUE;
