@@ -55,7 +55,7 @@ exit 0
  # your system doesn't have fcntl.h in /usr/include (which is where it
  # should be according to Posix).
 -DEFS = @DEFS@
-+DEFS = -DCRASH_MERGE @DEFS@
++DEFS = -DCRASH_MERGE -D${CRASH_TARGET} @DEFS@
  GDB_CFLAGS = -I. -I$(srcdir) -I$(srcdir)/config \
  	-DLOCALEDIR="\"$(localedir)\"" $(DEFS)
  
@@ -16222,7 +16222,7 @@ exit 0
    return NULL;
  }
 
-+#ifdef CRASH_MERGE
++#if defined(CRASH_MERGE) && defined(ARM64)
 +extern "C" void crash_decode_ptrauth_pc(ulong* pc);
 +#endif
 +
@@ -16233,7 +16233,7 @@ exit 0
        try
 	{
 	  pc = gdbarch_unwind_pc (prev_gdbarch, this_frame);
-+#ifdef CRASH_MERGE
++#if defined(CRASH_MERGE) && defined(ARM64)
 +	  crash_decode_ptrauth_pc(&pc);
 +#endif
 	  pc_p = true;

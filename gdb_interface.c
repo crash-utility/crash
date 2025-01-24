@@ -1084,12 +1084,12 @@ int crash_get_current_task_reg (int regno, const char *regname,
 }
 
 /* arm64 kernel lr maybe has patuh */
+#ifdef ARM64
 void crash_decode_ptrauth_pc(ulong *pc);
 void crash_decode_ptrauth_pc(ulong *pc)
 {
-#ifdef ARM64
 	struct machine_specific *ms = machdep->machspec;
 	if (is_kernel_text(*pc | ms->CONFIG_ARM64_KERNELPACMASK))
 		*pc |= ms->CONFIG_ARM64_KERNELPACMASK;
-#endif /* !ARM64 */
 }
+#endif /* !ARM64 */
