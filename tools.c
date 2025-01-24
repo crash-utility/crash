@@ -6248,7 +6248,7 @@ lowest_bit_long(ulong val)
 void
 drop_core(char *s)
 {
-	volatile int *nullptr;
+	volatile int *ptr;
 	int i ATTRIBUTE_UNUSED;
 
 	if (s && ascii_string(s))
@@ -6256,9 +6256,9 @@ drop_core(char *s)
 
 	kill((pid_t)pc->program_pid, 3);
 
-	nullptr = NULL;
+	ptr = NULL;
 	while (TRUE)
-		i = *nullptr;
+		i = *ptr;
 }
 
 
