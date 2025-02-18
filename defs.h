@@ -2589,7 +2589,7 @@ DEF_LOADER(bool);
 #define SHORT(ADDR)     LOADER(short) ((char *)(ADDR))
 #define UCHAR(ADDR)     *((unsigned char *)((char *)(ADDR)))
 #define VOID_PTR(ADDR)  ((void *) (LOADER(pointer_t) ((char *)(ADDR))))
-#define BOOL(ADDR)      LOADER(bool) ((char *)(ADDR)))
+#define BOOL(ADDR)      LOADER(bool) ((char *)(ADDR))
 
 #else
 
