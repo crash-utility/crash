@@ -36,16 +36,13 @@ $(CONTRIB_SO): %.so: %.c defs.h
 	@if [ -f $*.mk ]; then \
 		$(MAKE) -f $*.mk; \
 	else \
-		grep '((constructor))' $*.c > .constructor; \
-		if [ -s .constructor ]; then \
+		grep -q '((constructor))' $*.c && { \
 			echo "gcc -Wall -g -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
 			gcc -Wall -g -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
-		fi; \
-		if [ ! -s .constructor ]; then \
+		} || { \
 			echo "gcc -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
 			gcc -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
-		fi; \
-		rm -f .constructor; \
+		}; \
 	fi
 
 clean:
