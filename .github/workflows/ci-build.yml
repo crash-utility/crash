@@ -1,0 +1,92 @@
+name: Build
+
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch:
+        - x86_64
+        - aarch64
+        - s390x
+        - powerpc64
+        - x86
+        - riscv64
+        - mips
+        - alpha
+        - sparc64
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set Environment
+      env:
+        ARCH: ${{ matrix.arch }}
+      run: |
+        case $ARCH in
+          x86)         GNU_ARCH="i686-linux-gnu" ;;
+          x86_64)      CROSS_COMPILER_PKG="gcc-x86-64-linux-gnu"
+                       CROSS_COMPILER_PKG+=" g++-x86-64-linux-gnu"
+                       GNU_ARCH="$ARCH-linux-gnu" ;;
+          *)           GNU_ARCH="$ARCH-linux-gnu" ;;
+        esac
+
+        if [ -n "$GNU_ARCH" ]; then
+          if [ -z "$CROSS_COMPILER_PKG" ]; then
+            CROSS_COMPILER_PKG="gcc-$GNU_ARCH"
+            CROSS_COMPILER_PKG+=" g++-$GNU_ARCH"
+          fi
+          EXTRA_PKGS+=" $CROSS_COMPILER_PKG"
+          CROSS_COMPILE="$GNU_ARCH"
+        fi
+
+        echo "EXTRA_PKGS=$EXTRA_PKGS" >> $GITHUB_ENV
+        echo "CROSS_COMPILE=$CROSS_COMPILE" >> $GITHUB_ENV
+
+    - name: Install deps for crash-utility building
+      run: |
+        sudo apt-get update
+        sudo apt-get install make gcc g++ bison flex texinfo wget patch tar build-essential libc-dev autoconf automake libncurses-dev
+
+    - name: Install corss compile tool pkgs
+      if: env.EXTRA_PKGS != ''
+      run: |
+        sudo apt-get update
+        sudo apt-get -q=2 install ${{ env.EXTRA_PKGS }}
+
+    - name: Cross compile gmp lib
+      run: |
+        mkdir $GITHUB_WORKSPACE/libtools
+        wget https://gcc.gnu.org/pub/gcc/infrastructure/gmp-6.2.1.tar.bz2
+        tar -jxvf gmp-6.2.1.tar.bz2
+        cd gmp-6.2.1
+        ./configure --host=${{ env.CROSS_COMPILE }} --prefix=$GITHUB_WORKSPACE/libtools
+        make -j`nproc`
+        sudo make install
+        cd ..
+    - name: Cross compile mpfr lib
+      run: |
+        wget https://gcc.gnu.org/pub/gcc/infrastructure/mpfr-4.1.0.tar.bz2
+        tar -jxvf mpfr-4.1.0.tar.bz2
+        cd mpfr-4.1.0
+        ./configure --host=${{ env.CROSS_COMPILE }} --prefix=$GITHUB_WORKSPACE/libtools --with-gmp=$GITHUB_WORKSPACE/libtools
+        make -j`nproc`
+        sudo make install
+        cd ..
+    - name: Cross compile crash-utility
+      run: |
+        sudo cp $GITHUB_WORKSPACE/libtools/include/* /usr/include/
+        sudo cp -r $GITHUB_WORKSPACE/libtools/lib/* /usr/lib/
+        make CROSS_COMPILE=${{ env.CROSS_COMPILE }}- -j`nproc` warn
+    - name: Checking and Clean up
+      run: |
+        echo "Run command: file crash ..."
+        file crash
+        echo "Clean up for compiling ..."
+        make CROSS_COMPILE=${{ env.CROSS_COMPILE }}- -j`nproc` clean
