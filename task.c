@@ -9739,6 +9739,9 @@ cfs_rq_offset_init(void)
 			ASSIGN_OFFSET(cfs_rq_rb_leftmost) = OFFSET(cfs_rq_tasks_timeline) + 
 				MEMBER_OFFSET("rb_root_cached", "rb_leftmost");
 		MEMBER_OFFSET_INIT(cfs_rq_nr_running, "cfs_rq", "nr_running");
+		if (INVALID_MEMBER(cfs_rq_nr_running)) {
+			MEMBER_OFFSET_INIT(cfs_rq_nr_running, "cfs_rq", "nr_queued");
+		}
 		MEMBER_OFFSET_INIT(cfs_rq_curr, "cfs_rq", "curr");
 		MEMBER_OFFSET_INIT(rt_rq_active, "rt_rq", "active");
                 MEMBER_OFFSET_INIT(task_struct_run_list, "task_struct",
