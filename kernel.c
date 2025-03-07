@@ -23,7 +23,7 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include "xendump.h"
-#if defined(GDB_7_6) || defined(GDB_10_2)
+#if defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_16_2)
 #define __CONFIG_H__ 1
 #include "config.h"
 #endif
@@ -1574,8 +1574,8 @@ list_source_code(struct gnu_request *req, int count_entered)
 			error(FATAL, 
 			    "%s: source code is not available\n\n", req->buf);
 
-		sprintf(buf3, "%s: No such file or directory.", file);
-		if (decimal(argv[0], 0) && strstr(buf1, buf3))
+               sprintf(buf3, "%s: No such file or directory", file);
+               if ((decimal(argv[0], 0) || decimal(argv[1], 0)) && strstr(buf1, buf3))
 			error(FATAL, 
 			    "%s: source code is not available\n\n", req->buf);
 

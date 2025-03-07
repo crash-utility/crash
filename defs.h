@@ -5314,8 +5314,8 @@ enum type_code {
   TYPE_CODE_STRUCT,             /* C struct or Pascal record */
   TYPE_CODE_UNION,              /* C union or Pascal variant part */
   TYPE_CODE_ENUM,               /* Enumeration type */
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2)
-#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2)
+#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_16_2)
+#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_16_2)
   TYPE_CODE_FLAGS,              /* Bit flags type */
 #endif
   TYPE_CODE_FUNC,               /* Function type */
@@ -8099,8 +8099,8 @@ extern unsigned long calc_crc32(unsigned long, unsigned char *, size_t);
 #else
 extern unsigned long gnu_debuglink_crc32 (unsigned long, unsigned char *, size_t);
 #endif
-extern int have_partial_symbols(void); 
-extern int have_full_symbols(void);
+extern int have_partial_symbols(void *);
+extern int have_full_symbols(void *);
 
 #if defined(X86) || defined(X86_64) || defined(IA64)
 #define XEN_HYPERVISOR_ARCH 

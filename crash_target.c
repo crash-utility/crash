@@ -125,7 +125,7 @@ crash_target_init (void)
   /* Own the target until it is successfully pushed.  */
   target_ops_up target_holder (target);
 
-  push_target (std::move (target_holder));
+  current_inferior ()->push_target (std::move (target_holder));
 
   inferior_appeared (current_inferior (), CRASH_INFERIOR_PID);
 
@@ -135,7 +135,7 @@ crash_target_init (void)
   switch_to_thread (thread);
 
   /* Fetch all registers from core file.  */
-  target_fetch_registers (get_current_regcache (), -1);
+  target_fetch_registers (get_thread_regcache(thread), -1);
 
   /* Now, set up the frame cache. */
   reinit_frame_cache ();
@@ -144,7 +144,7 @@ crash_target_init (void)
 extern "C" int
 gdb_change_thread_context (void)
 {
-  target_fetch_registers(get_current_regcache(), -1);
+  target_fetch_registers(get_thread_regcache(inferior_thread()), -1);
   reinit_frame_cache();
   return TRUE;
 }
