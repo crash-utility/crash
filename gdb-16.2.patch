@@ -1879,3 +1879,15 @@
    _rl_tracefp = 0;
    return r;
  }
+--- gdb-16.2/configure.orig
++++ gdb-16.2/configure
+@@ -3620,6 +3620,9 @@ case "${target}" in
+     ;;
+ esac
+
++#disable gdbserver build in crash-utility
++enable_gdbserver=no
++
+ # Only allow gdbserver on some systems.
+ if test -d ${srcdir}/gdbserver; then
+     if test x$enable_gdbserver = x; then
