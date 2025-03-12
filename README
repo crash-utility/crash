@@ -84,6 +84,11 @@
     $ cd crash-8.0.6
     $ make
 
+  To cross compile the crash utility for aarch64 on x86_64:
+    $ make CROSS_COMPILE=aarch64-linux-gnu- -j`nproc`
+
+  Supported arches for cross compilation: x86_64, x86, aarch64, s390x, powerpc64, alpha, sparc64, mips, riscv64
+
   The initial build will take several minutes  because the embedded gdb module
   must be configured and built.  Alternatively, the crash source RPM file
   may be installed and built, and the resultant crash binary RPM file installed.

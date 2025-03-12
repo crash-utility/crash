@@ -27,9 +27,55 @@ PROGRAM=crash
 TARGET=
 GDB_CONF_FLAGS=
 
-ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
+# Supported arches for cross compilation: x86_64, x86, aarch64, s390x,
+# powerpc64, alpha, sparc64, mips, riscv64
+# E.g: cross compile crash-utility for aarch64 on X86_64
+# make CROSS_COMPILE=aarch64-linux-gnu- -j`nproc`
+# or
+# make CROSS_COMPILE=aarch64-linux-gnu- -j`nproc` warn
+#
+ifneq ($(CROSS_COMPILE),)
+ARCH := $(shell echo $(CROSS_COMPILE) | sed 's:^.*/::g' | cut -d- -f1)
+else
+ARCH := $(shell uname -m)
+endif
+
+ARCH := $(shell echo $(ARCH) | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
+
+CC     = $(CROSS_COMPILE)gcc
+CXX    = $(CROSS_COMPILE)g++
+HOSTCC = gcc
+
 ifeq (${ARCH}, ppc64)
 CONF_FLAGS = -m64
+endif
+
+ifneq ($(CROSS_COMPILE),)
+ifeq (${ARCH}, x86_64)
+CONF_TARGET_ARCH := X86_64
+else ifeq (${ARCH}, aarch64)
+CONF_TARGET_ARCH := ARM64
+else ifeq (${ARCH}, s390x)
+CONF_TARGET_ARCH := S390X
+else ifeq (${ARCH}, powerpc64)
+CONF_TARGET_ARCH := PPC64
+else ifeq (${ARCH}, ppc64le)
+CONF_TARGET_ARCH := PPC64
+else ifeq (${ARCH}, alpha)
+CONF_TARGET_ARCH := ALPHA
+else ifeq (${ARCH}, i386)
+CONF_TARGET_ARCH := X86
+else ifeq (${ARCH}, mips)
+CONF_TARGET_ARCH := MIPS
+else ifeq (${ARCH}, sparc64)
+CONF_TARGET_ARCH := SPARC64
+else ifeq (${ARCH}, riscv64)
+CONF_TARGET_ARCH := RISCV64
+else
+$(error The current Arch(${ARCH}) does not support cross compilation)
+endif
+CONF_FLAGS += -DCONF_TARGET_ARCH=${CONF_TARGET_ARCH}
+CONF_FLAGS += -DGDB_TARGET_DEFAULT="\"GDB_CONF_FLAGS=--host=$(shell echo $(CROSS_COMPILE) | sed -e 's:^.*/::g' -e 's/-$$//')\""
 endif
 
 #
@@ -313,7 +359,7 @@ force:
 
 make_configure: force
 	@rm -f configure
-	@${CC} ${CONF_FLAGS} -o configure configure.c ${WARNING_ERROR} ${WARNING_OPTIONS}
+	@${HOSTCC} ${CONF_FLAGS} -o configure configure.c ${WARNING_ERROR} ${WARNING_OPTIONS}
 
 clean: make_configure
 	@./configure ${CONF_TARGET_FLAG} -q -b
