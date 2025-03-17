@@ -215,6 +215,8 @@ char *program_usage_info[] = {
     "    Dump the contents of the kernel log buffer.  A kernel namelist",
     "    argument is not necessary, but the dumpfile must contain the",
     "    VMCOREINFO data taken from the original /proc/vmcore ELF header.",
+    "    Note: this option is deprecated and will no longer work for",
+    "    kernel(>=v5.10).",
     "",
     "  --no_kallsyms",
     "    Do not use kallsyms-generated symbol information contained within",
@@ -6815,7 +6817,7 @@ NULL
 char *help_kmem[] = {
 "kmem",
 "kernel memory",
-"[-f|-F|-c|-C|-i|-v|-V|-n|-z|-o|-h] [-p | -m member[,member]]\n"
+"[-f|-F|-c|-C|-i[=shared]|-v|-V|-n|-z|-o|-h] [-p | -m member[,member]]\n"
 "       [[-s|-S|-S=cpu[s]|-r] [slab] [-I slab[,slab]]] [-g [flags]] [[-P] address]]",
 "  This command displays information about the use of kernel memory.\n",
 "        -f  displays the contents of the system free memory headers.",
@@ -6823,7 +6825,9 @@ char *help_kmem[] = {
 "        -F  same as -f, but also dumps all pages linked to that header.",
 "        -c  walks through the page_hash_table and verifies page_cache_size.",
 "        -C  same as -c, but also dumps all pages in the page_hash_table.",
-"        -i  displays general memory usage information",
+"        -i  displays general memory usage information.",
+"            Note: SHARED is no longer printed (too slow on large memory systems)",
+"            unless specifying \"-i=shared\".",
 "        -v  displays the mapped virtual memory regions allocated by vmalloc().",
 "        -V  displays the kernel vm_stat table if it exists, or in more recent",
 "            kernels, the vm_zone_stat, vm_node_stat and vm_numa_stat tables,",
@@ -8511,7 +8515,7 @@ display_version(void)
 static 
 char *version_info[] = {
 
-"Copyright (C) 2002-2024  Red Hat, Inc.",
+"Copyright (C) 2002-2025  Red Hat, Inc.",
 "Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation", 
 "Copyright (C) 1999-2006  Hewlett-Packard Co",
 "Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited",

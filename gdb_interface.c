@@ -17,7 +17,7 @@
 
 #include "defs.h"
 
-#ifndef GDB_10_2
+#if !defined(GDB_10_2) && !defined(GDB_16_2)
 static void exit_after_gdb_info(void);
 #endif
 static int is_restricted_command(char *, ulong);
@@ -71,7 +71,7 @@ gdb_main_loop(int argc, char **argv)
 	}
 
         optind = 0;
-#ifndef GDB_10_2
+#if !defined(GDB_10_2) && !defined(GDB_16_2)
 #if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
         command_loop_hook = main_loop;
 #else
@@ -122,7 +122,7 @@ void
 display_gdb_banner(void)
 {
 	optind = 0;
-#ifndef GDB_10_2
+#if !defined(GDB_10_2) && !defined(GDB_16_2)
 #if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1)
         command_loop_hook = exit_after_gdb_info;
 #else
@@ -134,7 +134,7 @@ display_gdb_banner(void)
 	gdb_main_entry(2, args);
 }
 
-#ifndef GDB_10_2
+#if !defined(GDB_10_2) && !defined(GDB_16_2)
 static void
 exit_after_gdb_info(void)
 {
@@ -159,13 +159,15 @@ get_gdb_version(void)
 	}
 }
 
+extern void *current_program_space;
+
 void
 gdb_session_init(void)
 {
 	struct gnu_request *req;
 	int debug_data_pulled_in;
 
-        if (!have_partial_symbols() && !have_full_symbols())
+        if (!have_partial_symbols(current_program_space) && !have_full_symbols(current_program_space))
 		no_debugging_data(FATAL);
 
 	/*
@@ -300,7 +302,7 @@ retry:
 	sprintf(req->buf, "set width 0");
 	gdb_interface(req);
 
-#ifdef GDB_10_2
+#if defined(GDB_10_2) || defined(GDB_16_2)
 	req->command = GNU_PASS_THROUGH;
 	req->name = NULL, req->flags = 0;
 	sprintf(req->buf, "set max-value-size unlimited");
@@ -711,7 +713,7 @@ static char *prohibited_list[] = {
 	"watch", "rwatch", "awatch", "attach", "continue", "c", "fg", "detach", 
 	"finish", "handle", "interrupt", "jump", "kill", "next", "nexti", 
 	"signal", "step", "s", "stepi", "target", "until", "delete", 
-	"clear", "disable", "enable", "condition", "ignore", "frame", "catch",
+	"clear", "disable", "enable", "condition", "ignore", "catch",
 	"tcatch", "return", "file", "exec-file", "core-file", "symbol-file",
 	"load", "si", "ni", "shell", "sy",
 	NULL  /* must be last */
@@ -947,6 +949,12 @@ gdb_lookup_module_symbol(ulong addr, ulong *offset)
 	}
 }
 
+int
+is_kvaddr(ulong addr)
+{
+	return IS_KVADDR(addr);
+}
+
 /*
  *  Used by gdb_interface() to catch gdb-related errors, if desired.
  */
@@ -1067,30 +1075,23 @@ unsigned long crash_get_kaslr_offset(void)
 }
 
 /* Callbacks for crash_target */
-int crash_get_nr_cpus(void);
-int crash_get_cpu_reg (int cpu, int regno, const char *regname,
-                       int regsize, void *val);
-
-int crash_get_nr_cpus(void)
+int crash_get_current_task_reg (int regno, const char *regname,
+				int regsize, void *value);
+int crash_get_current_task_reg (int regno, const char *regname,
+				int regsize, void *value)
 {
-        if (SADUMP_DUMPFILE())
-                return sadump_get_nr_cpus();
-        else if (DISKDUMP_DUMPFILE())
-                return diskdump_get_nr_cpus();
-        else if (KDUMP_DUMPFILE())
-                return kdump_get_nr_cpus();
-        else if (VMSS_DUMPFILE())
-                return vmware_vmss_get_nr_cpus();
-
-        /* Just CPU #0 */
-        return 1;
+	if (!machdep->get_current_task_reg)
+		return FALSE;
+	return machdep->get_current_task_reg(regno, regname, regsize, value);
 }
 
-int crash_get_cpu_reg (int cpu, int regno, const char *regname,
-                       int regsize, void *value)
+/* arm64 kernel lr maybe has patuh */
+#ifdef ARM64
+void crash_decode_ptrauth_pc(ulong *pc);
+void crash_decode_ptrauth_pc(ulong *pc)
 {
-        if (!machdep->get_cpu_reg)
-                return FALSE;
-        return machdep->get_cpu_reg(cpu, regno, regname, regsize, value);
+	struct machine_specific *ms = machdep->machspec;
+	if (is_kernel_text(*pc | ms->CONFIG_ARM64_KERNELPACMASK))
+		*pc |= ms->CONFIG_ARM64_KERNELPACMASK;
 }
-
+#endif /* !ARM64 */

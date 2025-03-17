@@ -982,6 +982,7 @@ struct bt_info {
 	ulong eframe_ip;
 	ulong radix;
 	ulong *cpumask;
+	bool need_free;
 };
 
 #define STACK_OFFSET_TYPE(OFF) \
@@ -1080,7 +1081,7 @@ struct machdep_table {
         void (*get_irq_affinity)(int);
         void (*show_interrupts)(int, ulong *);
 	int (*is_page_ptr)(ulong, physaddr_t *);
-	int (*get_cpu_reg)(int, int, const char *, int, void *);
+	int (*get_current_task_reg)(int, const char *, int, void *);
 	int (*is_cpu_prstatus_valid)(int cpu);
 };
 
@@ -2243,6 +2244,33 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long vmap_node_busy;
 	long rb_list_head;
 	long file_f_inode;
+	long page_page_type;
+	long inactive_task_frame_r15;
+	long inactive_task_frame_r14;
+	long inactive_task_frame_r13;
+	long inactive_task_frame_r12;
+	long inactive_task_frame_flags;
+	long inactive_task_frame_si;
+	long inactive_task_frame_di;
+	long inactive_task_frame_bx;
+	long thread_struct_es;
+	long thread_struct_ds;
+	long thread_struct_fsbase;
+	long thread_struct_gsbase;
+	long thread_struct_fs;
+	long thread_struct_gs;
+	long task_struct_thread_context_x19;
+	long task_struct_thread_context_x20;
+	long task_struct_thread_context_x21;
+	long task_struct_thread_context_x22;
+	long task_struct_thread_context_x23;
+	long task_struct_thread_context_x24;
+	long task_struct_thread_context_x25;
+	long task_struct_thread_context_x26;
+	long task_struct_thread_context_x27;
+	long task_struct_thread_context_x28;
+	long neigh_table_hash_heads;
+	long neighbour_hash;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2419,6 +2447,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long module_memory;
 	long fred_frame;
 	long vmap_node;
+	long cpumask_t;
 };
 
 struct array_table {
@@ -2651,6 +2680,7 @@ struct vm_table {                /* kernel VM-related data */
 	ulong max_mem_section_nr;
 	ulong zero_paddr;
 	ulong huge_zero_paddr;
+	uint page_type_base;
 };
 
 #define NODES                       (0x1)
@@ -2684,6 +2714,11 @@ struct vm_table {                /* kernel VM-related data */
 #define SLAB_CPU_CACHE       (0x10000000)
 #define SLAB_ROOT_CACHES     (0x20000000)
 #define USE_VMAP_NODES       (0x40000000)
+/*
+ * The SLAB_PAGEFLAGS flag is introduced to detect the change of
+ * PG_slab's type from a page flag to a page type.
+ */
+#define SLAB_PAGEFLAGS       (0x80000000)
 
 #define IS_FLATMEM()		(vt->flags & FLATMEM)
 #define IS_DISCONTIGMEM()	(vt->flags & DISCONTIGMEM)
@@ -3561,6 +3596,16 @@ struct machine_specific {
 };
 
 struct arm64_stackframe {
+        unsigned long x19;
+        unsigned long x20;
+        unsigned long x21;
+        unsigned long x22;
+        unsigned long x23;
+        unsigned long x24;
+        unsigned long x25;
+        unsigned long x26;
+        unsigned long x27;
+        unsigned long x28;
         unsigned long fp;
         unsigned long sp;
         unsigned long pc;
@@ -5269,8 +5314,8 @@ enum type_code {
   TYPE_CODE_STRUCT,             /* C struct or Pascal record */
   TYPE_CODE_UNION,              /* C union or Pascal variant part */
   TYPE_CODE_ENUM,               /* Enumeration type */
-#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2)
-#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2)
+#if defined(GDB_5_3) || defined(GDB_6_0) || defined(GDB_6_1) || defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_16_2)
+#if defined(GDB_7_0) || defined(GDB_7_3_1) || defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_16_2)
   TYPE_CODE_FLAGS,              /* Bit flags type */
 #endif
   TYPE_CODE_FUNC,               /* Function type */
@@ -6071,7 +6116,7 @@ extern char *help_map[];
  *  task.c
  */ 
 void task_init(void);
-int set_context(ulong, ulong);
+int set_context(ulong, ulong, uint);
 void show_context(struct task_context *);
 ulong pid_to_task(ulong);
 ulong task_to_pid(ulong);
@@ -6154,6 +6199,7 @@ int load_module_symbols_helper(char *);
 void unlink_module(struct load_module *);
 int check_specified_module_tree(char *, char *);
 int is_system_call(char *, ulong);
+void get_dumpfile_regs(struct bt_info*, ulong*, ulong*);
 void generic_dump_irq(int);
 void generic_get_irq_affinity(int);
 void generic_show_interrupts(int, ulong *);
@@ -6253,6 +6299,7 @@ ulong cpu_map_addr(const char *type);
 #define BT_REGS_NOT_FOUND (0x4000000000000ULL)
 #define BT_OVERFLOW_STACK (0x8000000000000ULL)
 #define BT_SKIP_IDLE     (0x10000000000000ULL)
+#define BT_NO_PRINT_REGS (0x20000000000000ULL)
 #define BT_SYMBOL_OFFSET   (BT_SYMBOLIC_ARGS)
 
 #define BT_REF_HEXVAL         (0x1)
@@ -7958,6 +8005,7 @@ extern unsigned char *gdb_prettyprint_arrays;
 extern unsigned int *gdb_repeat_count_threshold;
 extern unsigned char *gdb_stop_print_at_null;
 extern unsigned int *gdb_output_radix;
+int is_kvaddr(ulong);
 
 /*
  *  gdb/top.c
@@ -8051,16 +8099,23 @@ extern unsigned long calc_crc32(unsigned long, unsigned char *, size_t);
 #else
 extern unsigned long gnu_debuglink_crc32 (unsigned long, unsigned char *, size_t);
 #endif
-extern int have_partial_symbols(void); 
-extern int have_full_symbols(void);
+extern int have_partial_symbols(void *);
+extern int have_full_symbols(void *);
 
 #if defined(X86) || defined(X86_64) || defined(IA64)
 #define XEN_HYPERVISOR_ARCH 
 #endif
 
+#ifndef offsetof
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#endif
+#define FIELD_SIZEOF(t, f) (sizeof(((t*)0)->f))
+#define REG_SEQ(TYPE, MEMBER) \
+	(offsetof(struct TYPE, MEMBER) / FIELD_SIZEOF(struct TYPE, MEMBER))
+
 /*
  * Register numbers must be in sync with gdb/features/i386/64bit-core.c
- * to make crash_target->fetch_registers() ---> machdep->get_cpu_reg()
+ * to make crash_target->fetch_registers() ---> machdep->get_current_task_reg()
  * working properly.
  */
 enum x86_64_regnum {
@@ -8104,7 +8159,169 @@ enum x86_64_regnum {
         FOSEG_REGNUM,
         FOOFF_REGNUM,
         FOP_REGNUM,
+        FS_BASE_REGNUM = 152,
+        GS_BASE_REGNUM,
+        ORIG_RAX_REGNUM,
         LAST_REGNUM
 };
+
+enum arm64_regnum {
+	X0_REGNUM,
+	X1_REGNUM,
+	X2_REGNUM,
+	X3_REGNUM,
+	X4_REGNUM,
+	X5_REGNUM,
+	X6_REGNUM,
+	X7_REGNUM,
+	X8_REGNUM,
+	X9_REGNUM,
+	X10_REGNUM,
+	X11_REGNUM,
+	X12_REGNUM,
+	X13_REGNUM,
+	X14_REGNUM,
+	X15_REGNUM,
+	X16_REGNUM,
+	X17_REGNUM,
+	X18_REGNUM,
+	X19_REGNUM,
+	X20_REGNUM,
+	X21_REGNUM,
+	X22_REGNUM,
+	X23_REGNUM,
+	X24_REGNUM,
+	X25_REGNUM,
+	X26_REGNUM,
+	X27_REGNUM,
+	X28_REGNUM,
+	X29_REGNUM,
+	X30_REGNUM,
+	SP_REGNUM,
+	PC_REGNUM,
+};
+
+/*
+ * Register numbers to make crash_target->fetch_registers()
+ * ---> machdep->get_current_task_reg() work properly.
+ *
+ *  These register numbers and names are given according to output of
+ *  `rs6000_register_name`, because that is what was being used by
+ *  crash_target::fetch_registers in case of PPC64
+ */
+enum ppc64_regnum {
+	PPC64_R0_REGNUM = 0,
+	PPC64_R1_REGNUM,
+	PPC64_R2_REGNUM,
+	PPC64_R3_REGNUM,
+	PPC64_R4_REGNUM,
+	PPC64_R5_REGNUM,
+	PPC64_R6_REGNUM,
+	PPC64_R7_REGNUM,
+	PPC64_R8_REGNUM,
+	PPC64_R9_REGNUM,
+	PPC64_R10_REGNUM,
+	PPC64_R11_REGNUM,
+	PPC64_R12_REGNUM,
+	PPC64_R13_REGNUM,
+	PPC64_R14_REGNUM,
+	PPC64_R15_REGNUM,
+	PPC64_R16_REGNUM,
+	PPC64_R17_REGNUM,
+	PPC64_R18_REGNUM,
+	PPC64_R19_REGNUM,
+	PPC64_R20_REGNUM,
+	PPC64_R21_REGNUM,
+	PPC64_R22_REGNUM,
+	PPC64_R23_REGNUM,
+	PPC64_R24_REGNUM,
+	PPC64_R25_REGNUM,
+	PPC64_R26_REGNUM,
+	PPC64_R27_REGNUM,
+	PPC64_R28_REGNUM,
+	PPC64_R29_REGNUM,
+	PPC64_R30_REGNUM,
+	PPC64_R31_REGNUM,
+
+	PPC64_F0_REGNUM = 32,
+	PPC64_F1_REGNUM,
+	PPC64_F2_REGNUM,
+	PPC64_F3_REGNUM,
+	PPC64_F4_REGNUM,
+	PPC64_F5_REGNUM,
+	PPC64_F6_REGNUM,
+	PPC64_F7_REGNUM,
+	PPC64_F8_REGNUM,
+	PPC64_F9_REGNUM,
+	PPC64_F10_REGNUM,
+	PPC64_F11_REGNUM,
+	PPC64_F12_REGNUM,
+	PPC64_F13_REGNUM,
+	PPC64_F14_REGNUM,
+	PPC64_F15_REGNUM,
+	PPC64_F16_REGNUM,
+	PPC64_F17_REGNUM,
+	PPC64_F18_REGNUM,
+	PPC64_F19_REGNUM,
+	PPC64_F20_REGNUM,
+	PPC64_F21_REGNUM,
+	PPC64_F22_REGNUM,
+	PPC64_F23_REGNUM,
+	PPC64_F24_REGNUM,
+	PPC64_F25_REGNUM,
+	PPC64_F26_REGNUM,
+	PPC64_F27_REGNUM,
+	PPC64_F28_REGNUM,
+	PPC64_F29_REGNUM,
+	PPC64_F30_REGNUM,
+	PPC64_F31_REGNUM,
+
+	PPC64_PC_REGNUM = 64,
+	PPC64_MSR_REGNUM = 65,
+	PPC64_CR_REGNUM = 66,
+	PPC64_LR_REGNUM = 67,
+	PPC64_CTR_REGNUM = 68,
+	PPC64_XER_REGNUM = 69,
+	PPC64_FPSCR_REGNUM = 70,
+
+	PPC64_VR0_REGNUM = 106,
+	PPC64_VR1_REGNUM,
+	PPC64_VR2_REGNUM,
+	PPC64_VR3_REGNUM,
+	PPC64_VR4_REGNUM,
+	PPC64_VR5_REGNUM,
+	PPC64_VR6_REGNUM,
+	PPC64_VR7_REGNUM,
+	PPC64_VR8_REGNUM,
+	PPC64_VR9_REGNUM,
+	PPC64_VR10_REGNUM,
+	PPC64_VR11_REGNUM,
+	PPC64_VR12_REGNUM,
+	PPC64_VR13_REGNUM,
+	PPC64_VR14_REGNUM,
+	PPC64_VR15_REGNUM,
+	PPC64_VR16_REGNUM,
+	PPC64_VR17_REGNUM,
+	PPC64_VR18_REGNUM,
+	PPC64_VR19_REGNUM,
+	PPC64_VR20_REGNUM,
+	PPC64_VR21_REGNUM,
+	PPC64_VR22_REGNUM,
+	PPC64_VR23_REGNUM,
+	PPC64_VR24_REGNUM,
+	PPC64_VR25_REGNUM,
+	PPC64_VR26_REGNUM,
+	PPC64_VR27_REGNUM,
+	PPC64_VR28_REGNUM,
+	PPC64_VR29_REGNUM,
+	PPC64_VR30_REGNUM,
+	PPC64_VR31_REGNUM,
+
+	PPC64_VSCR_REGNUM = 138,
+	PPC64_VRSAVE_REGNU = 139
+};
+
+/* crash_target.c */
+extern int gdb_change_thread_context (void);
 
 #endif /* !GDB_COMMON */

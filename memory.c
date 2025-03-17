@@ -237,7 +237,7 @@ static void dump_vmlist(struct meminfo *);
 static void dump_vmap_area(struct meminfo *);
 static int get_vmap_area_list_from_nodes(ulong **);
 static int dump_page_lists(struct meminfo *);
-static void dump_kmeminfo(void);
+static void dump_kmeminfo(struct meminfo *);
 static int page_to_phys(ulong, physaddr_t *); 
 static void display_memory(ulonglong, long, ulong, int, void *); 
 static char *show_opt_string(struct searchinfo *);
@@ -350,6 +350,45 @@ static ulong handle_each_vm_area(struct handle_each_vm_area_args *);
 #define ASCII_UNLIMITED ((ulong)(-1) >> 1)
 
 static ulong DISPLAY_DEFAULT;
+
+/*
+ * Before kernel commit ff202303c398e, the value is defined as a macro, so copy it here;
+ * After this commit, the value is defined as an enum, which can be evaluated at runtime.
+ */
+#define PAGE_TYPE_BASE	0xf0000000
+#define PageType(page_type, flag)						\
+	((page_type & (vt->page_type_base | flag)) == vt->page_type_base)
+
+static void page_type_init(void)
+{
+	if (!enumerator_value("PAGE_TYPE_BASE", (long *)&vt->page_type_base))
+		vt->page_type_base = PAGE_TYPE_BASE;
+}
+
+/*
+ * The PG_slab's type has changed from a page flag to a page type
+ * since kernel commit 46df8e73a4a3.
+ */
+static bool page_slab(ulong page, ulong flags)
+{
+	if (vt->flags & SLAB_PAGEFLAGS) {
+		if ((flags >> vt->PG_slab) & 1)
+			return TRUE;
+
+		return FALSE;
+	}
+
+	if (VALID_MEMBER(page_page_type)) {
+		uint page_type;
+
+		readmem(page+OFFSET(page_page_type), KVADDR, &page_type,
+			sizeof(page_type), "page_type", FAULT_ON_ERROR);
+		if (PageType(page_type, (uint)vt->PG_slab))
+			return TRUE;
+	}
+
+	return FALSE;
+}
 
 /*
  *  Verify that the sizeof the primitive types are reasonable.
@@ -504,6 +543,7 @@ vm_init(void)
 		ANON_MEMBER_OFFSET_INIT(page_compound_head, "page", "compound_head");
 	MEMBER_OFFSET_INIT(page_private, "page", "private");
 	MEMBER_OFFSET_INIT(page_freelist, "page", "freelist");
+	MEMBER_OFFSET_INIT(page_page_type, "page", "page_type");
 
 	MEMBER_OFFSET_INIT(mm_struct_pgd, "mm_struct", "pgd");
 
@@ -1277,6 +1317,8 @@ vm_init(void)
 	kmem_cache_init();
 
 	page_flags_init();
+
+	page_type_init();
 
 	rss_page_types_init();
 
@@ -5067,7 +5109,7 @@ cmd_kmem(void)
 	BZERO(&value[0], sizeof(ulonglong)*MAXARGS);
 	pc->curcmd_flags &= ~HEADER_PRINTED;
 
-        while ((c = getopt(argcnt, args, "gI:sS::rFfm:pvczCinl:L:PVoh")) != EOF) {
+        while ((c = getopt(argcnt, args, "gI:sS::rFfm:pvczCi::nl:L:PVoh")) != EOF) {
                 switch(c)
 		{
 		case 'V':
@@ -5084,6 +5126,9 @@ cmd_kmem(void)
 
 		case 'i': 
 			iflag = 1;
+			if (optarg && strcmp(optarg, "=shared") == 0) {
+				meminfo.flags = GET_SHARED_PAGES;
+			}
 			break;
 
 		case 'h': 
@@ -5370,7 +5415,7 @@ cmd_kmem(void)
 	}
 
 	if (iflag == 1)
-		dump_kmeminfo();
+		dump_kmeminfo(&meminfo);
 
 	if (pflag == 1)
 		dump_mem_map(&meminfo);
@@ -5931,7 +5976,7 @@ dump_mem_map_SPARSEMEM(struct meminfo *mi)
 	                                if ((flags >> v22_PG_Slab) & 1) 
 						slabs++;
 				} else if (vt->PG_slab) {
-	                                if ((flags >> vt->PG_slab) & 1) 
+					if (page_slab(pp, flags))
 						slabs++;
 				} else {
 	                                if ((flags >> v24_PG_slab) & 1) 
@@ -6381,7 +6426,7 @@ dump_mem_map(struct meminfo *mi)
 	                                if ((flags >> v22_PG_Slab) & 1) 
 						slabs++;
 				} else if (vt->PG_slab) {
-	                                if ((flags >> vt->PG_slab) & 1) 
+					if (page_slab(pp, flags))
 						slabs++;
 				} else {
 	                                if ((flags >> v24_PG_slab) & 1) 
@@ -6694,7 +6739,6 @@ dump_hstates()
 	FREEBUF(hstate);
 }
 
-
 static void
 page_flags_init(void)
 {
@@ -6775,6 +6819,9 @@ page_flags_init_from_pageflag_names(void)
 		vt->pageflags_data[i].name = nameptr;
 		vt->pageflags_data[i].mask = mask;
 
+		 if (!strncmp(nameptr, "slab", 4))
+			 vt->flags |= SLAB_PAGEFLAGS;
+
 		if (CRASHDEBUG(1)) {
 			fprintf(fp, "  %08lx %s\n", 
 				vt->pageflags_data[i].mask,
@@ -6835,8 +6882,9 @@ page_flags_init_from_pageflags_enum(void)
 			}
 			strcpy(nameptr, arglist[0] + strlen("PG_"));
 			vt->pageflags_data[p].name = nameptr;
-			vt->pageflags_data[p].mask = 1 << atoi(arglist[2]); 
-
+			vt->pageflags_data[p].mask = 1 << atoi(arglist[2]);
+			if (!strncmp(nameptr, "slab", 4))
+				vt->flags |= SLAB_PAGEFLAGS;
 			p++;
 		}
 	} else 
@@ -8472,7 +8520,7 @@ bailout:
 char *kmeminfo_hdr = "                 PAGES        TOTAL      PERCENTAGE\n";
 
 static void
-dump_kmeminfo(void)
+dump_kmeminfo(struct meminfo *mi)
 {
 	int i, len;
 	ulong totalram_pages;
@@ -8503,18 +8551,23 @@ dump_kmeminfo(void)
         ulong get_buffers;
         ulong get_slabs;
 	char buf[BUFSIZE];
-
-
-	BZERO(&meminfo, sizeof(struct meminfo));
-	meminfo.flags = GET_ALL;
-	dump_mem_map(&meminfo);
-	get_totalram = meminfo.get_totalram;
-	shared_pages = meminfo.get_shared;
-	get_buffers = meminfo.get_buffers;
-	get_slabs = meminfo.get_slabs;
+	ulong flags;
 
 	/*
-	 *  If vm_stat array exists, override page search info.
+	 * By default, we will no longer call dump_mem_map() as this is too
+	 * slow for large memory systems. If we have to call it (eg. missing
+	 * important information such as slabs or total ram), we will also
+	 * collect shared pages. Otherwise, we won't print shared pages unless
+	 * the caller explicitly requested shared pages ("kmem -i=shared").
+	 */
+	flags = mi->flags;
+	shared_pages = 0;
+	get_totalram = 0;
+	get_buffers = 0;
+	get_slabs = 0;
+
+	/*
+	 *  If vm_stat array does not exists, then set mem map flag.
 	 */
 	if (vm_stat_init()) {
 		if (dump_vm_stat("NR_SLAB", &nr_slab, 0))
@@ -8529,9 +8582,10 @@ dump_kmeminfo(void)
 			if (dump_vm_stat("NR_SLAB_UNRECLAIMABLE_B", &nr_slab, 0))
 				get_slabs += nr_slab;
 		}
+	} else {
+		flags |= GET_SLAB_PAGES;
 	}
 
-	fprintf(fp, "%s", kmeminfo_hdr);
 	/*
 	 *  Get total RAM based upon how the various versions of si_meminfo()
          *  have done it, latest to earliest:
@@ -8543,9 +8597,32 @@ dump_kmeminfo(void)
 	    symbol_exists("_totalram_pages")) {
 		totalram_pages = vt->totalram_pages ? 
 			vt->totalram_pages : get_totalram; 
-	} else 
-		totalram_pages = get_totalram;
+	} else {
+		flags |= GET_TOTALRAM_PAGES;
+		totalram_pages = 0;
+	}
 
+	/*
+	 * If the caller wants shared pages or if we are missing important data
+	 * (ie. slab or totalram) then go through the slow dump_mem_map() path.
+	 */
+	if (flags) {
+		BZERO(&meminfo, sizeof(struct meminfo));
+		meminfo.flags = GET_ALL;
+		dump_mem_map(&meminfo);
+		/* Update the missing information */
+		if (flags & GET_SLAB_PAGES) {
+			get_slabs = meminfo.get_slabs;
+		}
+		if (flags & GET_TOTALRAM_PAGES) {
+			get_totalram = meminfo.get_totalram;
+			totalram_pages = get_totalram;
+		}
+		shared_pages = meminfo.get_shared;
+		get_buffers = meminfo.get_buffers;
+	}
+
+	fprintf(fp, "%s", kmeminfo_hdr);
 	fprintf(fp, "%13s  %7ld  %11s         ----\n", "TOTAL MEM", 
 		totalram_pages, pages_to_size(totalram_pages, buf));
 
@@ -8570,9 +8647,11 @@ dump_kmeminfo(void)
          *  differently than the kernel -- it just tallies the non-reserved
          *  pages that have a count of greater than 1.
 	 */
-        pct = (shared_pages * 100)/totalram_pages;
-        fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
-		"SHARED", shared_pages, pages_to_size(shared_pages, buf), pct);
+	if (flags & GET_SHARED_PAGES) {
+            pct = (shared_pages * 100)/totalram_pages;
+            fprintf(fp, "%13s  %7ld  %11s  %3ld%% of TOTAL MEM\n", 
+			"SHARED", shared_pages, pages_to_size(shared_pages, buf), pct);
+	}
 
 	subtract_buffer_pages = 0;
 	if (symbol_exists("buffermem_pages")) { 
@@ -9736,14 +9815,14 @@ vaddr_to_kmem_cache(ulong vaddr, char *buf, int verbose)
 		readmem(page+OFFSET(page_flags), KVADDR,
 			&page_flags, sizeof(ulong), "page.flags",
 			FAULT_ON_ERROR);
-		if (!(page_flags & (1 << vt->PG_slab))) {
+		if (!page_slab(page, page_flags)) {
 			if (((vt->flags & KMALLOC_SLUB) || VALID_MEMBER(page_compound_head)) ||
 			    ((vt->flags & KMALLOC_COMMON) &&
 			    VALID_MEMBER(page_slab) && VALID_MEMBER(page_first_page))) {
 				readmem(compound_head(page)+OFFSET(page_flags), KVADDR,
 					&page_flags, sizeof(ulong), "page.flags",
 					FAULT_ON_ERROR);
-				if (!(page_flags & (1 << vt->PG_slab)))
+				if (!page_slab(compound_head(page), page_flags))
 					return NULL;
 			} else
 				return NULL;
@@ -14108,6 +14187,8 @@ dump_vm_table(int verbose)
 		fprintf(fp, "%sNODELISTS_IS_PTR", others++ ? "|" : "");\
 	if (vt->flags & VM_INIT)
 		fprintf(fp, "%sVM_INIT", others++ ? "|" : "");\
+	if (vt->flags & SLAB_PAGEFLAGS)
+		fprintf(fp, "%sSLAB_PAGEFLAGS", others++ ? "|" : "");\
 
 	fprintf(fp, ")\n");
 	if (vt->kernel_pgd[0] == vt->kernel_pgd[1])
@@ -14237,6 +14318,7 @@ dump_vm_table(int verbose)
 			vt->pageflags_data[i].mask,
 			vt->pageflags_data[i].name);
 	}
+	fprintf(fp, "     page_type_base: %x\n", vt->page_type_base);
 
 	dump_vma_cache(VERBOSE);
 }
@@ -20195,7 +20277,7 @@ char *
 is_slab_page(struct meminfo *si, char *buf)
 {
 	int i, cnt;
-	ulong page_slab, page_flags, name;
+	ulong pg_slab, page_flags, name;
         ulong *cache_list;
         char *retval;
 
@@ -20210,11 +20292,11 @@ is_slab_page(struct meminfo *si, char *buf)
 	    RETURN_ON_ERROR|QUIET))
 		return NULL;
 
-	if (!(page_flags & (1 << vt->PG_slab)))
+	if (!page_slab(si->spec_addr, page_flags))
 		return NULL;
 
 	if (!readmem(si->spec_addr + OFFSET(page_slab), KVADDR, 
-	    &page_slab, sizeof(ulong), "page.slab", 
+	    &pg_slab, sizeof(ulong), "page.slab",
 	    RETURN_ON_ERROR|QUIET))
 		return NULL;
 
@@ -20222,7 +20304,7 @@ is_slab_page(struct meminfo *si, char *buf)
         cnt = get_kmem_cache_list(&cache_list);
 
 	for (i = 0; i < cnt; i++) {
-		if (page_slab == cache_list[i]) {
+		if (pg_slab == cache_list[i]) {
 			if (!readmem(cache_list[i] + OFFSET(kmem_cache_name), 
 			    KVADDR, &name, sizeof(char *),
 			    "kmem_cache.name", QUIET|RETURN_ON_ERROR))

@@ -2051,6 +2051,9 @@ vfs_init(void)
 	MEMBER_OFFSET_INIT(dentry_d_covers, "dentry", "d_covers");
 	MEMBER_OFFSET_INIT(dentry_d_name, "dentry", "d_name");
 	MEMBER_OFFSET_INIT(dentry_d_iname, "dentry", "d_iname");
+	if (INVALID_MEMBER(dentry_d_iname)) {
+		MEMBER_OFFSET_INIT(dentry_d_iname, "dentry", "d_shortname");
+	}
 	MEMBER_OFFSET_INIT(dentry_d_sb, "dentry", "d_sb");
 	MEMBER_OFFSET_INIT(inode_i_mode, "inode", "i_mode");
 	MEMBER_OFFSET_INIT(inode_i_op, "inode", "i_op");

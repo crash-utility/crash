@@ -2768,7 +2768,8 @@ display_regs_from_elf_notes(int cpu, FILE *ofp)
 		}
 	}
 
-	if ((cpu - skipped_count) >= nd->num_prstatus_notes &&
+	if (((cpu < 0 ) || (!nd->nt_prstatus_percpu[cpu]) ||
+		(cpu - skipped_count) >= nd->num_prstatus_notes) &&
 	     !machine_type("MIPS")) {
 		error(INFO, "registers not collected for cpu %d\n", cpu);
 		return;

@@ -126,7 +126,7 @@ static int x86_64_get_framesize(struct bt_info *, ulong, ulong, char *);
 static void x86_64_framesize_debug(struct bt_info *);
 static void x86_64_get_active_set(void);
 static int x86_64_get_kvaddr_ranges(struct vaddr_range *);
-static int x86_64_get_cpu_reg(int, int, const char *, int, void *);
+static int x86_64_get_current_task_reg(int, const char *, int, void *);
 static int x86_64_verify_paddr(uint64_t);
 static void GART_init(void);
 static void x86_64_exception_stacks_init(void);
@@ -142,6 +142,23 @@ struct machine_specific x86_64_machine_specific = { 0 };
 
 static const char *exception_functions_orig[];
 static const char *exception_functions_5_8[];
+
+/*  Use this hardwired version -- sometimes the
+ *  debuginfo doesn't pick this up even though
+ *  it exists in the kernel; it shouldn't change.
+ */
+struct x86_64_user_regs_struct {
+	unsigned long r15, r14, r13, r12, bp, bx;
+	unsigned long r11, r10, r9, r8, ax, cx, dx;
+	unsigned long si, di, orig_ax, ip, cs;
+	unsigned long flags, sp, ss, fs_base;
+	unsigned long gs_base, ds, es, fs, gs;
+};
+
+struct user_regs_bitmap_struct {
+	struct x86_64_user_regs_struct ur;
+	ulong bitmap[32];
+};
 
 /*
  *  Do all necessary machine-specific setup here.  This is called several
@@ -195,7 +212,7 @@ x86_64_init(int when)
 		machdep->machspec->irq_eframe_link = UNINITIALIZED;
 		machdep->machspec->irq_stack_gap = UNINITIALIZED;
 		machdep->get_kvaddr_ranges = x86_64_get_kvaddr_ranges;
-		machdep->get_cpu_reg = x86_64_get_cpu_reg;
+		machdep->get_current_task_reg = x86_64_get_current_task_reg;
                 if (machdep->cmdline_args[0])
                         parse_cmdline_args();
 		if ((string = pc->read_vmcoreinfo("relocate"))) {
@@ -500,6 +517,12 @@ x86_64_init(int when)
 			MEMBER_OFFSET_INIT(thread_struct_rsp, "thread_struct", "sp");
 		if (INVALID_MEMBER(thread_struct_rsp0))
 			MEMBER_OFFSET_INIT(thread_struct_rsp0, "thread_struct", "sp0");
+		MEMBER_OFFSET_INIT(thread_struct_es, "thread_struct", "es");
+		MEMBER_OFFSET_INIT(thread_struct_ds, "thread_struct", "ds");
+		MEMBER_OFFSET_INIT(thread_struct_fsbase, "thread_struct", "fsbase");
+		MEMBER_OFFSET_INIT(thread_struct_gsbase, "thread_struct", "gsbase");
+		MEMBER_OFFSET_INIT(thread_struct_fs, "thread_struct", "fs");
+		MEMBER_OFFSET_INIT(thread_struct_gs, "thread_struct", "gs");
 		STRUCT_SIZE_INIT(tss_struct, "tss_struct");
 		MEMBER_OFFSET_INIT(tss_struct_ist, "tss_struct", "ist");
 		if (INVALID_MEMBER(tss_struct_ist)) {
@@ -583,17 +606,6 @@ x86_64_init(int when)
 			"user_regs_struct", "r15");
 		STRUCT_SIZE_INIT(user_regs_struct, "user_regs_struct");
 		if (!VALID_STRUCT(user_regs_struct)) {
-			/*  Use this hardwired version -- sometimes the
-			 *  debuginfo doesn't pick this up even though
- 			 *  it exists in the kernel; it shouldn't change.
- 			 */
-			struct x86_64_user_regs_struct {
-				unsigned long r15, r14, r13, r12, bp, bx;
-				unsigned long r11, r10, r9, r8, ax, cx, dx;
-				unsigned long si, di, orig_ax, ip, cs;
-				unsigned long flags, sp, ss, fs_base;
-				unsigned long gs_base, ds, es, fs, gs;
-			};
 			ASSIGN_SIZE(user_regs_struct) = 
 				sizeof(struct x86_64_user_regs_struct);
 			ASSIGN_OFFSET(user_regs_struct_rip) =
@@ -891,7 +903,7 @@ x86_64_dump_machdep_table(ulong arg)
         fprintf(fp, "        is_page_ptr: x86_64_is_page_ptr()\n");
         fprintf(fp, "       verify_paddr: x86_64_verify_paddr()\n");
         fprintf(fp, "  get_kvaddr_ranges: x86_64_get_kvaddr_ranges()\n");
-	fprintf(fp, "        get_cpu_reg: x86_64_get_cpu_reg()\n");
+	fprintf(fp, "get_current_task_reg: x86_64_get_current_task_reg()\n");
         fprintf(fp, "    init_kernel_pgd: x86_64_init_kernel_pgd()\n");
         fprintf(fp, "clear_machdep_cache: x86_64_clear_machdep_cache()\n");
 	fprintf(fp, " xendump_p2m_create: %s\n", PVOPS_XEN() ?
@@ -1526,11 +1538,8 @@ x86_64_ist_init(void)
 				if (ms->stkinfo.ebase[c][i])
 					ms->stkinfo.ebase[c][i] -= ms->stkinfo.esize[i];
 
-				ms->stkinfo.available[c][i] = TRUE;
 				/* VC stack can be unmapped if SEV-ES is disabled or not supported. */
-				if (STREQ(ms->stkinfo.exception_stacks[i], "VC") &&
-				    !accessible(ms->stkinfo.ebase[c][i]))
-					ms->stkinfo.available[c][i] = FALSE;
+				ms->stkinfo.available[c][i] = accessible(ms->stkinfo.ebase[c][i]);
 			}
 		}
 
@@ -4973,22 +4982,143 @@ x86_64_eframe_verify(struct bt_info *bt, long kvaddr, long cs, long ss,
 	return FALSE;
 }
 
+static ulong
+get_reg_from_inactive_task_frame(struct bt_info *bt, char *reg_name,
+				ulong reg_offset)
+{
+	ulong reg_value = 0, rsp = 0;
+	char reg_info[64];
+
+	snprintf(reg_info, sizeof(reg_info), "inactive_task_frame.%s", reg_name);
+
+	readmem(bt->task + OFFSET(task_struct_thread) +
+		OFFSET(thread_struct_rsp), KVADDR, &rsp,
+		sizeof(ulong), "thread_struct.rsp", FAULT_ON_ERROR);
+	readmem(rsp + reg_offset, KVADDR, &reg_value,
+		sizeof(ulong), reg_info, FAULT_ON_ERROR);
+	return reg_value;
+}
+
+#define SET_REG_BITMAP(REGMAP, TYPE, MEMBER) \
+	SET_BIT(REGMAP, REG_SEQ(TYPE, MEMBER))
+
 /*
  *  Get a stack frame combination of pc and ra from the most relevent spot.
  */
 static void
 x86_64_get_stack_frame(struct bt_info *bt, ulong *pcp, ulong *spp)
 {
-	if (bt->flags & BT_DUMPFILE_SEARCH)
-		return x86_64_get_dumpfile_stack_frame(bt, pcp, spp);
+	struct user_regs_bitmap_struct *ur_bitmap;
+	ulong sp = 0;
 
 	if (bt->flags & BT_SKIP_IDLE)
 		bt->flags &= ~BT_SKIP_IDLE;
 
-        if (pcp)
-                *pcp = x86_64_get_pc(bt);
-        if (spp)
-                *spp = x86_64_get_sp(bt);
+	ur_bitmap = (struct user_regs_bitmap_struct *)GETBUF(sizeof(*ur_bitmap));
+	memset(ur_bitmap, 0, sizeof(*ur_bitmap));
+
+	if (VALID_MEMBER(inactive_task_frame_bp)) {
+		if (!is_task_active(bt->task)) {
+			/*
+			* For inactive tasks in live and dumpfile, regs can be
+			* get from inactive_task_frame struct.
+			*/
+			ur_bitmap->ur.r15 = get_reg_from_inactive_task_frame(bt,
+					"r15", OFFSET(inactive_task_frame_r15));
+			ur_bitmap->ur.r14 = get_reg_from_inactive_task_frame(bt,
+					"r14", OFFSET(inactive_task_frame_r14));
+			ur_bitmap->ur.r13 = get_reg_from_inactive_task_frame(bt,
+					"r13", OFFSET(inactive_task_frame_r13));
+			ur_bitmap->ur.r12 = get_reg_from_inactive_task_frame(bt,
+					"r12", OFFSET(inactive_task_frame_r12));
+			ur_bitmap->ur.bx  = get_reg_from_inactive_task_frame(bt,
+					"bx", OFFSET(inactive_task_frame_bx));
+			ur_bitmap->ur.bp  = get_reg_from_inactive_task_frame(bt,
+					"bp", OFFSET(inactive_task_frame_bp));
+			/*
+			For inactive tasks:
+			crash> task -x 1|grep sp
+			sp = 0xffffc90000013d00
+			crash> rd ffffc90000013d00 32
+			ffffc90000013d00:  ffff888104dad4a8 0000000000000000  r15,r14
+			ffffc90000013d10:  ffff888100280000 ffff888100216500  r13,r12
+			ffffc90000013d20:  ffff888100217018 ffff88817fd2c800  rbx,rbp
+			ffffc90000013d30:  ffffffff81a6a1b3 ffffc90000013de0  saved_rip,...
+			ffffc90000013d40:  ffff888100000004 99ccbf53ea493000
+			ffffc90000013d50:  ffff888100216500 ffff888100216500
+
+			crash> dis __schedule
+			...
+			0xffffffff81a6a1ab <__schedule+507>:    mov    %r13,%rsi
+			0xffffffff81a6a1ae <__schedule+510>:    call   0xffffffff81003490 <__switch_to_asm>
+			0xffffffff81a6a1b3 <__schedule+515>:    mov    %rax,%rdi <<=== saved_rip
+			...
+			crash> dis __switch_to_asm
+			0xffffffff81003490 <__switch_to_asm>:   push   %rbp
+			0xffffffff81003491 <__switch_to_asm+1>: push   %rbx
+			0xffffffff81003492 <__switch_to_asm+2>: push   %r12
+			0xffffffff81003494 <__switch_to_asm+4>: push   %r13
+			0xffffffff81003496 <__switch_to_asm+6>: push   %r14
+			0xffffffff81003498 <__switch_to_asm+8>: push   %r15
+			0xffffffff8100349a <__switch_to_asm+10>:        mov    %rsp,0x14d8(%rdi)
+			...
+			Now saved_rip = ffffffff81a6a1b3, and we are starting
+			the stack unwind at saved_rip, which is function __schedule()
+			instead of function __switch_to_asm(), so the stack pointer should
+			be rewind from ffffc90000013d00 back to ffffc90000013d38,
+			aka *spp += 7 * reg_len. Otherwise we are unwinding function
+			__schedule() but with __switch_to_asm()'s stack frame, which
+			will fail.
+			*/
+			sp += 7 * sizeof(unsigned long);
+			SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, r15);
+			SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, r14);
+			SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, r13);
+			SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, r12);
+			SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, bx);
+			SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, bp);
+		} else {
+			/*
+			* For active tasks in dumpfile, we get regs through the
+			* original way. For active tasks in live, we only get
+			* ip and sp in the end of the function.
+			*/
+			if (bt->flags & BT_DUMPFILE_SEARCH) {
+				FREEBUF(ur_bitmap);
+				bt->need_free = FALSE;
+				return x86_64_get_dumpfile_stack_frame(bt, pcp, spp);
+			}
+		}
+	} else {
+		if (!is_task_active(bt->task)) {
+			if (spp) {
+				*spp = x86_64_get_sp(bt);
+				readmem(*spp, KVADDR, &(ur_bitmap->ur.bp),
+					sizeof(ulong), "ur_bitmap->ur.bp", FAULT_ON_ERROR);
+				SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, bp);
+			}
+		} else {
+			if (bt->flags & BT_DUMPFILE_SEARCH) {
+				FREEBUF(ur_bitmap);
+				bt->need_free = FALSE;
+				return x86_64_get_dumpfile_stack_frame(bt, pcp, spp);
+			}
+		}
+	}
+
+	if (pcp) {
+		*pcp = x86_64_get_pc(bt);
+		ur_bitmap->ur.ip = *pcp;
+		SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, ip);
+	}
+	if (spp) {
+		*spp = x86_64_get_sp(bt);
+		ur_bitmap->ur.sp = sp + *spp;
+		SET_REG_BITMAP(ur_bitmap->bitmap, x86_64_user_regs_struct, sp);
+	}
+
+	bt->machdep = ur_bitmap;
+	bt->need_free = TRUE;
 }
 
 /*
@@ -6401,6 +6531,17 @@ x86_64_ORC_init(void)
 	};
 	struct ORC_data *orc;
 
+	MEMBER_OFFSET_INIT(inactive_task_frame_bp, "inactive_task_frame", "bp");
+	MEMBER_OFFSET_INIT(inactive_task_frame_ret_addr, "inactive_task_frame", "ret_addr");
+	MEMBER_OFFSET_INIT(inactive_task_frame_r15, "inactive_task_frame", "r15");
+	MEMBER_OFFSET_INIT(inactive_task_frame_r14, "inactive_task_frame", "r14");
+	MEMBER_OFFSET_INIT(inactive_task_frame_r13, "inactive_task_frame", "r13");
+	MEMBER_OFFSET_INIT(inactive_task_frame_r12, "inactive_task_frame", "r12");
+	MEMBER_OFFSET_INIT(inactive_task_frame_flags, "inactive_task_frame", "flags");
+	MEMBER_OFFSET_INIT(inactive_task_frame_si, "inactive_task_frame", "si");
+	MEMBER_OFFSET_INIT(inactive_task_frame_di, "inactive_task_frame", "di");
+	MEMBER_OFFSET_INIT(inactive_task_frame_bx, "inactive_task_frame", "bx");
+
 	if (machdep->flags & FRAMEPOINTER)
 		return;
 
@@ -6457,9 +6598,6 @@ x86_64_ORC_init(void)
 	orc->__start_orc_unwind = symbol_value("__start_orc_unwind");
 	orc->__stop_orc_unwind = symbol_value("__stop_orc_unwind");
 	orc->orc_lookup = symbol_value("orc_lookup");
-
-	MEMBER_OFFSET_INIT(inactive_task_frame_bp, "inactive_task_frame", "bp");
-	MEMBER_OFFSET_INIT(inactive_task_frame_ret_addr, "inactive_task_frame", "ret_addr");
 
 	orc->has_signal = MEMBER_EXISTS("orc_entry", "signal");	/* added at 6.3 */
 	orc->has_end = MEMBER_EXISTS("orc_entry", "end");	/* removed at 6.4 */
@@ -8703,6 +8841,8 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp, char *stack_
 
         rewind(pc->tmpfile2);
         while (fgets(buf, BUFSIZE, pc->tmpfile2)) {
+		if (STRNEQ(buf, "=>"))
+			shift_string_left(buf, 2);
 		strcpy(buf2, buf);
 
 		if (CRASHDEBUG(3))
@@ -9074,17 +9214,135 @@ x86_64_get_kvaddr_ranges(struct vaddr_range *vrp)
 	return cnt;
 }
 
+#define CHECK_REG_CASE(R, r) \
+	case R##_REGNUM: \
+		if (!NUM_IN_BITMAP(ur_bitmap->bitmap, \
+			REG_SEQ(x86_64_user_regs_struct, r))) { \
+			FREEBUF(ur_bitmap); \
+			return FALSE; \
+		} \
+		break;
+
+#define COPY_REG_CASE(R, r) \
+	case R##_REGNUM: \
+		if (size != sizeof(ur_bitmap->ur.r)) \
+			break; \
+		memcpy(value, &ur_bitmap->ur.r, size); \
+		ret = TRUE; \
+		break;
+
 static int
-x86_64_get_cpu_reg(int cpu, int regno, const char *name,
-                   int size, void *value)
+x86_64_get_current_task_reg(int regno, const char *name,
+			    int size, void *value)
 {
-        if (regno >= LAST_REGNUM)
-                return FALSE;
+	struct bt_info bt_info, bt_setup;
+	struct task_context *tc;
+	struct user_regs_bitmap_struct *ur_bitmap;
+	ulong ip, sp;
+	bool ret = FALSE;
 
-        if (VMSS_DUMPFILE())
-                return vmware_vmss_get_cpu_reg(cpu, regno, name, size, value);
+	switch (regno) {
+	case RAX_REGNUM ... GS_REGNUM:
+	case FS_BASE_REGNUM ... ORIG_RAX_REGNUM:
+		break;
+	default:
+		return FALSE;
+	}
 
-        return FALSE;
+	tc = CURRENT_CONTEXT();
+	if (!tc)
+		return FALSE;
+
+	/*
+	* Task is active, grab CPU's registers
+	*/
+	if (is_task_active(tc->task) && VMSS_DUMPFILE())
+		return vmware_vmss_get_cpu_reg(tc->processor, regno, name, size, value);
+
+	BZERO(&bt_setup, sizeof(struct bt_info));
+	clone_bt_info(&bt_setup, &bt_info, tc);
+	fill_stackbuf(&bt_info);
+
+	// reusing the get_dumpfile_regs function to get pt regs structure
+	get_dumpfile_regs(&bt_info, &sp, &ip);
+	if (bt_info.stackbuf)
+		FREEBUF(bt_info.stackbuf);
+	ur_bitmap = (struct user_regs_bitmap_struct *)bt_info.machdep;
+	if (!ur_bitmap)
+		return FALSE;
+
+	/* Get all registers from elf notes*/
+	if (!bt_info.need_free) {
+		goto get_all;
+	}
+
+	/* Get subset registers from stack frame*/
+	switch (regno) {
+		CHECK_REG_CASE(RAX,   ax);
+		CHECK_REG_CASE(RBX,   bx);
+		CHECK_REG_CASE(RCX,   cx);
+		CHECK_REG_CASE(RDX,   dx);
+		CHECK_REG_CASE(RSI,   si);
+		CHECK_REG_CASE(RDI,   di);
+		CHECK_REG_CASE(RBP,   bp);
+		CHECK_REG_CASE(RSP,   sp);
+		CHECK_REG_CASE(R8,    r8);
+		CHECK_REG_CASE(R9,    r9);
+		CHECK_REG_CASE(R10,   r10);
+		CHECK_REG_CASE(R11,   r11);
+		CHECK_REG_CASE(R12,   r12);
+		CHECK_REG_CASE(R13,   r13);
+		CHECK_REG_CASE(R14,   r14);
+		CHECK_REG_CASE(R15,   r15);
+		CHECK_REG_CASE(RIP,   ip);
+		CHECK_REG_CASE(EFLAGS, flags);
+		CHECK_REG_CASE(CS,    cs);
+		CHECK_REG_CASE(SS,    ss);
+		CHECK_REG_CASE(DS,    ds);
+		CHECK_REG_CASE(ES,    es);
+		CHECK_REG_CASE(FS,    fs);
+		CHECK_REG_CASE(GS,    gs);
+		CHECK_REG_CASE(FS_BASE, fs_base);
+		CHECK_REG_CASE(GS_BASE, gs_base);
+		CHECK_REG_CASE(ORIG_RAX, orig_ax);
+	}
+
+get_all:
+	switch (regno) {
+		COPY_REG_CASE(RAX,   ax);
+		COPY_REG_CASE(RBX,   bx);
+		COPY_REG_CASE(RCX,   cx);
+		COPY_REG_CASE(RDX,   dx);
+		COPY_REG_CASE(RSI,   si);
+		COPY_REG_CASE(RDI,   di);
+		COPY_REG_CASE(RBP,   bp);
+		COPY_REG_CASE(RSP,   sp);
+		COPY_REG_CASE(R8,    r8);
+		COPY_REG_CASE(R9,    r9);
+		COPY_REG_CASE(R10,   r10);
+		COPY_REG_CASE(R11,   r11);
+		COPY_REG_CASE(R12,   r12);
+		COPY_REG_CASE(R13,   r13);
+		COPY_REG_CASE(R14,   r14);
+		COPY_REG_CASE(R15,   r15);
+		COPY_REG_CASE(RIP,   ip);
+		COPY_REG_CASE(EFLAGS, flags);
+		COPY_REG_CASE(CS,    cs);
+		COPY_REG_CASE(SS,    ss);
+		COPY_REG_CASE(DS,    ds);
+		COPY_REG_CASE(ES,    es);
+		COPY_REG_CASE(FS,    fs);
+		COPY_REG_CASE(GS,    gs);
+		COPY_REG_CASE(FS_BASE, fs_base);
+		COPY_REG_CASE(GS_BASE, gs_base);
+		COPY_REG_CASE(ORIG_RAX, orig_ax);
+	}
+
+	if (bt_info.need_free) {
+		FREEBUF(ur_bitmap);
+		bt_info.need_free = FALSE;
+	}
+	return ret;
 }
 
 /*

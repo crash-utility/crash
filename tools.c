@@ -1871,7 +1871,7 @@ cmd_set(void)
 				return;
 
 			if (ACTIVE()) {
-				set_context(tt->this_task, NO_PID);
+				set_context(tt->this_task, NO_PID, TRUE);
 				show_context(CURRENT_CONTEXT());
 				return;
 			}
@@ -1880,7 +1880,7 @@ cmd_set(void)
                 		error(INFO, "no panic task found!\n");
 				return;
 			}
-        		set_context(tt->panic_task, NO_PID);
+			set_context(tt->panic_task, NO_PID, TRUE);
 			show_context(CURRENT_CONTEXT());
 			return;
 
@@ -2559,14 +2559,14 @@ cmd_set(void)
 	                case STR_PID:
                                 pid = value;
                                 task = NO_TASK;
-                        	if (set_context(task, pid))
+                                if (set_context(task, pid, TRUE))
                                 	show_context(CURRENT_CONTEXT());
 	                        break;
 	
 	                case STR_TASK:
                                 task = value;
                                 pid = NO_PID;
-                                if (set_context(task, pid))
+                                if (set_context(task, pid, TRUE))
                                         show_context(CURRENT_CONTEXT()); 
 	                        break;
 	
@@ -6248,7 +6248,7 @@ lowest_bit_long(ulong val)
 void
 drop_core(char *s)
 {
-	volatile int *nullptr;
+	volatile int *ptr;
 	int i ATTRIBUTE_UNUSED;
 
 	if (s && ascii_string(s))
@@ -6256,9 +6256,9 @@ drop_core(char *s)
 
 	kill((pid_t)pc->program_pid, 3);
 
-	nullptr = NULL;
+	ptr = NULL;
 	while (TRUE)
-		i = *nullptr;
+		i = *ptr;
 }
 
 
@@ -6721,7 +6721,7 @@ get_cpumask_buf(void)
 	int cpulen, len_cpumask;
 
 	cpulen = DIV_ROUND_UP(kt->cpus, BITS_PER_LONG) * sizeof(ulong);
-	len_cpumask = STRUCT_SIZE("cpumask_t");
+	len_cpumask = VALID_SIZE(cpumask_t) ? SIZE(cpumask_t) : 0;
 	if (len_cpumask > 0)
 		cpulen = len_cpumask > cpulen ? cpulen : len_cpumask;
 

@@ -23,7 +23,7 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include "xendump.h"
-#if defined(GDB_7_6) || defined(GDB_10_2)
+#if defined(GDB_7_6) || defined(GDB_10_2) || defined(GDB_16_2)
 #define __CONFIG_H__ 1
 #include "config.h"
 #endif
@@ -157,6 +157,7 @@ kernel_init()
         if (!(kt->cpu_flags = (ulong *)calloc(NR_CPUS, sizeof(ulong))))
                 error(FATAL, "cannot malloc cpu_flags array");
 
+	STRUCT_SIZE_INIT(cpumask_t, "cpumask_t");
 	cpu_maps_init();
 
 	kt->stext = symbol_value("_stext");
@@ -914,9 +915,9 @@ cpu_map_size(const char *type)
 	struct gnu_request req;
 
         if (LKCD_KERNTYPES()) {
-                if ((len = STRUCT_SIZE("cpumask_t")) < 0)
-                        error(FATAL, "cannot determine type cpumask_t\n");
-		return len;
+		if (INVALID_SIZE(cpumask_t))
+			error(FATAL, "cannot determine type cpumask_t\n");
+		return SIZE(cpumask_t);
 	}
 
 	sprintf(map_symbol, "cpu_%s_map", type);
@@ -926,11 +927,9 @@ cpu_map_size(const char *type)
 		return len;
 	}
 
-	len = STRUCT_SIZE("cpumask_t");
-	if (len < 0)
+	if (INVALID_SIZE(cpumask_t))
 		return sizeof(ulong);
-	else
-		return len;
+	return SIZE(cpumask_t);
 }
 
 /*
@@ -953,8 +952,10 @@ cpu_maps_init(void)
 		{ ACTIVE_MAP, "active" },
 	};
 
-	if ((len = STRUCT_SIZE("cpumask_t")) < 0)
+	if (INVALID_SIZE(cpumask_t))
 		len = sizeof(ulong);
+	else
+		len = SIZE(cpumask_t);
 
 	buf = GETBUF(len);
 
@@ -1573,8 +1574,8 @@ list_source_code(struct gnu_request *req, int count_entered)
 			error(FATAL, 
 			    "%s: source code is not available\n\n", req->buf);
 
-		sprintf(buf3, "%s: No such file or directory.", file);
-		if (decimal(argv[0], 0) && strstr(buf1, buf3))
+               sprintf(buf3, "%s: No such file or directory", file);
+               if ((decimal(argv[0], 0) || decimal(argv[1], 0)) && strstr(buf1, buf3))
 			error(FATAL, 
 			    "%s: source code is not available\n\n", req->buf);
 
@@ -3532,6 +3533,39 @@ get_lkcd_regs(struct bt_info *bt, ulong *eip, ulong *esp)
 	}
 
 	machdep->get_stack_frame(bt, eip, esp);
+}
+
+void
+get_dumpfile_regs(struct bt_info *bt, ulong *eip, ulong *esp)
+{
+	bt->flags |= BT_NO_PRINT_REGS;
+
+	if (NETDUMP_DUMPFILE())
+		get_netdump_regs(bt, eip, esp);
+	else if (KDUMP_DUMPFILE())
+		get_kdump_regs(bt, eip, esp);
+	else if (DISKDUMP_DUMPFILE())
+		get_diskdump_regs(bt, eip, esp);
+	else if (KVMDUMP_DUMPFILE())
+		get_kvmdump_regs(bt, eip, esp);
+	else if (LKCD_DUMPFILE())
+		get_lkcd_regs(bt, eip, esp);
+	else if (XENDUMP_DUMPFILE())
+		get_xendump_regs(bt, eip, esp);
+	else if (SADUMP_DUMPFILE())
+		get_sadump_regs(bt, eip, esp);
+	else if (VMSS_DUMPFILE())
+		get_vmware_vmss_regs(bt, eip, esp);
+	else if (REMOTE_PAUSED()) {
+		if (!is_task_active(bt->task) || !get_remote_regs(bt, eip, esp))
+			machdep->get_stack_frame(bt, eip, esp);
+	} else
+		machdep->get_stack_frame(bt, eip, esp);
+
+	bt->flags &= ~BT_NO_PRINT_REGS;
+
+	bt->instptr = *eip;
+	bt->stkptr = *esp;
 }
 
 
@@ -5782,15 +5816,16 @@ display_sys_stats(void)
 				pc->kvmdump_mapfile);
 	}
 	
-	if (machine_type("PPC64"))
-		fprintf(fp, "        CPUS: %d\n", get_cpus_to_display());
-	else {
-		fprintf(fp, "        CPUS: %d", kt->cpus);
-		if (kt->cpus - get_cpus_to_display())
-			fprintf(fp, " [OFFLINE: %d]", 
-				kt->cpus - get_cpus_to_display());
-		fprintf(fp, "\n");
-	}
+	int number_cpus_to_display = get_cpus_to_display();
+	int number_cpus_present = get_cpus_present();
+	if (!number_cpus_present)
+		number_cpus_present = kt->cpus;
+
+	fprintf(fp, "        CPUS: %d", number_cpus_present);
+	if (number_cpus_present > number_cpus_to_display)
+		fprintf(fp, " [OFFLINE: %d]",
+			number_cpus_present - number_cpus_to_display);
+	fprintf(fp, "\n");
 
 	if (ACTIVE())
 		get_xtime(&kt->date);
@@ -6507,14 +6542,19 @@ set_cpu(int cpu)
 	if (hide_offline_cpu(cpu))
 		error(FATAL, "invalid cpu number: cpu %d is OFFLINE\n", cpu);
 
-	if ((task = get_active_task(cpu))) 
-		set_context(task, NO_PID);
+	task = get_active_task(cpu);
+
+	/* Check if context is already set to given cpu */
+	if (task == CURRENT_TASK())
+		return;
+
+	if (task)
+		set_context(task, NO_PID, TRUE);
 	else
 		error(FATAL, "cannot determine active task on cpu %ld\n", cpu);
 
 	show_context(CURRENT_CONTEXT());
 }
-
 
 /*
  *  Collect the irq_desc[] entry along with its associated handler and
@@ -7383,7 +7423,7 @@ generic_get_irq_affinity(int irq)
 		return;
 
 	len = DIV_ROUND_UP(kt->cpus, BITS_PER_LONG) * sizeof(ulong);
-	len_cpumask = STRUCT_SIZE("cpumask_t");
+	len_cpumask = VALID_SIZE(cpumask_t) ? SIZE(cpumask_t) : 0;
 	if (len_cpumask > 0)
 		len = len_cpumask > len ? len : len_cpumask;
 
