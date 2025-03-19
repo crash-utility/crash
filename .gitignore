@@ -12,6 +12,7 @@ crash.spec
 gdb.files
 gdb-7.6/
 gdb-10.2/
+gdb-16.2/
 extensions/defs.h
 extensions/*.so
 extensions/eppic
