@@ -135,6 +135,7 @@ static void riscv64_get_struct_page_size(struct machine_specific *ms)
 static void
 riscv64_display_machine_stats(void)
 {
+	int i, pad;
 	struct new_utsname *uts;
 	char buf[BUFSIZE];
 	ulong mhz;
@@ -151,7 +152,31 @@ riscv64_display_machine_stats(void)
 		fprintf(fp, "(unknown)\n");
 	fprintf(fp, "			  HZ: %d\n", machdep->hz);
 	fprintf(fp, "		   PAGE SIZE: %d\n", PAGESIZE());
+	fprintf(fp, "	 KERNEL VIRTUAL BASE: %lx\n", machdep->machspec->page_offset);
+	fprintf(fp, "	 KERNEL MODULES BASE: %lx\n", machdep->machspec->modules_vaddr);
+	fprintf(fp, "	 KERNEL VMALLOC BASE: %lx\n", machdep->machspec->vmalloc_start_addr);
+	fprintf(fp, "	 KERNEL VMEMMAP BASE: %lx\n", machdep->machspec->vmemmap_vaddr);
 	fprintf(fp, "	   KERNEL STACK SIZE: %ld\n", STACKSIZE());
+	if (machdep->machspec->irq_stack_size) {
+		fprintf(fp, " IRQ STACK SIZE: %ld\n",
+			machdep->machspec->irq_stack_size);
+		fprintf(fp, "     IRQ STACKS:\n");
+		for (i = 0; i < kt->cpus; i++) {
+			pad = (i < 10) ? 3 : (i < 100) ? 2 : (i < 1000) ? 1 : 0;
+			fprintf(fp, "%s           CPU %d: %lx\n", space(pad), i,
+				machdep->machspec->irq_stacks[i]);
+		}
+	}
+	if (machdep->machspec->overflow_stack_size) {
+		fprintf(fp, "OVERFLOW STACK SIZE: %ld\n",
+			machdep->machspec->overflow_stack_size);
+		fprintf(fp, "    OVERFLOW STACKS:\n");
+		for (i = 0; i < kt->cpus; i++) {
+			pad = (i < 10) ? 3 : (i < 100) ? 2 : (i < 1000) ? 1 : 0;
+			fprintf(fp, "%s           CPU %d: %lx\n", space(pad), i,
+				machdep->machspec->overflow_stacks[i]);
+		}
+	}
 }
 
 static void
