@@ -12808,6 +12808,7 @@ calculate_load_order_6_4(struct load_module *lm, bfd *bfd, int dynamic,
 	asymbol *store;
 	asymbol *sym;
 	symbol_info syminfo;
+	bfd_vma secaddr;
 	char *secname;
 	int i, t;
 
@@ -12860,6 +12861,7 @@ calculate_load_order_6_4(struct load_module *lm, bfd *bfd, int dynamic,
 				}
 				if (strcmp(syminfo.name, s1->name) == 0) {
 					secname = (char *)bfd_section_name(sym->section);
+					secaddr = bfd_section_vma(sym->section);
 					break;
 				}
 
@@ -12890,14 +12892,14 @@ calculate_load_order_6_4(struct load_module *lm, bfd *bfd, int dynamic,
 			}
 
 			/* Update the offset information for the section */
-			sec_start = s1->value - syminfo.value;
+			sec_start = s1->value - syminfo.value + secaddr;
 			/* keep the address instead of offset */
 			lm->mod_section_data[i].addr = sec_start;
 			lm->mod_section_data[i].flags |= SEC_FOUND;
 
 			if (CRASHDEBUG(2))
-				fprintf(fp, "update sec offset sym %s @ %lx  val %lx  section %s\n",
-					s1->name, s1->value, (ulong)syminfo.value, secname);
+				fprintf(fp, "update sec offset sym %s @ %lx  val %lx  section %s @ %lx\n",
+					s1->name, s1->value, (ulong)syminfo.value, secname, secaddr);
 
 			if (strcmp(secname, ".text") == 0)
 				lm->mod_text_start = sec_start;
