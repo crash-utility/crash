@@ -285,8 +285,9 @@ dump_lockless_record_log(int msg_flags)
 	if (msg_flags & SHOW_LOG_CALLER) {
 		unsigned int pidmax;
 
-		get_symbol_data("pid_max", sizeof(pidmax), &pidmax);
-		if (pidmax <= 99999)
+		if (!try_get_symbol_data("pid_max", sizeof(pidmax), &pidmax))
+			m.pid_max_chars = PID_CHARS_DEFAULT;
+		else if (pidmax <= 99999)
 			m.pid_max_chars = 6;
 		else if (pidmax <= 999999)
 			m.pid_max_chars = 7;
