@@ -80,8 +80,8 @@
 
   To build the crash utility: 
 
-    $ tar -xf crash-8.0.6.tar.gz
-    $ cd crash-8.0.6
+    $ tar -xf crash-9.0.0.tar.gz
+    $ cd crash-9.0.0
     $ make
 
   To cross compile the crash utility for aarch64 on x86_64:
@@ -137,7 +137,7 @@
   If neither /dev/mem or /dev/crash are available, then /proc/kcore will be
   be used as the live memory source.  If /proc/kcore is also restricted, then
   the Red Hat /dev/crash driver may be compiled and installed; its source
-  is included in the crash-8.0.6/memory_driver subdirectory.
+  is included in the crash-9.0.0/memory_driver subdirectory.
 
   If the kernel file is stored in /boot, /, /boot/efi, or in any /usr/src
   or /usr/lib/debug/lib/modules subdirectory, then no command line arguments
@@ -148,8 +148,8 @@
 
     $ crash
     
-    crash 8.0.6
-    Copyright (C) 2002-2022  Red Hat, Inc.
+    crash 9.0.0
+    Copyright (C) 2002-2025  Red Hat, Inc.
     Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
     Copyright (C) 1999-2006  Hewlett-Packard Co
     Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited
@@ -163,7 +163,7 @@
     certain conditions.  Enter "help copying" to see the conditions.
     This program has absolutely no warranty.  Enter "help warranty" for details.
      
-    GNU gdb 10.2
+    GNU gdb 16.2
     Copyright 2013 Free Software Foundation, Inc.
     License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
     This is free software: you are free to change and redistribute it.
@@ -174,7 +174,7 @@
           KERNEL: /boot/vmlinux
         DUMPFILE: /dev/mem
             CPUS: 1
-            DATE: Tue Nov 12 09:25:55 CST 2024
+            DATE: Fri Apr 25 09:47:38 CST 2025
           UPTIME: 10 days, 22:55:18
     LOAD AVERAGE: 0.08, 0.03, 0.01
            TASKS: 42
@@ -203,7 +203,7 @@
     exit           log            repeat         timer          
     extend         mach           runq           tree           
     
-    crash version: 8.0.6    gdb version: 10.2
+    crash version: 9.0.0    gdb version: 16.2
     For help on any command above, enter "help <command>".
     For help on input options, enter "help input".
     For help on output options, enter "help output".
@@ -216,8 +216,8 @@
 
     $ crash vmlinux vmcore
  
-    crash 8.0.6
-    Copyright (C) 2002-2022  Red Hat, Inc.
+    crash 9.0.0
+    Copyright (C) 2002-2025  Red Hat, Inc.
     Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
     Copyright (C) 1999-2006  Hewlett-Packard Co
     Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited
@@ -231,7 +231,7 @@
     certain conditions.  Enter "help copying" to see the conditions.
     This program has absolutely no warranty.  Enter "help warranty" for details.
      
-    GNU gdb 10.2
+    GNU gdb 16.2
     Copyright 2013 Free Software Foundation, Inc.
     License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
     This is free software: you are free to change and redistribute it.
@@ -242,7 +242,7 @@
           KERNEL: vmlinux
         DUMPFILE: vmcore
             CPUS: 4
-            DATE: Tue Mar  2 13:57:09 2004
+            DATE: Fri Apr 25 09:49:38 CST 2025
           UPTIME: 00:02:40
     LOAD AVERAGE: 2.24, 0.96, 0.37
            TASKS: 70
