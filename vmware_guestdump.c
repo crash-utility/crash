@@ -30,6 +30,7 @@
  *             2. Number of Virtual CPUs (4 bytes) } - struct guestdumpheader
  *             3. Reserved gap
  *             4. Main Memory information - struct mainmeminfo{,_old}
+ *             5. Reserved gap #2. Only in v7+
  *    (use get_vcpus_offset() to get total size of guestdumpheader)
  * vcpus_offset:               ---------\
  *             1. struct vcpu_state1     \
@@ -111,6 +112,22 @@ struct vcpu_state2 {
 	uint8_t reserved3[65];
 } __attribute__((packed));
 
+typedef enum {
+	CPU_ARCH_AARCH64,
+	CPU_ARCH_X86,
+} cpu_arch;
+
+/*
+ * Returns the size of reserved gap #2 in the header right after the Main Mem.
+ */
+static inline long
+get_gap2_size(uint32_t version)
+{
+	if (version == 7)
+		return 11;
+	return 0;
+}
+
 /*
  * Returns the size of the guest dump header.
  */
@@ -128,6 +145,9 @@ get_vcpus_offset(uint32_t version, int mem_holes)
 			return sizeof(struct guestdumpheader) + 14 + sizeof(struct mainmeminfo);
 		case 6: /* ESXi 8.0u2 */
 			return sizeof(struct guestdumpheader) + 15 + sizeof(struct mainmeminfo);
+		case 7: /* ESXi 9.0 */
+			return sizeof(struct guestdumpheader) + 8 + sizeof(struct mainmeminfo) +
+				get_gap2_size(version);
 
 	}
 	return 0;
@@ -155,10 +175,10 @@ get_vcpu_gapsize(uint32_t version)
  *
  * guestdump (debug.guest) is a simplified version of the *.vmss which does
  * not contain a full VM state, but minimal guest state, such as a memory
- * layout and CPUs state, needed for debugger. is_vmware_guestdump()
+ * layout and CPUs state, needed for the debugger. is_vmware_guestdump()
  * and vmware_guestdump_init() functions parse guestdump header and
  * populate vmss data structure (from vmware_vmss.c). In result, all
- * handlers (except mempry_dump) from vmware_vmss.c can be reused.
+ * handlers (except memory_dump) from vmware_vmss.c can be reused.
  *
  * debug.guest does not have a dedicated header magic or file format signature
  * To probe debug.guest we need to perform series of validations. In addition,
@@ -225,7 +245,8 @@ is_vmware_guestdump(char *filename)
 		/* vcpu_offset adjustment for mem_holes is required only for version 1. */
 		vcpus_offset = get_vcpus_offset(hdr.version, mmi.mem_holes);
 	} else {
-		if (fseek(fp, vcpus_offset - sizeof(struct mainmeminfo), SEEK_SET) == -1) {
+		if (fseek(fp, vcpus_offset - sizeof(struct mainmeminfo) - get_gap2_size(hdr.version),
+				SEEK_SET) == -1) {
 			if (CRASHDEBUG(1))
 				error(INFO, LOGPRX"Failed to fseek '%s': [Error %d] %s\n",
 						filename, errno, strerror(errno));
@@ -239,6 +260,25 @@ is_vmware_guestdump(char *filename)
 						"mainmeminfo", filename, errno, strerror(errno));
 			fclose(fp);
 			return FALSE;
+		}
+
+		/* Check CPU architecture field. Next 4 bytes after the Main Mem */
+		if (hdr.version >= 7) {
+			cpu_arch arch;
+			if (fread(&arch, sizeof(cpu_arch), 1, fp) != 1) {
+				if (CRASHDEBUG(1))
+					error(INFO, LOGPRX"Failed to read '%s' from file '%s': [Error %d] %s\n",
+							"CPU arch", filename, errno, strerror(errno));
+				fclose(fp);
+				return FALSE;
+			}
+			if (arch != CPU_ARCH_X86) {
+				if (CRASHDEBUG(1))
+					error(INFO,
+						LOGPRX"Invalid or unsupported CPU architecture: %d\n", arch);
+				fclose(fp);
+				return FALSE;
+			}
 		}
 	}
 	if (fseek(fp, 0L, SEEK_END) == -1) {
@@ -300,7 +340,7 @@ vmware_guestdump_init(char *filename, FILE *ofp)
 
 	if (!machine_type("X86") && !machine_type("X86_64")) {
 		error(INFO,
-		      LOGPRX"Invalid or unsupported host architecture for .vmss file: %s\n",
+		      LOGPRX"Invalid or unsupported host architecture for .guest file: %s\n",
 		      MACHINE_TYPE);
 		result = FALSE;
 		goto exit;
