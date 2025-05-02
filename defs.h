@@ -2448,6 +2448,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long fred_frame;
 	long vmap_node;
 	long cpumask_t;
+	long task_struct_exit_state;
 };
 
 struct array_table {
