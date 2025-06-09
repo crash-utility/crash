@@ -80,7 +80,7 @@ public:
 
 static void supply_registers(struct regcache *regcache, int regno)
 {
-  gdb_byte regval[16];
+  gdb_byte regval[32];
   struct gdbarch *arch = regcache->arch ();
   const char *regname = gdbarch_register_name(arch, regno);
   int regsize = register_size(arch, regno);
