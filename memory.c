@@ -2504,7 +2504,7 @@ readmem(ulonglong addr, int memtype, void *buffer, long size,
 
 		case PAGE_EXCLUDED:
 			RETURN_ON_PARTIAL_READ();
-                        if (PRINT_ERROR_MESSAGE)
+                        if (CRASHDEBUG(8))
                         	error(INFO, PAGE_EXCLUDED_ERRMSG, memtype_string(memtype, 0), addr, type);
                         goto readmem_error;
 
