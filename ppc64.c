@@ -2053,6 +2053,7 @@ ppc64_back_trace_cmd(struct bt_info *bt)
 	char buf[BUFSIZE];
 	struct gnu_request *req;
 	extern void print_stack_text_syms(struct bt_info *, ulong, ulong);
+	extra_stacks_idx = 0;
 
         bt->flags |= BT_EXCEPTION_FRAME;
 
@@ -2070,6 +2071,29 @@ ppc64_back_trace_cmd(struct bt_info *bt)
 
         req->pc = bt->instptr;
         req->sp = bt->stkptr;
+
+	if (is_task_active(bt->task)) {
+		if (!extra_stacks_regs[extra_stacks_idx]) {
+			extra_stacks_regs[extra_stacks_idx] =
+				(struct user_regs_bitmap_struct *)
+				malloc(sizeof(struct user_regs_bitmap_struct));
+		}
+		memset(extra_stacks_regs[extra_stacks_idx], 0,
+			sizeof(struct user_regs_bitmap_struct));
+		extra_stacks_regs[extra_stacks_idx]->ur.nip = req->pc;
+		extra_stacks_regs[extra_stacks_idx]->ur.gpr[1] = req->sp;
+		SET_BIT(extra_stacks_regs[extra_stacks_idx]->bitmap,
+			REG_SEQ(ppc64_pt_regs, nip));
+		SET_BIT(extra_stacks_regs[extra_stacks_idx]->bitmap,
+			REG_SEQ(ppc64_pt_regs, gpr[0]) + 1);
+		if (!bt->machdep ||
+		     (extra_stacks_regs[extra_stacks_idx]->ur.gpr[1] !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.gpr[1] &&
+		      extra_stacks_regs[extra_stacks_idx]->ur.nip !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.nip)) {
+			gdb_add_substack (extra_stacks_idx++);
+		}
+	}
 
 	if (bt->flags &
 	(BT_TEXT_SYMBOLS|BT_TEXT_SYMBOLS_PRINT|BT_TEXT_SYMBOLS_NOPRINT)) {
@@ -2512,6 +2536,28 @@ ppc64_print_eframe(char *efrm_str, struct ppc64_pt_regs *regs,
 	fprintf(fp, " %s [%lx] exception frame:\n", efrm_str, regs->trap);
 	ppc64_print_regs(regs);
 	ppc64_print_nip_lr(regs, 1);
+
+	if (!((regs->msr >> MSR_PR_LG) & 0x1) && 
+	    !(bt->flags & BT_EFRAME_SEARCH)) {
+		if (!extra_stacks_regs[extra_stacks_idx]) {
+			extra_stacks_regs[extra_stacks_idx] =
+				(struct user_regs_bitmap_struct *)
+				malloc(sizeof(struct user_regs_bitmap_struct));
+		}
+		memset(extra_stacks_regs[extra_stacks_idx], 0,
+			sizeof(struct user_regs_bitmap_struct));
+		memcpy(&extra_stacks_regs[extra_stacks_idx]->ur, regs,
+			sizeof(struct ppc64_pt_regs));
+		for (int i = 0; i < sizeof(struct ppc64_pt_regs)/sizeof(ulong); i++)
+			SET_BIT(extra_stacks_regs[extra_stacks_idx]->bitmap, i);
+		if (!bt->machdep ||
+		     (extra_stacks_regs[extra_stacks_idx]->ur.gpr[1] !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.gpr[1] &&
+		      extra_stacks_regs[extra_stacks_idx]->ur.nip !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.nip)) {
+			gdb_add_substack (extra_stacks_idx++);
+		}
+	}
 }
 
 static int
@@ -2552,6 +2598,12 @@ ppc64_get_current_task_reg(int regno, const char *name, int size,
 	tc = CURRENT_CONTEXT();
 	if (!tc)
 		return FALSE;
+
+	if (sid && sid <= extra_stacks_idx) {
+		ur_bitmap = extra_stacks_regs[sid - 1];
+		goto get_sub;
+	}
+
 	BZERO(&bt_setup, sizeof(struct bt_info));
 	clone_bt_info(&bt_setup, &bt_info, tc);
 	fill_stackbuf(&bt_info);
@@ -2570,39 +2622,45 @@ ppc64_get_current_task_reg(int regno, const char *name, int size,
 		goto get_all;
 	}
 
+get_sub:
 	switch (regno) {
 	case PPC64_R0_REGNUM ... PPC64_R31_REGNUM:
 		if (!NUM_IN_BITMAP(ur_bitmap->bitmap,
 		    REG_SEQ(ppc64_pt_regs, gpr[0]) + regno - PPC64_R0_REGNUM)) {
-			FREEBUF(ur_bitmap);
+			if (!sid)
+				FREEBUF(ur_bitmap);
 			return FALSE;
 		}
 		break;
 	case PPC64_PC_REGNUM:
 		if (!NUM_IN_BITMAP(ur_bitmap->bitmap,
 		    REG_SEQ(ppc64_pt_regs, nip))) {
-			FREEBUF(ur_bitmap);
+			if (!sid)
+				FREEBUF(ur_bitmap);
 			return FALSE;
 		}
 		break;
 	case PPC64_MSR_REGNUM:
 		if (!NUM_IN_BITMAP(ur_bitmap->bitmap,
 		    REG_SEQ(ppc64_pt_regs, msr))) {
-			FREEBUF(ur_bitmap);
+			if (!sid)
+				FREEBUF(ur_bitmap);
 			return FALSE;
 		}
 		break;
 	case PPC64_LR_REGNUM:
 		if (!NUM_IN_BITMAP(ur_bitmap->bitmap,
 		    REG_SEQ(ppc64_pt_regs, link))) {
-			FREEBUF(ur_bitmap);
+			if (!sid)
+				FREEBUF(ur_bitmap);
 			return FALSE;
 		}
 		break;
 	case PPC64_CTR_REGNUM:
 		if (!NUM_IN_BITMAP(ur_bitmap->bitmap,
 		    REG_SEQ(ppc64_pt_regs, ctr))) {
-			FREEBUF(ur_bitmap);
+			if (!sid)
+				FREEBUF(ur_bitmap);
 			return FALSE;
 		}
 		break;
@@ -2645,7 +2703,7 @@ get_all:
 		ret = TRUE;
 		break;
 	}
-	if (bt_info.need_free) {
+	if (!sid && bt_info.need_free) {
 		FREEBUF(ur_bitmap);
 		bt_info.need_free = FALSE;
 	}
