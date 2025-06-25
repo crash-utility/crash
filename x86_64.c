@@ -160,6 +160,9 @@ struct user_regs_bitmap_struct {
 	ulong bitmap[32];
 };
 
+ulong extra_stacks_idx = 0;
+struct user_regs_bitmap_struct *extra_stacks_regs[MAX_EXCEPTION_STACKS] = {0};
+
 /*
  *  Do all necessary machine-specific setup here.  This is called several
  *  times during initialization.

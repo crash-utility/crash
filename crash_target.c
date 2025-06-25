@@ -31,6 +31,9 @@ extern "C" int crash_get_current_task_reg (int regno, const char *regname,
 extern "C" int gdb_change_thread_context (void);
 extern "C" int gdb_add_substack (int);
 extern "C" void crash_get_current_task_info(unsigned long *pid, char **comm);
+#if defined (X86_64) || defined (ARM64) || defined (PPC64)
+extern "C" void silent_call_bt(void);
+#endif
 
 /* The crash target.  */
 
@@ -164,6 +167,10 @@ gdb_change_thread_context (void)
   /* 3rd, refresh regcache for tid 0 */
   target_fetch_registers(get_thread_regcache(inferior_thread()), -1);
   reinit_frame_cache();
+#if defined (X86_64) || defined (ARM64) || defined (PPC64)
+  /* 4th, invoke bt silently to refresh the additional stacks */
+  silent_call_bt();
+#endif
   return TRUE;
 }
 

@@ -80,6 +80,10 @@ struct user_regs_bitmap_struct {
 	ulong bitmap[32];
 };
 
+#define MAX_EXCEPTION_STACKS 7
+ulong extra_stacks_idx = 0;
+struct user_regs_bitmap_struct *extra_stacks_regs[MAX_EXCEPTION_STACKS] = {0};
+
 static int is_opal_context(ulong sp, ulong nip)
 {
 	uint64_t opal_start, opal_end;

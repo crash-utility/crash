@@ -3062,7 +3062,7 @@ sort_context_array(void)
 	curtask = CURRENT_TASK();
 	qsort((void *)tt->context_array, (size_t)tt->running_tasks,
         	sizeof(struct task_context), sort_by_pid);
-	set_context(curtask, NO_PID, TRUE);
+	set_context(curtask, NO_PID, FALSE);
 
 	sort_context_by_task();
 }
@@ -3109,7 +3109,7 @@ sort_context_array_by_last_run(void)
 	curtask = CURRENT_TASK();
 	qsort((void *)tt->context_array, (size_t)tt->running_tasks,
         	sizeof(struct task_context), sort_by_last_run);
-	set_context(curtask, NO_PID, TRUE);
+	set_context(curtask, NO_PID, FALSE);
 
 	sort_context_by_task();
 }
