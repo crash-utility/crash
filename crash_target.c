@@ -27,8 +27,9 @@ void crash_target_init (void);
 
 extern "C" int gdb_readmem_callback(unsigned long, void *, int, int);
 extern "C" int crash_get_current_task_reg (int regno, const char *regname,
-                                  int regsize, void *val);
+                                  int regsize, void *val, int sid);
 extern "C" int gdb_change_thread_context (void);
+extern "C" int gdb_add_substack (int);
 extern "C" void crash_get_current_task_info(unsigned long *pid, char **comm);
 
 /* The crash target.  */
@@ -66,7 +67,12 @@ public:
     crash_get_current_task_info(&pid, &comm);
     return string_printf ("%ld %s", pid, comm);
   }
-
+  const char *extra_thread_info (thread_info *tp) override
+  {
+    static char buf[16] = {0};
+    snprintf(buf, sizeof(buf), "stack %ld", tp->ptid.tid());
+    return buf;
+  }
 };
 
 static void supply_registers(struct regcache *regcache, int regno)
@@ -79,7 +85,7 @@ static void supply_registers(struct regcache *regcache, int regno)
   if (regsize > sizeof (regval))
     error (_("fatal error: buffer size is not enough to fit register value"));
 
-  if (crash_get_current_task_reg (regno, regname, regsize, (void *)&regval))
+  if (crash_get_current_task_reg (regno, regname, regsize, (void *)&regval, inferior_thread()->ptid.tid()))
     regcache->raw_supply (regno, regval);
   else
     regcache->raw_supply (regno, NULL);
@@ -144,7 +150,37 @@ crash_target_init (void)
 extern "C" int
 gdb_change_thread_context (void)
 {
+  /* 1st, switch to tid 0 if we are not */
+  if (inferior_thread()->ptid.tid()) {
+       switch_to_thread (&(current_inferior()->thread_list.front()));
+  }
+  /* 2nd, delete threads whose tid is not 0 */
+  for (thread_info *tp : current_inferior()->threads_safe()) {
+       if (tp->ptid.tid() && tp->deletable()) {
+               delete_thread_silent(tp);
+               current_inferior()->highest_thread_num--;
+       }
+  }
+  /* 3rd, refresh regcache for tid 0 */
   target_fetch_registers(get_thread_regcache(inferior_thread()), -1);
   reinit_frame_cache();
+  return TRUE;
+}
+
+/* Add a thread for each additional stack. Use stack ID as a thread ID */
+extern "C" int
+gdb_add_substack (int sid)
+{
+  thread_info *tp;
+  thread_info *current_thread = inferior_thread();
+
+  ptid_t ptid = ptid_t(CRASH_INFERIOR_PID, 0, sid + 1);
+  tp = current_inferior()->find_thread(ptid);
+  if (tp == nullptr) {
+    tp = add_thread_silent(current_inferior()->process_target(), ptid);
+  }
+  switch_to_thread (tp);
+  target_fetch_registers(get_thread_regcache(tp), -1);
+  switch_to_thread (current_thread);
   return TRUE;
 }

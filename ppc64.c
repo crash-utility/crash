@@ -56,7 +56,7 @@ static char * ppc64_check_eframe(struct ppc64_pt_regs *);
 static void ppc64_print_eframe(char *, struct ppc64_pt_regs *, 
 		struct bt_info *);
 static int ppc64_get_current_task_reg(int regno, const char *name, int size,
-		  void *value);
+		  void *value, int);
 static void parse_cmdline_args(void);
 static int ppc64_paca_percpu_offset_init(int);
 static void ppc64_init_cpu_info(void);
@@ -2512,7 +2512,7 @@ ppc64_print_eframe(char *efrm_str, struct ppc64_pt_regs *regs,
 
 static int
 ppc64_get_current_task_reg(int regno, const char *name, int size,
-		  void *value)
+		  void *value, int sid)
 {
 	struct bt_info bt_info, bt_setup;
 	struct task_context *tc;

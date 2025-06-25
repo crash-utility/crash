@@ -126,7 +126,7 @@ static int x86_64_get_framesize(struct bt_info *, ulong, ulong, char *);
 static void x86_64_framesize_debug(struct bt_info *);
 static void x86_64_get_active_set(void);
 static int x86_64_get_kvaddr_ranges(struct vaddr_range *);
-static int x86_64_get_current_task_reg(int, const char *, int, void *);
+static int x86_64_get_current_task_reg(int, const char *, int, void *, int);
 static int x86_64_verify_paddr(uint64_t);
 static void GART_init(void);
 static void x86_64_exception_stacks_init(void);
@@ -9233,7 +9233,7 @@ x86_64_get_kvaddr_ranges(struct vaddr_range *vrp)
 
 static int
 x86_64_get_current_task_reg(int regno, const char *name,
-			    int size, void *value)
+			    int size, void *value, int sid)
 {
 	struct bt_info bt_info, bt_setup;
 	struct task_context *tc;

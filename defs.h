@@ -1081,7 +1081,7 @@ struct machdep_table {
         void (*get_irq_affinity)(int);
         void (*show_interrupts)(int, ulong *);
 	int (*is_page_ptr)(ulong, physaddr_t *);
-	int (*get_current_task_reg)(int, const char *, int, void *);
+	int (*get_current_task_reg)(int, const char *, int, void *, int);
 	int (*is_cpu_prstatus_valid)(int cpu);
 };
 
@@ -8324,5 +8324,6 @@ enum ppc64_regnum {
 
 /* crash_target.c */
 extern int gdb_change_thread_context (void);
+extern int gdb_add_substack (int);
 
 #endif /* !GDB_COMMON */

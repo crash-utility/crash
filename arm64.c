@@ -204,7 +204,7 @@ out:
 
 static int
 arm64_get_current_task_reg(int regno, const char *name,
-                   int size, void *value)
+                   int size, void *value, int sid)
 {
 	struct bt_info bt_info, bt_setup;
 	struct task_context *tc;

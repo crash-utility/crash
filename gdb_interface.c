@@ -1076,13 +1076,13 @@ unsigned long crash_get_kaslr_offset(void)
 
 /* Callbacks for crash_target */
 int crash_get_current_task_reg (int regno, const char *regname,
-				int regsize, void *value);
+				int regsize, void *value, int sid);
 int crash_get_current_task_reg (int regno, const char *regname,
-				int regsize, void *value)
+				int regsize, void *value, int sid)
 {
 	if (!machdep->get_current_task_reg)
 		return FALSE;
-	return machdep->get_current_task_reg(regno, regname, regsize, value);
+	return machdep->get_current_task_reg(regno, regname, regsize, value, sid);
 }
 
 /* arm64 kernel lr maybe has patuh */
