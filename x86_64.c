@@ -3508,6 +3508,8 @@ x86_64_exception_RIP_message(struct bt_info *bt, ulong rip)
 #define STACK_TRANSITION_ERRMSG_I_P \
 "cannot transition from IRQ stack to current process stack:\n        IRQ stack pointer: %lx\n    process stack pointer: %lx\n       current stack base: %lx\n"
 
+#define SET_REG_BITMAP(REGMAP, TYPE, MEMBER) \
+	SET_BIT(REGMAP, REG_SEQ(TYPE, MEMBER))
 /*
  *  Low-budget back tracer -- dump text return addresses, following call chain
  *  when possible, along with any verifiable exception frames.
@@ -3528,6 +3530,7 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 	ulong last_process_stack_eframe;
 	ulong user_mode_eframe;
 	char *rip_symbol;
+	char buf[BUFSIZE];
 
         /*
          *  User may have made a run-time switch.
@@ -3551,6 +3554,7 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 	irq_eframe = 0;
 	last_process_stack_eframe = 0;
 	bt->call_target = NULL;
+	extra_stacks_idx = 0;
 	rsp = bt->stkptr;
 	ms = machdep->machspec;
 
@@ -3632,6 +3636,90 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 		level++;
 	}
 
+	if (is_task_active(bt->task) && bt->flags & BT_DUMPFILE_SEARCH) {
+		if (!extra_stacks_regs[extra_stacks_idx]) {
+			extra_stacks_regs[extra_stacks_idx] =
+				(struct user_regs_bitmap_struct *)
+				malloc(sizeof(struct user_regs_bitmap_struct));
+		}
+		memset(extra_stacks_regs[extra_stacks_idx], 0,
+			sizeof(struct user_regs_bitmap_struct));
+		extra_stacks_regs[extra_stacks_idx]->ur.ip = bt->instptr;
+		extra_stacks_regs[extra_stacks_idx]->ur.sp = bt->stkptr + 8;
+		SET_REG_BITMAP(extra_stacks_regs[extra_stacks_idx]->bitmap,
+			x86_64_user_regs_struct, ip);
+		SET_REG_BITMAP(extra_stacks_regs[extra_stacks_idx]->bitmap,
+			x86_64_user_regs_struct, sp);
+
+		/* Sometimes bp is needed for stack unwinding, so we try to get
+		   it. The bt->instptr usually points to a inst after a call
+		   inst, let's check the previous call inst. Note the call inst
+		   len is 5 */
+		open_tmpfile2();
+		sprintf(buf, "x/1i 0x%lx", bt->instptr - 5);
+		gdb_pass_through(buf, pc->tmpfile2, GNU_RETURN_ON_ERROR);
+		rewind(pc->tmpfile2);
+		fgets(buf, BUFSIZE, pc->tmpfile2);
+		if (strstr(buf, "call")) {
+			if (strstr(buf, "<relocate_range>") ||
+			    strstr(buf, "<relocate_kernel>")) {
+				/* OK, we are calling relocate_kernel(), which
+				 * is written in assembly and hasn't changed for
+				 * years, so we get some extra regs out of it. */
+				readmem(bt->stkptr - sizeof(ulong) * 6, KVADDR, buf,
+					sizeof(ulong) * 6, "relocate_kernel", FAULT_ON_ERROR);
+				extra_stacks_regs[extra_stacks_idx]->ur.r15 =
+					*(ulong *)(buf + sizeof(ulong) * 0);
+				extra_stacks_regs[extra_stacks_idx]->ur.r14 =
+					*(ulong *)(buf + sizeof(ulong) * 1);
+				extra_stacks_regs[extra_stacks_idx]->ur.r13 =
+					*(ulong *)(buf + sizeof(ulong) * 2);
+				extra_stacks_regs[extra_stacks_idx]->ur.r12 =
+					*(ulong *)(buf + sizeof(ulong) * 3);
+				extra_stacks_regs[extra_stacks_idx]->ur.bp =
+					*(ulong *)(buf + sizeof(ulong) * 4);
+				extra_stacks_regs[extra_stacks_idx]->ur.bx =
+					*(ulong *)(buf + sizeof(ulong) * 5);
+				SET_REG_BITMAP(extra_stacks_regs[extra_stacks_idx]->bitmap,
+					x86_64_user_regs_struct, r15);
+				SET_REG_BITMAP(extra_stacks_regs[extra_stacks_idx]->bitmap,
+					x86_64_user_regs_struct, r14);
+				SET_REG_BITMAP(extra_stacks_regs[extra_stacks_idx]->bitmap,
+					x86_64_user_regs_struct, r13);
+				SET_REG_BITMAP(extra_stacks_regs[extra_stacks_idx]->bitmap,
+					x86_64_user_regs_struct, r12);
+				SET_REG_BITMAP(extra_stacks_regs[extra_stacks_idx]->bitmap,
+					x86_64_user_regs_struct, bp);
+				SET_REG_BITMAP(extra_stacks_regs[extra_stacks_idx]->bitmap,
+					x86_64_user_regs_struct, bx);
+			} else {
+				/* This is a try-best effort. Usually the call
+				   inst will result in a next-inst addr pushed
+				   in and a rbp push of the calling function.
+				   So we can get rbp here */
+				readmem(extra_stacks_regs[extra_stacks_idx]->ur.sp
+					- sizeof(ulong) * 2, KVADDR,
+					&extra_stacks_regs[extra_stacks_idx]->ur.bp,
+					sizeof(ulong), "extra_stacks_regs.bp", FAULT_ON_ERROR);
+				if (INSTACK(extra_stacks_regs[extra_stacks_idx]->ur.bp, bt)) {
+					SET_REG_BITMAP(extra_stacks_regs[extra_stacks_idx]->bitmap,
+						x86_64_user_regs_struct, bp);
+					extra_stacks_regs[extra_stacks_idx]->ur.ip -= 5;
+				}
+			}
+		}
+		close_tmpfile2();
+		/*
+		 * bt->machdep is handled at x86_64_get_stack_frame(), so skip it
+		 */
+		if (!bt->machdep ||
+		     (extra_stacks_regs[extra_stacks_idx]->ur.sp !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.sp &&
+		      extra_stacks_regs[extra_stacks_idx]->ur.ip !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.ip)) {
+			gdb_add_substack(extra_stacks_idx++);
+		}
+	}
 
         if ((estack = x86_64_in_exception_stack(bt, &estack_index))) {
 in_exception_stack:
@@ -4159,6 +4247,7 @@ x86_64_dwarf_back_trace_cmd(struct bt_info *bt_in)
 	last_process_stack_eframe = 0;
 	bt->call_target = NULL;
 	bt->bptr = 0;
+	extra_stacks_idx = 0;
 	rsp = bt->stkptr;
 	if (!rsp) {
 		error(INFO, "cannot determine starting stack pointer\n");
@@ -4799,6 +4888,31 @@ x86_64_exception_frame(ulong flags, ulong kvaddr, char *local,
 	} else if (machdep->flags & ORC)
 		bt->bptr = rbp;
 
+	/*
+	* Preserve registers set for each additional in-kernel stack
+	*/
+	if (!(cs & 3) && verified && flags & EFRAME_PRINT &&
+	    extra_stacks_idx < MAX_EXCEPTION_STACKS &&
+	    !(bt->flags & BT_EFRAME_SEARCH)) {
+		if (!extra_stacks_regs[extra_stacks_idx]) {
+			extra_stacks_regs[extra_stacks_idx] = (struct user_regs_bitmap_struct *)
+				malloc(sizeof(struct user_regs_bitmap_struct));
+		}
+		memset(extra_stacks_regs[extra_stacks_idx], 0,
+			sizeof(struct user_regs_bitmap_struct));
+		memcpy(&extra_stacks_regs[extra_stacks_idx]->ur,
+			pt_regs_buf, SIZE(pt_regs));
+		for (int i = 0; i < SIZE(pt_regs)/sizeof(long); i++)
+			SET_BIT(extra_stacks_regs[extra_stacks_idx]->bitmap, i);
+		if (!bt->machdep ||
+		     (extra_stacks_regs[extra_stacks_idx]->ur.sp !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.sp &&
+		      extra_stacks_regs[extra_stacks_idx]->ur.ip !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.ip)) {
+			gdb_add_substack(extra_stacks_idx++);
+		}
+	}
+
 	if (kvaddr)
 		FREEBUF(pt_regs_buf);
 
@@ -5001,9 +5115,6 @@ get_reg_from_inactive_task_frame(struct bt_info *bt, char *reg_name,
 		sizeof(ulong), reg_info, FAULT_ON_ERROR);
 	return reg_value;
 }
-
-#define SET_REG_BITMAP(REGMAP, TYPE, MEMBER) \
-	SET_BIT(REGMAP, REG_SEQ(TYPE, MEMBER))
 
 /*
  *  Get a stack frame combination of pc and ra from the most relevent spot.
@@ -9221,7 +9332,8 @@ x86_64_get_kvaddr_ranges(struct vaddr_range *vrp)
 	case R##_REGNUM: \
 		if (!NUM_IN_BITMAP(ur_bitmap->bitmap, \
 			REG_SEQ(x86_64_user_regs_struct, r))) { \
-			FREEBUF(ur_bitmap); \
+			if (!sid) \
+				FREEBUF(ur_bitmap); \
 			return FALSE; \
 		} \
 		break;
@@ -9256,6 +9368,12 @@ x86_64_get_current_task_reg(int regno, const char *name,
 	if (!tc)
 		return FALSE;
 
+	/* Non zero stack ID, use extra stacks regs */
+	if (sid && sid <= extra_stacks_idx) {
+		ur_bitmap = extra_stacks_regs[sid - 1];
+		goto get_sub;
+	}
+
 	/*
 	* Task is active, grab CPU's registers
 	*/
@@ -9280,6 +9398,7 @@ x86_64_get_current_task_reg(int regno, const char *name,
 	}
 
 	/* Get subset registers from stack frame*/
+get_sub:
 	switch (regno) {
 		CHECK_REG_CASE(RAX,   ax);
 		CHECK_REG_CASE(RBX,   bx);
@@ -9341,7 +9460,7 @@ get_all:
 		COPY_REG_CASE(ORIG_RAX, orig_ax);
 	}
 
-	if (bt_info.need_free) {
+	if (!sid && bt_info.need_free) {
 		FREEBUF(ur_bitmap);
 		bt_info.need_free = FALSE;
 	}
@@ -9805,4 +9924,4 @@ x86_64_swp_offset(ulong entry)
 	return SWP_OFFSET(entry);
 }
 
-#endif  /* X86_64 */ 
+#endif  /* X86_64 */
