@@ -2271,6 +2271,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long task_struct_thread_context_x28;
 	long neigh_table_hash_heads;
 	long neighbour_hash;
+	long request_queue_tag_set;
+	long blk_mq_tag_set_flags;
+	long blk_mq_tag_set_shared_tags;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

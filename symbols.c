@@ -11487,6 +11487,12 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(blk_mq_tags_nr_reserved_tags));
 	fprintf(fp, "               blk_mq_tags_rqs: %ld\n",
 		OFFSET(blk_mq_tags_rqs));
+	fprintf(fp, "         request_queue_tag_set: %ld\n",
+		OFFSET(request_queue_tag_set));
+	fprintf(fp, "          blk_mq_tag_set_flags: %ld\n",
+		OFFSET(blk_mq_tag_set_flags));
+	fprintf(fp, "    blk_mq_tag_set_shared_tags: %ld\n",
+		OFFSET(blk_mq_tag_set_shared_tags));
 
 	fprintf(fp, "         subsys_private_subsys: %ld\n", OFFSET(subsys_private_subsys));
 	fprintf(fp, "  subsys_private_klist_devices: %ld\n",

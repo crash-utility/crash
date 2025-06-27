@@ -4326,6 +4326,12 @@ struct bt_iter_data {
 #define MQ_RQ_IN_FLIGHT 1
 #define REQ_OP_BITS     8
 #define REQ_OP_MASK     ((1 << REQ_OP_BITS) - 1)
+#define BLK_MQ_F_TAG_HCTX_SHARED (1 << 3)
+
+static bool blk_mq_is_shared_tags(unsigned int flags)
+{
+	return flags & BLK_MQ_F_TAG_HCTX_SHARED;
+}
 
 static uint op_is_write(uint op)
 {
@@ -4403,43 +4409,72 @@ static void bt_for_each(ulong q, ulong tags, ulong sbq, uint reserved, uint nr_r
 	sbitmap_for_each_set(&sc, bt_iter, &iter_data);
 }
 
-static void queue_for_each_hw_ctx(ulong q, ulong *hctx, uint cnt, struct diskio *dio)
+static bool queue_for_each_hw_ctx(ulong q, ulong blk_mq_tags_ptr,
+				bool bitmap_tags_is_ptr, struct diskio *dio)
 {
-	uint i;
+	uint nr_reserved_tags = 0;
+	ulong tags = 0, addr = 0;
+	bool ret = FALSE;
+
+	if (!readmem(blk_mq_tags_ptr, KVADDR, &tags, sizeof(ulong),
+			"blk_mq_hw_ctx.tags", RETURN_ON_ERROR))
+		goto out;
+
+	addr = tags + OFFSET(blk_mq_tags_nr_reserved_tags);
+	if (!readmem(addr, KVADDR, &nr_reserved_tags, sizeof(uint),
+			"blk_mq_tags_nr_reserved_tags", RETURN_ON_ERROR))
+		goto out;
+
+	if (nr_reserved_tags) {
+		addr = tags + OFFSET(blk_mq_tags_breserved_tags);
+		if (bitmap_tags_is_ptr &&
+			!readmem(addr, KVADDR, &addr, sizeof(ulong),
+				"blk_mq_tags.bitmap_tags", RETURN_ON_ERROR))
+			goto out;
+		bt_for_each(q, tags, addr, 1, nr_reserved_tags, dio);
+	}
+	addr = tags + OFFSET(blk_mq_tags_bitmap_tags);
+	if (bitmap_tags_is_ptr &&
+		!readmem(addr, KVADDR, &addr, sizeof(ulong),
+			"blk_mq_tags.bitmap_tags", RETURN_ON_ERROR))
+		goto out;
+	bt_for_each(q, tags, addr, 0, nr_reserved_tags, dio);
+
+	ret = TRUE;
+out:
+	return ret;
+}
+
+/*
+ * Replica of kernel block/blk-mq-tag.c:blk_mq_queue_tag_busy_iter()
+*/
+static void blk_mq_queue_tag_busy_iter(ulong q, ulong *hctx, uint cnt,
+					struct diskio *dio)
+{
+	uint i, flags;
 	int bitmap_tags_is_ptr = 0;
+	ulong addr = 0;
 
 	if (MEMBER_TYPE("blk_mq_tags", "bitmap_tags") == TYPE_CODE_PTR)
 		bitmap_tags_is_ptr = 1;
 
-	for (i = 0; i < cnt; i++) {
-		ulong addr = 0, tags = 0;
-		uint nr_reserved_tags = 0;
+	readmem(q + OFFSET(request_queue_tag_set), KVADDR, &addr,
+		sizeof(ulong), "request_queue.tag_set", RETURN_ON_ERROR);
 
+	readmem(addr + OFFSET(blk_mq_tag_set_flags), KVADDR,
+		&flags, sizeof(uint), "blk_mq_tag_set.flags", RETURN_ON_ERROR);
+
+	if (blk_mq_is_shared_tags(flags)) {
+		addr = addr + OFFSET(blk_mq_tag_set_shared_tags);
+		queue_for_each_hw_ctx(q, addr, bitmap_tags_is_ptr, dio);
+		return;
+	}
+
+	for (i = 0; i < cnt; i++) {
 		/* Tags owned by the block driver */
 		addr = hctx[i] + OFFSET(blk_mq_hw_ctx_tags);
-		if (!readmem(addr, KVADDR, &tags, sizeof(ulong),
-				"blk_mq_hw_ctx.tags", RETURN_ON_ERROR))
-			break;
-
-		addr = tags + OFFSET(blk_mq_tags_nr_reserved_tags);
-		if (!readmem(addr, KVADDR, &nr_reserved_tags, sizeof(uint),
-				"blk_mq_tags_nr_reserved_tags", RETURN_ON_ERROR))
-			break;
-
-		if (nr_reserved_tags) {
-			addr = tags + OFFSET(blk_mq_tags_breserved_tags);
-			if (bitmap_tags_is_ptr &&
-			    !readmem(addr, KVADDR, &addr, sizeof(ulong),
-					"blk_mq_tags.bitmap_tags", RETURN_ON_ERROR))
-				break;
-			bt_for_each(q, tags, addr, 1, nr_reserved_tags, dio);
-		}
-		addr = tags + OFFSET(blk_mq_tags_bitmap_tags);
-		if (bitmap_tags_is_ptr &&
-		    !readmem(addr, KVADDR, &addr, sizeof(ulong),
-				"blk_mq_tags.bitmap_tags", RETURN_ON_ERROR))
-			break;
-		bt_for_each(q, tags, addr, 0, nr_reserved_tags, dio);
+		if (queue_for_each_hw_ctx(q, addr, bitmap_tags_is_ptr, dio) == FALSE)
+			return;
 	}
 }
 
@@ -4489,7 +4524,7 @@ static void get_mq_diskio_from_hw_queues(ulong q, struct diskio *dio)
 		return;
 	}
 
-	queue_for_each_hw_ctx(q, hctx_array, cnt, dio);
+	blk_mq_queue_tag_busy_iter(q, hctx_array, cnt, dio);
 
 	FREEBUF(hctx_array);
 }
@@ -4914,6 +4949,9 @@ void diskio_init(void)
 	MEMBER_SIZE_INIT(class_private_devices, "class_private",
 		"class_devices");
 	MEMBER_OFFSET_INIT(disk_stats_in_flight, "disk_stats", "in_flight");
+	MEMBER_OFFSET_INIT(request_queue_tag_set, "request_queue", "tag_set");
+	MEMBER_OFFSET_INIT(blk_mq_tag_set_flags, "blk_mq_tag_set", "flags");
+	MEMBER_OFFSET_INIT(blk_mq_tag_set_shared_tags, "blk_mq_tag_set", "shared_tags");
 
 	dt->flags |= DISKIO_INIT;
 }
