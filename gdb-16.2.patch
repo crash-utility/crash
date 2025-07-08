@@ -9,7 +9,8 @@
 # to all subsequent patch applications.
 
 tar xvzmf gdb-16.2.tar.gz \
-	gdb-16.2/gdb/symfile.c
+	gdb-16.2/gdb/symfile.c \
+	gdb-16.2/gdb/symtab.c
 
 exit 0
 
@@ -1952,3 +1953,32 @@ exit 0
      }
 
    /* Remember the bfd indexes for the .text, .data, .bss and
+--- gdb-16.2/gdb/symtab.c.orig
++++ gdb-16.2/gdb/symtab.c
+@@ -7690,7 +7690,11 @@
+                         console("expr->first_opcode(): OP_VAR_VALUE\n");
+                 type = expr->evaluate_type()->type();
+                 if (req->tcb) {
+-                        long value = value_as_long(expr->evaluate());
++			expr::var_value_operation *vvop
++			    = (gdb::checked_static_cast<expr::var_value_operation *>
++			       (expr->op.get ()));
++			sym = vvop->get_symbol ();
++			long value = sym->value_longest ();
+                         /* callback with symbol value */
+                         req->typecode = TYPE_CODE(type);
+                         req->tcb(EOP_VALUE, req, &value, 0, 0, 0);
+@@ -7701,8 +7705,12 @@
+                                 req->length = type->length();
+                         }
+                         if (TYPE_CODE(type) == TYPE_CODE_ENUM) {
++				expr::var_value_operation *vvop
++				    = (gdb::checked_static_cast<expr::var_value_operation *>
++				       (expr->op.get ()));
++				sym = vvop->get_symbol ();
+                                 req->typecode = TYPE_CODE(type);
+-                                req->value = value_as_long(expr->evaluate());
++                                req->value = sym->value_longest ();
+                                 req->tagname = (char *)TYPE_TAG_NAME(type);
+                                 if (!req->tagname) {
+                                         val = expr->evaluate_type();
