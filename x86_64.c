@@ -3636,7 +3636,8 @@ x86_64_low_budget_back_trace_cmd(struct bt_info *bt_in)
 		level++;
 	}
 
-	if (is_task_active(bt->task) && bt->flags & BT_DUMPFILE_SEARCH) {
+	if (is_task_active(bt->task) && bt->flags & BT_DUMPFILE_SEARCH &&
+	    !(bt->flags & BT_TEXT_SYMBOLS_ALL)) {
 		if (!extra_stacks_regs[extra_stacks_idx]) {
 			extra_stacks_regs[extra_stacks_idx] =
 				(struct user_regs_bitmap_struct *)
