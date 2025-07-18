@@ -73,7 +73,7 @@
      that is created in the top-level kernel build directory must be saved.
 
   o  Requirements for building:
-      Fedora: make gcc gcc-c++ ncurses-devel zlib-devel lzo-devel snappy-devel bison wget patch texinfo libzstd-devel
+      Fedora: make gcc gcc-c++ ncurses-devel zlib-devel lzo-devel snappy-devel bison wget patch texinfo libzstd-devel gmp-devel mpfr-devel
       Ubuntu/Debian: make gcc g++ libncurses-dev zlib1g-dev liblzo2-dev libsnappy-dev bison wget patch texinfo libzstd-dev
       Arch Linux: make gcc ncurses zlib lzo snappy bison wget patch texinfo zstd
       openSUSE: make gcc gcc-c++ ncurses-devel zlib-devel lzo-devel snappy-devel bison wget patch texinfo libzstd-devel
