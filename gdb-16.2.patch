@@ -1982,3 +1982,21 @@ exit 0
                                  req->tagname = (char *)TYPE_TAG_NAME(type);
                                  if (!req->tagname) {
                                          val = expr->evaluate_type();
+--- gdb-16.2/gdb/solib-svr4.c.orig
++++ gdb-16.2/gdb/solib-svr4.c
+@@ -741,13 +741,13 @@
+ 	return 0;
+       return extract_typed_address (pbuf, ptr_type);
+     }
+-
++#ifndef CRASH_MERGE
+   /* Find DT_DEBUG.  */
+   if (gdb_bfd_scan_elf_dyntag (DT_DEBUG, current_program_space->exec_bfd (),
+ 			       &dyn_ptr, NULL)
+       || scan_dyntag_auxv (DT_DEBUG, &dyn_ptr, NULL))
+     return dyn_ptr;
+-
++#endif
+   /* This may be a static executable.  Look for the symbol
+      conventionally named _r_debug, as a last resort.  */
+   bound_minimal_symbol msymbol
