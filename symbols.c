@@ -4539,7 +4539,7 @@ is_shared_object(char *file)
 
 		case EM_X86_64:
 			if (machine_type("X86_64") || machine_type("ARM64") ||
-			    machine_type("PPC64"))
+			    machine_type("PPC64") || machine_type("RISCV64"))
 				return TRUE;
 			break;
 
