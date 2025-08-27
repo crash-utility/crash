@@ -3277,6 +3277,46 @@ load_module_filter(char *s, int type)
 
 #define AVERAGE_SYMBOL_SIZE (16)
 
+static size_t rust_demangle_symbol(const char *symbol, char *out, size_t out_size)
+{
+	int i;
+	size_t loc = 0;
+	size_t len = strlen(symbol);
+	char *buf = NULL;
+	/*
+	 * Rust symbols always start with _R (v0) or _ZN (legacy)
+	 */
+	const char *mangled_rust[] = {
+		"_R",
+		"_ZN",
+		NULL
+	};
+
+	if (!out || out_size < len)
+		return 0;
+
+	for (i = 0; mangled_rust[i]; i++) {
+		size_t sz = strlen(mangled_rust[i]);
+		char *p = memmem(symbol, len, mangled_rust[i], sz);
+		if (p) {
+			loc = p - symbol;
+			if (loc)
+				memcpy(out, symbol, loc);
+			break;
+		}
+	}
+
+	buf = rust_demangle(symbol + loc, DMGL_RUST);
+	if (buf) {
+		memcpy(out + loc, buf, strlen(buf));
+		free(buf);
+		return 1;
+	} else if (loc != 0)
+		memset(out, 0, loc);
+
+	return 0;
+}
+
 static int
 namespace_ctl(int cmd, struct symbol_namespace *ns, void *nsarg1, void *nsarg2)
 {
@@ -3315,9 +3355,14 @@ namespace_ctl(int cmd, struct symbol_namespace *ns, void *nsarg1, void *nsarg2)
 		return TRUE;
 
 	case NAMESPACE_INSTALL:
+		char demangled[BUFSIZE] = {0};
 		sp = (struct syment *)nsarg1;
 		name = (char *)nsarg2;
 		len = strlen(name)+1;
+		if (rust_demangle_symbol(name, demangled, sizeof(demangled))) {
+			len = strlen(demangled) + 1;
+			name = demangled;
+		}
 		if ((ns->index + len) >= ns->size) { 
                         if (!(addr = realloc(ns->address, ns->size*2))) 
 				error(FATAL, "symbol name space malloc: %s\n",
