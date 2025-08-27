@@ -125,6 +125,7 @@ struct command_table_entry linux_command_table[] = {
 #if defined(S390) || defined(S390X)
         {"s390dbf", cmd_s390dbf, help_s390dbf, 0},
 #endif
+	{"rustfilt",     cmd_rustfilt,     help_rustfilt,     MINIMAL},
 	{(char *)NULL}
 };
 

@@ -8186,6 +8186,16 @@ char *help_net[] = {
 NULL               
 };
 
+char *help_rustfilt[] = {
+"rustfilt",
+"demangle a mangled Rust symbol to human readable symbol",
+"<symbol>",
+"  This command converts a mangled Rust symbol to human readable symbol.",
+"\nEXAMPLES",
+"  crash> rustfilt _RNvNtCshc5sK6KjdJJ_6kernel5print11call_printk",
+"  kernel::print::call_printk",
+NULL
+};
 
 char *help_waitq[] = {
 "waitq",

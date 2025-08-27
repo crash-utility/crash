@@ -22,6 +22,7 @@
 #include "config.h"
 #endif
 #include "bfd.h"
+#include "demangle.h"
 
 static void store_symbols(bfd *, int, void *, long, unsigned int);
 static void store_sysmap_symbols(void);
@@ -4884,6 +4885,38 @@ do_multiples:
                 } while(args[optind]);
         }
         else if (!others) 
+		cmd_usage(pc->curcmd, SYNOPSIS);
+}
+
+/*
+ * Demangle a mangled Rust symbol to human readable symbol
+ */
+void cmd_rustfilt(void)
+{
+	int c;
+
+	while ((c = getopt(argcnt, args, "")) != EOF) {
+		switch(c)
+		{
+		default:
+			argerrs++;
+			break;
+		}
+	}
+
+	if (argerrs)
+		cmd_usage(pc->curcmd, SYNOPSIS);
+
+	if (args[optind]) {
+		char *buf;
+
+		buf = rust_demangle(args[optind], DMGL_RUST);
+		if (buf) {
+			fprintf(fp, "%s", buf);
+			free(buf);
+		} else
+			fprintf(fp, "Not a rust symbol: \n%s", args[optind]);
+	} else
 		cmd_usage(pc->curcmd, SYNOPSIS);
 }
 
