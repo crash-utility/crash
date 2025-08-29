@@ -634,6 +634,9 @@ riscv64_vtop_3level_4k(ulong *pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	ulong pte_val, pte_pfn;
 	ulong pt_phys;
 
+	if (verbose)
+		fprintf(fp, "PAGE DIRECTORY: %lx\n", (ulong)pgd);
+
 	/* PGD */
 	pgd_ptr = pgd + pgd_index_l3_4k(vaddr);
 	FILL_PGD(pgd, KVADDR, PAGESIZE());
@@ -1213,6 +1216,9 @@ riscv64_vtop_4level_4k(ulong *pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	ulong pte_val, pte_pfn;
 	ulong pt_phys;
 
+	if (verbose)
+		fprintf(fp, "PAGE DIRECTORY: %lx\n", (ulong)pgd);
+
 	/* PGD */
 	pgd_ptr = pgd + pgd_index_l4_4k(vaddr);
 	FILL_PGD(pgd, KVADDR, PAGESIZE());
@@ -1288,6 +1294,9 @@ riscv64_vtop_5level_4k(ulong *pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	ulong pmd_val;
 	ulong pte_val, pte_pfn;
 	ulong pt_phys;
+
+	if (verbose)
+		fprintf(fp, "PAGE DIRECTORY: %lx\n", (ulong)pgd);
 
 	/* PGD */
 	pgd_ptr = pgd + pgd_index_l5_4k(vaddr);
