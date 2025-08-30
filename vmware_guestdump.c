@@ -360,7 +360,7 @@ vmware_guestdump_init(char *filename, FILE *ofp)
 		goto exit;
 	}
 
-	vmss.vcpu_regs = malloc(vmss.num_vcpus * sizeof(uint32_t));
+	vmss.vcpu_regs = malloc(vmss.num_vcpus * sizeof(uint64_t));
 	vmss.regs64 = calloc(vmss.num_vcpus, sizeof(void *));
 	if (!vmss.vcpu_regs || !vmss.regs64) {
 		error(INFO, LOGPRX"Failed to allocate memory\n");
