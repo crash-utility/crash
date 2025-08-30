@@ -108,8 +108,14 @@ struct vcpu_state2 {
 		uint64_t eflags;
 		uint64_t rsp;
 		uint64_t ss;
+		uint64_t fs_base;
+		uint64_t gs_base;
+		uint64_t ds;
+		uint64_t es;
+		uint64_t fs;
+		uint64_t gs;
 	} regs64;
-	uint8_t reserved3[65];
+	uint8_t reserved3[17];
 } __attribute__((packed));
 
 typedef enum {
@@ -418,7 +424,14 @@ vmware_guestdump_init(char *filename, FILE *ofp)
 		vmss.regs64[i]->cr[4] = vs1.cr4;
 		vmss.regs64[i]->rip = vs2.regs64.rip;
 		vmss.regs64[i]->rflags = vs2.regs64.eflags;
-
+		vmss.regs64[i]->es = vs2.regs64.es;
+		vmss.regs64[i]->cs = vs2.regs64.cs;
+		vmss.regs64[i]->ss = vs2.regs64.ss;
+		vmss.regs64[i]->ds = vs2.regs64.ds;
+		vmss.regs64[i]->fs = vs2.regs64.fs;
+		vmss.regs64[i]->gs = vs2.regs64.gs;
+		vmss.regs64[i]->fs_base = vs2.regs64.fs_base;
+		vmss.regs64[i]->gs_base = vs2.regs64.gs_base;
 		vmss.vcpu_regs[i] = REGS_PRESENT_ALL;
 	}
 
