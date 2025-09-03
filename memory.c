@@ -19426,7 +19426,7 @@ get_kmem_cache_slub_data(long cmd, struct meminfo *si)
 {
 	int i, n, node;
 	ulong total_objects, total_slabs, free_objects;
-	ulong cpu_slab_ptr, node_ptr, cpu_freelist, orig_slab;
+	ulong cpu_slab_page_ptr, node_ptr, cpu_freelist, orig_slab;
 	ulong node_nr_partial, node_nr_slabs, node_total_objects;
 	int full_slabs, objects, node_total_avail;
 	long p;
@@ -19445,12 +19445,12 @@ get_kmem_cache_slub_data(long cmd, struct meminfo *si)
 	node_total_avail = VALID_MEMBER(kmem_cache_node_total_objects) ? TRUE : FALSE;
 
 	for (i = 0; i < kt->cpus; i++) {
-		cpu_slab_ptr = get_cpu_slab_ptr(si, i, &cpu_freelist);
+		cpu_slab_page_ptr = get_cpu_slab_ptr(si, i, &cpu_freelist);
 
-		if (!cpu_slab_ptr)
+		if (!cpu_slab_page_ptr)
 			continue;
 
-		if ((node = page_to_nid(cpu_slab_ptr)) < 0)
+		if ((node = page_to_nid(cpu_slab_page_ptr)) < 0)
 			goto bailout;
 
 		switch (cmd)
@@ -19458,15 +19458,15 @@ get_kmem_cache_slub_data(long cmd, struct meminfo *si)
 		case GET_SLUB_OBJECTS: {
 			/* For better error report, set cur slab to si->slab. */
 			orig_slab = si->slab;
-			si->slab = cpu_slab_ptr;
+			si->slab = cpu_slab_page_ptr;
 
-			if (!readmem(cpu_slab_ptr + OFFSET(page_inuse), 
+			if (!readmem(cpu_slab_page_ptr + OFFSET(page_inuse),
 				     KVADDR, &inuse, sizeof(short),
 				     "page inuse", RETURN_ON_ERROR)) {
 				si->slab = orig_slab;
 				return FALSE;
 			}
-			objects = slub_page_objects(si, cpu_slab_ptr);
+			objects = slub_page_objects(si, cpu_slab_page_ptr);
 			if (!objects) {
 				si->slab = orig_slab;
 				return FALSE;
