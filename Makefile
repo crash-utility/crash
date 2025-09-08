@@ -421,7 +421,7 @@ kernel.o: ${GENERIC_HFILES} kernel.c
 	${CC} -c ${CRASH_CFLAGS} kernel.c -I${BFD_DIRECTORY} -I${GDB_INCLUDE_DIRECTORY} ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 printk.o: ${GENERIC_HFILES} printk.c
-	${CC} -c ${CRASH_CFLAGS} printk.c ${WARNING_OPTIONS} ${WARNING_ERROR}
+	${CC} -c ${CRASH_CFLAGS} printk.c -I${GDB_INCLUDE_DIRECTORY} ${WARNING_OPTIONS} ${WARNING_ERROR}
 
 gdb_interface.o: ${GENERIC_HFILES} gdb_interface.c
 	${CC} -c ${CRASH_CFLAGS} gdb_interface.c ${WARNING_OPTIONS} ${WARNING_ERROR}
