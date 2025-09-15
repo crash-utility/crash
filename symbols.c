@@ -3325,6 +3325,7 @@ namespace_ctl(int cmd, struct symbol_namespace *ns, void *nsarg1, void *nsarg2)
 	char *name;
 	long cnt;
 	int len;
+	char demangled[BUFSIZE] = {0};
 
 	switch (cmd)
 	{
@@ -3355,7 +3356,6 @@ namespace_ctl(int cmd, struct symbol_namespace *ns, void *nsarg1, void *nsarg2)
 		return TRUE;
 
 	case NAMESPACE_INSTALL:
-		char demangled[BUFSIZE] = {0};
 		sp = (struct syment *)nsarg1;
 		name = (char *)nsarg2;
 		len = strlen(name)+1;
