@@ -221,7 +221,7 @@ dump_record(struct prb_map *m, unsigned long id, int msg_flags)
 	char *p1 = strstr(buf, "_R");
 	if (!p1)
 		p1 = strstr(buf, "_ZN");
-	char *p2 = strchrnul(buf, '+');
+	char *p2 = strrchr(buf, '+');
 	if (p1 && p2) {
 		char mangled[BUFSIZE] = {0};
 		char demangled[BUFSIZE] = {0};
