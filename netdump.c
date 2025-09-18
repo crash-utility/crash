@@ -111,6 +111,14 @@ map_cpus_to_prstatus(void)
 	FREEBUF(nt_ptr);
 }
 
+/**
+ * Check if vmcoreinfo in vmcore is missing/empty
+ */
+static bool is_netdump_vmcoreinfo_empty(void)
+{
+	return (nd->size_vmcoreinfo == 0);
+}
+
 /*
  *  Determine whether a file is a netdump/diskdump/kdump creation, 
  *  and if TRUE, initialize the vmcore_data structure.
@@ -463,6 +471,17 @@ is_netdump(char *file, ulong source_query)
 		netdump_memory_dump(fp);
 
 	pc->read_vmcoreinfo = vmcoreinfo_read_string;
+
+	/*
+	 * vmcoreinfo can be empty in case of dump collected via virsh-dump
+	 *
+	 * check if vmcoreinfo is not available in vmcore, and try to read
+	 * the vmcoreinfo from memory, using "vmcoreinfo_data" symbol
+	 */
+	if (is_netdump_vmcoreinfo_empty()) {
+		error(WARNING, "vmcoreinfo is empty, will read from symbols\n");
+		pc->read_vmcoreinfo = vmcoreinfo_read_from_memory;
+	}
 
 	if ((source_query == KDUMP_LOCAL) && 
 	    (pc->flags2 & GET_OSRELEASE))

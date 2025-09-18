@@ -1041,6 +1041,13 @@ pfn_to_pos(ulong pfn)
 	return desc_pos;
 }
 
+/**
+ * Check if vmcoreinfo in vmcore is missing/empty
+ */
+static bool is_diskdump_vmcoreinfo_empty(void)
+{
+	return (dd->sub_header_kdump->size_vmcoreinfo == 0);
+}
 
 /*
  *  Determine whether a file is a diskdump creation, and if TRUE,
@@ -1087,6 +1094,17 @@ is_diskdump(char *file)
 #endif
 
 	pc->read_vmcoreinfo = vmcoreinfo_read_string;
+
+	/*
+	 * vmcoreinfo can be empty in case of dump collected via virsh-dump
+	 *
+	 * check if vmcoreinfo is not available in vmcore, and try to read
+	 * the vmcoreinfo from memory, using "vmcoreinfo_data" symbol
+	 */
+	if (is_diskdump_vmcoreinfo_empty()) {
+		error(WARNING, "vmcoreinfo is empty, will read from symbols\n");
+		pc->read_vmcoreinfo = vmcoreinfo_read_from_memory;
+	}
 
 	if ((pc->flags2 & GET_LOG) && KDUMP_CMPRS_VALID()) {
 		pc->dfd = dd->dfd;
