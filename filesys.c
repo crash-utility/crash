@@ -3140,6 +3140,7 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 	tmp_vfsmnt = vfsmnt;
 
 	do {
+	more_vfsmnt:
 		tmp_dentry = parent;
 
 		dentry_buf = fill_dentry_cache(tmp_dentry);
@@ -3195,6 +3196,7 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 						break;
 					else
 						tmp_vfsmnt = mnt_parent;
+					goto more_vfsmnt;
 				}
 			} else if (VALID_STRUCT(mount)) {
 				if (tmp_vfsmnt) {
@@ -3213,6 +3215,7 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 						break;
 					else
 						tmp_vfsmnt = mnt_parent + OFFSET(mount_mnt);
+					goto more_vfsmnt;
 				}
 			}
 			else {
@@ -3222,6 +3225,9 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 		}
 						
 	} while (tmp_dentry != parent && parent);
+	if (!STREQ(pathname, "/") && LASTCHAR(pathname) == '/') {
+		LASTCHAR(pathname) = '\0';
+	}
 
 	if (mnt_buf)
 		FREEBUF(mnt_buf);
