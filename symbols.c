@@ -10691,6 +10691,10 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(vfsmount_mnt_mountpoint));
         fprintf(fp, "           vfsmount_mnt_parent: %ld\n", 
 		OFFSET(vfsmount_mnt_parent));
+	fprintf(fp, "            vfsmount_mnt_flags: %ld\n",
+		OFFSET(vfsmount_mnt_flags));
+	fprintf(fp, "            proc_mounts_cursor: %ld\n",
+		OFFSET(proc_mounts_cursor));
 	fprintf(fp, "              mount_mnt_parent: %ld\n",
 		OFFSET(mount_mnt_parent));
 	fprintf(fp, "          mount_mnt_mountpoint: %ld\n",

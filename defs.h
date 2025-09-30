@@ -2274,6 +2274,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long request_queue_tag_set;
 	long blk_mq_tag_set_flags;
 	long blk_mq_tag_set_shared_tags;
+	long vfsmount_mnt_flags;
+	long proc_mounts_cursor;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
