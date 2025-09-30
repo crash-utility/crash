@@ -1296,7 +1296,7 @@ cmd_mount(void)
 	 *  through it for each search argument entered.
 	 */
 	open_tmpfile();
-	show_mounts(0, MOUNT_PRINT_FILES | 
+	show_mounts(0, (VALID_MEMBER(super_block_s_files) ? MOUNT_PRINT_FILES : 0) |
 		(VALID_MEMBER(super_block_s_dirty) ? MOUNT_PRINT_INODES : 0), 
 		namespace_context);
 
