@@ -4481,8 +4481,9 @@ is_compressed_kernel(char *file, char **tmp)
 	}
 	if (system(command) < 0) {
 		please_wait_done();
-		error(INFO, "%s of %s failed\n", 
-			type == GZIP ? "gunzip" : "bunzip2", file);
+		error(INFO, "%s of %s failed\n",
+			type == GZIP ? "gunzip" :
+				(type == BZIP2 ? "bunzip2" : "unxz"), file);
 		free(tempname);
 		return FALSE;
 	}
