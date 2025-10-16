@@ -3800,6 +3800,7 @@ arm64_back_trace_cmd(struct bt_info *bt)
 
 	level = exception_frame = 0;
 	while (1) {
+		stackframe.pc |= ARM64_VA_START;
 		bt->instptr = stackframe.pc;
 
 		switch (arm64_print_stackframe_entry(bt, level, &stackframe, ofp))

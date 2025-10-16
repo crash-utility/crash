@@ -1,0 +1,1859 @@
+
+# When this file is updated in an existing source tree, it gets re-applied
+# during the next build using "patch -N --fuzz=0", which ignores patches
+# that have already been applied.  However, if a gdb file has been modified
+# multiple times, the subsequent patching may fail to recognize that a
+# given patch has been previously applied, and will attempt to re-apply it.
+# To prevent any unintended consequences, this file also acts as a
+# shell script that can restore any gdb file to its original state prior
+# to all subsequent patch applications.
+
+tar xvzmf gdb-13.2.tar.gz \
+        gdb-13.2/gdb/symtab.c \
+        gdb-13.2/gdb/printcmd.c \
+        gdb-13.2/gdb/symfile.c \
+        gdb-13.2/gdb/Makefile.in \
+        gdb-13.2/gdb/dwarf2/read.c \
+        gdb-13.2/gdb/ada-lang.c
+
+exit 0
+
+--- gdb-13.2/gdb/ada-lang.c.orig
++++ gdb-13.2/gdb/ada-lang.c
+@@ -1388,7 +1388,7 @@
+ 	i -= 1;
+       if (i > 1 && encoded[i] == '_' && encoded[i - 1] == '_')
+ 	len0 = i - 1;
+-      else if (encoded[i] == '$')
++      else if (i >= 0 && encoded[i] == '$')
+ 	len0 = i;
+     }
+ 
+--- gdb-13.2/gdb/cli/cli-cmds.c.orig
++++ gdb-13.2/gdb/cli/cli-cmds.c
+@@ -450,6 +450,11 @@
+     }
+ }
+ 
++#ifdef CRASH_MERGE
++static int crash_from_tty = 0;
++extern "C" void untrusted_file(FILE *, char *);
++#endif
++
+ int
+ is_complete_command (struct cmd_list_element *c)
+ {
+@@ -682,9 +687,32 @@
+       close (fd);
+       errno = save_errno;
+     }
+-  else
++#ifdef CRASH_MERGE
++  /*
++   * sourced during session initialization.
++   */
++  if (crash_from_tty == -1)
++    {
++      struct stat statbuf;
++      FILE *stream = result;
++      int _fd = fileno (stream);
++      if (fstat (_fd, &statbuf) < 0)
++        {
++          perror_with_name (full_path.get());
++          fclose (stream);
++          return opened;
++        }
++      if (statbuf.st_uid != getuid () || (statbuf.st_mode & S_IWOTH))
++        {
++          untrusted_file(NULL, full_path.get());
++          fclose (stream);
++          return opened;
++        }
++    }
++#endif
+     opened.emplace (gdb_file_up (result), std::move (full_path));
+ 
++
+   return opened;
+ }
+ 
+@@ -747,7 +775,11 @@
+ 	 If the source command was invoked interactively, throw an
+ 	 error.  Otherwise (e.g. if it was invoked by a script),
+ 	 just emit a warning, rather than cause an error.  */
++#ifdef CRASH_MERGE
++      if (from_tty > 0)
++#else
+       if (from_tty)
++#endif
+ 	perror_with_name (file);
+       else
+ 	{
+@@ -779,7 +811,14 @@
+ void
+ source_script (const char *file, int from_tty)
+ {
++#ifdef CRASH_MERGE
++  crash_from_tty = from_tty;
++#endif
+   source_script_with_search (file, from_tty, 0);
++#ifdef CRASH_MERGE
++  crash_from_tty = 0;
++#endif
++
+ }
+ 
+ static void
+--- gdb-13.2/gdb/coffread.c.orig
++++ gdb-13.2/gdb/coffread.c
+@@ -160,6 +160,7 @@
+ static file_ptr linetab_size;
+ 
+ static char *stringtab = NULL;
++static long stringtab_length = 0;
+ 
+ extern void stabsread_clear_cache (void);
+ 
+@@ -1315,6 +1316,7 @@
+   /* This is in target format (probably not very useful, and not
+      currently used), not host format.  */
+   memcpy (stringtab, lengthbuf, sizeof lengthbuf);
++  stringtab_length = length;
+   if (length == sizeof length)	/* Empty table -- just the count.  */
+     return 0;
+ 
+@@ -1334,8 +1336,9 @@
+ 
+   if (symbol_entry->_n._n_n._n_zeroes == 0)
+     {
+-      /* FIXME: Probably should be detecting corrupt symbol files by
+-	 seeing whether offset points to within the stringtab.  */
++      if (symbol_entry->_n._n_n._n_offset > stringtab_length)
++        error (_("COFF Error: string table offset (%ld) outside string table (length %ld)"),
++               symbol_entry->_n._n_n._n_offset, stringtab_length);
+       result = stringtab + symbol_entry->_n._n_n._n_offset;
+     }
+   else
+--- gdb-13.2/gdb/completer.c.orig
++++ gdb-13.2/gdb/completer.c
+@@ -2846,6 +2846,8 @@
+ 
+   /* How many items of MAX length can we fit in the screen window? */
+   cols = gdb_complete_get_screenwidth (displayer);
++  rl_reset_screen_size();
++  rl_get_screen_size(NULL, &cols);
+   max += 2;
+   limit = cols / max;
+   if (limit != 1 && (limit * max == cols))
+--- gdb-13.2/gdb/c-typeprint.c.orig
++++ gdb-13.2/gdb/c-typeprint.c
+@@ -1199,6 +1199,9 @@
+ 		= podata->end_bitpos
+ 		  - type->field (i).type ()->length () * TARGET_CHAR_BIT;
+ 	    }
++	  else if (strlen(type->field(i).name()) == 0)
++	    /* crash: Print details for unnamed struct and union. */
++	    newshow = show;
+ 
+ 	  c_print_type_1 (type->field (i).type (),
+ 			  type->field (i).name (),
+--- gdb-13.2/gdb/defs.h.orig	
++++ gdb-13.2/gdb/defs.h
+@@ -650,4 +650,7 @@
+ 
+ #include "utils.h"
+ 
++#ifdef CRASH_MERGE
++extern "C" int gdb_main_entry(int, char **);
++#endif
+ #endif /* #ifndef DEFS_H */
+--- gdb-13.2/gdb/dwarf2/read.c.orig
++++ gdb-13.2/gdb/dwarf2/read.c
+@@ -2549,7 +2549,11 @@
+      indices.  */
+   if (version < 4)
+     {
++#ifdef CRASH_MERGE
++      static int warning_printed = 1;
++#else
+       static int warning_printed = 0;
++#endif
+       if (!warning_printed)
+ 	{
+ 	  warning (_("Skipping obsolete .gdb_index section in %s."),
+@@ -2568,7 +2572,11 @@
+      "set use-deprecated-index-sections on".  */
+   if (version < 6 && !deprecated_ok)
+     {
++#ifdef CRASH_MERGE
++      static int warning_printed = 1;
++#else
+       static int warning_printed = 0;
++#endif
+       if (!warning_printed)
+ 	{
+ 	  warning (_("\
+--- gdb-13.2/gdb/main.c.orig	
++++ gdb-13.2/gdb/main.c
+@@ -447,6 +447,14 @@
+   return;
+ }
+ 
++#ifdef CRASH_MERGE
++extern "C" void update_gdb_hooks(void);
++extern "C" void main_loop(void);
++extern "C" unsigned long crash_get_kaslr_offset(void);
++extern "C" int console(const char *, ...);
++void crash_target_init (void);
++#endif
++
+ /* Call command_loop.  */
+ 
+ /* Prevent inlining this function for the benefit of GDB's selftests
+@@ -1014,7 +1022,11 @@
+       }
+   }
+ 
++#ifdef CRASH_MERGE
++  save_original_signals_state (1);
++#else
+   save_original_signals_state (quiet);
++#endif
+ 
+   /* Try to set up an alternate signal stack for SIGSEGV handlers.  */
+   gdb::alternate_signal_stack signal_stack;
+@@ -1107,7 +1119,7 @@
+   if (print_version)
+     {
+       print_gdb_version (gdb_stdout, false);
+-      gdb_printf ("\n");
++      gdb_printf ("\n\n");
+       exit (0);
+     }
+ 
+@@ -1144,6 +1156,10 @@
+      look at things by now.  Initialize the default interpreter.  */
+   set_top_level_interpreter (interpreter_p.c_str ());
+ 
++#ifdef CRASH_MERGE
++  update_gdb_hooks();
++#endif
++
+   /* FIXME: cagney/2003-02-03: The big hack (part 2 of 2) that lets
+      GDB retain the old MI1 interpreter startup behavior.  Output the
+      copyright message after the interpreter is installed when it is
+@@ -1171,7 +1187,11 @@
+   if (!system_gdbinit.empty () && !inhibit_gdbinit)
+     {
+       for (const std::string &file : system_gdbinit)
++#ifdef CRASH_MERGE
++        ret = catch_command_errors (source_script, file.c_str (), -1);
++#else
+ 	ret = catch_command_errors (source_script, file.c_str (), 0);
++#endif
+     }
+ 
+   /* Read and execute $HOME/.gdbinit file, if it exists.  This is done
+@@ -1180,7 +1200,11 @@
+      debugging or what directory you are in.  */
+ 
+   if (!home_gdbinit.empty () && !inhibit_gdbinit && !inhibit_home_gdbinit)
++#ifdef CRASH_MERGE
++    ret = catch_command_errors (source_script, home_gdbinit.c_str (), -1);
++#else
+     ret = catch_command_errors (source_script, home_gdbinit.c_str (), 0);
++#endif
+ 
+   /* Process '-ix' and '-iex' options early.  */
+   execute_cmdargs (&cmdarg_vec, CMDARG_INIT_FILE, CMDARG_INIT_COMMAND, &ret);
+@@ -1211,7 +1235,11 @@
+ 				  !batch_flag);
+       if (ret != 0)
+ 	ret = catch_command_errors (symbol_file_add_main_adapter,
++#ifdef CRASH_MERGE
++                                    symarg, 0);
++#else
+ 				    symarg, !batch_flag);
++#endif
+     }
+   else
+     {
+@@ -1282,7 +1310,11 @@
+ 	    {
+ 	      auto_load_local_gdbinit_loaded = 1;
+ 
++#ifdef CRASH_MERGE
++              ret = catch_command_errors (source_script, local_gdbinit.c_str (), -1);
++#else
+ 	      ret = catch_command_errors (source_script, local_gdbinit.c_str (), 0);
++#endif
+ 	    }
+ 	}
+     }
+@@ -1319,6 +1351,16 @@
+ 
+   captured_main_1 (context);
+ 
++#ifdef CRASH_MERGE
++  /* Relocate the vmlinux. */
++  objfile_rebase (current_program_space->symfile_object_file, crash_get_kaslr_offset());
++
++  crash_target_init();
++
++  /* Back to crash.  */
++  main_loop();
++#endif
++
+   /* NOTE: cagney/1999-11-07: There is probably no reason for not
+      moving this loop and the code found in captured_command_loop()
+      into the command_loop() proper.  The main thing holding back that
+@@ -1333,6 +1375,9 @@
+ 	{
+ 	  exception_print (gdb_stderr, ex);
+ 	}
++#ifdef CRASH_MERGE
++        console("<CAPTURED_MAIN WHILE LOOP>\n");
++#endif
+     }
+   /* No exit -- exit is through quit_command.  */
+ }
+@@ -1354,6 +1399,22 @@
+   return 1;
+ }
+ 
++#ifdef CRASH_MERGE
++/*
++ *  NOTE: adapted from gdb.c, which is no longer built in; changed name of
++ *        original main() to gdb_main_entry() for use as crash entry point
++ */
++int
++gdb_main_entry (int argc, char **argv)
++{
++  struct captured_main_args args;
++  memset (&args, 0, sizeof args);
++  args.argc = argc;
++  args.argv = argv;
++  args.interpreter_p = INTERP_CONSOLE;
++  return gdb_main (&args);
++}
++#endif
+ 
+ /* Don't use *_filtered for printing help.  We don't want to prompt
+    for continue no matter how small the screen or how much we're going
+--- gdb-13.2/gdb/Makefile.in.orig
++++ gdb-13.2/gdb/Makefile.in
+@@ -602,7 +602,7 @@
+ # It is also possible that you will need to add -I/usr/include/sys if
+ # your system doesn't have fcntl.h in /usr/include (which is where it
+ # should be according to Posix).
+-DEFS = @DEFS@
++DEFS = -DCRASH_MERGE @DEFS@
+ GDB_CFLAGS = -I. -I$(srcdir) -I$(srcdir)/config \
+ 	-DLOCALEDIR="\"$(localedir)\"" $(DEFS)
+ 
+@@ -1182,6 +1182,7 @@
+ 	symmisc.c \
+ 	symtab.c \
+ 	target.c \
++	../../crash_target.c \
+ 	target-connection.c \
+ 	target-dcache.c \
+ 	target-descriptions.c \
+@@ -1850,7 +1851,7 @@
+ 	$(SUBDIR_TARGET_OBS) \
+ 	$(SUBDIR_GCC_COMPILE_OBS)
+ 
+-SUBDIRS = doc @subdirs@ data-directory
++SUBDIRS = build_no_subdirs
+ CLEANDIRS = $(SUBDIRS)
+ 
+ # List of subdirectories in the build tree that must exist.
+@@ -1891,8 +1892,8 @@
+ # Flags needed to compile Python code
+ PYTHON_CFLAGS = @PYTHON_CFLAGS@
+ 
+-all: gdb$(EXEEXT) $(CONFIG_ALL) gdb-gdb.py gdb-gdb.gdb
+-	@$(MAKE) $(FLAGS_TO_PASS) DO=all "DODIRS=$(SUBDIRS)" subdir_do
++all: gdb$(EXEEXT) gdb-gdb.py gdb-gdb.gdb
++	@$(MAKE) -s $(FLAGS_TO_PASS) DO=all "DODIRS=`echo $(SUBDIRS) | sed 's/testsuite//'`" subdir_do
+ 
+ # Rule for compiling .c files in the top-level gdb directory.
+ # The order-only dependencies ensure that we create the build subdirectories.
+@@ -2147,9 +2148,10 @@
+ # Removing the old gdb first works better if it is running, at least on SunOS.
+ gdb$(EXEEXT): gdb.o $(LIBGDB_OBS) $(CDEPS) $(TDEPLIBS)
+ 	$(SILENCE) rm -f gdb$(EXEEXT)
++	@$(MAKE) -C ../.. GDB_FLAGS=-DGDB_13_2 library
+ 	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
+-		-o gdb$(EXEEXT) gdb.o $(LIBGDB_OBS) \
+-		$(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES)
++                -o $(shell /bin/cat mergeobj) $(LIBGDB_OBS) \
++                $(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES) $(shell /bin/cat mergelibs)
+ ifneq ($(CODESIGN_CERT),)
+ 	$(ECHO_SIGN) $(CODESIGN) -s $(CODESIGN_CERT) gdb$(EXEEXT)
+ endif
+@@ -2594,9 +2596,9 @@
+ # into place if the compile succeeds.  We need this because gcc does
+ # not atomically write the dependency output file.
+ override COMPILE.post = -c -o $@ -MT $@ -MMD -MP \
+-	-MF $(@D)/$(DEPDIR)/$(basename $(@F)).Tpo
+-override POSTCOMPILE = @mv $(@D)/$(DEPDIR)/$(basename $(@F)).Tpo \
+-	$(@D)/$(DEPDIR)/$(basename $(@F)).Po
++        -MF $(subst ../..,.,$(@D))/$(DEPDIR)/$(basename $(@F)).Tpo
++override POSTCOMPILE = @mv $(subst ../..,.,$(@D))/$(DEPDIR)/$(basename $(@F)).Tpo \
++        $(subst ../..,.,$(@D))/$(DEPDIR)/$(basename $(@F)).Po
+ else
+ override COMPILE.pre = source='$<' object='$@' libtool=no \
+ 	DEPDIR=$(DEPDIR) $(DEPMODE) $(depcomp) \
+--- gdb-13.2/gdb/objfiles.h.orig
++++ gdb-13.2/gdb/objfiles.h
+@@ -858,9 +858,9 @@
+ 
+ extern int objfile_has_symbols (struct objfile *objfile);
+ 
+-extern int have_partial_symbols (void);
++extern "C" int have_partial_symbols (void);
+ 
+-extern int have_full_symbols (void);
++extern "C" int have_full_symbols (void);
+ 
+ extern void objfile_set_sym_fns (struct objfile *objfile,
+ 				 const struct sym_fns *sf);
+--- gdb-13.2/gdb/printcmd.c.orig
++++ gdb-13.2/gdb/printcmd.c
+@@ -547,6 +547,9 @@
+    form.  However note that DO_DEMANGLE can be overridden by the specific
+    settings of the demangle and asm_demangle variables.  Returns
+    non-zero if anything was printed; zero otherwise.  */
++#ifdef CRASH_MERGE
++extern "C" int gdb_print_callback(unsigned long);
++#endif
+ 
+ int
+ print_address_symbolic (struct gdbarch *gdbarch, CORE_ADDR addr,
+@@ -558,6 +561,12 @@
+   int offset = 0;
+   int line = 0;
+ 
++#ifdef CRASH_MERGE
++  if (!gdb_print_callback(addr)) {
++        return 0;
++  }
++#endif
++
+   if (build_address_symbolic (gdbarch, addr, do_demangle, false, &name,
+ 			      &offset, &filename, &line, &unmapped))
+     return 0;
+@@ -590,6 +599,10 @@
+ 
+ /* See valprint.h.  */
+ 
++#ifdef CRASH_MERGE
++extern "C" char *gdb_lookup_module_symbol(unsigned long, unsigned long *);
++#endif
++
+ int
+ build_address_symbolic (struct gdbarch *gdbarch,
+ 			CORE_ADDR addr,  /* IN */
+@@ -696,7 +709,19 @@
+ 	}
+     }
+   if (symbol == NULL && msymbol.minsym == NULL)
++#ifdef CRASH_MERGE
++  {
++    char *name_ptr = gdb_lookup_module_symbol(addr, (unsigned long *)offset);
++    if (name_ptr) {
++      *name = name_ptr;
++      return 0;
++    } else {
+     return 1;
++    }
++  }
++#else
++    return 1;
++#endif
+ 
+   /* If the nearest symbol is too far away, don't print anything symbolic.  */
+ 
+@@ -1236,6 +1261,43 @@
+   *expp = exp;
+ }
+ 
++static void
++print_command_2 (const char *args, int voidprint)
++{
++  struct value *val;
++  value_print_options print_opts;
++
++  get_user_print_options (&print_opts);
++  /* Override global settings with explicit options, if any.  */
++  auto group = make_value_print_options_def_group (&print_opts);
++  gdb::option::process_options
++    (&args, gdb::option::PROCESS_OPTIONS_REQUIRE_DELIMITER, group);
++
++  print_command_parse_format (&args, "print", &print_opts);
++
++  const char *exp = args;
++
++  if (exp != nullptr && *exp)
++    {
++      expression_up expr = parse_expression (exp);
++      val = evaluate_expression (expr.get ());
++    }
++  else
++    val = access_value_history (0);
++
++    gdb_printf ("%d %d %ld %ld %ld %ld\n",
++      check_typedef(value_type (val))->code(),
++      check_typedef(value_type (val))->is_unsigned (),
++      check_typedef(value_type(val))->length (),
++      value_offset (val), value_bitpos (val), value_bitsize(val));
++}
++
++static void
++printm_command (const char *exp, int from_tty)
++{
++  print_command_2 (exp, 1);
++}
++
+ /* See valprint.h.  */
+ 
+ void
+@@ -3358,6 +3420,12 @@
+     = add_com ("print", class_vars, print_command, print_help.c_str ());
+   set_cmd_completer_handle_brkchars (print_cmd, print_command_completer);
+   add_com_alias ("p", print_cmd, class_vars, 1);
++
++  c = add_com ("printm", class_vars, printm_command, _("\
++Similar to \"print\" command, but it used to print the type, size, offset,\n\
++bitpos and bitsize of the expression EXP."));
++  set_cmd_completer (c, expression_completer);
++
+   add_com_alias ("inspect", print_cmd, class_vars, 1);
+ 
+   add_setshow_uinteger_cmd ("max-symbolic-offset", no_class,
+--- gdb-13.2/gdb/psymtab.c.orig
++++ gdb-13.2/gdb/psymtab.c
+@@ -162,6 +162,9 @@
+ }
+ 
+ /* See psympriv.h.  */
++#ifdef CRASH_MERGE
++  extern "C" int gdb_line_number_callback(unsigned long, unsigned long, unsigned long);
++#endif
+ 
+ struct partial_symtab *
+ psymbol_functions::find_pc_sect_psymtab (struct objfile *objfile,
+@@ -176,7 +179,12 @@
+ 
+ 	best_pst = find_pc_sect_psymtab_closer (objfile, pc, section, pst,
+ 						msymbol);
++#ifdef CRASH_MERGE
++        if ((best_pst != NULL) &&
++          gdb_line_number_callback(pc, pst->text_low (objfile), pst->text_high (objfile)))
++#else
+ 	if (best_pst != NULL)
++#endif
+ 	  return best_pst;
+       }
+ 
+--- gdb-13.2/gdb/symfile.c.orig
++++ gdb-13.2/gdb/symfile.c
+@@ -643,7 +643,26 @@
+       for (cur_sec = abfd->sections; cur_sec != NULL; cur_sec = cur_sec->next)
+ 	/* We do not expect this to happen; just skip this step if the
+ 	   relocatable file has a section with an assigned VMA.  */
+-	if (bfd_section_vma (cur_sec) != 0)
++        if (bfd_section_vma (cur_sec) != 0
++           /*
++            *  Kernel modules may have some non-zero VMAs, i.e., like the
++            *  __ksymtab and __ksymtab_gpl sections in this example:
++            *
++            *    Section Headers:
++            *      [Nr] Name              Type             Address           Offset
++            *           Size              EntSize          Flags  Link  Info  Align
++            *      ...
++            *      [ 8] __ksymtab         PROGBITS         0000000000000060  0000ad90
++            *           0000000000000010  0000000000000000   A       0     0     16
++            *      [ 9] .rela__ksymtab    RELA             0000000000000000  0000ada0
++            *           0000000000000030  0000000000000018          43     8     8
++            *      [10] __ksymtab_gpl     PROGBITS         0000000000000070  0000add0
++            *           00000000000001a0  0000000000000000   A       0     0     16
++            *      ...
++            *
++            *  but they should be treated as if they are NULL.
++            */
++            && strncmp (bfd_section_name (cur_sec), "__k", 3) != 0)
+ 	  break;
+ 
+       if (cur_sec == NULL)
+@@ -1073,6 +1092,12 @@
+   if (mainline)
+     flags |= OBJF_MAINLINE;
+   objfile = objfile::make (abfd, name, flags, parent);
++#ifdef CRASH_MERGE
++  if (add_flags & SYMFILE_MAINLINE) {
++    extern struct objfile *gdb_kernel_objfile;
++    gdb_kernel_objfile = objfile;
++  }
++#endif
+ 
+   /* We either created a new mapped symbol table, mapped an existing
+      symbol table file which has not had initial symbol reading
+@@ -1366,6 +1391,10 @@
+ #if ! defined (DEBUG_SUBDIRECTORY)
+ #define DEBUG_SUBDIRECTORY ".debug"
+ #endif
++#ifdef CRASH_MERGE
++extern "C" int check_specified_module_tree(const char *, const char *);
++extern "C" char *check_specified_kernel_debug_file();
++#endif
+ 
+ /* Find a separate debuginfo file for OBJFILE, using DIR as the directory
+    where the original file resides (may not be the same as
+@@ -1402,6 +1431,15 @@
+   if (separate_debug_file_exists (debugfile, crc32, objfile))
+     return debugfile;
+ 
++#ifdef CRASH_MERGE
++{
++  if (check_specified_module_tree(objfile_name (objfile), debugfile.c_str()) &&
++      separate_debug_file_exists(debugfile, crc32, objfile)) {
++        return debugfile;
++  }
++}
++#endif
++
+   /* Then try in the global debugfile directories.
+ 
+      Keep backward compatibility so that DEBUG_FILE_DIRECTORY being "" will
+@@ -1561,6 +1599,14 @@
+ 	}
+     }
+ 
++#ifdef CRASH_MERGE
++  if (debugfile.empty ()) {
++       char *name_copy;
++       name_copy = check_specified_kernel_debug_file();
++       return name_copy ? std::string (name_copy) : std::string ();
++  }
++#endif
++
+   return debugfile;
+ }
+ 
+@@ -2321,8 +2367,10 @@
+   else if (section_addrs.empty ())
+     gdb_printf ("\n");
+ 
++#ifndef CRASH_MERGE
+   if (from_tty && (!query ("%s", "")))
+     error (_("Not confirmed."));
++#endif
+ 
+   objf = symbol_file_add (filename.get (), add_flags, &section_addrs,
+ 			  flags);
+@@ -3599,6 +3647,15 @@
+ symfile_relocate_debug_section (struct objfile *objfile,
+ 				asection *sectp, bfd_byte *buf)
+ {
++#ifdef CRASH_MERGE
++  /* Executable files have all the relocations already resolved.
++   * Handle files linked with --emit-relocs.
++   * http://sources.redhat.com/ml/gdb/2006-08/msg00137.html
++   */
++  bfd *abfd = objfile->obfd.get();
++  if ((abfd->flags & EXEC_P) != 0)
++    return NULL;
++#endif
+   gdb_assert (objfile->sf->sym_relocate);
+ 
+   return (*objfile->sf->sym_relocate) (objfile, sectp, buf);
+--- gdb-13.2/gdb/symtab.c.orig
++++ gdb-13.2/gdb/symtab.c
+@@ -1945,29 +1945,48 @@
+    variable and thus can probably assume it will never hit the C++
+    code).  */
+ 
++#ifdef CRASH_MERGE
++static void gdb_bait_and_switch(char *, struct symbol *);
++#endif
++
+ struct block_symbol
+ lookup_symbol_in_language (const char *name, const struct block *block,
+ 			   const domain_enum domain, enum language lang,
+ 			   struct field_of_this_result *is_a_field_of_this)
+ {
+   SYMBOL_LOOKUP_SCOPED_DEBUG_ENTER_EXIT;
++  struct block_symbol result;
+ 
+   demangle_result_storage storage;
+   const char *modified_name = demangle_for_lookup (name, lang, storage);
+ 
+-  return lookup_symbol_aux (modified_name,
++  result = lookup_symbol_aux (modified_name,
+ 			    symbol_name_match_type::FULL,
+ 			    block, domain, lang,
+ 			    is_a_field_of_this);
++#ifdef CRASH_MERGE
++  if (result.symbol && (domain == VAR_DOMAIN))
++        gdb_bait_and_switch((char *)modified_name, result.symbol);
++#endif
++  return result;
+ }
+ 
+ /* See symtab.h.  */
+ 
++#ifdef CRASH_MERGE
++static const struct block *gdb_get_crash_block(void);
++#endif
++
+ struct block_symbol
+ lookup_symbol (const char *name, const struct block *block,
+ 	       domain_enum domain,
+ 	       struct field_of_this_result *is_a_field_of_this)
+ {
++#ifdef CRASH_MERGE
++  if (!block)
++    block = gdb_get_crash_block();
++#endif
++
+   return lookup_symbol_in_language (name, block, domain,
+ 				    current_language->la_language,
+ 				    is_a_field_of_this);
+@@ -2938,7 +2957,7 @@
+   for (objfile *objf : current_program_space->objfiles ())
+     {
+       struct compunit_symtab *result
+-	= objf->find_pc_sect_compunit_symtab (msymbol, pc, section, 1);
++	= objf->find_pc_sect_compunit_symtab (msymbol, pc, section, 0);
+       if (result != NULL)
+        return result;
+     }
+@@ -7037,3 +7056,898 @@
+   gdb::observers::new_objfile.attach (symtab_new_objfile_observer, "symtab");
+   gdb::observers::free_objfile.attach (symtab_free_objfile_observer, "symtab");
+ }
++
++#ifdef CRASH_MERGE
++#include "gdb-stabs.h"
++#include "gdbsupport/version.h"
++#define GDB_COMMON
++#include "../../defs.h"
++
++static void get_member_data(struct gnu_request *, struct type *, long, int);
++static void walk_enum(struct type *, struct gnu_request *);
++static void eval_enum(struct type *, struct gnu_request *);
++static void gdb_get_line_number(struct gnu_request *);
++static void gdb_get_datatype(struct gnu_request *);
++static void gdb_get_symbol_type(struct gnu_request *);
++static void gdb_command_exists(struct gnu_request *);
++static void gdb_debug_command(struct gnu_request *);
++static void gdb_function_numargs(struct gnu_request *);
++static void gdb_add_symbol_file(struct gnu_request *);
++static void gdb_delete_symbol_file(struct gnu_request *);
++static void gdb_patch_symbol_values(struct gnu_request *);
++static void get_user_print_option_address(struct gnu_request *);
++extern int get_frame_offset(CORE_ADDR);
++static void gdb_set_crash_block(struct gnu_request *);
++extern "C" void gdb_command_funnel(struct gnu_request *);
++void gdb_command_funnel_1(struct gnu_request *);
++static long lookup_struct_contents(struct gnu_request *);
++static void iterate_datatypes(struct gnu_request *);
++
++struct objfile *gdb_kernel_objfile = { 0 };
++
++static ulong gdb_merge_flags = 0;
++#define KERNEL_SYMBOLS_PATCHED (0x1)
++
++#undef STREQ
++#define STREQ(A, B)      (A && B && (strcmp(A, B) == 0))
++#define TYPE_CODE(t)        (t->code ())
++#define TYPE_TAG_NAME(t) (TYPE_MAIN_TYPE(t)->name)
++#define TYPE_NFIELDS(t) (t->num_fields ())
++#define TYPE_NAME(t) (t->name ())
++
++/*
++ *  All commands from above come through here.
++ */
++void
++gdb_command_funnel(struct gnu_request *req)
++{
++        try {
++                gdb_command_funnel_1(req);
++        } catch (const gdb_exception &ex) {
++                if (req->flags & GNU_RETURN_ON_ERROR)
++                        req->flags |= GNU_COMMAND_FAILED;
++                else
++                        throw ex;
++        }
++}
++
++void
++gdb_command_funnel_1(struct gnu_request *req)
++{
++        struct symbol *sym;
++
++        if (req->command != GNU_VERSION && req->command != GNU_USER_PRINT_OPTION) {
++                (dynamic_cast<stdio_file *>gdb_stdout)->set_stream(req->fp);
++                (dynamic_cast<stdio_file *>gdb_stderr)->set_stream(req->fp);
++        }
++
++        switch (req->command)
++        {
++        case GNU_VERSION:
++                req->buf = (char *)version;
++                break;
++
++        case GNU_PASS_THROUGH:
++                execute_command(req->buf,
++                        req->flags & GNU_FROM_TTY_OFF ? FALSE : TRUE);
++                break;
++
++        case GNU_USER_PRINT_OPTION:
++                get_user_print_option_address(req);
++                break;
++
++        case GNU_RESOLVE_TEXT_ADDR:
++                sym = find_pc_function(req->addr);
++                if (!sym || TYPE_CODE(sym->type()) != TYPE_CODE_FUNC)
++                        req->flags |= GNU_COMMAND_FAILED;
++                break;
++
++        case GNU_DISASSEMBLE:
++                if (req->addr2)
++                        sprintf(req->buf, "disassemble 0x%lx 0x%lx",
++                                req->addr, req->addr2);
++                else
++                        sprintf(req->buf, "disassemble 0x%lx", req->addr);
++                execute_command(req->buf, TRUE);
++                break;
++
++        case GNU_ADD_SYMBOL_FILE:
++                gdb_add_symbol_file(req);
++                break;
++
++        case GNU_DELETE_SYMBOL_FILE:
++                gdb_delete_symbol_file(req);
++                break;
++
++        case GNU_GET_LINE_NUMBER:
++                gdb_get_line_number(req);
++                break;
++
++        case GNU_GET_DATATYPE:
++                gdb_get_datatype(req);
++                break;
++
++        case GNU_GET_SYMBOL_TYPE:
++                gdb_get_symbol_type(req);
++                break;
++
++        case GNU_COMMAND_EXISTS:
++                gdb_command_exists(req);
++                break;
++
++        case GNU_ALPHA_FRAME_OFFSET:
++                req->value = 0;
++                break;
++
++        case GNU_FUNCTION_NUMARGS:
++                gdb_function_numargs(req);
++                break;
++
++        case GNU_DEBUG_COMMAND:
++                gdb_debug_command(req);
++                break;
++
++        case GNU_PATCH_SYMBOL_VALUES:
++                gdb_patch_symbol_values(req);
++                break;
++
++        case GNU_SET_CRASH_BLOCK:
++                gdb_set_crash_block(req);
++                break;
++
++        case GNU_GET_FUNCTION_RANGE:
++                {
++                        CORE_ADDR start, end;
++                        if (!find_pc_partial_function(req->pc, NULL, &start, &end))
++                                req->flags |= GNU_COMMAND_FAILED;
++                        else {
++                                req->addr = (ulong)start;
++                                req->addr2 = (ulong)end;
++                        }
++                }
++                break;
++
++        case GNU_LOOKUP_STRUCT_CONTENTS:
++                req->value = lookup_struct_contents(req);
++                break;
++
++        case GNU_ITERATE_DATATYPES:
++                iterate_datatypes(req);
++                break;
++
++        default:
++                req->flags |= GNU_COMMAND_FAILED;
++                break;
++        }
++}
++
++/*
++ *  Given a PC value, return the file and line number.
++ */
++static void
++gdb_get_line_number(struct gnu_request *req)
++{
++        struct symtab_and_line sal;
++        struct objfile *objfile;
++        CORE_ADDR pc;
++
++#define LASTCHAR(s)      (s[strlen(s)-1])
++
++        /*
++         * Prime the addrmap pump.
++         */
++        pc = req->addr;
++
++        sal = find_pc_line(pc, 0);
++
++        if (!sal.symtab) {
++                /*
++                 *  If a module address line number can't be found, it's typically
++                 *  due to its addrmap still containing offset values because its
++                 *  objfile doesn't have full symbols loaded.
++                 */
++                if (req->lm) {
++                        objfile = req->lm->loaded_objfile;
++                        if (!objfile_has_full_symbols(objfile)) {
++                               objfile->expand_all_symtabs ();
++                                sal = find_pc_line(pc, 0);
++                        }
++                }
++                if (!sal.symtab) {
++                        req->buf[0] = '\0';
++                        return;
++                }
++        }
++
++        if (sal.symtab->filename && (sal.symtab)->compunit ()->dirname ()) {
++                if (sal.symtab->filename[0] == '/')
++                        sprintf(req->buf, "%s: %d",
++                                sal.symtab->filename, sal.line);
++                else
++                        sprintf(req->buf, "%s%s%s: %d",
++                                (sal.symtab)->compunit ()->dirname (),
++                                LASTCHAR((sal.symtab)->compunit ()->dirname ()) == '/' ? "" : "/",
++                                sal.symtab->filename, sal.line);
++        }
++}
++
++
++/*
++ * Follow the type linkage for full member and value type resolution, with callback
++ */
++static void drillDownType(struct gnu_request *req, struct type *type)
++{
++        while (type)
++        {
++                /* check out for stub types and pull in the definition instead */
++                if (type->is_stub() && TYPE_TAG_NAME(type)) {
++                        struct symbol *sym;
++                        sym = lookup_symbol(TYPE_TAG_NAME(type), 0, STRUCT_DOMAIN, 0).symbol;
++                        if (sym)
++                                type = sym->type();
++                }
++                switch (TYPE_CODE(type)) {
++                        drill_ops_t op;
++                        long l1, l2;
++                        int typecode;
++
++                case TYPE_CODE_PTR:
++                        req->tcb(EOP_POINTER, req, 0, 0, 0, 0);
++                        break;
++
++                case TYPE_CODE_TYPEDEF:
++                        req->is_typedef = 1;
++                        req->typecode = TYPE_CODE(type);
++                        if (!req->tcb(EOP_TYPEDEF, req, TYPE_NAME(type), 0, 0, 0))
++                                return;
++                        break;
++
++                case TYPE_CODE_FUNC:
++                        req->tcb(EOP_FUNCTION, req, 0, 0, 0, 0);
++                        break;
++
++                case TYPE_CODE_ARRAY:
++                        l1 = type->length ();
++                        l2 = check_typedef(type->target_type ())->length ();
++                        req->tcb(EOP_ARRAY, req, &l1, &l2, 0, 0);
++                        break;
++
++                case TYPE_CODE_VOID:
++                case TYPE_CODE_INT:
++                case TYPE_CODE_BOOL:
++                        l1 = type->length ();
++                        req->tcb(EOP_INT, req, &l1, 0, 0, 0);
++                        break;
++
++                case TYPE_CODE_UNION:
++                        op = EOP_UNION;
++                        goto label;
++
++                case TYPE_CODE_ENUM:
++                        op = EOP_ENUM;
++                        goto label;
++
++                case TYPE_CODE_STRUCT:
++                        op = EOP_STRUCT;
++                        goto label;
++
++                default:
++                        typecode = TYPE_CODE(type);
++                        req->tcb(EOP_OOPS, req, &typecode, "Unknown typecode", 0, 0);
++                        return; /* not reached */
++
++                label:
++                        l1 = type->length ();
++                        req->tcb(op, req, &l1, type, TYPE_TAG_NAME(type), 0);
++                }
++                type = type->target_type ();
++        }
++        req->tcb(EOP_DONE, req, 0, 0, 0, 0);
++}
++
++/*
++ *  General purpose routine for determining datatypes.
++ */
++
++static void
++gdb_get_datatype(struct gnu_request *req)
++{
++        struct type *type;
++        struct type *typedef_type;
++        expression_up expr;
++        struct symbol *sym;
++        struct value *val;
++
++        if (gdb_CRASHDEBUG(2))
++                console("gdb_get_datatype [%s] (a)\n", req->name);
++
++        req->typecode = TYPE_CODE_UNDEF;
++
++        /*
++         *  lookup_symbol() will pick up struct and union names.
++         */
++        sym = lookup_symbol(req->name, 0, STRUCT_DOMAIN, 0).symbol;
++        if (sym) {
++                req->typecode = TYPE_CODE(sym->type());
++                req->length = sym->type()->length ();
++                if (req->member)
++                        get_member_data(req, sym->type(), 0, 1);
++
++                if (TYPE_CODE(sym->type()) == TYPE_CODE_ENUM)
++                        walk_enum(sym->type(), req);
++
++                return;
++        }
++
++        /*
++         *  Otherwise parse the expression.
++         */
++        if (gdb_CRASHDEBUG(2))
++                console("gdb_get_datatype [%s] (b)\n", req->name);
++
++        expr = parse_expression(req->name);
++
++
++        switch (expr->first_opcode())
++        {
++        case OP_VAR_VALUE:
++                if (gdb_CRASHDEBUG(2))
++                        console("expr->elts[0].opcode: OP_VAR_VALUE\n");
++                type = value_type(evaluate_type(expr.get()));
++                if (req->tcb) {
++                        long value = value_as_long (evaluate_expression (expr.get ()));
++                        /* callback with symbol value */
++                        req->typecode = TYPE_CODE(type);
++                        req->tcb(EOP_VALUE, req, &value, 0, 0, 0);
++                        drillDownType(req, type);
++                } else {
++                        if (req->flags & GNU_VAR_LENGTH_TYPECODE) {
++                                req->typecode = TYPE_CODE(type);
++                                req->length = type->length ();
++                        }
++                        if (TYPE_CODE(type) == TYPE_CODE_ENUM) {
++                                req->typecode = TYPE_CODE(type);
++                                req->value = value_as_long (evaluate_expression (expr.get ()));
++                                req->tagname = (char *)TYPE_TAG_NAME(type);
++                                if (!req->tagname) {
++                                        eval_enum(type, req);
++                                }
++                        }
++                }
++                break;
++
++          case OP_TYPE:
++                if (gdb_CRASHDEBUG(2))
++                        console("expr->elts[0].opcode: OP_TYPE\n");
++                    type = value_type(evaluate_type(expr.get()));
++                if (req->tcb) {
++                        drillDownType(req, type);
++                } else {
++                        req->typecode = TYPE_CODE(type);
++                        req->length = type->length ();
++                        if (TYPE_CODE(type) == TYPE_CODE_TYPEDEF) {
++                                req->is_typedef = TYPE_CODE_TYPEDEF;
++                                if ((typedef_type = check_typedef(type))) {
++                                        req->typecode = TYPE_CODE(typedef_type);
++                                        req->length = typedef_type->length ();
++                                        type = typedef_type;
++                                }
++                        }
++                        if (TYPE_CODE(type) == TYPE_CODE_ENUM)
++                                walk_enum(type, req);
++                }
++
++                if (req->member)
++                        get_member_data(req, type, 0, 1);
++
++                break;
++
++        default:
++                if (gdb_CRASHDEBUG(2))
++                        console("expr.get()->elts[0].opcode: %d (?)\n",
++                                expr->first_opcode());
++                break;
++
++        }
++}
++
++/*
++ *  More robust enum list dump that gdb's, showing the value of each
++ *  identifier, each on its own line.
++ */
++static void
++walk_enum(struct type *type, struct gnu_request *req)
++{
++        int i;
++        int len, print = (req->flags & GNU_PRINT_ENUMERATORS);
++        long long lastval;
++
++        if (print) {
++                if (req->is_typedef)
++                        gdb_printf(gdb_stdout, "typedef ");
++                if (TYPE_TAG_NAME(type))
++                        gdb_printf(gdb_stdout, "enum %s {\n", TYPE_TAG_NAME (type));
++                else
++                        gdb_printf(gdb_stdout, "enum {\n");
++        }
++
++        len = TYPE_NFIELDS (type);
++        for (i = 0; i < len; i++) {
++                if (print)
++                        gdb_printf(gdb_stdout, "  %s", type->field (i).name ());
++                lastval = type->field (i).loc_enumval ();
++                if (print) {
++                        gdb_printf(gdb_stdout, " = %s", plongest(lastval));
++                        gdb_printf(gdb_stdout, "\n");
++                } else if (req->tcb)
++                        req->tcb(EOP_ENUMVAL, req, type->field (i).name (), &lastval, 0, 0);
++        }
++        if (print) {
++                if (TYPE_TAG_NAME(type))
++                        gdb_printf(gdb_stdout, "};\n");
++                else
++                        gdb_printf(gdb_stdout, "} %s;\n", req->name);
++        }
++}
++
++/*
++ *  Given an enum type with no tagname, determine its value.
++ */
++static void
++eval_enum(struct type *type, struct gnu_request *req)
++{
++        int i;
++        int len;
++        long long lastval;
++
++        len = TYPE_NFIELDS (type);
++        lastval = 0;
++
++        for (i = 0; i < len; i++) {
++                if (lastval != type->field (i).loc_enumval ())
++                        lastval = type->field (i).loc_enumval ();
++
++                if (STREQ(type->field (i).name (), req->name)) {
++                        req->tagname = "(unknown)";
++                        req->value = lastval;
++                        return;
++                }
++                lastval++;
++        }
++}
++
++/*
++ *  Walk through a struct type's list of fields looking for the desired
++ *  member field, and when found, return its relevant data.
++ */
++static void
++get_member_data(struct gnu_request *req, struct type *type, long offset, int is_first)
++{
++        short i;
++        struct field *nextfield;
++        short nfields;
++        struct type *typedef_type, *target_type;
++
++        req->member_offset = -1;
++
++        nfields = TYPE_MAIN_TYPE(type)->nfields;
++        nextfield = TYPE_MAIN_TYPE(type)->flds_bnds.fields;
++
++        if (nfields == 0 && is_first /* The first call */) {
++                struct type *newtype;
++                newtype = lookup_transparent_type(req->name);
++                if (newtype) {
++                        console("get_member_data(%s.%s): switching type from %lx to %lx\n",
++                                req->name, req->member, type, newtype);
++                        nfields = TYPE_MAIN_TYPE(newtype)->nfields;
++                        nextfield = TYPE_MAIN_TYPE(newtype)->flds_bnds.fields;
++                }
++        }
++
++        for (i = 0; i < nfields; i++) {
++                if (*nextfield->name() == 0) { /* Anonymous struct/union */
++                        get_member_data(req, nextfield->type(),
++                            offset + nextfield->loc_bitpos(), 0);
++                        if (req->member_offset != -1)
++                                return;
++                } else {
++                        /* callback may be just looking for a specific member name */
++                        if (req->tcb) {
++                                if (req->tcb(EOP_MEMBER_NAME, req, nextfield->name(), 0, 0, 0)) {
++                                        long bitpos = nextfield->loc_bitpos();
++                                        long bitsize = FIELD_BITSIZE(*nextfield);
++                                        long len = nextfield->type()->length ();
++                                        long byteOffset;
++                                        offset += nextfield->loc_bitpos();
++                                        byteOffset = offset/8;
++                                        console("EOP_MEMBER_SIZES\n");
++                                        req->tcb(EOP_MEMBER_SIZES, req, &byteOffset, &len, &bitpos, &bitsize);
++                                        /* callback with full type info */
++                                        drillDownType(req, nextfield->type());
++                                }
++                        } else if (STREQ(req->member, nextfield->name())) {
++                                req->member_offset = offset + nextfield->loc_bitpos();
++                                req->member_length = nextfield->type()->length ();
++                                req->member_typecode = TYPE_CODE(nextfield->type());
++                                req->member_main_type_name = (char *)TYPE_NAME(nextfield->type());
++                                req->member_main_type_tag_name = (char *)TYPE_TAG_NAME(nextfield->type());
++                                target_type = nextfield->type()->target_type ();
++                                if (target_type) {
++                                        req->member_target_type_name = (char *)TYPE_NAME(target_type);
++                                        req->member_target_type_tag_name = (char *)TYPE_TAG_NAME(target_type);
++                                }
++                                if ((req->member_typecode == TYPE_CODE_TYPEDEF) &&
++                                    (typedef_type = check_typedef(nextfield->type()))) {
++                                        req->member_length = typedef_type->length ();
++                                }
++                                return;
++                        }
++                }
++                nextfield++;
++        }
++}
++
++/*
++ *  Check whether a command exists.  If it doesn't, the command will be
++ *  returned indirectly via the error_hook.
++ */
++static void
++gdb_command_exists(struct gnu_request *req)
++{
++        extern struct cmd_list_element *cmdlist;
++
++        req->value = FALSE;
++        lookup_cmd((const char **)&req->name, cmdlist, "", NULL, 0, 1);
++        req->value = TRUE;
++}
++
++static void
++gdb_function_numargs(struct gnu_request *req)
++{
++        struct symbol *sym;
++
++        sym = find_pc_function(req->pc);
++
++        if (!sym || TYPE_CODE(sym->type()) != TYPE_CODE_FUNC) {
++                req->flags |= GNU_COMMAND_FAILED;
++                return;
++        }
++
++        req->value = (ulong)TYPE_NFIELDS(sym->type());
++}
++
++struct load_module *gdb_current_load_module = NULL;
++
++static void
++gdb_add_symbol_file(struct gnu_request *req)
++{
++        struct load_module *lm;
++        int i;
++        int allsect = 0;
++        char *secname;
++        char buf[96];
++
++        gdb_current_load_module = lm = (struct load_module *)req->addr;
++
++        req->name = lm->mod_namelist;
++        gdb_delete_symbol_file(req);
++        lm->loaded_objfile = NULL;
++
++        if ((lm->mod_flags & MOD_NOPATCH) == 0) {
++                for (i = 0 ; i < lm->mod_sections; i++) {
++                    if (STREQ(lm->mod_section_data[i].name, ".text") &&
++                        (lm->mod_section_data[i].flags & SEC_FOUND))
++                            allsect = 1;
++                }
++
++                if (!allsect) {
++                    sprintf(req->buf, "add-symbol-file %s 0x%lx %s", lm->mod_namelist,
++                            lm->mod_text_start ? lm->mod_text_start : lm->mod_base,
++                            lm->mod_flags & MOD_DO_READNOW ? "-readnow" : "");
++                    if (lm->mod_data_start) {
++                            sprintf(buf, " -s .data 0x%lx", lm->mod_data_start);
++                            strcat(req->buf, buf);
++                    }
++                    if (lm->mod_bss_start) {
++                            sprintf(buf, " -s .bss 0x%lx", lm->mod_bss_start);
++                            strcat(req->buf, buf);
++                    }
++                    if (lm->mod_rodata_start) {
++                            sprintf(buf, " -s .rodata 0x%lx", lm->mod_rodata_start);
++                            strcat(req->buf, buf);
++                    }
++                } else {
++                    sprintf(req->buf, "add-symbol-file %s 0x%lx %s", lm->mod_namelist,
++                            lm->mod_text_start, lm->mod_flags & MOD_DO_READNOW ?
++                            "-readnow" : "");
++                    for (i = 0; i < lm->mod_sections; i++) {
++                            secname = lm->mod_section_data[i].name;
++                            if ((lm->mod_section_data[i].flags & SEC_FOUND) &&
++                                !STREQ(secname, ".text")) {
++                                    if (lm->mod_section_data[i].addr)
++                                        sprintf(buf, " -s %s 0x%lx", secname, lm->mod_section_data[i].addr);
++                                    else
++                                        sprintf(buf, " -s %s 0x%lx", secname,
++                                            lm->mod_section_data[i].offset + lm->mod_base);
++                                    strcat(req->buf, buf);
++                            }
++                    }
++                }
++        }
++
++        if (gdb_CRASHDEBUG(1))
++            gdb_printf(gdb_stdout, "%s\n", req->buf);
++
++               execute_command(req->buf, FALSE);
++
++        for (objfile *objfile : current_program_space->objfiles ()) {
++                if (same_file((char *)objfile_name(objfile), lm->mod_namelist)) {
++                        if (objfile->separate_debug_objfile)
++                                lm->loaded_objfile = objfile->separate_debug_objfile;
++                        else
++                                lm->loaded_objfile = objfile;
++                        break;
++                }
++        }
++
++        if (!lm->loaded_objfile)
++                req->flags |= GNU_COMMAND_FAILED;
++}
++
++static void
++gdb_delete_symbol_file(struct gnu_request *req)
++{
++        for (objfile *objfile : current_program_space->objfiles ()) {
++                if (STREQ(objfile_name(objfile), req->name) ||
++                    same_file((char *)objfile_name(objfile), req->name)) {
++                        objfile->unlink ();
++                        break;
++                }
++        }
++
++        if (gdb_CRASHDEBUG(2)) {
++                gdb_printf(gdb_stdout, "current object files:\n");
++                for (objfile *objfile : current_program_space->objfiles ())
++                        gdb_printf(gdb_stdout, "  %s\n", objfile_name(objfile));
++        }
++}
++
++/*
++ *  Walk through all minimal_symbols, patching their values with the
++ *  correct addresses.
++ */
++static void
++gdb_patch_symbol_values(struct gnu_request *req)
++{
++        req->name = PATCH_KERNEL_SYMBOLS_START;
++        patch_kernel_symbol(req);
++
++       for (objfile *objfile : current_program_space->objfiles ())
++           for (minimal_symbol *msymbol : objfile->msymbols ())
++        {
++                req->name = (char *)msymbol->m_name;
++                req->addr = (ulong)(&((msymbol)->m_value.ivalue));
++                if (!patch_kernel_symbol(req)) {
++                        req->flags |= GNU_COMMAND_FAILED;
++                        break;
++                }
++        }
++
++        req->name = PATCH_KERNEL_SYMBOLS_STOP;
++        patch_kernel_symbol(req);
++
++        clear_symtab_users(0);
++        gdb_merge_flags |= KERNEL_SYMBOLS_PATCHED;
++}
++
++static void
++gdb_get_symbol_type(struct gnu_request *req)
++{
++        expression_up expr;
++        struct value *val;
++        struct type *type;
++        struct type *target_type;
++
++        req->typecode = TYPE_CODE_UNDEF;
++
++        expr = parse_expression (req->name);
++        val = evaluate_type (expr.get());
++
++        type = value_type(val);
++
++        req->type_name = (char *)TYPE_MAIN_TYPE(type)->name;
++        req->typecode = TYPE_MAIN_TYPE(type)->code;
++        req->length = type->length();
++        req->type_tag_name = (char *)TYPE_TAG_NAME(type);
++        target_type = type->target_type();
++
++        if (target_type) {
++                req->target_typename = (char *)TYPE_MAIN_TYPE(target_type)->name;
++                req->target_typecode = TYPE_MAIN_TYPE(target_type)->code;
++                req->target_length = target_type->length();
++        }
++
++        if (req->member)
++                get_member_data(req, type, 0, 1);
++}
++
++static void
++gdb_debug_command(struct gnu_request *req)
++{
++
++}
++
++/*
++ *  lookup_symbol(), pull a symbol value bait-and-switch operation by altering
++ *  either a data symbol's address value or a text symbol's block start address.
++ */
++static void
++gdb_bait_and_switch(char *name, struct symbol *sym)
++{
++        struct bound_minimal_symbol msym;
++        struct block *block;
++
++        if ((gdb_merge_flags & KERNEL_SYMBOLS_PATCHED) &&
++            (msym = lookup_minimal_symbol(name, NULL, gdb_kernel_objfile)).minsym) {
++                if (sym->aclass () == LOC_BLOCK) {
++                        block = (struct block *)(sym->value_block ());
++                        block->set_start(msym.value_address());
++                } else
++                        sym->set_value_address (msym.value_address());
++        }
++}
++
++#include "valprint.h"
++
++void
++get_user_print_option_address(struct gnu_request *req)
++{
++        extern struct value_print_options user_print_options;
++
++        req->addr = 0;
++
++        if (strcmp(req->name, "output_format") == 0)
++                req->addr = (ulong)&user_print_options.output_format;
++        if (strcmp(req->name, "print_max") == 0)
++                req->addr = (ulong)&user_print_options.print_max;
++        if (strcmp(req->name, "prettyprint_structs") == 0)
++                req->addr = (ulong)&user_print_options.prettyformat_structs;
++        if (strcmp(req->name, "prettyprint_arrays") == 0)
++                req->addr = (ulong)&user_print_options.prettyformat_arrays;
++        if (strcmp(req->name, "repeat_count_threshold") == 0)
++                req->addr = (ulong)&user_print_options.repeat_count_threshold;
++        if (strcmp(req->name, "stop_print_at_null") == 0)
++                req->addr = (ulong)&user_print_options.stop_print_at_null;
++        if (strcmp(req->name, "output_radix") == 0)
++                req->addr = (ulong)&output_radix;
++}
++
++CORE_ADDR crash_text_scope;
++
++static void
++gdb_set_crash_block(struct gnu_request *req)
++{
++        if (!req->addr) {  /* debug */
++                crash_text_scope = 0;
++                return;
++        }
++
++        if ((req->addr2 = (ulong)block_for_pc(req->addr)))
++                crash_text_scope = req->addr;
++        else {
++                crash_text_scope = 0;
++                req->flags |= GNU_COMMAND_FAILED;
++        }
++}
++
++static const struct block *
++gdb_get_crash_block(void)
++{
++        if (crash_text_scope)
++                return block_for_pc(crash_text_scope);
++        else
++                return NULL;
++}
++
++static long
++lookup_struct_contents(struct gnu_request *req)
++{
++  int i;
++  long r;
++  struct field *f;
++  struct main_type *m;
++  const char *n;
++  struct main_type *top_m = (struct main_type *)req->addr;
++  char *type_name = req->type_name;
++
++  if (!top_m || !type_name)
++    return 0;
++
++  for (i = 0; i < top_m->nfields; i++)
++    {
++      f = top_m->flds_bnds.fields + i;
++      if (!f->type())
++        continue;
++      m = f->type()->main_type;
++
++      // If the field is an array, check the target type -
++      // it might be structure, or might not be.
++      // - struct request_sock *syn_table[0];
++      //   here m->target_type->main_type->code is expected
++      //   to be TYPE_CODE_PTR
++      // - struct list_head vec[TVN_SIZE];
++      //   here m->target_type->main_type->code should be
++      //   TYPE_CODE_STRUCT
++      if (m->code == TYPE_CODE_ARRAY && m->m_target_type)
++        m = m->m_target_type->main_type;
++
++      /* Here is a recursion.
++       * If we have struct variable (not pointer),
++       * scan this inner structure
++       */
++      if (m->code == TYPE_CODE_STRUCT) {
++        req->addr = (ulong)m;
++        r = lookup_struct_contents(req);
++        req->addr = (ulong)top_m;
++        if (r)
++          return 1;
++      }
++
++      if (m->code == TYPE_CODE_PTR && m->m_target_type)
++        m = m->m_target_type->main_type;
++      if (m->name)
++        n = m->name;
++      else
++        continue;
++
++      if (strstr(n, type_name))
++        return 1;
++    }
++
++  return 0;
++}
++
++static void
++iterate_datatypes (struct gnu_request *req)
++{
++  for (objfile *objfile : current_program_space->objfiles ())
++    {
++      objfile->expand_all_symtabs ();
++
++      for (compunit_symtab *cust : objfile->compunits ())
++        {
++          const struct blockvector *bv = cust->blockvector();
++
++          for (int i = GLOBAL_BLOCK; i <= STATIC_BLOCK; ++i)
++            {
++              const struct block *b = bv->block(i);
++              struct block_iterator iter;
++              struct symbol *sym;
++
++              ALL_BLOCK_SYMBOLS (b, iter, sym)
++                {
++                  QUIT;
++
++                  if (sym->aclass () != LOC_TYPEDEF)
++                    continue;
++
++                  if (req->highest &&
++                    !(req->lowest <= sym->type()->length() && sym->type()->length() <= req->highest))
++                        continue;
++
++                  req->addr = (ulong)(sym->type()->main_type);
++                  req->name = (char *)(sym->m_name);
++                  req->length = sym->type()->length();
++
++                  if (req->member) {
++                    req->value = lookup_struct_contents(req);
++                    if (!req->value)
++                      continue;
++                  }
++                  req->callback(req, req->callback_data);
++                }
++            }
++        }
++    }
++}
++#endif
+--- gdb-13.2/gdb/top.c.orig
++++ gdb-13.2/gdb/top.c
+@@ -302,7 +302,7 @@
+     errstream (errstream_),
+     input_fd (fileno (instream)),
+     m_input_interactive_p (ISATTY (instream)),
+-    m_gdb_stdout (new pager_file (new stdio_file (outstream))),
++    m_gdb_stdout (new stdio_file (outstream)),
+     m_gdb_stdin (new stdio_file (instream)),
+     m_gdb_stderr (new stderr_file (errstream)),
+     m_gdb_stdlog (new timestamped_file (m_gdb_stderr))
+--- gdb-13.2/gdb/tui/tui-io.c.orig
++++ gdb-13.2/gdb/tui/tui-io.c
+@@ -915,7 +915,7 @@
+ #endif
+ 
+   /* Create tui output streams.  */
+-  tui_stdout = new pager_file (new tui_file (stdout, true));
++  tui_stdout = new tui_file (stdout, true);
+   tui_stderr = new tui_file (stderr, false);
+   tui_stdlog = new timestamped_file (tui_stderr);
+   tui_out = new tui_ui_out (tui_stdout);
+--- gdb-13.2/gdb/ui-file.h.orig
++++ gdb-13.2/gdb/ui-file.h
+@@ -269,10 +269,10 @@
+   int fd () const override
+   { return m_fd; }
+ 
+-private:
+   /* Sets the internal stream to FILE, and saves the FILE's file
+      descriptor in M_FD.  */
+   void set_stream (FILE *file);
++private:
+ 
+   /* The file.  */
+   FILE *m_file;
+--- gdb-13.2/gdb/xml-syscall.c.orig
++++ gdb-13.2/gdb/xml-syscall.c
+@@ -37,7 +37,11 @@
+ static void
+ syscall_warn_user (void)
+ {
++#ifdef CRASH_MERGE
++  static int have_warned = 1;
++#else
+   static int have_warned = 0;
++#endif
+   if (!have_warned)
+     {
+       have_warned = 1;
+--- gdb-13.2/libiberty/Makefile.in.orig
++++ gdb-13.2/libiberty/Makefile.in
+@@ -181,6 +181,7 @@
+ 	./getruntime.$(objext) ./hashtab.$(objext) ./hex.$(objext)	\
+ 	./lbasename.$(objext) ./lrealpath.$(objext)			\
+ 	./make-relative-prefix.$(objext) ./make-temp-file.$(objext)	\
++	./mkstemps.$(objext)                                            \
+ 	./objalloc.$(objext)						\
+ 	./obstack.$(objext)						\
+ 	./partition.$(objext) ./pexecute.$(objext) ./physmem.$(objext)	\
+@@ -214,7 +215,7 @@
+ 	./index.$(objext) ./insque.$(objext)				\
+ 	./memchr.$(objext) ./memcmp.$(objext) ./memcpy.$(objext) 	\
+ 	./memmem.$(objext) ./memmove.$(objext)				\
+-	 ./mempcpy.$(objext) ./memset.$(objext) ./mkstemps.$(objext)	\
++	 ./mempcpy.$(objext) ./memset.$(objext) 			\
+ 	./pex-djgpp.$(objext) ./pex-msdos.$(objext)			\
+ 	 ./pex-unix.$(objext) ./pex-win32.$(objext)			\
+ 	 ./putenv.$(objext)						\
+--- gdb-13.2/Makefile.in.orig
++++ gdb-13.2/Makefile.in
+@@ -365,6 +365,9 @@
+ AS_FOR_BUILD = @AS_FOR_BUILD@
+ CC_FOR_BUILD = @CC_FOR_BUILD@
+ CFLAGS_FOR_BUILD = @CFLAGS_FOR_BUILD@
++ifeq (${CRASH_TARGET}, PPC64)
++CFLAGS_FOR_BUILD += -m64 -fPIC
++endif
+ CPP_FOR_BUILD = @CPP_FOR_BUILD@
+ CPPFLAGS_FOR_BUILD = @CPPFLAGS_FOR_BUILD@
+ CXXFLAGS_FOR_BUILD = @CXXFLAGS_FOR_BUILD@
+@@ -438,6 +441,9 @@
+ GNATMAKE = @GNATMAKE@
+ 
+ CFLAGS = @CFLAGS@
++ifeq (${CRASH_TARGET}, PPC64)
++CFLAGS += -m64 -fPIC
++endif
+ LDFLAGS = @LDFLAGS@
+ LIBCFLAGS = $(CFLAGS)
+ CXXFLAGS = @CXXFLAGS@
+--- gdb-13.2/opcodes/i386-dis.c.orig	
++++ gdb-13.2/opcodes/i386-dis.c
+@@ -9871,6 +9871,10 @@
+       threebyte = *ins.codep;
+       dp = &dis386_twobyte[threebyte];
+       ins.need_modrm = twobyte_has_modrm[threebyte];
++      if (dp->name && ((strcmp(dp->name, "ud2a") == 0) || (strcmp(dp->name, "ud2") == 0))) {
++        extern int kernel_BUG_encoding_bytes(void);
++        ins.codep += kernel_BUG_encoding_bytes();
++      }
+       ins.codep++;
+     }
+   else
+--- gdb-13.2/readline/readline/misc.c.orig
++++ gdb-13.2/readline/readline/misc.c
+@@ -401,7 +401,7 @@
+ 
+ #if defined (VI_MODE)
+   if (rl_editing_mode == vi_mode && _rl_keymap != vi_insertion_keymap)
+-    rl_point = 0;
++    rl_point = rl_end;
+ #endif /* VI_MODE */
+ 
+   if (rl_editing_mode == emacs_mode)
+--- gdb-13.2/readline/readline/readline.h.orig
++++ gdb-13.2/readline/readline/readline.h
+@@ -405,7 +405,7 @@
+ #if defined (USE_VARARGS) && defined (PREFER_STDARG)
+ extern int rl_message (const char *, ...)  __attribute__((__format__ (printf, 1, 2)));
+ #else
+-extern int rl_message ();
++extern int rl_message (void);
+ #endif
+ 
+ extern int rl_show_char PARAMS((int));
+--- gdb-13.2/readline/readline/rltypedefs.h.orig
++++ gdb-13.2/readline/readline/rltypedefs.h
+@@ -32,10 +32,10 @@
+ #  define _FUNCTION_DEF
+ 
+ #if defined(__GNUC__) || defined(__clang__)
+-typedef int Function () __attribute__ ((deprecated));
+-typedef void VFunction () __attribute__ ((deprecated));
+-typedef char *CPFunction () __attribute__ ((deprecated));
+-typedef char **CPPFunction () __attribute__ ((deprecated));
++typedef int Function (void) __attribute__ ((deprecated));
++typedef void VFunction (void) __attribute__ ((deprecated));
++typedef char *CPFunction (void) __attribute__ ((deprecated));
++typedef char **CPPFunction (void) __attribute__ ((deprecated));
+ #else
+ typedef int Function ();
+ typedef void VFunction ();
+--- gdb-13.2/readline/readline/util.c.orig
++++ gdb-13.2/readline/readline/util.c
+@@ -488,10 +488,13 @@
+ 
+   if (_rl_tracefp == 0)
+     _rl_tropen ();
++  if (!_rl_tracefp)
++    goto out;
+   vfprintf (_rl_tracefp, format, args);
+   fprintf (_rl_tracefp, "\n");
+   fflush (_rl_tracefp);
+ 
++out:
+   va_end (args);
+ }
+ 
+@@ -511,15 +514,16 @@
+ #endif
+   snprintf (fnbuf, sizeof (fnbuf), "%s/rltrace.%ld", x, (long)getpid());
+   unlink(fnbuf);
+-  _rl_tracefp = fopen (fnbuf, "w+");
++  _rl_tracefp = fopen (fnbuf, "w+xe");
+   return _rl_tracefp != 0;
+ }
+ 
+ int
+ _rl_trclose (void)
+ {
+-  int r;
++  int r = 0;
+ 
++  if (_rl_tracefp)
+   r = fclose (_rl_tracefp);
+   _rl_tracefp = 0;
+   return r;
+--- gdb-13.2/gdb/objfiles.h.orig
++++ gdb-13.2/gdb/objfiles.h
+@@ -784,6 +784,8 @@ struct objfile
+      next time.  If an objfile does not have the symbols, it will
+      never have them.  */
+   bool skip_jit_symbol_lookup = false;
++
++  bool all_symtabs_expanded = false;
+ };
+ 
+ /* A deleter for objfile.  */
+--- gdb-13.2/gdb/symfile.c.orig
++++ gdb-13.2/gdb/symfile.c
+@@ -1124,6 +1124,7 @@ symbol_file_add_with_addrs (const gdb_bfd_ref_ptr &abfd, const char *name,
+ 		    styled_string (file_name_style.style (), name));
+ 
+       objfile->expand_all_symtabs ();
++      objfile->all_symtabs_expanded = true;
+     }
+ 
+   /* Note that we only print a message if we have no symbols and have
+@@ -2654,6 +2655,7 @@ reread_symbols (int from_tty)
+ 					   objfile_name (objfile)));
+ 
+ 	      objfile->expand_all_symtabs ();
++              objfile->all_symtabs_expanded = true;
+ 	    }
+ 
+ 	  if (!objfile_has_symbols (objfile))
+--- gdb-13.2/gdb/symtab.c.orig
++++ gdb-13.2/gdb/symtab.c
+@@ -7248,8 +7248,9 @@ gdb_get_line_number(struct gnu_request *req)
+                  */
+                 if (req->lm) {
+                         objfile = req->lm->loaded_objfile;
+-                        if (!objfile_has_full_symbols(objfile)) {
++                        if (!objfile->all_symtabs_expanded) {
+                                objfile->expand_all_symtabs ();
++                               objfile->all_symtabs_expanded = true;
+                                 sal = find_pc_line(pc, 0);
+                         }
+                 }
+@@ -7913,6 +7914,7 @@ iterate_datatypes (struct gnu_request *req)
+   for (objfile *objfile : current_program_space->objfiles ())
+     {
+       objfile->expand_all_symtabs ();
++      objfile->all_symtabs_expanded = true;
+ 
+       for (compunit_symtab *cust : objfile->compunits ())
+         {
