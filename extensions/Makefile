@@ -23,7 +23,7 @@
 # suffice, create a .mk file with the same prefix as the .c file,
 # and that makefile will be invoked. 
 # 
-
+CC ?= gcc
 CONTRIB_SO := $(patsubst %.c,%.so,$(wildcard *.c))
 
 all: link_defs $(CONTRIB_SO)
@@ -36,16 +36,13 @@ $(CONTRIB_SO): %.so: %.c defs.h
 	@if [ -f $*.mk ]; then \
 		$(MAKE) -f $*.mk; \
 	else \
-		grep '((constructor))' $*.c > .constructor; \
-		if [ -s .constructor ]; then \
-			echo "gcc -Wall -g -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
-			gcc -Wall -g -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
-		fi; \
-		if [ ! -s .constructor ]; then \
-			echo "gcc -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
-			gcc -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
-		fi; \
-		rm -f .constructor; \
+		grep -q '((constructor))' $*.c && { \
+			echo "$(CC) -Wall -g -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
+			$(CC) -Wall -g -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
+		} || { \
+			echo "$(CC) -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS)"; \
+			$(CC) -Wall -g -nostartfiles -shared -rdynamic -o $@ $*.c -fPIC -D$(TARGET) $(TARGET_CFLAGS) $(GDB_FLAGS); \
+		}; \
 	fi
 
 clean:

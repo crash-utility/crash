@@ -1,0 +1,42 @@
+name: Testing Farm CI
+
+on:
+  schedule:
+    - cron: '10 2 * * 1'
+
+jobs:
+  cron_schedule:
+    name: Testing Farm CI (${{ matrix.arch }} ${{ matrix.compose }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64]
+        compose: [Fedora-Rawhide]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checking TF_API_KEY
+        run: |
+          if [ -z "${{ secrets.TF_API_KEY }}" ]; then
+            echo "TF_API_KEY is empty!"
+            exit 1
+          else
+            echo "TF_API_KEY is set!"
+          fi
+
+      - name: Schedule tests on Testing Farm
+        id: testing-farm
+        uses: sclorg/testing-farm-as-github-action@v4
+        with:
+          api_key: ${{ secrets.TF_API_KEY }}
+          git_url: https://github.com/crash-utility/crash.git
+          tf_scope: private
+          git_ref: master
+          tmt_path: ci-tests
+          tmt_plan_regex: local$
+          compose: ${{ matrix.compose }}
+          arch: ${{ matrix.arch }}

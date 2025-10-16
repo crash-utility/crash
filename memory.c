@@ -531,6 +531,8 @@ vm_init(void)
 		ASSIGN_OFFSET(page_mapping) = MEMBER_OFFSET("page", "_mapcount") +
 			STRUCT_SIZE("atomic_t") + sizeof(ulong);
         MEMBER_OFFSET_INIT(page_index, "page", "index");
+	if (INVALID_MEMBER(page_index))		/* 6.16 and later */
+		MEMBER_OFFSET_INIT(page_index, "page", "__folio_index");
 	if (INVALID_MEMBER(page_index))
 		ANON_MEMBER_OFFSET_INIT(page_index, "page", "index");
         MEMBER_OFFSET_INIT(page_buffers, "page", "buffers");
@@ -2504,7 +2506,7 @@ readmem(ulonglong addr, int memtype, void *buffer, long size,
 
 		case PAGE_EXCLUDED:
 			RETURN_ON_PARTIAL_READ();
-                        if (PRINT_ERROR_MESSAGE)
+                        if (CRASHDEBUG(8))
                         	error(INFO, PAGE_EXCLUDED_ERRMSG, memtype_string(memtype, 0), addr, type);
                         goto readmem_error;
 

@@ -1296,7 +1296,7 @@ cmd_mount(void)
 	 *  through it for each search argument entered.
 	 */
 	open_tmpfile();
-	show_mounts(0, MOUNT_PRINT_FILES | 
+	show_mounts(0, (VALID_MEMBER(super_block_s_files) ? MOUNT_PRINT_FILES : 0) |
 		(VALID_MEMBER(super_block_s_dirty) ? MOUNT_PRINT_INODES : 0), 
 		namespace_context);
 
@@ -1366,6 +1366,10 @@ cmd_mount(void)
 
 	close_tmpfile();
 }
+
+/* For kernels 5.8-6.7, we're skipping show mount cursor entries.
+ */
+#define MNT_CURSOR             0x10000000
 
 /*
  *  Do the work for cmd_mount();
@@ -1492,6 +1496,15 @@ show_mounts(ulong one_vfsmount, int flags, struct task_context *namespace_contex
 
 		sbp = ULONG(vfsmount_buf + OFFSET(vfsmount_mnt_sb)); 
 		if (!IS_KVADDR(sbp)) {
+			if (sbp == 0 && VALID_MEMBER(proc_mounts_cursor) &&
+			    VALID_MEMBER(vfsmount_mnt_flags)) {
+				int mnt_flags = INT(vfsmount_buf + OFFSET(vfsmount_mnt_flags));
+				if (mnt_flags == MNT_CURSOR) {
+					if (CRASHDEBUG(1))
+						fprintf(stderr,"skipped cursor vfsmnt: 0x%lx\n", *vfsmnt);
+					continue;
+				}
+			}
 			error(WARNING, "cannot get super_block from vfsmnt: 0x%lx\n", *vfsmnt);
 			continue;
 		}
@@ -2081,6 +2094,8 @@ vfs_init(void)
 	if (INVALID_MEMBER(vfsmount_mnt_devname))
 		MEMBER_OFFSET_INIT(mount_mnt_mountpoint,
 			"mount", "mnt_mountpoint");
+	MEMBER_OFFSET_INIT(vfsmount_mnt_flags, "vfsmount", "mnt_flags");
+	MEMBER_OFFSET_INIT(proc_mounts_cursor, "proc_mounts", "cursor");
 	MEMBER_OFFSET_INIT(mount_mnt, "mount", "mnt");
 	MEMBER_OFFSET_INIT(namespace_root, "namespace", "root");
 	MEMBER_OFFSET_INIT(task_struct_nsproxy, "task_struct", "nsproxy");
@@ -3140,6 +3155,7 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 	tmp_vfsmnt = vfsmnt;
 
 	do {
+	more_vfsmnt:
 		tmp_dentry = parent;
 
 		dentry_buf = fill_dentry_cache(tmp_dentry);
@@ -3195,6 +3211,7 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 						break;
 					else
 						tmp_vfsmnt = mnt_parent;
+					goto more_vfsmnt;
 				}
 			} else if (VALID_STRUCT(mount)) {
 				if (tmp_vfsmnt) {
@@ -3213,6 +3230,7 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 						break;
 					else
 						tmp_vfsmnt = mnt_parent + OFFSET(mount_mnt);
+					goto more_vfsmnt;
 				}
 			}
 			else {
@@ -3222,6 +3240,9 @@ get_pathname(ulong dentry, char *pathname, int length, int full, ulong vfsmnt)
 		}
 						
 	} while (tmp_dentry != parent && parent);
+	if (!STREQ(pathname, "/") && LASTCHAR(pathname) == '/') {
+		LASTCHAR(pathname) = '\0';
+	}
 
 	if (mnt_buf)
 		FREEBUF(mnt_buf);

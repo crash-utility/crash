@@ -306,6 +306,7 @@ task_init(void)
 		MEMBER_SIZE_INIT(task_struct_state, "task_struct", "__state");
 	}
         MEMBER_OFFSET_INIT(task_struct_exit_state, "task_struct", "exit_state");
+        MEMBER_SIZE_INIT(task_struct_exit_state, "task_struct", "exit_state");
         MEMBER_OFFSET_INIT(task_struct_pid, "task_struct", "pid");
         MEMBER_OFFSET_INIT(task_struct_comm, "task_struct", "comm");
         MEMBER_OFFSET_INIT(task_struct_next_task, "task_struct", "next_task");
@@ -3061,7 +3062,7 @@ sort_context_array(void)
 	curtask = CURRENT_TASK();
 	qsort((void *)tt->context_array, (size_t)tt->running_tasks,
         	sizeof(struct task_context), sort_by_pid);
-	set_context(curtask, NO_PID, TRUE);
+	set_context(curtask, NO_PID, FALSE);
 
 	sort_context_by_task();
 }
@@ -3108,7 +3109,7 @@ sort_context_array_by_last_run(void)
 	curtask = CURRENT_TASK();
 	qsort((void *)tt->context_array, (size_t)tt->running_tasks,
         	sizeof(struct task_context), sort_by_last_run);
-	set_context(curtask, NO_PID, TRUE);
+	set_context(curtask, NO_PID, FALSE);
 
 	sort_context_by_task();
 }
@@ -5965,8 +5966,14 @@ task_state(ulong task)
 		state = ULONG(tt->task_struct + OFFSET(task_struct_state));
 	else
 		state = UINT(tt->task_struct + OFFSET(task_struct_state));
-	exit_state = VALID_MEMBER(task_struct_exit_state) ?
-		ULONG(tt->task_struct + OFFSET(task_struct_exit_state)) : 0;
+
+	if (VALID_MEMBER(task_struct_exit_state)
+	    && SIZE(task_struct_exit_state) == sizeof(ulong))
+	    exit_state = ULONG(tt->task_struct + OFFSET(task_struct_exit_state));
+	else if (VALID_MEMBER(task_struct_exit_state))
+	    exit_state = UINT(tt->task_struct + OFFSET(task_struct_exit_state));
+	else
+	    exit_state = 0;
 
         return (state | exit_state);
 }

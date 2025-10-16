@@ -126,6 +126,10 @@ struct user_regs_bitmap_struct {
 	ulong bitmap[32];
 };
 
+#define MAX_EXCEPTION_STACKS 7
+ulong extra_stacks_idx = 0;
+struct user_regs_bitmap_struct *extra_stacks_regs[MAX_EXCEPTION_STACKS] = {0};
+
 static inline bool is_mte_kvaddr(ulong addr)
 {
 	/* check for ARM64_MTE enabled */
@@ -204,7 +208,7 @@ out:
 
 static int
 arm64_get_current_task_reg(int regno, const char *name,
-                   int size, void *value)
+                   int size, void *value, int sid)
 {
 	struct bt_info bt_info, bt_setup;
 	struct task_context *tc;
@@ -222,6 +226,12 @@ arm64_get_current_task_reg(int regno, const char *name,
 	tc = CURRENT_CONTEXT();
 	if (!tc)
 		return FALSE;
+
+	if (sid && sid <= extra_stacks_idx) {
+		ur_bitmap = extra_stacks_regs[extra_stacks_idx - 1];
+		goto get_sub;
+	}
+
 	BZERO(&bt_setup, sizeof(struct bt_info));
 	clone_bt_info(&bt_setup, &bt_info, tc);
 	fill_stackbuf(&bt_info);
@@ -237,25 +247,29 @@ arm64_get_current_task_reg(int regno, const char *name,
 		goto get_all;
 	}
 
+get_sub:
 	switch (regno) {
 	case X0_REGNUM ... X30_REGNUM:
 		if (!NUM_IN_BITMAP(ur_bitmap->bitmap,
 		    REG_SEQ(arm64_pt_regs, regs[0]) + regno - X0_REGNUM)) {
-			FREEBUF(ur_bitmap);
+			if (!sid)
+				FREEBUF(ur_bitmap);
 			return FALSE;
 		}
 		break;
 	case SP_REGNUM:
 		if (!NUM_IN_BITMAP(ur_bitmap->bitmap,
 		    REG_SEQ(arm64_pt_regs, sp))) {
-			FREEBUF(ur_bitmap);
+			if (!sid)
+				FREEBUF(ur_bitmap);
 			return FALSE;
 		}
 		break;
 	case PC_REGNUM:
 		if (!NUM_IN_BITMAP(ur_bitmap->bitmap,
 		    REG_SEQ(arm64_pt_regs, pc))) {
-			FREEBUF(ur_bitmap);
+			if (!sid)
+				FREEBUF(ur_bitmap);
 			return FALSE;
 		}
 		break;
@@ -283,7 +297,7 @@ get_all:
 		break;
 	}
 
-	if (bt_info.need_free) {
+	if (!sid && bt_info.need_free) {
 		FREEBUF(ur_bitmap);
 		bt_info.need_free = FALSE;
 	}
@@ -3676,6 +3690,7 @@ arm64_back_trace_cmd(struct bt_info *bt)
 	int level;
 	ulong exception_frame;
 	FILE *ofp;
+	extra_stacks_idx = 0;
 
 	if (bt->flags & BT_OPT_BACK_TRACE) {
 		if (machdep->flags & UNW_4_14) {
@@ -3727,6 +3742,35 @@ arm64_back_trace_cmd(struct bt_info *bt)
 		stackframe.sp = bt->stkptr;
 		stackframe.pc = bt->instptr;
 		stackframe.fp = bt->frameptr;
+	}
+
+	if (is_task_active(bt->task)) {
+		if (!extra_stacks_regs[extra_stacks_idx]) {
+			extra_stacks_regs[extra_stacks_idx] = (struct user_regs_bitmap_struct *)
+				malloc(sizeof(struct user_regs_bitmap_struct));
+		}
+		memset(extra_stacks_regs[extra_stacks_idx], 0,
+			sizeof(struct user_regs_bitmap_struct));
+		if (bt->task != tt->panic_task && stackframe.sp) {
+			readmem(stackframe.sp - 8, KVADDR, &extra_stacks_regs[extra_stacks_idx]->ur.pc,
+				sizeof(ulong), "extra_stacks_regs.pc", RETURN_ON_ERROR);
+			readmem(stackframe.sp - 16, KVADDR, &extra_stacks_regs[extra_stacks_idx]->ur.sp,
+				sizeof(ulong), "extra_stacks_regs.sp", RETURN_ON_ERROR);
+		} else {
+			extra_stacks_regs[extra_stacks_idx]->ur.pc = stackframe.pc;
+			extra_stacks_regs[extra_stacks_idx]->ur.sp = stackframe.sp;
+		}
+		SET_BIT(extra_stacks_regs[extra_stacks_idx]->bitmap,
+			REG_SEQ(arm64_pt_regs, pc));
+		SET_BIT(extra_stacks_regs[extra_stacks_idx]->bitmap,
+			REG_SEQ(arm64_pt_regs, sp));
+		if (!bt->machdep ||
+		     (extra_stacks_regs[extra_stacks_idx]->ur.sp !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.sp &&
+		      extra_stacks_regs[extra_stacks_idx]->ur.pc !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.pc)) {
+			gdb_add_substack (extra_stacks_idx++);
+		}
 	}
 
 	if (bt->flags & BT_TEXT_SYMBOLS) {
@@ -3849,6 +3893,35 @@ arm64_back_trace_cmd_v2(struct bt_info *bt)
 		stackframe.sp = bt->stkptr;
 		stackframe.pc = bt->instptr;
 		stackframe.fp = bt->frameptr;
+	}
+
+	if (is_task_active(bt->task)) {
+		if (!extra_stacks_regs[extra_stacks_idx]) {
+			extra_stacks_regs[extra_stacks_idx] = (struct user_regs_bitmap_struct *)
+				malloc(sizeof(struct user_regs_bitmap_struct));
+		}
+		memset(extra_stacks_regs[extra_stacks_idx], 0,
+			sizeof(struct user_regs_bitmap_struct));
+		if (bt->task != tt->panic_task && stackframe.sp) {
+			readmem(stackframe.sp - 8, KVADDR, &extra_stacks_regs[extra_stacks_idx]->ur.pc,
+				sizeof(ulong), "extra_stacks_regs.pc", RETURN_ON_ERROR);
+			readmem(stackframe.sp - 16, KVADDR, &extra_stacks_regs[extra_stacks_idx]->ur.sp,
+				sizeof(ulong), "extra_stacks_regs.sp", RETURN_ON_ERROR);
+		} else {
+			extra_stacks_regs[extra_stacks_idx]->ur.pc = stackframe.pc;
+			extra_stacks_regs[extra_stacks_idx]->ur.sp = stackframe.sp;
+		}
+		SET_BIT(extra_stacks_regs[extra_stacks_idx]->bitmap,
+			REG_SEQ(arm64_pt_regs, pc));
+		SET_BIT(extra_stacks_regs[extra_stacks_idx]->bitmap,
+			REG_SEQ(arm64_pt_regs, sp));
+		if (!bt->machdep ||
+		     (extra_stacks_regs[extra_stacks_idx]->ur.sp !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.sp &&
+		      extra_stacks_regs[extra_stacks_idx]->ur.pc !=
+		      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.pc)) {
+			gdb_add_substack (extra_stacks_idx++);
+		}		
 	}
 
 	if (bt->flags & BT_TEXT_SYMBOLS) {
@@ -4465,6 +4538,25 @@ arm64_print_exception_frame(struct bt_info *bt, ulong pt_regs, int mode, FILE *o
 			fprintf(ofp, "ORIG_X0: %016lx  SYSCALLNO: %lx",
 				(ulong)regs->orig_x0, (ulong)regs->syscallno);
 			fprintf(ofp, "  PSTATE: %08lx\n", (ulong)regs->pstate);
+		} else if (!(bt->flags & BT_EFRAME_SEARCH)) {
+			if (!extra_stacks_regs[extra_stacks_idx]) {
+				extra_stacks_regs[extra_stacks_idx] =
+					(struct user_regs_bitmap_struct *)
+					malloc(sizeof(struct user_regs_bitmap_struct));
+			}
+			memset(extra_stacks_regs[extra_stacks_idx], 0,
+				sizeof(struct user_regs_bitmap_struct));
+			memcpy(&extra_stacks_regs[extra_stacks_idx]->ur, regs,
+				sizeof(struct arm64_pt_regs));
+			for (int i = 0; i < sizeof(struct arm64_pt_regs)/sizeof(long); i++)
+				SET_BIT(extra_stacks_regs[extra_stacks_idx]->bitmap, i);
+			if (!bt->machdep ||
+			     (extra_stacks_regs[extra_stacks_idx]->ur.sp !=
+			      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.sp &&
+			      extra_stacks_regs[extra_stacks_idx]->ur.pc !=
+			      ((struct user_regs_bitmap_struct *)(bt->machdep))->ur.pc)) {
+				gdb_add_substack (extra_stacks_idx++);
+			}			
 		}
 	}
 

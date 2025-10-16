@@ -1,0 +1,11 @@
+summary: Generate vmcore and analyze it with crash tool
+environment:
+  KDUMP_UTILS_RPM: kdump-utils
+discover+:
+    test:
+     - /kdump/default_crashkernel
+     - /kdump/config-any
+     - /kdump/crash-sysrq-c
+     - /kdump/build-crash-utility
+     - /kdump/analyse-crash-cmd/common_analyse
+

@@ -110,41 +110,77 @@ struct vmssregs64 {
 	uint64_t	r13;
 	uint64_t	r14;
 	uint64_t	r15;
+	uint64_t	es;
+	uint64_t	cs;
+	uint64_t	ss;
+	uint64_t	ds;
+	uint64_t	fs;
+	uint64_t	gs;
+	uint64_t	ldtr;
+	uint64_t	tr;
+
 	/* manually managed */
 	uint64_t	idtr;
 	uint64_t	cr[VMW_CR64_SIZE / 8];
 	uint64_t	rip;
 	uint64_t	rflags;
+	uint64_t	fs_base;
+	uint64_t	gs_base;
 };
 typedef struct vmssregs64 vmssregs64;
 
-#define REGS_PRESENT_RAX    1<<0
-#define REGS_PRESENT_RCX    1<<1
-#define REGS_PRESENT_RDX    1<<2
-#define REGS_PRESENT_RBX    1<<3
-#define REGS_PRESENT_RBP    1<<4
-#define REGS_PRESENT_RSP    1<<5
-#define REGS_PRESENT_RSI    1<<6
-#define REGS_PRESENT_RDI    1<<7
-#define REGS_PRESENT_R8     1<<8
-#define REGS_PRESENT_R9     1<<9
-#define REGS_PRESENT_R10    1<<10
-#define REGS_PRESENT_R11    1<<11
-#define REGS_PRESENT_R12    1<<12
-#define REGS_PRESENT_R13    1<<13
-#define REGS_PRESENT_R14    1<<14
-#define REGS_PRESENT_R15    1<<15
-#define REGS_PRESENT_IDTR   1<<16
-#define REGS_PRESENT_CR0    1<<17
-#define REGS_PRESENT_CR1    1<<18
-#define REGS_PRESENT_CR2    1<<19
-#define REGS_PRESENT_CR3    1<<20
-#define REGS_PRESENT_CR4    1<<21
-#define REGS_PRESENT_RIP    1<<22
-#define REGS_PRESENT_RFLAGS 1<<23
-#define REGS_PRESENT_GPREGS 65535
-#define REGS_PRESENT_CRS    4063232
-#define REGS_PRESENT_ALL    16777215
+typedef enum SegmentName {
+	SEG_ES,
+	SEG_CS,
+	SEG_SS,
+	SEG_DS,
+	SEG_FS,
+	SEG_GS,
+	SEG_LDTR,
+	SEG_TR,
+	NUM_SEGS
+} SegmentName;
+
+#define REGS_PRESENT_RAX    1L<<0
+#define REGS_PRESENT_RCX    1L<<1
+#define REGS_PRESENT_RDX    1L<<2
+#define REGS_PRESENT_RBX    1L<<3
+#define REGS_PRESENT_RBP    1L<<4
+#define REGS_PRESENT_RSP    1L<<5
+#define REGS_PRESENT_RSI    1L<<6
+#define REGS_PRESENT_RDI    1L<<7
+#define REGS_PRESENT_R8     1L<<8
+#define REGS_PRESENT_R9     1L<<9
+#define REGS_PRESENT_R10    1L<<10
+#define REGS_PRESENT_R11    1L<<11
+#define REGS_PRESENT_R12    1L<<12
+#define REGS_PRESENT_R13    1L<<13
+#define REGS_PRESENT_R14    1L<<14
+#define REGS_PRESENT_R15    1L<<15
+#define REGS_PRESENT_IDTR   1L<<16
+#define REGS_PRESENT_CR0    1L<<17
+#define REGS_PRESENT_CR1    1L<<18
+#define REGS_PRESENT_CR2    1L<<19
+#define REGS_PRESENT_CR3    1L<<20
+#define REGS_PRESENT_CR4    1L<<21
+#define REGS_PRESENT_RIP    1L<<22
+#define REGS_PRESENT_RFLAGS 1L<<23
+
+#define REGS_PRESENT_ES     1L<<24
+#define REGS_PRESENT_CS     1L<<25
+#define REGS_PRESENT_SS     1L<<26
+#define REGS_PRESENT_DS     1L<<27
+#define REGS_PRESENT_FS     1L<<28
+#define REGS_PRESENT_GS     1L<<29
+#define REGS_PRESENT_LDTR   1L<<30
+#define REGS_PRESENT_TR     1L<<31
+#define REGS_PRESENT_FS_BASE  1L<<32
+#define REGS_PRESENT_GS_BASE  1L<<33
+
+#define REGS_PRESENT_GPREGS   0x000000000000FFFF
+#define REGS_PRESENT_CRS      0x00000000003E0000
+#define REGS_PRESENT_SEG      0x00000003FF000000
+#define REGS_PRESENT_ALL      0x00000003FFFFFFFF
 
 #define MAX_REGIONS	3
 struct vmssdata {
@@ -159,7 +195,7 @@ struct vmssdata {
 	uint64_t	memsize;
 	ulong		phys_base;
 	int		separate_vmem;
-	uint32_t	*vcpu_regs;
+	uint64_t	*vcpu_regs;
 	uint64_t	num_vcpus;
 	vmssregs64	**regs64;
 };

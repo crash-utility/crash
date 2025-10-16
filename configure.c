@@ -169,7 +169,9 @@ void add_extra_lib(char *);
 #define TARGET_CFLAGS_LOONGARCH64     "TARGET_CFLAGS="
 #define TARGET_CFLAGS_LOONGARCH64_ON_X86_64	"TARGET_CFLAGS="
 
+#ifndef GDB_TARGET_DEFAULT
 #define GDB_TARGET_DEFAULT        "GDB_CONF_FLAGS="
+#endif
 #define GDB_TARGET_ARM_ON_X86     "GDB_CONF_FLAGS=--target=arm-elf-linux"
 #define GDB_TARGET_ARM_ON_X86_64  "GDB_CONF_FLAGS=--target=arm-elf-linux CFLAGS=-m32 CXXFLAGS=-m32"
 #define GDB_TARGET_X86_ON_X86_64  "GDB_CONF_FLAGS=--target=i686-pc-linux-gnu CFLAGS=-m32 CXXFLAGS=-m32"
@@ -386,6 +388,7 @@ get_current_configuration(struct supported_gdb_version *sp)
 	static char buf[512];
 	char *p;
 
+#ifndef CONF_TARGET_ARCH
 #ifdef __alpha__
         target_data.target = ALPHA;
 #endif
@@ -431,6 +434,9 @@ get_current_configuration(struct supported_gdb_version *sp)
 #endif
 #ifdef __loongarch64
 	target_data.target = LOONGARCH64;
+#endif
+#else
+       target_data.target = CONF_TARGET_ARCH;
 #endif
 
 	set_initial_target(sp);

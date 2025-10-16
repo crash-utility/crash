@@ -1110,7 +1110,7 @@ decimal(char *s, int count)
 	} else
 		cnt = count;
 
-    	for (p = &s[0], digits = 0; *p; p++) {
+	for (p = &s[0], digits = 0; p && *p; p++) {
 	        switch(*p)
 	        {
 	            case '0':

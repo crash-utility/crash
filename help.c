@@ -6301,7 +6301,7 @@ char *help__list[] = {
 "    ffff88005ac10180",
 "      comm = \"crash\"",
 "",
-"  To display a liked list whose head node and other nodes are embedded within",
+"  To display a linked list whose head node and other nodes are embedded within",
 "  either same or different data structures resulting in different offsets for",
 "  head node and other nodes, e.g. dentry.d_subdirs and dentry.d_child, the",
 "  -O option can be used:",
@@ -8186,6 +8186,16 @@ char *help_net[] = {
 NULL               
 };
 
+char *help_rustfilt[] = {
+"rustfilt",
+"demangle a mangled Rust symbol to human readable symbol",
+"<symbol>",
+"  This command converts a mangled Rust symbol to human readable symbol.",
+"\nEXAMPLES",
+"  crash> rustfilt _RNvNtCshc5sK6KjdJJ_6kernel5print11call_printk",
+"  kernel::print::call_printk",
+NULL
+};
 
 char *help_waitq[] = {
 "waitq",
@@ -9617,6 +9627,11 @@ char *README[] = {
 "",
 README_ENTER_DIRECTORY,
 "    $ make",
+"",
+"  To cross compile the crash utility for aarch64 on x86_64: ",
+"    $ make CROSS_COMPILE=aarch64-linux-gnu- -j`nproc`",
+"",
+"  Supported arches for cross compilation: x86_64, x86, aarch64, s390x, powerpc64, alpha, sparc64, mips, riscv64",
 "",
 "  The initial build will take several minutes  because the embedded gdb module",
 "  must be configured and built.  Alternatively, the crash source RPM file",

@@ -1,5 +1,6 @@
 #include "defs.h"
 #include <ctype.h>
+#include "demangle.h"
 
 /* convenience struct for passing many values to helper functions */
 struct prb_map {
@@ -201,14 +202,44 @@ dump_record(struct prb_map *m, unsigned long id, int msg_flags)
 
 	text = m->text_data + begin;
 
+	if (text_len > BUFSIZE) {
+		error(WARNING, "\nThe messages could be truncated!\n");
+		text_len = BUFSIZE;
+	}
+
 	for (i = 0, p = text; i < text_len; i++, p++) {
 		if (*p == '\n')
 			fprintf(fp, "\n%s", space(ilen));
 		else if (isprint(*p) || isspace(*p))
-			fputc(*p, fp);
+			sprintf(&buf[i], "%c", *p);
 		else
 			fputc('.', fp);
 	}
+	/*
+	 * Try to demangle a mangled Rust symbol(calltrace) from log buffer
+	 */
+	char *p1 = strstr(buf, "_R");
+	if (!p1)
+		p1 = strstr(buf, "_ZN");
+	char *p2 = strrchr(buf, '+');
+	if (p1 && p2) {
+		char mangled[BUFSIZE] = {0};
+		char demangled[BUFSIZE] = {0};
+		char *res;
+		size_t slen = p1 - buf;
+
+		if (slen)
+			memcpy(demangled, buf, slen);
+
+		memcpy(mangled, p1, p2-p1);
+		res = rust_demangle(mangled, DMGL_RUST);
+		if (res) {
+			snprintf(demangled+slen, BUFSIZE-slen, "%s%s", res, p2);
+			fprintf(fp, "%s",demangled);
+			free(res);
+		}
+	} else
+		fprintf(fp, "%s", buf);
 
 	if (msg_flags & SHOW_LOG_DICT) {
 		text = info + OFFSET(printk_info_dev_info) +
@@ -285,8 +316,9 @@ dump_lockless_record_log(int msg_flags)
 	if (msg_flags & SHOW_LOG_CALLER) {
 		unsigned int pidmax;
 
-		get_symbol_data("pid_max", sizeof(pidmax), &pidmax);
-		if (pidmax <= 99999)
+		if (!try_get_symbol_data("pid_max", sizeof(pidmax), &pidmax))
+			m.pid_max_chars = PID_CHARS_DEFAULT;
+		else if (pidmax <= 99999)
 			m.pid_max_chars = 6;
 		else if (pidmax <= 999999)
 			m.pid_max_chars = 7;

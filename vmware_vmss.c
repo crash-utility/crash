@@ -317,7 +317,7 @@ vmware_vmss_init(char *filename, FILE *ofp)
 
 						vmss.num_vcpus = u.val32;
 						vmss.regs64 = malloc(vmss.num_vcpus * sizeof(void *));
-						vmss.vcpu_regs = malloc(vmss.num_vcpus * sizeof(uint32_t));
+						vmss.vcpu_regs = malloc(vmss.num_vcpus * sizeof(uint64_t));
 
 						for (k = 0; k < vmss.num_vcpus; k++) {
 							vmss.regs64[k] = malloc(sizeof(vmssregs64));
@@ -432,14 +432,64 @@ vmware_vmss_init(char *filename, FILE *ofp)
 						int cpu = idx[0];
 						vmss.regs64[cpu]->rflags |= u.val32;
 						vmss.vcpu_regs[cpu] |= REGS_PRESENT_RFLAGS;
+					} else if (strcmp(name, "S.base64") == 0) {
+						int cpu = idx[0];
+						int seg_index = idx[1];
+						switch (seg_index) {
+							case SEG_FS:
+								vmss.regs64[cpu]->fs_base = u.val64;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_FS_BASE;
+								break;
+							case SEG_GS:
+								vmss.regs64[cpu]->gs_base = u.val64;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_GS_BASE;
+								break;
+						}
+					} else if (strcmp(name, "S") == 0) {
+						int cpu = idx[0];
+						int seg_index = idx[1];
+						switch (seg_index) {
+							case SEG_ES:
+								vmss.regs64[cpu]->es = u.val32;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_ES;
+								break;
+							case SEG_CS:
+								vmss.regs64[cpu]->cs = u.val32;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_CS;
+								break;
+							case SEG_SS:
+								vmss.regs64[cpu]->ss = u.val32;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_SS;
+								break;
+							case SEG_DS:
+								vmss.regs64[cpu]->ds = u.val32;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_DS;
+								break;
+							case SEG_FS:
+								vmss.regs64[cpu]->fs = u.val32;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_FS;
+								break;
+							case SEG_GS:
+								vmss.regs64[cpu]->gs = u.val32;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_GS;
+								break;
+							case SEG_LDTR:
+								vmss.regs64[cpu]->ldtr = u.val32;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_LDTR;
+								break;
+							case SEG_TR:
+								vmss.regs64[cpu]->tr = u.val32;
+								vmss.vcpu_regs[cpu] |= REGS_PRESENT_TR;
+								break;
+							default:
+								error(INFO, "Unknown VMSS Segment [%d][%d]\n", cpu, seg_index);
+						}
 					}
 				}
-
 				DEBUG_PARSE_PRINT((ofp, "\n"));
 			}
 		}
 	}
-
 
 	if (vmss.memsize == 0) {
 		char *vmem_filename, *p;
@@ -842,7 +892,7 @@ dump_registers_for_vmss_dump(void)
 		fprintf(fp, "CPU %d:\n", i);
 
 		if (vmss.vcpu_regs[i] != REGS_PRESENT_ALL) {
-			fprintf(fp, "Missing registers for this CPU: 0x%x\n", vmss.vcpu_regs[i]);
+			fprintf(fp, "Missing registers for this CPU: 0x%lx\n", vmss.vcpu_regs[i]);
 			continue;
 		}
 
@@ -902,36 +952,50 @@ vmware_vmss_get_cpu_reg(int cpu, int regno, const char *name, int size,
         if (cpu >= vmss.num_vcpus)
                 return FALSE;
 
-        /* All supported registers are 8 bytes long. */
-        if (size != 8)
-                return FALSE;
-
-#define CASE(R,r) \
+#define CASE_32(R,r) \
                 case R##_REGNUM: \
+                        if (size != 4) \
+                                return FALSE; \
                         if (!(vmss.vcpu_regs[cpu] & REGS_PRESENT_##R)) \
                                 return FALSE; \
                         memcpy(value, &vmss.regs64[cpu]->r, size); \
                         break
 
+#define CASE_64(R,r) \
+                case R##_REGNUM: \
+                        if (size != 8) \
+                                return FALSE; \
+                        if (!(vmss.vcpu_regs[cpu] & REGS_PRESENT_##R)) \
+                                return FALSE; \
+                        memcpy(value, &vmss.regs64[cpu]->r, size); \
+                        break
 
         switch (regno) {
-                CASE (RAX, rax);
-                CASE (RBX, rbx);
-                CASE (RCX, rcx);
-                CASE (RDX, rdx);
-                CASE (RSI, rsi);
-                CASE (RDI, rdi);
-                CASE (RBP, rbp);
-                CASE (RSP, rsp);
-                CASE (R8, r8);
-                CASE (R9, r9);
-                CASE (R10, r10);
-                CASE (R11, r11);
-                CASE (R12, r12);
-                CASE (R13, r13);
-                CASE (R14, r14);
-                CASE (R15, r15);
-                CASE (RIP, rip);
+                CASE_64 (RAX, rax);
+                CASE_64 (RBX, rbx);
+                CASE_64 (RCX, rcx);
+                CASE_64 (RDX, rdx);
+                CASE_64 (RSI, rsi);
+                CASE_64 (RDI, rdi);
+                CASE_64 (RBP, rbp);
+                CASE_64 (RSP, rsp);
+                CASE_64 (R8, r8);
+                CASE_64 (R9, r9);
+                CASE_64 (R10, r10);
+                CASE_64 (R11, r11);
+                CASE_64 (R12, r12);
+                CASE_64 (R13, r13);
+                CASE_64 (R14, r14);
+                CASE_64 (R15, r15);
+                CASE_64 (RIP, rip);
+                CASE_32 (ES, es);
+                CASE_32 (CS, cs);
+                CASE_32 (SS, ss);
+                CASE_32 (DS, ds);
+                CASE_32 (FS, fs);
+                CASE_32 (GS, gs);
+                CASE_64 (FS_BASE, fs_base);
+                CASE_64 (GS_BASE, gs_base);
                 case EFLAGS_REGNUM:
                         if (!(vmss.vcpu_regs[cpu] & REGS_PRESENT_RFLAGS))
                                 return FALSE;

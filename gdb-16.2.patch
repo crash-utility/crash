@@ -8,10 +8,11 @@
 # shell script that can restore any gdb file to its original state prior
 # to all subsequent patch applications.
 
-#tar xvzmf gdb-10.2.tar.gz \
-#        gdb-10.2/gdb/Makefile.in
-#
-#exit 0
+tar xvzmf gdb-16.2.tar.gz \
+	gdb-16.2/gdb/symfile.c \
+	gdb-16.2/gdb/symtab.c
+
+exit 0
 
 --- gdb-16.2/Makefile.in.orig
 +++ gdb-16.2/Makefile.in
@@ -1879,3 +1880,123 @@
    _rl_tracefp = 0;
    return r;
  }
+--- gdb-16.2/configure.orig
++++ gdb-16.2/configure
+@@ -3620,6 +3620,9 @@ case "${target}" in
+     ;;
+ esac
+
++#disable gdbserver build in crash-utility
++enable_gdbserver=no
++
+ # Only allow gdbserver on some systems.
+ if test -d ${srcdir}/gdbserver; then
+     if test x$enable_gdbserver = x; then
+--- gdb-16.2/gdb/symfile.c.orig
++++ gdb-16.2/gdb/symfile.c
+@@ -341,8 +341,15 @@ place_section (bfd *abfd, asection *sect, section_offsets &offsets,
+     return;
+
+   /* If the user specified an offset, honor it.  */
+-  if (offsets[gdb_bfd_section_index (abfd, sect)] != 0)
++  if (offsets[gdb_bfd_section_index (abfd, sect)] != 0) {
++    /*
++     * addr_info_make_relative() subtracts out the section VMA. But if the user
++     * specified an offset, they have already taken this into account. Add it
++     * back in
++     */
++    offsets[gdb_bfd_section_index (abfd, sect)] += bfd_section_vma(sect);
+     return;
++  }
+
+   /* Otherwise, let's try to find a place for the section.  */
+   start_addr = (lowest + align - 1) & -align;
+@@ -630,33 +637,6 @@ default_symfile_offsets (struct objfile *objfile,
+       bfd *abfd = objfile->obfd.get ();
+       asection *cur_sec;
+
+-      for (cur_sec = abfd->sections; cur_sec != NULL; cur_sec = cur_sec->next)
+-	/* We do not expect this to happen; just skip this step if the
+-	   relocatable file has a section with an assigned VMA.  */
+-        if (bfd_section_vma (cur_sec) != 0
+-           /*
+-            *  Kernel modules may have some non-zero VMAs, i.e., like the
+-            *  __ksymtab and __ksymtab_gpl sections in this example:
+-            *
+-            *    Section Headers:
+-            *      [Nr] Name              Type             Address           Offset
+-            *           Size              EntSize          Flags  Link  Info  Align
+-            *      ...
+-            *      [ 8] __ksymtab         PROGBITS         0000000000000060  0000ad90
+-            *           0000000000000010  0000000000000000   A       0     0     16
+-            *      [ 9] .rela__ksymtab    RELA             0000000000000000  0000ada0
+-            *           0000000000000030  0000000000000018          43     8     8
+-            *      [10] __ksymtab_gpl     PROGBITS         0000000000000070  0000add0
+-            *           00000000000001a0  0000000000000000   A       0     0     16
+-            *      ...
+-            *
+-            *  but they should be treated as if they are NULL.
+-            */
+-            && strncmp (bfd_section_name (cur_sec), "__k", 3) != 0)
+-	  break;
+-
+-      if (cur_sec == NULL)
+-	{
+	  section_offsets &offsets = objfile->section_offsets;
+
+	  /* Pick non-overlapping offsets for sections the user did not
+@@ -704,7 +684,6 @@ default_symfile_offsets (struct objfile *objfile,
+					offsets[cur_sec->index]);
+	      offsets[cur_sec->index] = 0;
+	    }
+-	}
+     }
+
+   /* Remember the bfd indexes for the .text, .data, .bss and
+--- gdb-16.2/gdb/symtab.c.orig
++++ gdb-16.2/gdb/symtab.c
+@@ -7690,7 +7690,11 @@
+                         console("expr->first_opcode(): OP_VAR_VALUE\n");
+                 type = expr->evaluate_type()->type();
+                 if (req->tcb) {
+-                        long value = value_as_long(expr->evaluate());
++			expr::var_value_operation *vvop
++			    = (gdb::checked_static_cast<expr::var_value_operation *>
++			       (expr->op.get ()));
++			sym = vvop->get_symbol ();
++			long value = sym->value_longest ();
+                         /* callback with symbol value */
+                         req->typecode = TYPE_CODE(type);
+                         req->tcb(EOP_VALUE, req, &value, 0, 0, 0);
+@@ -7701,8 +7705,12 @@
+                                 req->length = type->length();
+                         }
+                         if (TYPE_CODE(type) == TYPE_CODE_ENUM) {
++				expr::var_value_operation *vvop
++				    = (gdb::checked_static_cast<expr::var_value_operation *>
++				       (expr->op.get ()));
++				sym = vvop->get_symbol ();
+                                 req->typecode = TYPE_CODE(type);
+-                                req->value = value_as_long(expr->evaluate());
++                                req->value = sym->value_longest ();
+                                 req->tagname = (char *)TYPE_TAG_NAME(type);
+                                 if (!req->tagname) {
+                                         val = expr->evaluate_type();
+--- gdb-16.2/gdb/solib-svr4.c.orig
++++ gdb-16.2/gdb/solib-svr4.c
+@@ -741,13 +741,13 @@
+ 	return 0;
+       return extract_typed_address (pbuf, ptr_type);
+     }
+-
++#ifndef CRASH_MERGE
+   /* Find DT_DEBUG.  */
+   if (gdb_bfd_scan_elf_dyntag (DT_DEBUG, current_program_space->exec_bfd (),
+ 			       &dyn_ptr, NULL)
+       || scan_dyntag_auxv (DT_DEBUG, &dyn_ptr, NULL))
+     return dyn_ptr;
+-
++#endif
+   /* This may be a static executable.  Look for the symbol
+      conventionally named _r_debug, as a last resort.  */
+   bound_minimal_symbol msymbol

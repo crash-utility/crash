@@ -1,0 +1,27 @@
+provision:
+   - name: client
+     hardware:
+       memory: ">= 4 GiB"
+       cpu:
+         processors: ">= 4"
+
+prepare:
+  # Set root password to log in as root in the console
+  - name: Set root password
+    how: shell
+    script:
+      - echo root:kdump | chpasswd
+
+  - name: Use custom mirror
+    how: shell
+    script:
+      - test -v CUSTOM_MIRROR && sed -e 's/^metalink=/#metalink=/g' -e "s|^#baseurl=http://download.example/pub/fedora/linux|baseurl=${CUSTOM_MIRROR}|g" -i.bak /etc/yum.repos.d/fedora{,-updates}.repo || true
+
+execute:
+    how: tmt
+    exit-first: true
+
+discover:
+    how: fmf
+    url: https://github.com/crash-utility/crash-test.git
+    ref: main
