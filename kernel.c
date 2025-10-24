@@ -5136,7 +5136,7 @@ cmd_log(void)
 
 	msg_flags = 0;
 
-        while ((c = getopt(argcnt, args, "Ttdmasc")) != EOF) {
+        while ((c = getopt(argcnt, args, "TtdmascR")) != EOF) {
                 switch(c)
                 {
 		case 'T':
@@ -5159,6 +5159,9 @@ cmd_log(void)
 			break;
 		case 'c':
 			msg_flags |= SHOW_LOG_CALLER;
+			break;
+		case 'R':
+			msg_flags |= SHOW_LOG_RUST;
 			break;
                 default:
                         argerrs++;

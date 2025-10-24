@@ -6229,6 +6229,7 @@ void parse_kernel_version(char *);
 #define SHOW_LOG_CTIME   (0x10)
 #define SHOW_LOG_SAFE    (0x20)
 #define SHOW_LOG_CALLER  (0x40)
+#define SHOW_LOG_RUST    (0x80)
 void set_cpu(int);
 void clear_machdep_cache(void);
 struct stack_hook *gather_text_list(struct bt_info *);
