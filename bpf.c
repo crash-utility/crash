@@ -121,6 +121,26 @@ static ulong bpf_map_memory_size(int map_type, uint value_size,
 	return roundup((max_entries * size), PAGESIZE());
 }
 
+/*
+ * Code replicated from kernel/bpf/ringbuf.c:ringbuf_map_mem_usage()
+*/
+static ulong ringbuf_map_mem_usage(struct bpf_info *bpf, int i)
+{
+	ulong nr_pages;
+	ulong usage = SIZE(bpf_ringbuf_map);
+	ulong rb = (ulong)(bpf->maplist[i].value) - OFFSET(bpf_ringbuf_map_map)
+			+ OFFSET(bpf_ringbuf_map_rb);
+	readmem(rb, KVADDR, &rb, sizeof(ulong), "bpf_ringbuf *", FAULT_ON_ERROR);
+	readmem(rb + OFFSET(bpf_ringbuf_nr_pages), KVADDR, &nr_pages,
+		sizeof(ulong), "bpf_ringbuf.nr_pages", FAULT_ON_ERROR);
+	usage += (nr_pages << PAGESHIFT());
+	ulong nr_meta_pages = (OFFSET(bpf_ringbuf_consumer_pos) >> PAGESHIFT()) + 2;
+	ulong nr_data_pages = UINT(bpf->bpf_map_buf + OFFSET(bpf_map_max_entries)) >> PAGESHIFT();
+	usage += (nr_meta_pages + 2 * nr_data_pages) * sizeof(void *);
+
+	return usage;
+}
+
 void
 cmd_bpf(void)
 {
@@ -217,6 +237,7 @@ bpf_init(struct bpf_info *bpf)
 		STRUCT_SIZE_INIT(bpf_prog_aux, "bpf_prog_aux");
 		STRUCT_SIZE_INIT(bpf_map, "bpf_map");
 		STRUCT_SIZE_INIT(bpf_insn, "bpf_insn");
+		STRUCT_SIZE_INIT(bpf_ringbuf_map, "bpf_ringbuf_map");
 		MEMBER_OFFSET_INIT(bpf_prog_aux, "bpf_prog", "aux");
 		MEMBER_OFFSET_INIT(bpf_prog_type, "bpf_prog", "type");
 		MEMBER_OFFSET_INIT(bpf_prog_tag, "bpf_prog", "tag");
@@ -228,6 +249,10 @@ bpf_init(struct bpf_info *bpf)
 		MEMBER_OFFSET_INIT(bpf_map_map_flags, "bpf_map", "map_flags");
 		MEMBER_OFFSET_INIT(bpf_prog_aux_used_maps, "bpf_prog_aux", "used_maps");
 		MEMBER_OFFSET_INIT(bpf_prog_aux_used_map_cnt, "bpf_prog_aux", "used_map_cnt");
+		MEMBER_OFFSET_INIT(bpf_ringbuf_map_map, "bpf_ringbuf_map", "map");
+		MEMBER_OFFSET_INIT(bpf_ringbuf_map_rb, "bpf_ringbuf_map", "rb");
+		MEMBER_OFFSET_INIT(bpf_ringbuf_consumer_pos, "bpf_ringbuf", "consumer_pos");
+		MEMBER_OFFSET_INIT(bpf_ringbuf_nr_pages, "bpf_ringbuf", "nr_pages");
 		if (!VALID_STRUCT(bpf_prog) || 
 		    !VALID_STRUCT(bpf_prog_aux) ||
 		    !VALID_STRUCT(bpf_map) ||
@@ -664,7 +689,10 @@ do_map_only:
 				fprintf(fp, "%d\n", map_pages * PAGESIZE());
 			} else if ((msize = bpf_map_memory_size(type, value_size, key_size, max_entries)))
 				fprintf(fp, "%ld\n", msize);
-			else
+#define BPF_MAP_TYPE_RINGBUF (0x1BUL)
+			else if (type == BPF_MAP_TYPE_RINGBUF) {
+				fprintf(fp, "%ld\n", ringbuf_map_mem_usage(bpf, i));
+			} else
 				fprintf(fp, "(unknown)");
 
 			fprintf(fp, "     NAME: ");

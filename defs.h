@@ -2276,6 +2276,10 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long blk_mq_tag_set_shared_tags;
 	long vfsmount_mnt_flags;
 	long proc_mounts_cursor;
+	long bpf_ringbuf_map_map;
+	long bpf_ringbuf_map_rb;
+	long bpf_ringbuf_consumer_pos;
+	long bpf_ringbuf_nr_pages;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2454,6 +2458,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long vmap_node;
 	long cpumask_t;
 	long task_struct_exit_state;
+	long bpf_ringbuf_map;
 };
 
 struct array_table {

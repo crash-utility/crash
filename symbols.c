@@ -11951,6 +11951,10 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "          thread_struct_gsbase: %ld\n", OFFSET(thread_struct_gsbase));
 	fprintf(fp, "              thread_struct_fs: %ld\n", OFFSET(thread_struct_fs));
 	fprintf(fp, "              thread_struct_gs: %ld\n", OFFSET(thread_struct_gs));
+	fprintf(fp, "           bpf_ringbuf_map_map: %ld\n", OFFSET(bpf_ringbuf_map_map));
+	fprintf(fp, "            bpf_ringbuf_map_rb: %ld\n", OFFSET(bpf_ringbuf_map_rb));
+	fprintf(fp, "      bpf_ringbuf_consumer_pos: %ld\n", OFFSET(bpf_ringbuf_consumer_pos));
+	fprintf(fp, "          bpf_ringbuf_nr_pages: %ld\n", OFFSET(bpf_ringbuf_nr_pages));
 
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
@@ -12231,6 +12235,7 @@ dump_offset_table(char *spec, ulong makestruct)
 
 	fprintf(fp, "                percpu_counter: %ld\n", SIZE(percpu_counter));
 	fprintf(fp, "                     cpumask_t: %ld\n", SIZE(cpumask_t));
+	fprintf(fp, "               bpf_ringbuf_map: %ld\n", SIZE(bpf_ringbuf_map));
 
         fprintf(fp, "\n                   array_table:\n");
 	/*
