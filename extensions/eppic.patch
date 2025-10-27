@@ -1,0 +1,210 @@
+--- eppic/applications/crash/eppic.c.orig
++++ eppic/applications/crash/eppic.c
+@@ -20,6 +20,7 @@
+ #include "defs.h"
+ 
+ #include <eppic_api.h>
++#include "eppic.h"
+ 
+ /*
+  *  Global data (global_data.c) 
+@@ -788,6 +789,39 @@ char *sclass_help[]={
+                 NULL
+ };
+ 
++char *eppic_help[]={
++		"eppic",
++                "Run eppic program(es).",
++                "<fileName1.c>[, <fileName2.c>]",
++                "  Oneshot run eppic program(es) which with a main() entry each.",
++                NULL
++};
++
++void
++eppic_command(void)
++{
++	char *buf;
++	optind = 1;
++
++	if (!args[optind]) {
++		cmd_usage(crash_global_cmd(), SYNOPSIS);
++		return;
++	}
++
++	while(args[optind]) {
++		buf = eppic_filempath(args[optind]);
++		if (!buf) {
++			eppic_msg("eppic_filempath error on %s\n", args[optind]);
++			return;
++		}
++		eppic_load(buf);
++		if (eppic_findfile(buf, 0))
++			eppic_unload(buf);
++		eppic_free(buf);
++		optind++;
++	}
++}
++
+ #define NCMDS 200
+ static struct command_table_entry command_table[NCMDS] =  {
+ 
+@@ -797,6 +831,7 @@ static struct command_table_entry command_table[NCMDS] =  {
+ 	{"sdebug", sdebug_cmd, sdebug_help},
+ 	{"sname", sname_cmd, sname_help},
+ 	{"sclass", sclass_cmd, sclass_help},
++	{"eppic", eppic_command, eppic_help},
+ 	{(char *)0 }
+ };
+ 
+@@ -885,6 +920,13 @@ char **help=malloc(sizeof *help * 5);
+         }
+     }
+     free(help);
++
++    if (load && !strcmp(name, "main")) {
++        int optind_save = optind;
++        eppic_cmd(name, NULL, 0);
++        optind = optind_save;
++    }
++
+     return;
+ }
+ 
+--- eppic/libeppic/eppic_api.h.orig
++++ eppic/libeppic/eppic_api.h
+@@ -16,6 +16,9 @@
+ /* minor and major version number 
+     4.0 switch to new Eppic name and use of fully typed symbols.
+ */
++#ifndef EPPIC_API_H
++#define EPPIC_API_H
++
+ #define S_MAJOR 5
+ #define S_MINOR 0
+ 
+@@ -298,3 +301,5 @@ void eppic_dbg_named(int class, char *name, int level, char *, ...);
+ 
+ /* parsers debug flags */
+ extern int eppicdebug, eppicppdebug;
++
++#endif
+\ No newline at end of file
+--- eppic/libeppic/eppic_func.c.orig
++++ eppic/libeppic/eppic_func.c
+@@ -22,6 +22,8 @@
+ #include <sys/types.h>
+ #include <time.h>
+ #include <sys/stat.h>
++#include <fcntl.h>
++#include <unistd.h>
+ #include "eppic.h"
+ 
+ /*
+@@ -793,6 +795,42 @@ char *ed=getenv("EDITOR");
+     if(!system(buf)) eppic_load(fname);
+ }
+ 
++static const char *example[] = {
++"/*										",
++" * Example: Print all tasks' PID & command					",
++" *										",
++" * // Kernel's global variables and data structures can be used directly without",
++" * // pre-define it in kernel header. If any are within kernel modules, should",
++" * // preload the .ko first via \"mod -S/-s\" cmd in crash before invoke your",
++" * // eppic program.								",
++" * //										",
++" * // Eppic program's syntax is similar to C but with slight differences.	",
++" * // Code samples:								",
++" * // https://github.com/lucchouina/eppic/tree/master/applications/crash/code",
++" * // Available eppic functions:						",
++" * // https://github.com/lucchouina/eppic/blob/master/libeppic/eppic_builtin.c#L316",
++" *										",
++" * int main(void)								",
++" * {										",
++" *     struct task_struct *p;							",
++" *     unsigned long offset;							",
++" *										",
++" *     p = (struct task_struct *)&init_task;					",
++" *     offset = (unsigned long)&(p->tasks) - (unsigned long)p;		",
++" *										",
++" *     do {									",
++" *         printf(\"PID: %d Command: %s\\n\", (int)(p->pid), getstr((char *)&(p->comm[0])));",
++" *         p = (struct task_struct *)((unsigned long)(p->tasks.next) - offset);",
++" *     } while(p != &init_task);						",
++" * 										",
++" *     return 0;								",
++" * }										",
++" *										",
++" * crash> eppic program_file.c						",
++" */										",
++};
++
++char *eppic_get_func_file(char *);
+ /*
+     This funciton is called to start a vi session on a function
+     (file=0) or a file (file=1);
+@@ -800,24 +838,31 @@ char *ed=getenv("EDITOR");
+ void
+ eppic_vi(char *fname, int file)
+ {
+-int line, freeit=0;
++int line=1, freeit=0, fd;
+ char *filename;
++char newline = '\n';
+ 
+     if(file) {
+ 
+         filename=eppic_filempath(fname);
+ 
+         if(!filename) {
+-
+-            eppic_msg("File not found : %s\n", fname);
+-            return;
+-
+-        }
+-
+-        line=1;
+-        freeit=1;
+-
+-
++	    fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
++	    if (fd < 0) {
++		eppic_msg("File not found : %s\n", fname);
++		return;
++	    } else {
++		for (int i = 0; i < sizeof(example)/sizeof(char *); i++) {
++			write(fd, example[i], strlen(example[i]));
++			write(fd, &newline, sizeof(newline));
++		}
++		close(fd);
++		filename = fname;
++		freeit=0;
++	    }
++        } else {
++            freeit=1;
++	}
+     } else {
+ 
+         func *f=eppic_getfbyname(fname, 0);
+@@ -837,6 +882,10 @@ char *filename;
+ 
+     eppic_exevi(filename, line);
+ 
++    char *fi_name = eppic_get_func_file("main");
++    if (fi_name)
++        eppic_deletefile(fi_name);
++
+     if(freeit) eppic_free(filename);
+ 
+ }
+@@ -1184,3 +1233,10 @@ eppic_runcmd(char *fname, var_t*args)
+     return 0;
+ }
+ 
++char *eppic_get_func_file(char *funcname)
++{
++	func *fn = eppic_getfbyname(funcname, 0);
++	if (!fn)
++		return NULL;
++	return fn->file->fname;
++}

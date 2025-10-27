@@ -53,7 +53,14 @@ all:
 			fi; \
 			if  [ -f $(APPFILE) ]; \
 			then \
-				make -f eppic.mk eppic.so; \
+				if patch --dry-run -N -p0 < eppic.patch >/dev/null ; then \
+					patch -N -p0 < eppic.patch; \
+					make -f eppic.mk eppic.so; \
+				elif patch --dry-run -N -p0 -R < eppic.patch >/dev/null ; then \
+					make -f eppic.mk eppic.so; \
+				else \
+					echo "eppic.so: apply eppic.patch error"; \
+				fi; \
 			else \
 				echo "eppic.so: failed to pull eppic code from git repo"; \
 			fi; \
