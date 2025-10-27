@@ -19,7 +19,7 @@
 #include <dlfcn.h>
 
 static int in_extensions_library(char *, char *);
-static char *get_extensions_directory(char *);
+static char *get_extensions_directory(char *, bool *);
 static void show_all_extensions(void);
 static void show_extensions(char *);
 
@@ -395,32 +395,29 @@ in_extensions_library(char *lib, char *buf)
  * Look for an extensions directory using the proper order. 
  */
 static char *
-get_extensions_directory(char *dirbuf)
+get_extensions_directory(char *dirbuf, bool *end)
 {
-	char *env;
+	static int index = 0;
+	char *dirs[] = {
+		getenv("CRASH_EXTENSIONS"),
+		BITS64() ? "/usr/lib64/crash/extensions" : NULL,
+		"/usr/lib/crash/extensions",
+		"./extensions",
+	};
+	char *dir;
 
-	if ((env = getenv("CRASH_EXTENSIONS"))) {
-		if (is_directory(env)) {
-			strcpy(dirbuf, env);
-			return dirbuf;
-		}
+	if (index >= sizeof(dirs) / sizeof(char *)) {
+		*end = true;
+		return NULL;
 	}
-
-	if (BITS64()) {
-		sprintf(dirbuf, "/usr/lib64/crash/extensions");
-		if (is_directory(dirbuf))
-			return dirbuf;
+	*end = false;
+	dir = dirs[index++];
+	if (is_directory(dir)) {
+		snprintf(dirbuf, BUFSIZE, "%s", dir);
+		return dir;
+	} else {
+		return NULL;
 	}
-
-       	sprintf(dirbuf, "/usr/lib/crash/extensions");
-	if (is_directory(dirbuf))
-		return dirbuf;
- 
-       	sprintf(dirbuf, "./extensions");
-	if (is_directory(dirbuf))
-		return dirbuf;
-
-	return NULL;
 }
 
 
@@ -432,14 +429,20 @@ preload_extensions(void)
 	char dirbuf[BUFSIZE];
 	char filename[BUFSIZE*2];
 	int found;
+	bool end;
 
-	if (!get_extensions_directory(dirbuf))
-		return;
+next_dir:
+	if (!get_extensions_directory(dirbuf, &end)) {
+		if (end)
+			return;
+		else
+			goto next_dir;
+	}
 
         dirp = opendir(dirbuf);
 	if (!dirp) {
 		error(INFO, "%s: %s\n", dirbuf, strerror(errno));
-		return;
+		goto next_dir;
 	}
 
 	pc->curcmd = pc->program_name;
@@ -461,10 +464,12 @@ preload_extensions(void)
 	
 	if (found)
 		fprintf(fp, "\n");
-	else
+	else {
 		error(NOTE, 
 		    "%s: no extension modules found in directory\n\n",
 			dirbuf);
+		goto next_dir;
+	}
 }
 
 /*
