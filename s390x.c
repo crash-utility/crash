@@ -727,7 +727,7 @@ static ulong s390x_vr_PTOV(ulong paddr)
 
 static int s390x_vr_IS_VMALLOC_ADDR(ulong vaddr)
 {
-	return (vaddr >= vt->vmalloc_start && vaddr < machdep->kvbase);
+	return (vt->vmalloc_start && vaddr >= vt->vmalloc_start && vaddr < machdep->kvbase);
 }
 
 ulong s390x_VTOP(ulong vaddr)
