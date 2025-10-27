@@ -946,9 +946,9 @@ s390x_kvtop(struct task_context *tc, ulong vaddr, physaddr_t *paddr, int verbose
 		return FALSE;
 	}
 
-	if (!IS_VMALLOC_ADDR(vaddr)) {
-	       *paddr = VTOP(vaddr);
-	       return TRUE;
+	if (!verbose && !IS_VMALLOC_ADDR(vaddr)) {
+		*paddr = VTOP(vaddr);
+		return TRUE;
 	}
 
 	pgd_base = (unsigned long)vt->kernel_pgd[0];
