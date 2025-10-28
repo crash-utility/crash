@@ -234,6 +234,8 @@ arm64_get_current_task_reg(int regno, const char *name,
 
 	BZERO(&bt_setup, sizeof(struct bt_info));
 	clone_bt_info(&bt_setup, &bt_info, tc);
+	if (bt_info.stackbase == 0)
+		return FALSE;
 	fill_stackbuf(&bt_info);
 
 	get_dumpfile_regs(&bt_info, &sp, &ip);
