@@ -2000,3 +2000,13 @@ exit 0
    /* This may be a static executable.  Look for the symbol
       conventionally named _r_debug, as a last resort.  */
    bound_minimal_symbol msymbol
+--- gdb-16.2/gdb/symtab.c.orig
++++ gdb-16.2/gdb/symtab.c
+@@ -7726,6 +7726,7 @@
+                     type = expr->evaluate_type()->type();
+ 
+                 if (req->tcb) {
++                        req->typecode = TYPE_CODE(type);
+                         drillDownType(req, type);
+                 } else {
+                         req->typecode = TYPE_CODE(type);
