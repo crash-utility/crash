@@ -1350,7 +1350,7 @@ cache_page(physaddr_t paddr)
 	} else if (pd.flags & DUMP_DH_COMPRESSED_ZSTD) {
 
 		if (!(dd->flags & ZSTD_SUPPORTED)) {
-			error(INFO, "%s: uncompess failed: no zstd compression support\n",
+			error(INFO, "%s: uncompress failed: no zstd compression support\n",
 				DISKDUMP_VALID() ? "diskdump" : "compressed kdump");
 			return READ_ERROR;
 		}
@@ -1358,7 +1358,7 @@ cache_page(physaddr_t paddr)
 		if (!dctx) {
 			dctx = ZSTD_createDCtx();
 			if (!dctx) {
-				error(INFO, "%s: uncompess failed: cannot create ZSTD_DCtx\n",
+				error(INFO, "%s: uncompress failed: cannot create ZSTD_DCtx\n",
 					DISKDUMP_VALID() ? "diskdump" : "compressed kdump");
 				return READ_ERROR;
 			}
