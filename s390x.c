@@ -1733,6 +1733,7 @@ static unsigned long show_trace(struct bt_info *bt, int cnt, unsigned long sp,
 		/* Check for user PSW */
 		reg = readmem_ul(sp + MEMBER_OFFSET("pt_regs", "psw"));
 		if (reg & S390X_PSW_MASK_PSTATE) {
+			fprintf(fp, " USER-MODE INTERRUPT FRAME; pt_regs at %lx:\n", sp);
 			print_ptregs(bt, sp);
 			return sp;
 		}
@@ -1745,6 +1746,7 @@ static unsigned long show_trace(struct bt_info *bt, int cnt, unsigned long sp,
 		/* Check for loop (kernel_thread_starter) of second zero bc */
 		if (low == reg || reg == 0)
 			return reg;
+		fprintf(fp, " KERNEL-MODE INTERRUPT FRAME; pt_regs at %lx:\n", sp);
 		print_ptregs(bt, sp);
 		low = sp;
 		sp = reg;
