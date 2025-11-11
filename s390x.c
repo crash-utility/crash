@@ -1376,12 +1376,18 @@ s390x_translate_pte(ulong pte, void *physaddr, ulonglong unused)
 static int 
 s390x_eframe_search(struct bt_info *bt)
 {
-	if(bt->flags & BT_EFRAME_SEARCH2)
+	ulong esp;
+
+	if (bt->flags & BT_EFRAME_SEARCH2) {
 		return (error(FATAL, 
 		    "Option '-E' is not implemented for this architecture\n"));
-	else
-		return (error(FATAL, 
-		    "Option '-e' is not implemented for this architecture\n"));
+	} else {
+		/* For 'bt -e' print only interrupt frames and related pt_regs */
+		s390x_get_stack_frame(bt, NULL, &esp);
+		bt->stkptr = esp;
+		s390x_back_trace_cmd(bt);
+		return 0;
+	}
 }
 
 #ifdef DEPRECATED
@@ -1699,17 +1705,19 @@ static void print_ptregs(struct bt_info *bt, unsigned long sp)
 static unsigned long show_trace(struct bt_info *bt, int cnt, unsigned long sp,
 				unsigned long low, unsigned long high)
 {
-	unsigned long reg; 
+	unsigned long reg, iframe_addr;
 	unsigned long psw_addr ATTRIBUTE_UNUSED;
 
 	while (1) {
 		if (sp < low || sp > high - SIZE(s390_stack_frame))
 			return sp;
 		reg = readmem_ul(sp + OFFSET(s390_stack_frame_r14));
-		if (!s390x_has_cpu(bt))
-			print_frame(bt, cnt++, sp, reg);
-		if (bt->flags & BT_FULL)
-			print_frame_data(sp, high);
+		if (!(bt->flags & BT_EFRAME_SEARCH)) {
+			if (!s390x_has_cpu(bt))
+				print_frame(bt, cnt++, sp, reg);
+			if (bt->flags & BT_FULL)
+				print_frame_data(sp, high);
+		}
 		/* Follow the backchain. */
 		while (1) {
 			low = sp;
@@ -1722,18 +1730,25 @@ static unsigned long show_trace(struct bt_info *bt, int cnt, unsigned long sp,
 			if (sp <= low || sp > high - SIZE(s390_stack_frame))
 				return sp;
 			reg = readmem_ul(sp + OFFSET(s390_stack_frame_r14));
-			print_frame(bt, cnt++, sp, reg);
-			if (bt->flags & BT_FULL)
-				print_frame_data(sp, high);
+			if (!(bt->flags & BT_EFRAME_SEARCH)) {
+				print_frame(bt, cnt++, sp, reg);
+				if (bt->flags & BT_FULL)
+					print_frame_data(sp, high);
+			}
 		}
 		/* Zero backchain detected, check for interrupt frame. */
+		iframe_addr = sp;
 		sp += SIZE(s390_stack_frame);
 		if (sp <= low || sp > high - STRUCT_SIZE("pt_regs"))
 			return sp;
 		/* Check for user PSW */
 		reg = readmem_ul(sp + MEMBER_OFFSET("pt_regs", "psw"));
 		if (reg & S390X_PSW_MASK_PSTATE) {
-			fprintf(fp, " USER-MODE INTERRUPT FRAME; pt_regs at %lx:\n", sp);
+			if (bt->flags & BT_EFRAME_SEARCH)
+				fprintf(fp, " USER-MODE INTERRUPT FRAME at %lx\n", iframe_addr);
+			else
+				fprintf(fp, " USER-MODE INTERRUPT FRAME;");
+			fprintf(fp, " pt_regs at %lx:\n", sp);
 			print_ptregs(bt, sp);
 			return sp;
 		}
@@ -1746,7 +1761,11 @@ static unsigned long show_trace(struct bt_info *bt, int cnt, unsigned long sp,
 		/* Check for loop (kernel_thread_starter) of second zero bc */
 		if (low == reg || reg == 0)
 			return reg;
-		fprintf(fp, " KERNEL-MODE INTERRUPT FRAME; pt_regs at %lx:\n", sp);
+		if (bt->flags & BT_EFRAME_SEARCH)
+			fprintf(fp, " KERNEL-MODE INTERRUPT FRAME at %lx\n", iframe_addr);
+		else
+			fprintf(fp, " KERNEL-MODE INTERRUPT FRAME;");
+		fprintf(fp, " pt_regs at %lx:\n", sp);
 		print_ptregs(bt, sp);
 		low = sp;
 		sp = reg;
