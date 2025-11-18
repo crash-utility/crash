@@ -43,6 +43,7 @@ static void display_bh_1(void);
 static void display_bh_2(void);
 static void display_bh_3(void);
 static void display_bh_4(void);
+static int hrtimer_base_type_init(void);
 static void dump_hrtimer_data(const ulong *cpus);
 static void dump_hrtimer_clock_base(const void *, const int);
 static void dump_hrtimer_base(const void *, const int);
@@ -797,6 +798,12 @@ kernel_init()
 			"hrtimer_clock_base", "first");
 		MEMBER_OFFSET_INIT(hrtimer_clock_base_get_time, 
 			"hrtimer_clock_base", "get_time");
+		if (INVALID_MEMBER(hrtimer_clock_base_get_time)) {
+			/* Linux 6.18: 009eb5da29a9 */
+			MEMBER_OFFSET_INIT(hrtimer_clock_base_index, "hrtimer_clock_base", "index");
+			if (!hrtimer_base_type_init())
+				error(WARNING, "cannot get enum hrtimer_base_type\n");
+		}
 	}
 
 	STRUCT_SIZE_INIT(hrtimer_base, "hrtimer_base");
@@ -7939,6 +7946,52 @@ static int expires_len = -1;
 static int softexpires_len = -1;
 static int tte_len = -1;
 
+static char **hrtimer_base_type = NULL;
+static int
+hrtimer_base_type_init(void)
+{
+	long max_bases;
+	int i, c ATTRIBUTE_UNUSED;
+	char buf[BUFSIZE];
+	char *arglist[MAXARGS];
+
+	if (!enumerator_value("HRTIMER_MAX_CLOCK_BASES", &max_bases))
+		return FALSE;
+
+	hrtimer_base_type = (char **)calloc(max_bases, sizeof(char *));
+	if (!hrtimer_base_type)
+		return FALSE;
+
+	pc->flags2 |= ALLOW_FP; /* Required during initialization */
+	open_tmpfile();
+	if (dump_enumerator_list("hrtimer_base_type")) {
+		rewind(pc->tmpfile);
+		while (fgets(buf, BUFSIZE, pc->tmpfile)) {
+			if (!strstr(buf, " = "))
+				continue;
+			c = parse_line(buf, arglist);
+			i = atoi(arglist[2]);
+			if (0 <= i && i < max_bases)
+				hrtimer_base_type[i] = strdup(arglist[0]);
+		}
+		close_tmpfile();
+		pc->flags2 &= ~ALLOW_FP;
+	} else {
+		close_tmpfile();
+		pc->flags2 &= ~ALLOW_FP;
+		free(hrtimer_base_type);
+		hrtimer_base_type = NULL;
+		return FALSE;
+	}
+
+	if (CRASHDEBUG(1)) {
+		for (i = 0; i < max_bases; i++)
+			fprintf(fp, "hrtimer_base_type[%d] = %s\n", i, hrtimer_base_type[i]);
+	}
+
+	return TRUE;
+}
+
 static void
 dump_hrtimer_clock_base(const void *hrtimer_bases, const int num)
 {
@@ -7950,11 +8003,23 @@ dump_hrtimer_clock_base(const void *hrtimer_bases, const int num)
 
 	base = (void *)hrtimer_bases + OFFSET(hrtimer_cpu_base_clock_base) +
 		SIZE(hrtimer_clock_base) * num;
-	readmem((ulong)(base + OFFSET(hrtimer_clock_base_get_time)), KVADDR,
-		&get_time, sizeof(get_time), "hrtimer_clock_base get_time",
-		FAULT_ON_ERROR);
-	fprintf(fp, "  CLOCK: %d  HRTIMER_CLOCK_BASE: %lx  [%s]\n", num, 
-		(ulong)base, value_to_symstr(get_time, buf, 0));
+
+	if (INVALID_MEMBER(hrtimer_clock_base_get_time)) {
+		/* Linux 6.18: 009eb5da29a9 */
+		if (hrtimer_base_type) {
+			uint index;
+			readmem((ulong)(base + OFFSET(hrtimer_clock_base_index)), KVADDR, &index,
+				sizeof(index), "hrtimer_clock_base index", FAULT_ON_ERROR);
+			fprintf(fp, "  CLOCK: %d  HRTIMER_CLOCK_BASE: %lx  [%s]\n", num,
+				(ulong)base, hrtimer_base_type[index]);
+		} else
+			fprintf(fp, "  CLOCK: %d  HRTIMER_CLOCK_BASE: %lx\n", num, (ulong)base);
+	} else {
+		readmem((ulong)(base + OFFSET(hrtimer_clock_base_get_time)), KVADDR, &get_time,
+			sizeof(get_time), "hrtimer_clock_base get_time", FAULT_ON_ERROR);
+		fprintf(fp, "  CLOCK: %d  HRTIMER_CLOCK_BASE: %lx  [%s]\n", num,
+			(ulong)base, value_to_symstr(get_time, buf, 0));
+	}
 
 	/* get current time(uptime) */
 	get_uptime(NULL, &current_time);

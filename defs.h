@@ -2280,6 +2280,7 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long bpf_ringbuf_map_rb;
 	long bpf_ringbuf_consumer_pos;
 	long bpf_ringbuf_nr_pages;
+	long hrtimer_clock_base_index;
 };
 
 struct size_table {         /* stash of commonly-used sizes */

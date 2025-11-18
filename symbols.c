@@ -11760,6 +11760,8 @@ dump_offset_table(char *spec, ulong makestruct)
 		OFFSET(hrtimer_clock_base_first));
 	fprintf(fp, "   hrtimer_clock_base_get_time: %ld\n",
 		OFFSET(hrtimer_clock_base_get_time));
+	fprintf(fp, "      hrtimer_clock_base_index: %ld\n",
+		OFFSET(hrtimer_clock_base_index));
 	fprintf(fp, "            hrtimer_base_first: %ld\n",
 		OFFSET(hrtimer_base_first));
 	fprintf(fp, "          hrtimer_base_pending: %ld\n",
