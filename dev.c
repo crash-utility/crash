@@ -4464,7 +4464,7 @@ static void blk_mq_queue_tag_busy_iter(ulong q, ulong *hctx, uint cnt,
 	readmem(addr + OFFSET(blk_mq_tag_set_flags), KVADDR,
 		&flags, sizeof(uint), "blk_mq_tag_set.flags", RETURN_ON_ERROR);
 
-	if (blk_mq_is_shared_tags(flags)) {
+	if (blk_mq_is_shared_tags(flags) && VALID_MEMBER(blk_mq_tag_set_shared_tags)) {
 		addr = addr + OFFSET(blk_mq_tag_set_shared_tags);
 		queue_for_each_hw_ctx(q, addr, bitmap_tags_is_ptr, dio);
 		return;
