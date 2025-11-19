@@ -99,6 +99,7 @@ static ulong dump_audit_skb_queue(ulong);
 static ulong __dump_audit(char *);
 static void dump_audit(void);
 static void dump_printk_safe_seq_buf(int);
+static char *vmcoreinfo_read_string(const char *);
 static void check_vmcoreinfo(void);
 static int is_pvops_xen(void);
 static int get_linux_banner_from_vmlinux(char *, size_t);
@@ -11894,8 +11895,8 @@ dump_printk_safe_seq_buf(int msg_flags)
  * Returns a string (that has to be freed by the caller) that contains the
  * value for key or NULL if the key has not been found.
  */
-char *
-vmcoreinfo_read_from_memory(const char *key)
+static char *
+vmcoreinfo_read_string(const char *key)
 {
 	char *buf, *value_string, *p1, *p2;
 	size_t value_length;
@@ -11904,14 +11905,6 @@ vmcoreinfo_read_from_memory(const char *key)
 	char keybuf[BUFSIZE];
 
 	buf = value_string = NULL;
-
-	if (!(pc->flags & GDB_INIT)) {
-		/*
-		 * GDB interface hasn't been initialised yet, so can't
-		 * access vmcoreinfo_data
-		 */
-		return NULL;
-	}
 
 	switch (get_symbol_type("vmcoreinfo_data", NULL, NULL))
 	{
@@ -11968,10 +11961,10 @@ check_vmcoreinfo(void)
 		switch (get_symbol_type("vmcoreinfo_data", NULL, NULL))
 		{
 		case TYPE_CODE_PTR:
-			pc->read_vmcoreinfo = vmcoreinfo_read_from_memory;
+			pc->read_vmcoreinfo = vmcoreinfo_read_string;
 			break;
 		case TYPE_CODE_ARRAY:
-			pc->read_vmcoreinfo = vmcoreinfo_read_from_memory;
+			pc->read_vmcoreinfo = vmcoreinfo_read_string;
 			break;
 		}
 	}
