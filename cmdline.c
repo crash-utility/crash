@@ -1285,6 +1285,8 @@ restore_ifile_sanity(void)
 		close_tmpfile2();
 	}
 
+	wait_for_children(ALL_CHILDREN);
+
 	restore_gdb_sanity();
 
 	free_all_bufs();
