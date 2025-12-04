@@ -1488,8 +1488,8 @@ exec_input_file(void)
 			continue;
 
                 if (!(pc->flags & SILENT)) {
-                        fprintf(fp, "%s%s", pc->prompt, buf);
-                        fflush(fp);
+                        fprintf(incoming_fp, "%s%s", pc->prompt, buf);
+                        fflush(incoming_fp);
                 }
 
                 exec_command();
