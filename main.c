@@ -1045,6 +1045,8 @@ is_external_command(void)
 	int i;
 	char *cmd;
 	char command[BUFSIZE];
+	FILE *pipe;
+	char buf[BUFSIZE];
 
 	cmd = args[0];
 
@@ -1068,8 +1070,19 @@ is_external_command(void)
 			else
                         	strcat(command, args[i]);
                 }
-                if (system(command) == -1)
-			perror(command);
+
+		if (pc->redirect & REDIRECT_TO_PIPE) {
+			if ((pipe = popen(command, "r")) == NULL) {
+				error(INFO, "cannot execute: %s\n", command);
+				return TRUE;
+			}
+			while (fgets(buf, BUFSIZE, pipe))
+				fputs(buf, fp);
+			pclose(pipe);
+		} else {
+			if (system(command) == -1)
+				perror(command);
+		}
                 return TRUE;
         }
 
