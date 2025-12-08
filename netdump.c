@@ -50,6 +50,7 @@ static int proc_kcore_init_64(FILE *, int);
 static char *get_regs_from_note(char *, ulong *, ulong *);
 static void kdump_get_osrelease(void);
 static char *vmcoreinfo_read_string(const char *);
+static void kdump_get_build_id(void);
 
 
 #define ELFSTORE 1
@@ -476,6 +477,10 @@ is_netdump(char *file, ulong source_query)
 		pc->flags |= KDUMP;
 		get_log_from_vmcoreinfo(file);
 	}
+
+	if ((source_query == KDUMP_LOCAL) &&
+	    (pc->flags2 & GET_BUILD_ID))
+		kdump_get_build_id();
 
 	return nd->header_size;
 
@@ -4994,6 +4999,18 @@ kdump_get_osrelease(void)
 		free(string);
 	} else 
 		pc->flags2 &= ~GET_OSRELEASE;
+}
+
+static void
+kdump_get_build_id(void)
+{
+	char *string;
+
+	if ((string = vmcoreinfo_read_string("BUILD-ID"))) {
+		fprintf(fp, "%s\n", string);
+		free(string);
+	} else
+		pc->flags2 &= ~GET_BUILD_ID;
 }
 
 void

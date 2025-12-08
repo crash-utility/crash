@@ -398,6 +398,13 @@ Display the OSRELEASE vmcoreinfo string from a kdump
 .I dumpfile 
 header.
 .TP
+.BI --build-id \ dumpfile
+Display the BUILD-ID vmcoreinfo string from a kdump
+.I dumpfile
+header.
+Note: this option only works for kernel (>=v5.9); otherwise it
+prints "unknown" and exits with non-zero status.
+.TP
 .BI --hyper
 Force the session to be that of a Xen hypervisor.
 .TP

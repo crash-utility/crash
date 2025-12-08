@@ -91,6 +91,7 @@ static void dump_vmcoreinfo(FILE *);
 static void dump_note_offsets(FILE *);
 static char *vmcoreinfo_read_string(const char *);
 static void diskdump_get_osrelease(void);
+static void diskdump_get_build_id(void);
 static int valid_note_address(unsigned char *);
 
 /* For split dumpfile */
@@ -1073,6 +1074,9 @@ is_diskdump(char *file)
 
 	if (pc->flags2 & GET_OSRELEASE) 
 		diskdump_get_osrelease();
+
+	if (pc->flags2 & GET_BUILD_ID)
+		diskdump_get_build_id();
 
 #ifdef LZO
 	if (lzo_init() == LZO_E_OK)
@@ -2444,6 +2448,19 @@ diskdump_get_osrelease(void)
 	}
 	else
 		pc->flags2 &= ~GET_OSRELEASE;
+}
+
+static void
+diskdump_get_build_id(void)
+{
+	char *string;
+
+	if ((string = vmcoreinfo_read_string("BUILD-ID"))) {
+		fprintf(fp, "%s\n", string);
+		free(string);
+	}
+	else
+		pc->flags2 &= ~GET_BUILD_ID;
 }
 
 static int

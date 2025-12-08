@@ -29,6 +29,7 @@ static void check_xen_hyper(void);
 static void show_untrusted_files(void);
 static void get_osrelease(char *);
 static void get_log(char *);
+static void get_build_id(char *);
 
 static struct option long_options[] = {
         {"memory_module", required_argument, 0, 0},
@@ -67,6 +68,7 @@ static struct option long_options[] = {
 	{"no_elf_notes", 0, 0, 0},
 	{"osrelease", required_argument, 0, 0},
 	{"log", required_argument, 0, 0},
+	{"build-id", required_argument, 0, 0},
 	{"hex", 0, 0, 0},
 	{"dec", 0, 0, 0},
 	{"no_strip", 0, 0, 0},
@@ -278,6 +280,11 @@ main(int argc, char **argv)
 		        else if (STREQ(long_options[option_index].name, "log")) {
 				pc->flags2 |= GET_LOG;
 				get_log(optarg);
+			}
+
+		        else if (STREQ(long_options[option_index].name, "build-id")) {
+				pc->flags2 |= GET_BUILD_ID;
+				get_build_id(optarg);
 			}
 
 			else if (STREQ(long_options[option_index].name, "hex")) {
@@ -1506,6 +1513,8 @@ dump_program_context(void)
 		fprintf(fp, "%sREDZONE", others++ ? "|" : "");
 	if (pc->flags2 & VMWARE_VMSS_GUESTDUMP)
 		fprintf(fp, "%sVMWARE_VMSS_GUESTDUMP", others++ ? "|" : "");
+	if (pc->flags2 & GET_BUILD_ID)
+		fprintf(fp, "%sGET_BUILD_ID", others++ ? "|" : "");
 	fprintf(fp, ")\n");
 
 	fprintf(fp, "         namelist: %s\n", pc->namelist);
@@ -1976,6 +1985,27 @@ get_log(char *dumpfile)
 	clean_exit(retval);
 }
 
+static void
+get_build_id(char *dumpfile)
+{
+	int retval = 1;
+
+	if (is_flattened_format(dumpfile)) {
+		if (pc->flags2 & GET_BUILD_ID)
+			retval = 0;
+	} else if (is_diskdump(dumpfile)) {
+		if (pc->flags2 & GET_BUILD_ID)
+			retval = 0;
+	} else if (is_kdump(dumpfile, KDUMP_LOCAL)) {
+		if (pc->flags2 & GET_BUILD_ID)
+			retval = 0;
+	}
+
+	if (retval)
+		fprintf(fp, "unknown\n");
+
+	clean_exit(retval);
+}
 
 char *
 no_vmcoreinfo(const char *unused)

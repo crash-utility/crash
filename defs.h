@@ -577,6 +577,7 @@ struct program_context {
 #define MEMSRC_LOCAL         (0x80000ULL)
 #define REDZONE             (0x100000ULL)
 #define VMWARE_VMSS_GUESTDUMP (0x200000ULL)
+#define GET_BUILD_ID (0x400000ULL)
 	char *cleanup;
 	char *namelist_orig;
 	char *namelist_debug_orig;

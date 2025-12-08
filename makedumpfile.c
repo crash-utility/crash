@@ -24,6 +24,7 @@
 #include <byteswap.h>
 
 static void flattened_format_get_osrelease(char *);
+static void flattened_format_get_build_id(char *);
 
 int flattened_format = 0;
 
@@ -196,7 +197,7 @@ read_all_makedumpfile_data_header(char *file)
 void
 check_flattened_format(char *file)
 {
-	int fd, get_osrelease;
+	int fd, get_osrelease, get_build_id;
 	struct stat stat;
 	struct makedumpfile_header fh;
 
@@ -205,6 +206,12 @@ check_flattened_format(char *file)
 		pc->flags2 &= ~GET_OSRELEASE;
 	} else
 		get_osrelease = FALSE;
+
+	if (pc->flags2 & GET_BUILD_ID) {
+		get_build_id = TRUE;
+		pc->flags2 &= ~GET_BUILD_ID;
+	} else
+		get_build_id = FALSE;
 
 	if (flattened_format)
 		goto out;
@@ -237,6 +244,11 @@ check_flattened_format(char *file)
 		return;
 	}
 
+	if (get_build_id) {
+		flattened_format_get_build_id(file);
+		return;
+	}
+
 	if (!read_all_makedumpfile_data_header(file))
 		return;
 
@@ -251,6 +263,9 @@ check_flattened_format(char *file)
 out:
 	if (get_osrelease)
 		pc->flags2 |= GET_OSRELEASE;
+
+	if (get_build_id)
+		pc->flags2 |= GET_BUILD_ID;
 }
 
 static int
@@ -368,26 +383,39 @@ dump_flat_header(FILE *ofp)
 }
 
 static void 
-flattened_format_get_osrelease(char *file)
+flattened_format_get_common(char *file, char *key, ulonglong flag)
 {
 	int c;
 	FILE *pipe;
-	char buf[BUFSIZE], *p1, *p2;
+	char keybuf[BUFSIZE], buf[BUFSIZE], *p1, *p2;
 
-	c = strlen("OSRELEASE=");
+	sprintf(keybuf, "%s=", key);
+	c = strlen(keybuf);
 	sprintf(buf, "/usr/bin/strings -n %d %s", c, file);
 			
 	if ((pipe = popen(buf, "r")) == NULL)
 		return;
 
         for (c = 0; (c < 100) && fgets(buf, BUFSIZE-1, pipe); c++) {
-		if ((p1 = strstr(buf, "OSRELEASE="))) {
+		if ((p1 = strstr(buf, keybuf))) {
 			p2 = strstr(p1, "=");
 			fprintf(fp, "%s", p2+1);
 			flattened_format = TRUE;
-			pc->flags2 |= GET_OSRELEASE;
+			pc->flags2 |= flag;
 		}
 	}
 
 	pclose(pipe);
+}
+
+static void
+flattened_format_get_osrelease(char *file)
+{
+	flattened_format_get_common(file, "OSRELEASE", GET_OSRELEASE);
+}
+
+static void
+flattened_format_get_build_id(char *file)
+{
+	flattened_format_get_common(file, "BUILD-ID", GET_BUILD_ID);
 }
