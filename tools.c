@@ -5698,7 +5698,7 @@ ll_power(long long base, long long exp)
 #define B32K (4)
 
 #define SHARED_BUF_SIZES  (B32K+1)
-#define MAX_MALLOC_BUFS   (2000)
+int MAX_MALLOC_BUFS  = 3072; /* can be changed from command line args */
 #define MAX_CACHE_SIZE    (KILOBYTES(32))
 
 struct shared_bufs {
@@ -5723,7 +5723,7 @@ struct shared_bufs {
         long buf_8K_ovf;
         long buf_32K_ovf;
 	int buf_inuse[SHARED_BUF_SIZES];
-	char *malloc_bp[MAX_MALLOC_BUFS];
+	char **malloc_bp;
 	long smallest;
 	long largest;
 	long embedded;
@@ -5744,6 +5744,7 @@ buf_init(void)
 
 	bp->smallest = 0x7fffffff; 
 	bp->total = 0.0;
+	bp->malloc_bp = (char**) calloc(MAX_MALLOC_BUFS * sizeof(char*), 1);
 
 #ifdef VALGRIND
 	VALGRIND_MAKE_MEM_NOACCESS(&bp->buf_1K, sizeof(bp->buf_1K));
@@ -6130,7 +6131,9 @@ getbuf(long reqsize)
 	dump_shared_bufs();
 	
 	return ((char *)(long)
-		error(FATAL, "cannot allocate any more memory!\n"));
+		error(FATAL, "cannot allocate any more memory!\n"
+				"try increasing --max-malloc-bufs (current  value : %d)\n",
+				MAX_MALLOC_BUFS));
 }
 
 /*

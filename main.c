@@ -46,6 +46,7 @@ static struct option long_options[] = {
 	{"version", 0, 0, 0},
 	{"buildinfo", 0, 0, 0},
         {"cpus", required_argument, 0, 0},
+        {"max-malloc-bufs", required_argument, 0, 0},
         {"no_ikconfig", 0, 0, 0},
         {"hyper", 0, 0, 0},
 	{"p2m_mfn", required_argument, 0, 0},
@@ -162,6 +163,9 @@ main(int argc, char **argv)
 
 		        else if (STREQ(long_options[option_index].name, "cpus")) 
 				kt->cpus_override = optarg;
+
+		        else if (STREQ(long_options[option_index].name, "max-malloc-bufs"))
+				MAX_MALLOC_BUFS = max(MAX_MALLOC_BUFS, atoi(optarg));
 
 			else if (STREQ(long_options[option_index].name, "hyper"))
 				pc->flags |= XEN_HYPER;

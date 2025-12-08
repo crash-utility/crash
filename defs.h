@@ -188,6 +188,13 @@
 #define HIST_BLKSIZE  (4096)
 
 static inline int string_exists(char *s) { return (s ? TRUE : FALSE); }
+
+static inline int max(int a, int b) {
+	if (a > b)
+		return a;
+	return b;
+}
+
 #define STREQ(A, B)      (string_exists((char *)A) && string_exists((char *)B) && \
 	(strcmp((char *)(A), (char *)(B)) == 0))
 #define STRNEQ(A, B)     (string_exists((char *)A) && string_exists((char *)B) && \
@@ -5609,6 +5616,7 @@ void exec_args_input_file(struct command_table_entry *, struct args_input_file *
 /*
  *  tools.c
  */
+extern int MAX_MALLOC_BUFS;
 FILE *set_error(char *);
 int __error(int, char *, ...);
 #define error __error               /* avoid conflict with gdb error() */
