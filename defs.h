@@ -169,7 +169,7 @@
 #define NR_CPUS  (256)
 #endif
 #ifdef LOONGARCH64
-#define NR_CPUS  (256)
+#define NR_CPUS  (2048)
 #endif
 
 #define NR_DEVICE_DUMPS (64)
