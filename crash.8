@@ -511,6 +511,10 @@ a relocation size equal to the difference between the two values.
 Set the number of internal hash queue heads used for list gathering
 and verification.  The default count is 32768.
 .TP
+.BI --max-malloc-bufs \ size
+Set the value of \fBMAX_MALLOC_BUFS\fP to \fIsize\fP.
+The minimum allowed value is 3072.
+.TP
 .B --minimal
 Bring up a session that is restricted to the 
 .I log, dis, rd, sym, eval, set
