@@ -4326,11 +4326,11 @@ struct bt_iter_data {
 #define MQ_RQ_IN_FLIGHT 1
 #define REQ_OP_BITS     8
 #define REQ_OP_MASK     ((1 << REQ_OP_BITS) - 1)
-#define BLK_MQ_F_TAG_HCTX_SHARED (1 << 3)
+static long blk_hctx_shared = 0;
 
 static bool blk_mq_is_shared_tags(unsigned int flags)
 {
-	return flags & BLK_MQ_F_TAG_HCTX_SHARED;
+	return flags & blk_hctx_shared;
 }
 
 static uint op_is_write(uint op)
@@ -4952,6 +4952,7 @@ void diskio_init(void)
 	MEMBER_OFFSET_INIT(request_queue_tag_set, "request_queue", "tag_set");
 	MEMBER_OFFSET_INIT(blk_mq_tag_set_flags, "blk_mq_tag_set", "flags");
 	MEMBER_OFFSET_INIT(blk_mq_tag_set_shared_tags, "blk_mq_tag_set", "shared_tags");
+	enumerator_value("BLK_MQ_F_TAG_HCTX_SHARED", &blk_hctx_shared);
 
 	dt->flags |= DISKIO_INIT;
 }
