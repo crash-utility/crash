@@ -880,6 +880,7 @@ bpf_prog_used_maps(int idx, char *retbuf)
 				sprintf(&retbuf[strlen(retbuf)], "%s%ld", 
 					strlen(retbuf) ? "," : "",
 					bpf->maplist[m].index);
+				break;
 			}
 		}
 	}
