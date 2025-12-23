@@ -464,6 +464,11 @@ kernel_init()
 		    "list_head.next offset: %ld: list command may fail\n",
 			OFFSET(list_head_next));
 
+	if (STRUCT_EXISTS("klp_patch")) {
+		if (MEMBER_EXISTS("klp_patch", "list"))
+			MEMBER_OFFSET_INIT(klp_patch_list, "klp_patch", "list");
+	}
+
         MEMBER_OFFSET_INIT(hlist_node_next, "hlist_node", "next");
         MEMBER_OFFSET_INIT(hlist_node_pprev, "hlist_node", "pprev");
 	STRUCT_SIZE_INIT(hlist_head, "hlist_head"); 
@@ -5689,6 +5694,70 @@ is_livepatch(void)
 	return FALSE;
 }
 
+struct klp_transition_ctx {
+	ulong transition_patch;
+	int found;
+};
+
+static int
+klp_transition_match(void *entry, void *data)
+{
+	struct klp_transition_ctx *ctx = data;
+
+	if ((ulong)entry == ctx->transition_patch) {
+		ctx->found = TRUE;
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+static int
+is_livepatch_transition(void)
+{
+	struct kernel_list_head head;
+	struct list_data ld;
+	struct klp_transition_ctx ctx;
+	ulong transition_patch;
+	ulong list_addr;
+	int ret;
+
+	if (!try_get_symbol_data("klp_transition_patch",
+	    sizeof(ulong), &transition_patch) || !transition_patch)
+		return FALSE;
+
+	if (!STRUCT_EXISTS("klp_patch") || !VALID_MEMBER(klp_patch_list) ||
+	    !kernel_symbol_exists("klp_patches"))
+		return TRUE;
+
+	list_addr = symbol_value("klp_patches");
+	if (!readmem(list_addr, KVADDR, &head, sizeof(head), "klp_patches",
+	    RETURN_ON_ERROR | QUIET))
+		return TRUE;
+
+	if (!head.next || head.next == (void *)list_addr)
+		return TRUE;
+
+	BZERO(&ctx, sizeof(ctx));
+	ctx.transition_patch = transition_patch;
+
+	BZERO(&ld, sizeof(ld));
+	ld.flags = LIST_CALLBACK|CALLBACK_RETURN|RETURN_ON_LIST_ERROR|
+	    RETURN_ON_DUPLICATE|LIST_ALLOCATE;
+	ld.start = (ulong)head.next;
+	ld.end = list_addr;
+	ld.member_offset = OFFSET(list_head_next);
+	ld.list_head_offset = OFFSET(klp_patch_list);
+	ld.callback_func = klp_transition_match;
+	ld.callback_data = &ctx;
+
+	ret = do_list(&ld);
+	if (ret < 0)
+		return FALSE;
+
+	return ctx.found;
+}
+
 /*
  *  Display system stats at init-time or for the sys command.
  */
@@ -5732,17 +5801,19 @@ display_sys_stats(void)
 		}
 	} else {
         	if (pc->system_map) {
-			fprintf(fp, "  SYSTEM MAP: %s%s%s\n", pc->system_map,
+			fprintf(fp, "  SYSTEM MAP: %s%s%s%s\n", pc->system_map,
 				is_livepatch() ? "  [LIVEPATCH]" : "",
+				is_livepatch_transition() ? "  [TRANSITION]" : "",
 				is_kernel_tainted() ? "  [TAINTED]" : "");
 			fprintf(fp, "DEBUG KERNEL: %s %s\n", 
 					pc->namelist_orig ?
 					pc->namelist_orig : pc->namelist,
 					debug_kernel_version(pc->namelist));
 		} else
-			fprintf(fp, "      KERNEL: %s%s%s\n", pc->namelist_orig ?
+			fprintf(fp, "      KERNEL: %s%s%s%s\n", pc->namelist_orig ?
 				pc->namelist_orig : pc->namelist,
 				is_livepatch() ? "  [LIVEPATCH]" : "",
+				is_livepatch_transition() ? "  [TRANSITION]" : "",
 				is_kernel_tainted() ? "  [TAINTED]" : "");
 	}
 
