@@ -1287,11 +1287,10 @@ static int
 riscv64_vtop_5level_4k(ulong *pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 {
 	ulong *pgd_ptr, pgd_val;
-	ulong p4d_val;
-	ulong pud_val;
-	ulong pmd_val;
-	ulong pte_val, pte_pfn;
-	ulong pt_phys;
+	ulong p4d_base, p4d_addr, p4d_val;
+	ulong pud_base, pud_addr, pud_val;
+	ulong pmd_base, pmd_addr, pmd_val;
+	ulong pte_base, pte_addr, pte_val, pte_pfn;
 
 	if (verbose)
 		fprintf(fp, "PAGE DIRECTORY: %lx\n", (ulong)pgd);
@@ -1305,47 +1304,47 @@ riscv64_vtop_5level_4k(ulong *pgd, ulong vaddr, physaddr_t *paddr, int verbose)
 	if (!pgd_val)
 		goto no_page;
 	pgd_val &= PTE_PFN_PROT_MASK;
-	pt_phys = (pgd_val >> _PAGE_PFN_SHIFT) << PAGESHIFT();
+	p4d_base = (pgd_val >> _PAGE_PFN_SHIFT) << PAGESHIFT();
 
 	/* P4D */
-	FILL_P4D(PAGEBASE(pt_phys), PHYSADDR, PAGESIZE());
-	p4d_val = ULONG(machdep->machspec->p4d + PAGEOFFSET(sizeof(p4d_t) *
-			p4d_index_l5_4k(vaddr)));
+	FILL_P4D(PAGEBASE(p4d_base), PHYSADDR, PAGESIZE());
+	p4d_addr = p4d_base + sizeof(p4d_t) * p4d_index_l5_4k(vaddr);
+	p4d_val = ULONG(machdep->machspec->p4d + PAGEOFFSET(p4d_addr));
 	if (verbose)
-		fprintf(fp, "  P4D: %016lx => %016lx\n", pt_phys, p4d_val);
+		fprintf(fp, "  P4D: %016lx => %016lx\n", p4d_addr, p4d_val);
 	if (!p4d_val)
 		goto no_page;
 	p4d_val &= PTE_PFN_PROT_MASK;
-	pt_phys = (p4d_val >> _PAGE_PFN_SHIFT) << PAGESHIFT();
+	pud_base = (p4d_val >> _PAGE_PFN_SHIFT) << PAGESHIFT();
 
 	/* PUD */
-	FILL_PUD(PAGEBASE(pt_phys), PHYSADDR, PAGESIZE());
-	pud_val = ULONG(machdep->pud + PAGEOFFSET(sizeof(pud_t) *
-			pud_index_l5_4k(vaddr)));
+	FILL_PUD(PAGEBASE(pud_base), PHYSADDR, PAGESIZE());
+	pud_addr = pud_base + sizeof(pud_t) * pud_index_l5_4k(vaddr);
+	pud_val = ULONG(machdep->pud + PAGEOFFSET(pud_addr));
 	if (verbose)
-		fprintf(fp, "  PUD: %016lx => %016lx\n", pt_phys, pud_val);
+		fprintf(fp, "  PUD: %016lx => %016lx\n", pud_addr, pud_val);
 	if (!pud_val)
 		goto no_page;
 	pud_val &= PTE_PFN_PROT_MASK;
-	pt_phys = (pud_val >> _PAGE_PFN_SHIFT) << PAGESHIFT();
+	pmd_base = (pud_val >> _PAGE_PFN_SHIFT) << PAGESHIFT();
 
 	/* PMD */
-	FILL_PMD(PAGEBASE(pt_phys), PHYSADDR, PAGESIZE());
-	pmd_val = ULONG(machdep->pmd + PAGEOFFSET(sizeof(pmd_t) *
-			pmd_index_l4_4k(vaddr)));
+	FILL_PMD(PAGEBASE(pmd_base), PHYSADDR, PAGESIZE());
+	pmd_addr = pmd_base + sizeof(pmd_t) * pmd_index_l5_4k(vaddr);
+	pmd_val = ULONG(machdep->pmd + PAGEOFFSET(pmd_addr));
 	if (verbose)
-		fprintf(fp, "  PMD: %016lx => %016lx\n", pt_phys, pmd_val);
+		fprintf(fp, "  PMD: %016lx => %016lx\n", pmd_addr, pmd_val);
 	if (!pmd_val)
 		goto no_page;
 	pmd_val &= PTE_PFN_PROT_MASK;
-	pt_phys = (pmd_val >> _PAGE_PFN_SHIFT) << PAGESHIFT();
+	pte_base = (pmd_val >> _PAGE_PFN_SHIFT) << PAGESHIFT();
 
 	/* PTE */
-	FILL_PTBL(PAGEBASE(pt_phys), PHYSADDR, PAGESIZE());
-	pte_val = ULONG(machdep->ptbl + PAGEOFFSET(sizeof(pte_t) *
-			pte_index_l4_4k(vaddr)));
+	FILL_PTBL(PAGEBASE(pte_base), PHYSADDR, PAGESIZE());
+	pte_addr = pte_base + sizeof(pte_t) * pte_index_l5_4k(vaddr);
+	pte_val = ULONG(machdep->ptbl + PAGEOFFSET(pte_addr));
 	if (verbose)
-		fprintf(fp, "  PTE: %lx => %lx\n", pt_phys, pte_val);
+		fprintf(fp, "  PTE: %lx => %lx\n", pte_base, pte_val);
 	if (!pte_val)
 		goto no_page;
 	pte_val &= PTE_PFN_PROT_MASK;
