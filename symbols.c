@@ -5679,7 +5679,7 @@ value_search_module_6_4(ulong value, ulong *offset)
 
 			splast = NULL;
 			for ( ; sp <= sp_end; sp++) {
-				if (machine_type("ARM64") &&
+				if ((machine_type("ARM64") || machine_type("PPC64")) &&
 				    IN_MODULE_PERCPU(sp->value, lm) &&
 				    !IN_MODULE_PERCPU(value, lm))
 					continue;
@@ -5769,10 +5769,10 @@ retry:
 		*/
 		splast = NULL;
                 for ( ; sp <= sp_end; sp++) {
-			if (machine_type("ARM64") &&
+			if ((machine_type("ARM64") || machine_type("PPC64")) &&
 			    IN_MODULE_PERCPU(sp->value, lm) &&
-			    !IN_MODULE_PERCPU(value, lm)) 
-				continue;       
+			    !IN_MODULE_PERCPU(value, lm))
+				continue;
 
 			if (value == sp->value) {
 				if (MODULE_END(sp) || MODULE_INIT_END(sp))
