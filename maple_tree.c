@@ -67,12 +67,15 @@ struct req_entry *fill_member_offsets(char *);
 void dump_struct_members_fast(struct req_entry *, int, ulong);
 void dump_struct_members_for_tree(struct tree_data *, int, ulong);
 
-static void mt_dump_range(ulong min, ulong max, uint depth)
+static void mt_dump_range(ulong min, ulong max, uint depth, int radix)
 {
-	if (min == max)
-		fprintf(fp, "%.*s%lu: ", depth * 2, spaces, min);
-	else
-		fprintf(fp, "%.*s%lu-%lu: ", depth * 2, spaces, min, max);
+       if (min == max) {
+               fprintf(fp, (radix == 16) ? "%.*s%lx: " : "%.*s%lu: ",
+                       depth * 2, spaces, min);
+       } else {
+               fprintf(fp, (radix == 16) ? "%.*s%lx-%lx: " : "%.*s%lu-%lu: ",
+                       depth * 2, spaces, min, max);
+       }
 }
 
 static inline bool mt_is_reserved(ulong entry)
@@ -92,13 +95,28 @@ static uint mt_height(char *mt_buf)
 	       >> MT_FLAGS_HEIGHT_OFFSET;
 }
 
-static void dump_mt_range64(char *mr64_buf)
+/*
+ * Determine the output radix for maple tree display.
+ * Priority: 1) -x/-d flags, 2) global pc->output_radix
+ */
+static inline int mt_output_radix(struct tree_data *td)
+{
+       if (td) {
+               if (td->flags & TREE_STRUCT_RADIX_10)
+                       return 10;
+               else if (td->flags & TREE_STRUCT_RADIX_16)
+                       return 16;
+       }
+       return pc->output_radix;
+}
+
+static void dump_mt_range64(char *mr64_buf, int radix)
 {
 	int i;
 
 	fprintf(fp, " contents: ");
 	for (i = 0; i < mt_slots[maple_range_64] - 1; i++)
-		fprintf(fp, "%p %lu ",
+               fprintf(fp, (radix == 16) ? "%p %lx " : "%p %lu ",
 			VOID_PTR(mr64_buf + OFFSET(maple_range_64_slot)
 				 + sizeof(void *) * i),
 			ULONG(mr64_buf + OFFSET(maple_range_64_pivot)
@@ -107,14 +125,15 @@ static void dump_mt_range64(char *mr64_buf)
 				     + sizeof(void *) * i));
 }
 
-static void dump_mt_arange64(char *ma64_buf)
+static void dump_mt_arange64(char *ma64_buf, int radix)
 {
 	int i;
 
 	fprintf(fp, " contents: ");
 	for (i = 0; i < mt_slots[maple_arange_64]; i++)
-		fprintf(fp, "%lu ", ULONG(ma64_buf + OFFSET(maple_arange_64_gap)
-					  + sizeof(ulong) * i));
+               fprintf(fp, (radix == 16) ? "%lx " : "%lu ",
+                       ULONG(ma64_buf + OFFSET(maple_arange_64_gap)
+                             + sizeof(ulong) * i));
 
 	fprintf(fp, "| %02X %02X| ",
 		UCHAR(ma64_buf + OFFSET(maple_arange_64_meta) +
@@ -123,7 +142,7 @@ static void dump_mt_arange64(char *ma64_buf)
 		      OFFSET(maple_metadata_gap)));
 
 	for (i = 0; i < mt_slots[maple_arange_64] - 1; i++)
-		fprintf(fp, "%p %lu ",
+               fprintf(fp, (radix == 16) ? "%p %lx " : "%p %lu ",
 			VOID_PTR(ma64_buf + OFFSET(maple_arange_64_slot) +
 				 sizeof(void *) * i),
 			ULONG(ma64_buf + OFFSET(maple_arange_64_pivot) +
@@ -132,25 +151,27 @@ static void dump_mt_arange64(char *ma64_buf)
 				     sizeof(void *) * i));
 }
 
-static void dump_mt_entry(ulong entry, ulong min, ulong max, uint depth)
+static void dump_mt_entry(ulong entry, ulong min, ulong max, uint depth, int radix)
 {
-	mt_dump_range(min, max, depth);
+       mt_dump_range(min, max, depth, radix);
 
-	if (xa_is_value(entry))
-		fprintf(fp, "value %ld (0x%lx) [0x%lx]\n", xa_to_value(entry),
+       if (xa_is_value(entry)) {
+               fprintf(fp, (radix == 16) ? "value 0x%lx [0x%lx]\n" : "value %ld [0x%lx]\n",
 			xa_to_value(entry), entry);
-	else if (xa_is_zero(entry))
-		fprintf(fp, "zero (%ld)\n", xa_to_internal(entry));
-	else if (mt_is_reserved(entry))
+       } else if (xa_is_zero(entry)) {
+               fprintf(fp, (radix == 16) ? "zero (0x%lx)\n" : "zero (%ld)\n",
+                       xa_to_internal(entry));
+       } else if (mt_is_reserved(entry)) {
 		fprintf(fp, "UNKNOWN ENTRY (0x%lx)\n", entry);
-	else
-		fprintf(fp, "0x%lx\n", entry);
+       } else {
+               fprintf(fp, (radix == 16) ? "0x%lx\n" : "%lu\n", entry);
+       }
 }
 
 static void dump_mt_node(ulong maple_node, char *node_data, uint type,
-			 ulong min, ulong max, uint depth)
+                        ulong min, ulong max, uint depth, int radix)
 {
-	mt_dump_range(min, max, depth);
+       mt_dump_range(min, max, depth, radix);
 
 	fprintf(fp, "node 0x%lx depth %d type %d parent %p",
 		maple_node, depth, type,
@@ -169,6 +190,7 @@ static void do_mt_range64(ulong entry, ulong min, ulong max,
 	int i;
 	int len = strlen(path);
 	struct tree_data *td = ops->is_td ? (struct tree_data *)ops->private : NULL;
+       int radix = mt_output_radix(td);
 	char *mr64_buf;
 
 	if (SIZE(maple_node) > MAPLE_BUFSIZE)
@@ -180,7 +202,7 @@ static void do_mt_range64(ulong entry, ulong min, ulong max,
 	mr64_buf = node_buf + OFFSET(maple_node_mr64);
 
 	if (td && td->flags & TREE_STRUCT_VERBOSE) {
-		dump_mt_range64(mr64_buf);
+               dump_mt_range64(mr64_buf, radix);
 	}
 
 	for (i = 0; i < mt_slots[maple_range_64]; i++) {
@@ -230,6 +252,7 @@ static void do_mt_arange64(ulong entry, ulong min, ulong max,
 	int i;
 	int len = strlen(path);
 	struct tree_data *td = ops->is_td ? (struct tree_data *)ops->private : NULL;
+       int radix = mt_output_radix(td);
 	char *ma64_buf;
 
 	if (SIZE(maple_node) > MAPLE_BUFSIZE)
@@ -241,7 +264,7 @@ static void do_mt_arange64(ulong entry, ulong min, ulong max,
 	ma64_buf = node_buf + OFFSET(maple_node_ma64);
 
 	if (td && td->flags & TREE_STRUCT_VERBOSE) {
-		dump_mt_arange64(ma64_buf);
+               dump_mt_arange64(ma64_buf, radix);
 	}
 
 	for (i = 0; i < mt_slots[maple_arange_64]; i++) {
@@ -286,6 +309,7 @@ static void do_mt_entry(ulong entry, ulong min, ulong max, uint depth,
 	int print_radix = 0, i;
 	static struct req_entry **e = NULL;
 	struct tree_data *td = ops->is_td ? (struct tree_data *)ops->private : NULL;
+       int output_radix = mt_output_radix(td);
 
 	if (ops->entry && entry)
 		ops->entry(entry, entry, path, max, ops->private);
@@ -306,12 +330,15 @@ static void do_mt_entry(ulong entry, ulong min, ulong max, uint depth,
 	td->count++;
 
 	if (td->flags & TREE_STRUCT_VERBOSE) {
-		dump_mt_entry(entry, min, max, depth);
-	} else if (td->flags & VERBOSE && entry)
-		fprintf(fp, "%lx\n", entry);
-	if (td->flags & TREE_POSITION_DISPLAY && entry)
-		fprintf(fp, "  index: %ld  position: %s/%u\n",
+               dump_mt_entry(entry, min, max, depth, output_radix);
+       } else if (td->flags & VERBOSE && entry) {
+               fprintf(fp, (output_radix == 16) ? "%lx\n" : "%lu\n", entry);
+       }
+       if (td->flags & TREE_POSITION_DISPLAY && entry) {
+               fprintf(fp, (output_radix == 16) ? "  index: %lx  position: %s/%u\n" :
+                       "  index: %ld  position: %s/%u\n",
 			++(*global_index), path, index);
+       }
 
 	if (td->structname && entry) {
 		if (td->flags & TREE_STRUCT_RADIX_10)
@@ -319,7 +346,7 @@ static void do_mt_entry(ulong entry, ulong min, ulong max, uint depth,
 		else if (td->flags & TREE_STRUCT_RADIX_16)
 			print_radix = 16;
 		else
-			print_radix = 0;
+                       print_radix = output_radix;
 
 		for (i = 0; i < td->structname_args; i++) {
 			switch (count_chars(td->structname[i], '.')) {
@@ -348,6 +375,7 @@ static void do_mt_node(ulong entry, ulong min, ulong max,
 	uint i;
 	char node_buf[MAPLE_BUFSIZE];
 	struct tree_data *td = ops->is_td ? (struct tree_data *)ops->private : NULL;
+       int radix = mt_output_radix(td);
 
 	if (SIZE(maple_node) > MAPLE_BUFSIZE)
 		error(FATAL, "MAPLE_BUFSIZE should be larger than maple_node struct");
@@ -356,7 +384,7 @@ static void do_mt_node(ulong entry, ulong min, ulong max,
 		"mt_dump_node read maple_node", FAULT_ON_ERROR);
 
 	if (td && td->flags & TREE_STRUCT_VERBOSE) {
-		dump_mt_node(maple_node, node_buf, type, min, max, depth);
+               dump_mt_node(maple_node, node_buf, type, min, max, depth, radix);
 	}
 
 	switch (type) {
@@ -457,7 +485,8 @@ static void do_maple_tree_dump(ulong node, ulong slot, const char *path,
 			       ulong index, void *private)
 {
 	struct do_maple_tree_info *info = private;
-	fprintf(fp, "[%lu] %lx\n", index, slot);
+       fprintf(fp, (pc->output_radix == 16) ? "[%lx] %lx\n" : "[%lu] %lx\n",
+               index, slot);
 	info->count++;
 }
 
