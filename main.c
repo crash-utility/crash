@@ -1071,7 +1071,7 @@ is_external_command(void)
                         	strcat(command, args[i]);
                 }
 
-		if (pc->redirect & REDIRECT_TO_PIPE) {
+		if (pc->redirect & (REDIRECT_TO_PIPE|REDIRECT_TO_FILE)) {
 			if ((pipe = popen(command, "r")) == NULL) {
 				error(INFO, "cannot execute: %s\n", command);
 				return TRUE;
