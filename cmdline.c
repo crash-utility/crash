@@ -486,7 +486,7 @@ setup_redirect(int origin)
 	char *p, which;
 	int append;
 	int expression;
-	int string;
+	char string;
 	int ret ATTRIBUTE_UNUSED;
 	FILE *pipe;
 	FILE *ofile;
@@ -506,7 +506,7 @@ setup_redirect(int origin)
 		pc->redirect |= REDIRECT_SHELL_COMMAND;
 
 	expression = 0;
-	string = FALSE;
+	string = 0;
 
 	while (*p) {
 		if (*p == '(')
@@ -514,10 +514,12 @@ setup_redirect(int origin)
 		if (*p == ')')
 			expression--;
 
-		if ((*p == '"') || (*p == '\''))
-			string = !string;
+		if (*p == '\'' && string != '"')
+			string = (string == '\'') ? 0 : '\'';
+		else if (*p == '"' && string != '\'')
+			string = (string == '"') ? 0 : '"';
 
-		if (!(expression || string) && 
+		if (!(expression || string) &&
 		    ((*p == '|') || (*p == '!'))) {
 			which = *p;
 			*p = NULLCHAR;
@@ -674,16 +676,18 @@ int
 multiple_pipes(char **input)
 {
 	char *p, *found;
-	int quote;
+	char quote;
 
 	found = NULL;
-	quote = FALSE;
+	quote = 0;
 
 	for (p = *input; *p; p++) {
-		if ((*p == '\'') || (*p == '"')) {
-			quote = !quote;
-			continue;
-		} else if (quote)
+		if (*p == '\'' && quote != '"')
+			quote = (quote == '\'') ? 0 : '\'';
+		else if (*p == '"' && quote != '\'')
+			quote = (quote == '"') ? 0 : '"';
+
+		if (quote)
 			continue;
 
 		if (*p == '|') {
