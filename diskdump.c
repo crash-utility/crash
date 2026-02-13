@@ -181,12 +181,12 @@ map_cpus_to_prstatus_kdump_cmprs(void)
 	BZERO(dd->nt_prstatus_percpu, size);
 
 	/*
-	 *  Re-populate the array with the notes mapping to online cpus
+	 *  Re-populate the array with the notes mapping to present cpus
 	 */
 	nrcpus = (kt->kernel_NR_CPUS ? kt->kernel_NR_CPUS : NR_CPUS);
 
 	for (i = 0, j = 0; i < nrcpus; i++) {
-		if (in_cpu_map(ONLINE_MAP, i) && machdep->is_cpu_prstatus_valid(i)) {
+		if (in_cpu_map(PRESENT_MAP, i) && machdep->is_cpu_prstatus_valid(i)) {
 			dd->nt_prstatus_percpu[i] = nt_ptr[j++];
 			dd->num_prstatus_notes = 
 				MAX(dd->num_prstatus_notes, i+1);
