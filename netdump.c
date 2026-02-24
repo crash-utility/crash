@@ -1977,8 +1977,9 @@ vmcoreinfo_read_string(const char *key)
 		size_vmcoreinfo = 0;
 	}
 
-	if (!vmcoreinfo)
-		return NULL;
+	if (!vmcoreinfo) {
+		return vmcoreinfo_read_from_memory(key);
+	}
 
 	/* the '+ 1' is the equal sign */
 	for (i = 0; i < (int)(size_vmcoreinfo - key_length + 1); i++) {

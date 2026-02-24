@@ -2389,6 +2389,7 @@ vmcoreinfo_read_string(const char *key)
 	off_t offset;
 	char keybuf[BUFSIZE];
 	const off_t failed = (off_t)-1;
+	bool info_found = false;
 
 	if (dd->header->header_version < 3)
 		return NULL;
@@ -2421,6 +2422,7 @@ vmcoreinfo_read_string(const char *key)
 	}
 
 	buf[size_vmcoreinfo] = '\n';
+	info_found = true;
 
 	if ((p1 = strstr(buf, keybuf))) {
 		p2 = p1 + strlen(keybuf);
@@ -2433,6 +2435,9 @@ vmcoreinfo_read_string(const char *key)
 err:
 	if (buf)
 		free(buf);
+
+	if (!info_found && value_string == NULL)
+		return vmcoreinfo_read_from_memory(key);
 
 	return value_string;
 }
