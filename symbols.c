@@ -1976,9 +1976,11 @@ store_module_symbols_6_4(ulong total, int mods_installed)
 			"module buffer", FAULT_ON_ERROR);
 
 		syms = ULONG(modbuf + OFFSET(module_syms));
-		gpl_syms = ULONG(modbuf + OFFSET(module_gpl_syms));
+		gpl_syms = VALID_MEMBER(module_gpl_syms) ?
+			ULONG(modbuf + OFFSET(module_gpl_syms)) : 0;
 		nsyms = UINT(modbuf + OFFSET(module_num_syms));
-		ngplsyms = UINT(modbuf + OFFSET(module_num_gpl_syms));
+		ngplsyms = VALID_MEMBER(module_num_gpl_syms) ?
+			UINT(modbuf + OFFSET(module_num_gpl_syms)) : 0;
 
 		nksyms = UINT(modbuf + OFFSET(module_num_symtab));
 
@@ -2336,9 +2338,11 @@ store_module_symbols_v2(ulong total, int mods_installed)
 			"module buffer", FAULT_ON_ERROR);
 
 		syms = ULONG(modbuf + OFFSET(module_syms));
-		gpl_syms = ULONG(modbuf + OFFSET(module_gpl_syms));
+		gpl_syms = VALID_MEMBER(module_gpl_syms) ?
+			ULONG(modbuf + OFFSET(module_gpl_syms)) : 0;
                 nsyms = UINT(modbuf + OFFSET(module_num_syms));
-                ngplsyms = UINT(modbuf + OFFSET(module_num_gpl_syms));
+                ngplsyms = VALID_MEMBER(module_num_gpl_syms) ?
+			UINT(modbuf + OFFSET(module_num_gpl_syms)) : 0;
 
 		if (THIS_KERNEL_VERSION >= LINUX(2,6,27)) {
 			nksyms = UINT(modbuf + OFFSET(module_num_symtab));
