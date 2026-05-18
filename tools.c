@@ -4728,7 +4728,7 @@ error_height:
 	return -1;
 }
 
-static ulong XA_CHUNK_SHIFT = UNINITIALIZED;
+ulong XA_CHUNK_SHIFT = UNINITIALIZED;
 static ulong XA_CHUNK_SIZE = UNINITIALIZED;
 static ulong XA_CHUNK_MASK = UNINITIALIZED;
 
@@ -4737,20 +4737,31 @@ do_xarray_iter(ulong node, uint height, char *path,
 	       ulong index, struct xarray_ops *ops)
 {
 	uint off;
+	uint update_off;
+	bool should_continue;
 
 	if (!hq_enter(node))
 		error(FATAL,
 			"\nduplicate tree node: %lx\n", node);
 
-	for (off = 0; off < XA_CHUNK_SIZE; off++) {
+	for (off = 0; off < XA_CHUNK_SIZE; off += update_off) {
 		ulong slot;
 		ulong shift = (height - 1) * XA_CHUNK_SHIFT;
+
+		update_off = 1;
 
 		readmem(node + OFFSET(xa_node_slots) +
 			sizeof(void *) * off, KVADDR, &slot, sizeof(void *),
 			"xa_node.slots[off]", FAULT_ON_ERROR);
 		if (!slot)
 			continue;
+
+		if (ops->update_off) {
+			update_off = ops->update_off(node, height, path, index,
+				       slot, off, shift, ops, &should_continue);
+			if (should_continue)
+				continue;
+		}
 
 		if ((slot & XARRAY_TAG_MASK) == XARRAY_TAG_INTERNAL)
 			slot &= ~XARRAY_TAG_INTERNAL;

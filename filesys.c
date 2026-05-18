@@ -2289,7 +2289,7 @@ dump_inode_page_cache_info(ulong inode)
 	if (root_rnode)
 		count = do_radix_tree(root_rnode, RADIX_TREE_DUMP_CB, &lp);
 	else if (xarray)
-		count = do_xarray(xarray, XARRAY_DUMP_CB, &lp);
+		count = do_xarray(xarray, XARRAY_DUMP_CB | XARRAY_TYPE_PAGE_CACHE, &lp);
 
 	if (count != nrpages)
 		error(INFO, "%s page count: %ld  nrpages: %ld\n",
@@ -4217,12 +4217,46 @@ struct do_xarray_info {
 	ulong maxcount;
 	ulong count;
 	void *data;
+	ulong (*update_count)(ulong);
 };
+
+static ulong
+folio_update_count(ulong slot)
+{
+	return 1 << folio_order(slot);
+}
+
+static uint folio_xarray_update_off(ulong node, uint height, char *path, ulong index,
+       ulong slot, uint off, ulong shift, struct xarray_ops *ops, bool *should_continue)
+{
+	uint order;
+
+       *should_continue = false;
+
+	if (height == 1) {
+	       order = folio_order(slot) % XA_CHUNK_SHIFT;
+	       return 1 << order;
+	}
+
+	/* height > 1 */
+	if ((slot & XARRAY_TAG_MASK) == 0) {
+	       ops->entry(node, slot, path, index | off, ops->private);
+	       *should_continue = true;
+	       order = folio_order(slot) % XA_CHUNK_SHIFT;
+	       return 1 << order;
+	}
+	return 1;
+}
+
 static void do_xarray_count(ulong node, ulong slot, const char *path,
 				ulong index, void *private)
 {
 	struct do_xarray_info *info = private;
-	info->count++;
+
+	if (info->update_count)
+		info->count += info->update_count(slot);
+	else
+		info->count++;
 }
 static void do_xarray_search(ulong node, ulong slot, const char *path,
 				 ulong index, void *private)
@@ -4239,8 +4273,9 @@ static void do_xarray_dump(ulong node, ulong slot, const char *path,
 			       ulong index, void *private)
 {
 	struct do_xarray_info *info = private;
+
 	fprintf(fp, "[%ld] %lx\n", index, slot);
-	info->count++;
+	do_xarray_count(node, slot, path, index, private);
 }
 static void do_xarray_gather(ulong node, ulong slot, const char *path,
 				 ulong index, void *private)
@@ -4274,7 +4309,8 @@ static void do_xarray_dump_cb(ulong node, ulong slot, const char *path,
 		      "operation failed: entry: %ld  item: %lx\n",
 		      info->count, slot);
 	}
-	info->count++;
+
+	do_xarray_count(node, slot, path, index, private);
 }
 
 /*
@@ -4318,7 +4354,12 @@ do_xarray(ulong root, int flag, struct list_pair *xp)
 		.private	= &info,
 	};
 
-	switch (flag)
+	if (flag & XARRAY_TYPE_PAGE_CACHE) {
+		info.update_count = folio_update_count;
+		ops.update_off = folio_xarray_update_off;
+	}
+
+	switch (flag & 0x7)
 	{
 	case XARRAY_COUNT:
 		ops.entry = do_xarray_count;

@@ -5689,6 +5689,9 @@ int do_radix_tree_traverse(ulong ptr, int is_root, struct radix_tree_ops *ops);
 struct xarray_ops {
 	void (*entry)(ulong node, ulong slot, const char *path,
 		      ulong index, void *private);
+	uint (*update_off)(ulong node, uint height, char *path, ulong index,
+                      ulong slot, uint off, ulong shift, struct xarray_ops *ops,
+		      bool *should_continue);
 	uint radix;
 	void *private;
 };
@@ -6003,6 +6006,8 @@ ulong do_xarray(ulong, int, struct list_pair *);
 #define XARRAY_DUMP_CB (5)
 #define XARRAY_TAG_MASK      (3UL)
 #define XARRAY_TAG_INTERNAL  (2UL)
+#define XARRAY_TYPE_PAGE_CACHE	0x8
+extern ulong XA_CHUNK_SHIFT;
 
 int folio_order(ulong folio);
 
