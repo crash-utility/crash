@@ -5948,6 +5948,7 @@ int dump_inode_page(ulong);
 ulong valid_section_nr(ulong);
 void display_memory_from_file_offset(ulonglong, long, void *);
 void swap_info_init(void);
+int page_to_nid(ulong);
 
 /*
  *  filesys.c 

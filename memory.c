@@ -301,7 +301,7 @@ static int dump_vm_event_state(void);
 static int dump_page_states(void);
 static int generic_read_dumpfile(ulonglong, void *, long, char *, ulong);
 static int generic_write_dumpfile(ulonglong, void *, long, char *, ulong);
-static int page_to_nid(ulong);
+int page_to_nid(ulong);
 static int get_kmem_cache_list(ulong **);
 static int get_kmem_cache_root_list(ulong **);
 static int get_kmem_cache_child_list(ulong **, ulong);
@@ -20093,7 +20093,7 @@ is_kmem_cache_addr_common(ulong vaddr, char *kbuf)
 /*
  *  Kernel-config-neutral page-to-node evaluator.
  */
-static int 
+int
 page_to_nid(ulong page)
 {
         int i;

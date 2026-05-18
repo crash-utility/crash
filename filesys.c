@@ -49,7 +49,7 @@ static int match_file_string(char *, char *, char *);
 static ulong get_root_vfsmount(char *);
 static void check_live_arch_mismatch(void);
 static long get_inode_nrpages(ulong);
-static void dump_inode_page_cache_info(ulong);
+static void dump_inode_page_cache_info(ulong, void *callback);
 
 #define DENTRY_CACHE (20)
 #define INODE_CACHE  (20)
@@ -2240,8 +2240,38 @@ get_inode_nrpages(ulong i_mapping)
 	return nrpages;
 }
 
+/* Used to collect the numa information for an inode */
+static ulong *numa_node;
+
 static void
-dump_inode_page_cache_info(ulong inode)
+print_inode_summary_info(void)
+{
+       int i;
+
+       fprintf(fp, "     NODE           PAGES\n");
+       for (i = 0; i < vt->numnodes; i++)
+               fprintf(fp, "     %2d          %8ld\n", i, numa_node[i]);
+}
+
+static int
+summary_inode_page(ulong page)
+{
+       int node;
+
+       if (!is_page_ptr(page, NULL))
+               error(FATAL, "Invalid inode page(0x%lx)\n", page);
+
+       node = page_to_nid(page);
+       if (node < 0 || node >= vt->numnodes)
+               error(FATAL, "Invalid node(%d) for page(0x%lx)\n", node, page);
+
+       numa_node[node] += 1 << folio_order(page);
+
+       return 1;
+}
+
+static void
+dump_inode_page_cache_info(ulong inode, void *callback)
 {
 	char *inode_buf;
 	ulong i_mapping, nrpages, root_rnode, xarray, count;
@@ -2284,7 +2314,7 @@ dump_inode_page_cache_info(ulong inode)
 		root_rnode = i_mapping + OFFSET(address_space_page_tree);
 
 	lp.index = 0;
-	lp.value = (void *)&dump_inode_page;
+	lp.value = callback;
 
 	if (root_rnode)
 		count = do_radix_tree(root_rnode, RADIX_TREE_DUMP_CB, &lp);
@@ -2324,7 +2354,7 @@ cmd_files(void)
         ref = NULL;
         refarg = NULL;
 
-        while ((c = getopt(argcnt, args, "d:R:p:c")) != EOF) {
+        while ((c = getopt(argcnt, args, "d:n:R:p:c")) != EOF) {
                 switch(c)
 		{
 		case 'R':
@@ -2343,11 +2373,31 @@ cmd_files(void)
 			display_dentry_info(value);
 			return;
 
+                case 'n':
+                       if (VALID_MEMBER(address_space_page_tree) &&
+                           VALID_MEMBER(inode_i_mapping)) {
+                               value = htol(optarg, FAULT_ON_ERROR, NULL);
+
+                               /* Allocate the array for this inode */
+                               numa_node = (ulong *)GETBUF(sizeof(ulong) * vt->numnodes);
+                               BZERO(numa_node, sizeof(ulong) * vt->numnodes);
+
+                               dump_inode_page_cache_info(value, (void *)&summary_inode_page);
+
+                               /* Print out the NUMA node information for this inode */
+                               print_inode_summary_info();
+
+                               FREEBUF(numa_node);
+                               numa_node = NULL;
+                       } else
+                               option_not_supported('n');
+                       return;
+
 		case 'p':
 			if (VALID_MEMBER(address_space_page_tree) &&
 			    VALID_MEMBER(inode_i_mapping)) {
 				value = htol(optarg, FAULT_ON_ERROR, NULL);
-				dump_inode_page_cache_info(value);
+				dump_inode_page_cache_info(value, (void *)&dump_inode_page);
 			} else
 				option_not_supported('p');
 			return;
