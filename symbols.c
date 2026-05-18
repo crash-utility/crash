@@ -10462,6 +10462,9 @@ dump_offset_table(char *spec, ulong makestruct)
         fprintf(fp, "                  page_private: %ld\n", OFFSET(page_private));
 	fprintf(fp, "                page_page_type: %ld\n",
 		OFFSET(page_page_type));
+	fprintf(fp, "                page_compound_order: %ld\n", OFFSET(page_compound_order));
+	fprintf(fp, "                folio__folio_order: %ld\n", OFFSET(folio__folio_order));
+	fprintf(fp, "                folio__flags_1: %ld\n", OFFSET(folio__flags_1));
 
 	fprintf(fp, "        trace_print_flags_mask: %ld\n",
 		OFFSET(trace_print_flags_mask));
@@ -11972,6 +11975,9 @@ dump_offset_table(char *spec, ulong makestruct)
 	fprintf(fp, "\n                    size_table:\n");
 	fprintf(fp, "                          page: %ld\n", SIZE(page));
 	fprintf(fp, "                    page_flags: %ld\n", SIZE(page_flags));
+	fprintf(fp, "           page_compound_order: %ld\n", SIZE(page_compound_order));
+	fprintf(fp, "            folio__folio_order: %ld\n", SIZE(folio__folio_order));
+	fprintf(fp, "                folio__flags_1: %ld\n", SIZE(folio__flags_1));
 	fprintf(fp, "             trace_print_flags: %ld\n", SIZE(trace_print_flags));
         fprintf(fp, "              free_area_struct: %ld\n", 
 		SIZE(free_area_struct));

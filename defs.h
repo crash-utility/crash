@@ -2291,6 +2291,9 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long hrtimer_clock_base_index;
 	long klp_patch_list;
 	long tk_data_timekeeper;
+	long page_compound_order;
+	long folio__folio_order;
+	long folio__flags_1;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2470,6 +2473,9 @@ struct size_table {         /* stash of commonly-used sizes */
 	long cpumask_t;
 	long task_struct_exit_state;
 	long bpf_ringbuf_map;
+	long page_compound_order;
+	long folio__folio_order;
+	long folio__flags_1;
 };
 
 struct array_table {
@@ -5997,6 +6003,8 @@ ulong do_xarray(ulong, int, struct list_pair *);
 #define XARRAY_DUMP_CB (5)
 #define XARRAY_TAG_MASK      (3UL)
 #define XARRAY_TAG_INTERNAL  (2UL)
+
+int folio_order(ulong folio);
 
 int file_dump(ulong, ulong, ulong, int, int);
 #define DUMP_FULL_NAME      0x1
