@@ -3229,14 +3229,23 @@ x86_64_print_stack_entry(struct bt_info *bt, FILE *ofp, int level,
 	if (!(bt->flags & BT_SAVE_EFRAME_IP))
 		bt->eframe_ip = 0;
 	offset = 0;
-	sp = value_search(text, &offset);
+	if (bt->flags & BT_SAVE_EFRAME_IP)
+		sp = value_search(text, &offset);
+	else {
+		sp = value_search(text-1, &offset);
+		offset++;
+	}
 	if (!sp)
 		return BACKTRACE_ENTRY_IGNORED;
 
 	name = sp->name;
 
 	if (offset && (bt->flags & BT_SYMBOL_OFFSET))
-		name_plus_offset = value_to_symstr(text, buf2, bt->radix);
+		if (bt->flags & BT_SAVE_EFRAME_IP)
+			name_plus_offset = value_to_symstr(text, buf2, bt->radix);
+		else
+			/* text-1 is used in the function */
+			name_plus_offset = value_to_symstr_trace(text, buf2, bt->radix);
 	else
 		name_plus_offset = NULL;
 
@@ -3337,7 +3346,10 @@ x86_64_print_stack_entry(struct bt_info *bt, FILE *ofp, int level,
 	fprintf(ofp, "\n");
 
         if (bt->flags & BT_LINE_NUMBERS) {
-                get_line_number(text, buf1, FALSE);
+		if (bt->flags & BT_SAVE_EFRAME_IP)
+			get_line_number(text, buf1, FALSE);
+		else
+			get_line_number(text-1, buf1, FALSE);
                 if (strlen(buf1))
                         fprintf(ofp, "    %s\n", buf1);
 	}
@@ -3864,8 +3876,10 @@ in_exception_stack:
 			}
 
 			level++;
+			bt->flags |= BT_SAVE_EFRAME_IP;
 			if ((framesize = x86_64_get_framesize(bt, bt->instptr, rsp, NULL)) >= 0)
 				rsp += framesize;
+			bt->flags &= ~BT_SAVE_EFRAME_IP;
 		}
 	}
 
@@ -8811,7 +8825,13 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp, char *stack_
 			return 0;
 	}
 
-        if (!(sp = value_search(textaddr, &offset))) {
+	if (bt->flags & BT_SAVE_EFRAME_IP)
+		sp = value_search(textaddr, &offset);
+	else {
+		sp = value_search(textaddr-1, &offset);
+		offset++;
+	}
+	if (!sp) {
 		if (!(bt->flags & BT_FRAMESIZE_DEBUG))
 			bt->flags |= BT_FRAMESIZE_DISABLE;
                 return 0;
@@ -8887,7 +8907,8 @@ x86_64_get_framesize(struct bt_info *bt, ulong textaddr, ulong rsp, char *stack_
 	if ((sp->value >= kt->init_begin) && (sp->value < kt->init_end))
 		return 0;
 
-	if ((machdep->flags & ORC) && (korc = orc_find(textaddr))) {
+	if ((machdep->flags & ORC) &&
+	    (korc = orc_find(bt->flags & BT_SAVE_EFRAME_IP ? textaddr : textaddr-1))) {
 		if (CRASHDEBUG(1)) {
 			struct ORC_data *orc = &machdep->machspec->orc;
 			fprintf(fp, 

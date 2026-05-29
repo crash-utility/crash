@@ -104,6 +104,7 @@ static void free_structure(struct struct_elem *);
 static unsigned char is_right_brace(const char *);
 static struct struct_elem *find_node(struct struct_elem *, char *);
 static void dump_node(struct struct_elem *, char *, unsigned char, unsigned char);
+static char *_value_to_symstr(ulong value, char *buf, ulong radix, int trace);
 
 static int module_mem_type(ulong, struct load_module *);
 static ulong module_mem_end(ulong, struct load_module *);
@@ -5973,14 +5974,25 @@ generic_machdep_value_to_symbol(ulong value, ulong *offset)
 	return NULL;
 }	
 
+char *
+value_to_symstr(ulong value, char *buf, ulong radix)
+{
+	return _value_to_symstr(value, buf, radix, 0);
+}
+
+char *
+value_to_symstr_trace(ulong value, char *buf, ulong radix)
+{
+	return _value_to_symstr(value, buf, radix, 1);
+}
 
 /*
  *  For a given value, format a string containing the nearest symbol name
  *  plus the offset if appropriate.  Display the offset in the specified
  *  radix (10 or 16) -- if it's 0, set it to the current pc->output_radix.
  */
-char *
-value_to_symstr(ulong value, char *buf, ulong radix)
+static char *
+_value_to_symstr(ulong value, char *buf, ulong radix, int trace)
 {
         struct syment *sp;
         ulong offset;
@@ -5996,7 +6008,13 @@ value_to_symstr(ulong value, char *buf, ulong radix)
 	if ((radix != 10) && (radix != 16))
 		radix = 16;
 
-        if ((sp = value_search(value, &offset))) {
+	if (trace) {
+		sp = value_search(value-1, &offset);
+		offset++;
+	} else
+		sp = value_search(value, &offset);
+
+	if (sp) {
                 if (offset)
                         sprintf(buf, radix == 16 ? "%s+0x%lx" : "%s+%ld",
 				sp->name, offset);

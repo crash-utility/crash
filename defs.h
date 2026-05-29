@@ -5807,6 +5807,7 @@ struct syment *prev_symbol(char *, struct syment *);
 void get_symbol_data(char *, long, void *);
 int try_get_symbol_data(char *, long, void *);
 char *value_to_symstr(ulong, char *, ulong);
+char *value_to_symstr_trace(ulong, char *, ulong);
 char *value_symbol(ulong);
 ulong symbol_value(char *);
 ulong symbol_value_module(char *, char *);
