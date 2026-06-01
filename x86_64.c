@@ -999,6 +999,8 @@ x86_64_dump_machdep_table(ulong arg)
 		fprintf(fp, "                    module_ORC: %s\n", ms->orc.module_ORC ? "TRUE" : "FALSE");
 		fprintf(fp, "                    has_signal: %s\n", ms->orc.has_signal ? "TRUE" : "FALSE");
 		fprintf(fp, "                       has_end: %s\n", ms->orc.has_end    ? "TRUE" : "FALSE");
+		fprintf(fp, "                        reg_sp: %d\n", ms->orc.reg_sp);
+		fprintf(fp, "                   reg_prev_sp: %d\n", ms->orc.reg_prev_sp);
 		fprintf(fp, "             lookup_num_blocks: %d\n", ms->orc.lookup_num_blocks);
 		fprintf(fp, "         __start_orc_unwind_ip: %lx\n", ms->orc.__start_orc_unwind_ip);
 		fprintf(fp, "          __stop_orc_unwind_ip: %lx\n", ms->orc.__stop_orc_unwind_ip);
@@ -6733,6 +6735,15 @@ x86_64_ORC_init(void)
 
 	if (orc->has_signal && !orc->has_end)
 		machdep->flags |= ORC_6_4;
+
+	/* See kernel commit 1735858caa4b */
+	if (THIS_KERNEL_VERSION >= LINUX(7,1,0)) {
+		ORC_REG_SP = 3;
+		ORC_REG_PREV_SP = 8;
+	} else {
+		ORC_REG_SP = 5;
+		ORC_REG_PREV_SP = 1;
+	}
 
 	machdep->flags |= ORC;
 }

@@ -6650,6 +6650,8 @@ struct ORC_data {
 	orc_entry orc_entry_data;
 	int has_signal;
 	int has_end;
+	int reg_sp;
+	int reg_prev_sp;
 };
 
 #define ORC_TYPE_CALL                   ((machdep->flags & ORC_6_4) ? 2 : 0)
@@ -6660,11 +6662,11 @@ struct ORC_data {
 #define UNWIND_HINT_TYPE_RESTORE        4
 
 #define ORC_REG_UNDEFINED               0
-#define ORC_REG_PREV_SP                 1
+#define ORC_REG_PREV_SP                 (machdep->machspec->orc.reg_prev_sp)
 #define ORC_REG_DX                      2
 #define ORC_REG_DI                      3
 #define ORC_REG_BP                      4
-#define ORC_REG_SP                      5
+#define ORC_REG_SP                      (machdep->machspec->orc.reg_sp)
 #define ORC_REG_R10                     6
 #define ORC_REG_R13                     7
 #define ORC_REG_BP_INDIRECT             8
