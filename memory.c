@@ -16290,9 +16290,6 @@ dump_swap_info(ulong swapflags, ulong *totalswap_pages, ulong *totalused_pages)
 					OFFSET(swap_info_struct_inuse_pages));
 		}
 
-		swap_map = ULONG(vt->swap_info_struct +
-			OFFSET(swap_info_struct_swap_map));
-
 		if (swap_file) {
 			if (VALID_MEMBER(swap_info_struct_swap_vfsmnt)) {
                 		vfsmnt = ULONG(vt->swap_info_struct +
@@ -16321,6 +16318,9 @@ dump_swap_info(ulong swapflags, ulong *totalswap_pages, ulong *totalused_pages)
 		smap = NULL;
 		if (vt->flags & SWAPINFO_V1) {
 			smap = (ushort *)GETBUF(sizeof(ushort) * max);
+
+			swap_map = ULONG(vt->swap_info_struct +
+				OFFSET(swap_info_struct_swap_map));
 
 			if (!readmem(swap_map, KVADDR, smap, 
 			    sizeof(ushort) * max, "swap_info swap_map data",
