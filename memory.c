@@ -8871,7 +8871,8 @@ dump_kmeminfo(struct meminfo *mi)
          *  get swap data from dump_swap_info().
          */
 	fprintf(fp, "\n");
-	if (symbol_exists("swapper_space") || symbol_exists("swapper_spaces")) {
+	if (symbol_exists("swap_info") ||
+	    symbol_exists("swapper_space") || symbol_exists("swapper_spaces")) {
 		if (dump_swap_info(RETURN_ON_ERROR, &totalswap_pages, 
 		    &totalused_pages)) {
 			fprintf(fp, "%13s  %7ld  %11s         ----\n", 
