@@ -707,7 +707,31 @@ loongarch64_is_exception_entry(struct syment *sym)
 	return STREQ(sym->name, "ret_from_exception") ||
 		STREQ(sym->name, "ret_from_irq") ||
 		STREQ(sym->name, "work_resched") ||
-		STREQ(sym->name, "handle_sys");
+		STREQ(sym->name, "handle_sys") ||
+		STREQ(sym->name, "handle_syscall") ||
+		STREQ(sym->name, "handle_ade") ||
+		STREQ(sym->name, "handle_ale") ||
+		STREQ(sym->name, "handle_bce") ||
+		STREQ(sym->name, "handle_bp") ||
+		STREQ(sym->name, "handle_fpe") ||
+		STREQ(sym->name, "handle_fpu") ||
+		STREQ(sym->name, "handle_iasub") ||
+		STREQ(sym->name, "handle_ib") ||
+		STREQ(sym->name, "handle_int") ||
+		STREQ(sym->name, "handle_ipe") ||
+		STREQ(sym->name, "handle_lbt") ||
+		STREQ(sym->name, "handle_lsx") ||
+		STREQ(sym->name, "handle_mcheck") ||
+		STREQ(sym->name, "handle_oac") ||
+		STREQ(sym->name, "handle_parchk") ||
+		STREQ(sym->name, "handle_reserved") ||
+		STREQ(sym->name, "handle_ri") ||
+		STREQ(sym->name, "handle_tlb_protect") ||
+		STREQ(sym->name, "tlb_do_page_fault_0") ||
+		STREQ(sym->name, "tlb_do_page_fault_1") ||
+		STREQ(sym->name, "handle_vint") ||
+		STREQ(sym->name, "handle_watch") ||
+		STREQ(sym->name, "handle_lasx");
 }
 
 /*
