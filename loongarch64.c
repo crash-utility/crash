@@ -761,6 +761,8 @@ loongarch64_stackframe_init(void)
 
 	ASSIGN_OFFSET(task_struct_thread_reg03) =
 		task_struct_thread + thread_reg03_sp;
+	MEMBER_OFFSET_INIT(pt_regs_regs, "pt_regs", "regs");
+	STRUCT_SIZE_INIT(pt_regs, "pt_regs");
 	ASSIGN_OFFSET(task_struct_thread_reg01) =
 		task_struct_thread + thread_reg01_ra;
 
