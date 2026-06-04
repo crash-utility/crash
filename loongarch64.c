@@ -18,20 +18,23 @@
 #include <elf.h>
 #include "defs.h"
 
-/* from arch/loongarch/include/asm/ptrace.h */
+/*
+ * This matches the beginning of both kernel struct pt_regs and the
+ * elf_gregset_t layout exported in NT_PRSTATUS notes.
+ */
 struct loongarch64_pt_regs {
 	/* Saved main processor registers. */
 	unsigned long regs[32];
 
 	/* Saved special registers. */
+	unsigned long orig_a0;
+	unsigned long csr_epc;
+	unsigned long csr_badvaddr;
 	unsigned long csr_crmd;
 	unsigned long csr_prmd;
 	unsigned long csr_euen;
 	unsigned long csr_ecfg;
 	unsigned long csr_estat;
-	unsigned long csr_epc;
-	unsigned long csr_badvaddr;
-	unsigned long orig_a0;
 };
 
 struct loongarch64_unwind_frame {
@@ -108,13 +111,14 @@ typedef struct { ulong pte; } pte_t;
 #define LOONGARCH64_EF_RA		1
 #define LOONGARCH64_EF_SP		3
 #define LOONGARCH64_EF_FP		22
-#define LOONGARCH64_EF_CSR_EPC		32
-#define LOONGARCH64_EF_CSR_BADVADDR	33
-#define LOONGARCH64_EF_CSR_CRMD		34
-#define LOONGARCH64_EF_CSR_PRMD		35
-#define LOONGARCH64_EF_CSR_EUEN		36
-#define LOONGARCH64_EF_CSR_ECFG		37
-#define LOONGARCH64_EF_CSR_ESTAT	38
+#define LOONGARCH64_EF_ORIG_A0		32
+#define LOONGARCH64_EF_CSR_EPC		33
+#define LOONGARCH64_EF_CSR_BADVADDR	34
+#define LOONGARCH64_EF_CSR_CRMD		35
+#define LOONGARCH64_EF_CSR_PRMD		36
+#define LOONGARCH64_EF_CSR_EUEN		37
+#define LOONGARCH64_EF_CSR_ECFG		38
+#define LOONGARCH64_EF_CSR_ESTAT	39
 
 static struct machine_specific loongarch64_machine_specific = { 0 };
 
@@ -911,8 +915,12 @@ loongarch64_get_crash_notes(void)
 		/*
 		 * Add __per_cpu_offset for each cpu to form the pointer to the notes
 		 */
-		for (i = 0; i < kt->cpus; i++)
-			notes_ptrs[i] = notes_ptrs[kt->cpus-1] + kt->__per_cpu_offset[i];
+		for (i = 0; i < kt->cpus; i++) {
+			if (IS_KVADDR(notes_ptrs[kt->cpus-1]))
+				notes_ptrs[i] = notes_ptrs[kt->cpus-1] + kt->__per_cpu_offset[i];
+			else
+				notes_ptrs[i] = crash_notes + kt->__per_cpu_offset[i];
+		}
 	}
 
 	buf = GETBUF(SIZE(note_buf));
@@ -1009,7 +1017,7 @@ loongarch64_get_elf_notes(void)
 	struct machine_specific *ms = machdep->machspec;
 	int i;
 
-	if (!DISKDUMP_DUMPFILE() && !KDUMP_DUMPFILE())
+	if (!DISKDUMP_DUMPFILE() && !KDUMP_DUMPFILE() && !NETDUMP_DUMPFILE())
 		return FALSE;
 
 	panic_task_regs = calloc(kt->cpus, sizeof(*panic_task_regs));
@@ -1022,7 +1030,7 @@ loongarch64_get_elf_notes(void)
 
 		if (DISKDUMP_DUMPFILE())
 			note = diskdump_get_prstatus_percpu(i);
-		else if (KDUMP_DUMPFILE())
+		else if (KDUMP_DUMPFILE() || NETDUMP_DUMPFILE())
 			note = netdump_get_prstatus_percpu(i);
 
 		if (!note) {
