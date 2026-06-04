@@ -64,6 +64,7 @@ static void loongarch64_dump_backtrace_entry(struct bt_info *bt,
 			struct loongarch64_unwind_frame *previous, int level);
 static void loongarch64_dump_exception_stack(struct bt_info *bt, char *pt_regs);
 static int loongarch64_is_exception_entry(struct syment *sym);
+static int loongarch64_eframe_search(struct bt_info *bt);
 static void loongarch64_display_full_frame(struct bt_info *bt,
 			struct loongarch64_unwind_frame *current,
 			struct loongarch64_unwind_frame *previous);
@@ -1267,6 +1268,7 @@ loongarch64_init(int when)
 		machdep->kvtop = loongarch64_kvtop;
 		machdep->cmd_mach = loongarch64_cmd_mach;
 		machdep->back_trace = loongarch64_back_trace_cmd;
+		machdep->eframe_search = loongarch64_eframe_search;
 		machdep->get_stack_frame = loongarch64_get_stack_frame;
 		machdep->vmalloc_start = loongarch64_vmalloc_start;
 		machdep->processor_speed = loongarch64_processor_speed;
@@ -1387,6 +1389,12 @@ loongarch64_display_regs_from_elf_notes(int cpu, FILE *ofp)
 		regs->csr_ecfg,
 		regs->csr_estat,
 		regs->csr_euen);
+}
+
+static int
+loongarch64_eframe_search(struct bt_info *bt)
+{
+	return error(FATAL, "-e option not supported on this architecture\n");
 }
 
 #else /* !LOONGARCH64 */
