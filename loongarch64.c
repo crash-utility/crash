@@ -461,7 +461,7 @@ loongarch64_back_trace_cmd(struct bt_info *bt)
 		previous.pc = current.ra = regs->regs[LOONGARCH64_EF_RA];
 	}
 
-	while (current.sp <= bt->stacktop - 32 - SIZE(pt_regs)) {
+	while (current.sp <= bt->stacktop - SIZE(pt_regs)) {
 		struct syment *symbol = NULL;
 		ulong offset;
 
@@ -501,7 +501,7 @@ loongarch64_back_trace_cmd(struct bt_info *bt)
 		 *    * ret_from_kernel_thread
 		 */
 		if (symbol && !STRNEQ(symbol->name, "ret_from") && !offset &&
-			!current.ra && current.sp < bt->stacktop - 32 - SIZE(pt_regs)) {
+			!current.ra && current.sp < bt->stacktop - SIZE(pt_regs)) {
 			if (CRASHDEBUG(8))
 				fprintf(fp, "zero offset at %s, try previous symbol\n",
 					symbol->name);
