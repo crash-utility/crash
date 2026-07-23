@@ -10505,6 +10505,7 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(page_active));
         fprintf(fp, "            page_compound_head: %ld\n",
                 OFFSET(page_compound_head));
+	fprintf(fp, "            page_compound_info: %ld\n", OFFSET(page_compound_info));
         fprintf(fp, "                  page_private: %ld\n", OFFSET(page_private));
 	fprintf(fp, "                page_page_type: %ld\n",
 		OFFSET(page_page_type));
