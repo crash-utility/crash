@@ -10933,6 +10933,9 @@ dump_offset_table(char *spec, ulong makestruct)
                 OFFSET(kmem_cache_oo));
         fprintf(fp, "             kmem_cache_random: %ld\n",
                 OFFSET(kmem_cache_random));
+	fprintf(fp, "           kmem_cache_per_node: %ld\n", OFFSET(kmem_cache_per_node));
+
+	fprintf(fp, " kmem_cache_per_node_ptrs_node: %ld\n", OFFSET(kmem_cache_per_node_ptrs_node));
 
         fprintf(fp, "    kmem_cache_node_nr_partial: %ld\n",
                 OFFSET(kmem_cache_node_nr_partial));
@@ -12044,6 +12047,7 @@ dump_offset_table(char *spec, ulong makestruct)
         fprintf(fp, "                    kmem_cache: %ld\n", SIZE(kmem_cache));
         fprintf(fp, "               kmem_cache_node: %ld\n", SIZE(kmem_cache_node));
         fprintf(fp, "                kmem_cache_cpu: %ld\n", SIZE(kmem_cache_cpu));
+	fprintf(fp, "      kmem_cache_per_node_ptrs: %ld\n", SIZE(kmem_cache_per_node_ptrs));
 
         fprintf(fp, "              swap_info_struct: %ld\n", 
 		SIZE(swap_info_struct));

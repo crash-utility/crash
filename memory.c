@@ -871,6 +871,8 @@ vm_init(void)
 		MEMBER_OFFSET_INIT(kmem_cache_inuse, "kmem_cache", "inuse");
 		MEMBER_OFFSET_INIT(kmem_cache_align, "kmem_cache", "align");
 		MEMBER_OFFSET_INIT(kmem_cache_node, "kmem_cache", "node");
+		if (INVALID_MEMBER(kmem_cache_node))
+			MEMBER_OFFSET_INIT(kmem_cache_per_node, "kmem_cache", "per_node");
 		MEMBER_OFFSET_INIT(kmem_cache_cpu_slab, "kmem_cache", "cpu_slab");
 		MEMBER_OFFSET_INIT(kmem_cache_list, "kmem_cache", "list");
 		MEMBER_OFFSET_INIT(kmem_cache_red_left_pad, "kmem_cache", "red_left_pad");
@@ -922,7 +924,12 @@ vm_init(void)
 			if (INVALID_MEMBER(page_objects))
 				ANON_MEMBER_OFFSET_INIT(page_objects, "slab", "objects");
 		}
-		if (VALID_MEMBER(kmem_cache_node)) {
+		if (VALID_MEMBER(kmem_cache_per_node)) { /* Linux 7.1 and later */
+			MEMBER_OFFSET_INIT(kmem_cache_per_node_ptrs_node,
+					"kmem_cache_per_node_ptrs", "node");
+			STRUCT_SIZE_INIT(kmem_cache_per_node_ptrs, "kmem_cache_per_node_ptrs");
+			vt->flags |= CONFIG_NUMA;
+		} else if (VALID_MEMBER(kmem_cache_node)) {
                 	ARRAY_LENGTH_INIT(len, NULL, "kmem_cache.node", NULL, 0);
 			vt->flags |= CONFIG_NUMA;
 		}
@@ -19555,9 +19562,13 @@ get_kmem_cache_slub_data(long cmd, struct meminfo *si)
 	for (n = 0; n < vt->numnodes; n++) {
 		if (vt->flags & CONFIG_NUMA) {
 			nt = &vt->node_table[n];
-			node_ptr = ULONG(si->cache_buf +
-				OFFSET(kmem_cache_node) +
-				(sizeof(void *) * nt->node_id));
+			if (VALID_MEMBER(kmem_cache_per_node)) /* Linux 7.1 and later */
+				node_ptr = ULONG(si->cache_buf + OFFSET(kmem_cache_per_node) +
+						(SIZE(kmem_cache_per_node_ptrs) * nt->node_id) +
+						OFFSET(kmem_cache_per_node_ptrs_node));
+			else
+				node_ptr = ULONG(si->cache_buf + OFFSET(kmem_cache_node) +
+						(sizeof(void *) * nt->node_id));
 		} else
 			node_ptr = si->cache + 
 				OFFSET(kmem_cache_local_node);

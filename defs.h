@@ -2296,6 +2296,8 @@ struct offset_table {                    /* stash of commonly-used offsets */
 	long folio__folio_order;
 	long folio__flags_1;
 	long page_compound_info;
+	long kmem_cache_per_node;
+	long kmem_cache_per_node_ptrs_node;
 };
 
 struct size_table {         /* stash of commonly-used sizes */
@@ -2478,6 +2480,7 @@ struct size_table {         /* stash of commonly-used sizes */
 	long page_compound_order;
 	long folio__folio_order;
 	long folio__flags_1;
+	long kmem_cache_per_node_ptrs;
 };
 
 struct array_table {
