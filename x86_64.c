@@ -6736,13 +6736,28 @@ x86_64_ORC_init(void)
 	if (orc->has_signal && !orc->has_end)
 		machdep->flags |= ORC_6_4;
 
-	/* See kernel commit 1735858caa4b */
-	if (THIS_KERNEL_VERSION >= LINUX(7,1,0)) {
-		ORC_REG_SP = 3;
-		ORC_REG_PREV_SP = 8;
-	} else {
-		ORC_REG_SP = 5;
-		ORC_REG_PREV_SP = 1;
+	/* Try get ORC_REG_(PREV)_SP */
+	ORC_REG_SP = 5;
+	ORC_REG_PREV_SP = 1;
+
+	if (kernel_symbol_exists("orc_fp_entry")) {
+		/*
+		 * kernel_orc_entry_6_4 & kernel_orc_entry have the same
+		 * offset of bp_reg.
+		 */
+		kernel_orc_entry_6_4 entry = {0};
+		if (try_get_symbol_data("orc_fp_entry", sizeof(entry), &entry)) {
+			/*
+			 * orc_fp_entry.bp_reg = ORC_REG_PREV_SP
+			 * See kernel commit 1735858caa4b. Use ORC_REG_PREV_SP
+			 * as the indicator of the commit.
+			 */
+			if (entry.bp_reg == 8) {
+				ORC_REG_SP = 3;
+				ORC_REG_PREV_SP = 8;
+			}
+		} else
+			error(WARNING, "Cannot get orc_fp_entry.bp_reg info");
 	}
 
 	machdep->flags |= ORC;
