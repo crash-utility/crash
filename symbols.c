@@ -1085,12 +1085,16 @@ symbol_value_from_proc_kallsyms(char *symname)
 
 /*
  *  Install all static kernel symbol values into the symval_hash.
+ *  Uses a dynamically-allocated tails[] array for O(1) tail insertion.
  */
 static void
 symval_hash_init(void)
 {
 	int index;
-	struct syment *sp, *sph;
+	struct syment *sp, **tails;
+
+	tails = (struct syment **)GETBUF(SYMVAL_HASH * sizeof(struct syment *));
+	BZERO(tails, SYMVAL_HASH * sizeof(struct syment *));
 
         for (sp = st->symtable; sp < st->symend; sp++) {
 		index = SYMVAL_HASH_INDEX(sp->value);
@@ -1098,15 +1102,12 @@ symval_hash_init(void)
 		if (st->symval_hash[index].val_hash_head == NULL) {
 			st->symval_hash[index].val_hash_head = sp;
 			st->symval_hash[index].val_hash_last = sp;
-			continue;
-		}
-
-		sph = st->symval_hash[index].val_hash_head; 
-		while (sph->val_hash_next)
-			sph = sph->val_hash_next;
-				
-		sph->val_hash_next = sp;
+		} else
+			tails[index]->val_hash_next = sp;
+		tails[index] = sp;
 	}
+
+	FREEBUF(tails);
 }
 
 /*
