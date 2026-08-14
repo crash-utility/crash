@@ -29,6 +29,9 @@
 #endif
 #include "bfd.h"
 
+#define KERNEL_VERSION_MIN '2'
+#define KERNEL_VERSION_MAX '7'  /* latest linux mainline kernel major number */
+
 static void do_module_cmd(ulong, char *, ulong, char *, char *);
 static void show_module_taint(void);
 static char *find_module_objfile(char *, char *, char *);
@@ -103,6 +106,30 @@ static void dump_printk_safe_seq_buf(int);
 static void check_vmcoreinfo(void);
 static int is_pvops_xen(void);
 static int get_linux_banner_from_vmlinux(char *, size_t);
+
+static bool kernel_version_str_sanity_check(char *buf)
+{
+	int n;
+	char *p;
+
+	if (!buf)
+		return FALSE;
+
+	p = strstr(buf, "Linux version ");
+	if (!p)
+		return FALSE;
+
+	n = strlen(p);
+
+	if (n < 17) /* "Linux version " (14) + "x.y" (3) = 17 */
+		return FALSE;
+
+	if (p[14] >= KERNEL_VERSION_MIN && p[14] <= KERNEL_VERSION_MAX
+			&& p[15] == '.'	&& p[16] >= '0' && p[16] <= '9')
+		return TRUE;
+
+	return FALSE;
+}
 
 /*
  * popuplate the global kernel table (kt) with kernel version
@@ -1396,11 +1423,7 @@ verify_namelist()
 	found = FALSE;
 	sprintf(buffer3, "(unknown)");
         while (fgets(buffer, (BUFSIZE/2)-1, pipe)) {
-		if (!strstr(buffer, "Linux version 2.") &&
-		    !strstr(buffer, "Linux version 3.") &&
-		    !strstr(buffer, "Linux version 4.") &&
-		    !strstr(buffer, "Linux version 5.") &&
-		    !strstr(buffer, "Linux version 6."))
+		if (!kernel_version_str_sanity_check(buffer))
 			continue;
 
                 if (strstr(buffer, kt->proc_version)) {
@@ -5987,11 +6010,7 @@ debug_kernel_version(char *namelist)
 
 	argc = 0;
         while (fgets(buf, BUFSIZE-1, pipe)) {
-                if (!strstr(buf, "Linux version 2.") &&
-		    !strstr(buf, "Linux version 3.") &&
-		    !strstr(buf, "Linux version 4.") &&
-		    !strstr(buf, "Linux version 5.") &&
-		    !strstr(buf, "Linux version 6."))
+		if (!kernel_version_str_sanity_check(buf))
                         continue;
 
 		argc = parse_line(buf, arglist); 
