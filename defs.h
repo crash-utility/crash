@@ -2924,6 +2924,7 @@ struct symbol_table_data {
 #ifdef GDB_5_3
 	struct _bfd *bfd;
 #else
+	struct bfd *bfd_orig;
 	struct bfd *bfd;
 #endif
 	struct sec *sections;

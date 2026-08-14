@@ -444,6 +444,7 @@ check_gnu_debuglink(bfd *bfd)
 	return FALSE;
 
 reset_bfd:
+	st->bfd_orig = st->bfd;
 
         if ((st->bfd = bfd_openr(pc->debuginfo_file, NULL)) == NULL)
                 error(FATAL, "cannot open object file: %s\n", 

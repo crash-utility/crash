@@ -12164,6 +12164,7 @@ check_vmcoreinfo(void)
 static
 int get_linux_banner_from_vmlinux(char *buf, size_t size)
 {
+	struct bfd *bfd = st->bfd_orig ? : st->bfd;
 	struct bfd_section *sect;
 	long offset;
 	ulong start_rodata;
@@ -12175,7 +12176,7 @@ int get_linux_banner_from_vmlinux(char *buf, size_t size)
 	else
 		return FALSE;
 
-	sect = bfd_get_section_by_name(st->bfd, ".rodata");
+	sect = bfd_get_section_by_name(bfd, ".rodata");
 	if (!sect)
 		return FALSE;
 
@@ -12187,7 +12188,7 @@ int get_linux_banner_from_vmlinux(char *buf, size_t size)
 	 */
 	offset = symbol_value("linux_banner") - start_rodata;
 
-	if (!bfd_get_section_contents(st->bfd,
+	if (!bfd_get_section_contents(bfd,
 				      sect,
 				      buf,
 				      offset,
