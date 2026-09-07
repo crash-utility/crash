@@ -119,7 +119,12 @@ vmware_vmss_init(char *filename, FILE *ofp)
 	}
 
 	for (i = 0; i < hdr.numgroups; i++) {
-		if (fseek(fp, grps[i].position, SEEK_SET) == -1) {
+		if (grps[i].position > (uint64_t)LONG_MAX) {
+			error(INFO, LOGPRX"Offset of VMSS Group['%s'] exceeds maximum at %#llx.\n",
+				grps[i].name, (ulonglong)grps[i].position);
+			continue;
+		}
+		if (fseek(fp, (long)grps[i].position, SEEK_SET) == -1) {
 			error(INFO, LOGPRX"Bad offset of VMSS Group['%s'] in '%s' at %#llx.\n",
 			      grps[i].name, filename, (ulonglong)grps[i].position);
 			continue;
@@ -723,7 +728,12 @@ vmware_vmss_memory_dump(FILE *ofp)
 	}
 
 	for (i = 0; i < hdr.numgroups; i++) {
-		if (fseek(fp, grps[i].position, SEEK_SET) == -1) {
+		if (grps[i].position > (uint64_t)LONG_MAX) {
+			fprintf(ofp, "Offset of VMSS Group['%s'] exceeds maximum at %#llx.\n",
+			      grps[i].name, (ulonglong)grps[i].position);
+			continue;
+		}
+		if (fseek(fp, (long)grps[i].position, SEEK_SET) == -1) {
 			fprintf(ofp, "Bad offset of VMSS Group['%s'] in vmss file at %#llx.\n",
 				grps[i].name, (ulonglong)grps[i].position);
 			continue;
