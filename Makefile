@@ -469,6 +469,7 @@ do_clean:
 	rm -f ${OBJECT_FILES} ${DAEMON_OBJECT_FILES} ${PROGRAM} ${PROGRAM}lib.a ${GDB_OFILES}
 	@$(MAKE) -C extensions -i clean
 	@$(MAKE) -C memory_driver -i clean
+	@$(MAKE) -C doc -i clean
 
 #
 # Remove everything a build creates: the objects and binaries handled by
