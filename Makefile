@@ -834,3 +834,21 @@ do_extensions:
 
 memory_driver: make_configure 
 	@$(MAKE) -C memory_driver -i
+
+#
+# Documentation.  The reStructuredText sources live in doc/ and are the
+# source of truth for the crash documentation; the HTML generated here is
+# what gets published on the crash utility web site.
+#
+doc: htmldocs
+
+htmldocs:
+	$(MAKE) -C doc html
+
+pdfdocs:
+	$(MAKE) -C doc latexpdf
+
+cleandocs:
+	$(MAKE) -C doc clean
+
+.PHONY: doc htmldocs pdfdocs cleandocs
