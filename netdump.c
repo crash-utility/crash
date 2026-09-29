@@ -2102,8 +2102,9 @@ dump_Elf32_Nhdr(Elf32_Off offset, int store)
 
 	notesize = (uint64_t)note->n_namesz + (uint64_t)note->n_descsz;
 
-	if ((note->n_namesz == 0) || !remaining || (notesize > remaining)) {
-		error(WARNING, 
+	if ((note->n_namesz == 0) || !remaining || (notesize > remaining) ||
+	    (note->n_namesz >= BUFSIZE)) {
+		error(WARNING,
 		    "possibly corrupt Elf32_Nhdr: "
 		    "n_namesz: %ld n_descsz: %ld n_type: %lx\n%s",
 			note->n_namesz, note->n_descsz, note->n_type,
@@ -2339,8 +2340,9 @@ dump_Elf64_Nhdr(Elf64_Off offset, int store)
 
 	notesize = (uint64_t)note->n_namesz + (uint64_t)note->n_descsz;
 
-	if ((note->n_namesz == 0) || !remaining || (notesize > remaining)) {
-		error(WARNING, 
+	if ((note->n_namesz == 0) || !remaining || (notesize > remaining) ||
+	    (note->n_namesz >= BUFSIZE)) {
+		error(WARNING,
 		    "possibly corrupt Elf64_Nhdr: "
 		    "n_namesz: %ld n_descsz: %ld n_type: %lx\n%s",
 			note->n_namesz, note->n_descsz, note->n_type,
