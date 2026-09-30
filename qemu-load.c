@@ -979,6 +979,8 @@ qemu_load (const struct qemu_device_loader *devices, uint32_t required_features,
                 }
 		if (sec == QEMU_VM_CONFIGURATION) {
 			uint32_t len = get_be32 (fp);
+			if (len >= sizeof(name))
+				goto fail;
 			get_string_len (fp, name, len);
 			continue;
                 }
