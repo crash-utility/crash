@@ -318,6 +318,11 @@ all: make_configure
 	@$(MAKE) gdb_merge
 #	@$(MAKE) extensions
 
+#
+# The embedded gdb is built for the selected target only -- gdb, bfd and
+# opcodes already default to that -- without the full-screen TUI and
+# without the libctf and libbacktrace libraries, none of which crash uses.
+#
 gdb_merge: force
 	@if [ ! -f ${GDB}/README ]; then \
 	  $(MAKE) gdb_unzip; fi
@@ -327,7 +332,7 @@ gdb_merge: force
 	@if [ ! -f ${GDB}/config.status ]; then \
 	  (cd ${GDB}; ./configure ${GDB_CONF_FLAGS} --with-separate-debug-dir=/usr/lib/debug \
 	    --with-bugurl="" --with-expat=no --with-python=no --disable-sim \
-	    --disable-tui; \
+	    --disable-tui --disable-libctf --disable-libbacktrace; \
 	  $(MAKE) CRASH_TARGET=${TARGET}; echo ${TARGET} > crash.target) \
 	else $(MAKE) rebuild; fi
 	@if [ ! -f ${PROGRAM} ]; then \
