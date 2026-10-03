@@ -326,7 +326,8 @@ gdb_merge: force
 	@rm -f ${PROGRAM}
 	@if [ ! -f ${GDB}/config.status ]; then \
 	  (cd ${GDB}; ./configure ${GDB_CONF_FLAGS} --with-separate-debug-dir=/usr/lib/debug \
-	    --with-bugurl="" --with-expat=no --with-python=no --disable-sim; \
+	    --with-bugurl="" --with-expat=no --with-python=no --disable-sim \
+	    --disable-tui; \
 	  $(MAKE) CRASH_TARGET=${TARGET}; echo ${TARGET} > crash.target) \
 	else $(MAKE) rebuild; fi
 	@if [ ! -f ${PROGRAM} ]; then \
