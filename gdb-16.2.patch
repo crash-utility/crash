@@ -9,6 +9,8 @@
 # to all subsequent patch applications.
 
 tar xvzmf gdb-16.2.tar.gz \
+	gdb-16.2/Makefile.in \
+	gdb-16.2/gdb/Makefile.in \
 	gdb-16.2/gdb/symfile.c \
 	gdb-16.2/gdb/symtab.c
 
@@ -17,25 +19,33 @@ exit 0
 --- gdb-16.2/Makefile.in.orig
 +++ gdb-16.2/Makefile.in
 @@ -369,6 +369,9 @@ CC_FOR_BUILD = @CC_FOR_BUILD@
- CFLAGS_FOR_BUILD = @CFLAGS_FOR_BUILD@
+-CFLAGS_FOR_BUILD = @CFLAGS_FOR_BUILD@
++CFLAGS_FOR_BUILD = $(filter-out -g,@CFLAGS_FOR_BUILD@) $(if $(filter 1,$(DEBUG)),-g)
  CPP_FOR_BUILD = @CPP_FOR_BUILD@
  CPPFLAGS_FOR_BUILD = @CPPFLAGS_FOR_BUILD@
 +ifeq (${CRASH_TARGET}, PPC64)
 +CFLAGS_FOR_BUILD += -m64 -fPIC
 +endif
- CXXFLAGS_FOR_BUILD = @CXXFLAGS_FOR_BUILD@
+-CXXFLAGS_FOR_BUILD = @CXXFLAGS_FOR_BUILD@
++CXXFLAGS_FOR_BUILD = $(filter-out -g,@CXXFLAGS_FOR_BUILD@) $(if $(filter 1,$(DEBUG)),-g)
  CXX_FOR_BUILD = @CXX_FOR_BUILD@
  DLLTOOL_FOR_BUILD = @DLLTOOL_FOR_BUILD@
 @@ -441,6 +444,9 @@ GNATBIND = @GNATBIND@
  GNATMAKE = @GNATMAKE@
  
- CFLAGS = @CFLAGS@
+-CFLAGS = @CFLAGS@
++CFLAGS = $(filter-out -g,@CFLAGS@) $(if $(filter 1,$(DEBUG)),-g)
 +ifeq (${CRASH_TARGET}, PPC64)
 +CFLAGS += -m64 -fPIC
 +endif
  LDFLAGS = @LDFLAGS@
  LIBCFLAGS = $(CFLAGS)
  CXXFLAGS = @CXXFLAGS@
+@@ -446,3 +452,3 @@
+-CXXFLAGS = @CXXFLAGS@
++CXXFLAGS = $(filter-out -g,@CXXFLAGS@) $(if $(filter 1,$(DEBUG)),-g)
+ LIBCXXFLAGS = $(CXXFLAGS) -fno-implicit-templates
+ GOCFLAGS = $(CFLAGS)
 --- gdb-16.2/gdb/Makefile.in.orig
 +++ gdb-16.2/gdb/Makefile.in
 @@ -603,7 +603,7 @@ CONFIG_DEP_SUBDIR = $(addsuffix /$(DEPDIR),$(CONFIG_SRC_SUBDIR))
@@ -47,6 +57,12 @@ exit 0
  GDB_INCLUDED_HEADER = -include $(srcdir)/defs.h
  GDB_CFLAGS = \
  	-I. \
+@@ -623,3 +623,3 @@
+-CFLAGS = @CFLAGS@
++CFLAGS = $(filter-out -g,@CFLAGS@) $(if $(filter 1,$(DEBUG)),-g)
+-CXXFLAGS = @CXXFLAGS@
++CXXFLAGS = $(filter-out -g,@CXXFLAGS@) $(if $(filter 1,$(DEBUG)),-g)
+ CPPFLAGS = @CPPFLAGS@
 @@ -1220,6 +1220,7 @@ COMMON_SFILES = \
  	symmisc.c \
  	symtab.c \

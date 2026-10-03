@@ -84,6 +84,16 @@
     $ cd crash-9.0.x
     $ make
 
+  By default, debug information (-g) is not built into either crash or the
+  embedded gdb module.  To build both with debug information:
+
+    $ make DEBUG=1
+
+  Changing the target ("make target=...") or toggling DEBUG on an existing
+  build tree does not recompile objects that are already up to date.  Run
+  "make clean" before rebuilding, and also remove the gdb-16.2 directory if
+  the embedded gdb was configured for a different target.
+
   To cross compile the crash utility for aarch64 on x86_64:
     $ make CROSS_COMPILE=aarch64-linux-gnu- -j`nproc`
 

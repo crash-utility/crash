@@ -258,7 +258,18 @@ GDB_FLAGS=
 # TARGET_CFLAGS will be configured automatically by configure
 TARGET_CFLAGS=
 
-CRASH_CFLAGS=-g -D${TARGET} ${TARGET_CFLAGS} ${GDB_FLAGS} ${CFLAGS}
+#
+# Debug information (-g) is not built by default.  Use "make DEBUG=1" to
+# build both crash and the embedded gdb module with debug information.
+#
+ifeq ($(DEBUG),1)
+DEBUG_CFLAGS=-g
+else
+DEBUG_CFLAGS=
+endif
+export DEBUG
+
+CRASH_CFLAGS=$(DEBUG_CFLAGS) -D${TARGET} ${TARGET_CFLAGS} ${GDB_FLAGS} ${CFLAGS}
 
 GPL_FILES=
 TAR_FILES=${SOURCE_FILES} Makefile ${GPL_FILES} README crash-release crash.8 \
