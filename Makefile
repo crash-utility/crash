@@ -622,10 +622,12 @@ files: make_configure
 	@./configure -q -b
 	@$(MAKE) show_files
 
-gdb_files: make_configure
-	@./configure -q -b
-	@echo ${GDB_FILES} ${GDB_PATCH_FILES}
-
+#
+# The list of files which make up a release tarball.  The embedded gdb's
+# files and its patch file(s) are included through GDB_FILES and
+# GDB_PATCH_FILES, which is why "make files" still lists them even though
+# there is no separate gdb_files target.
+#
 show_files:
 	@if [ -f ${PROGRAM}  ]; then \
 		./${PROGRAM} --no_scroll --no_crashrc -h README > README; fi
@@ -701,23 +703,11 @@ do_release:
 	   ls -l ${PROGRAM}-${VERSION}-${RELEASE}.src.rpm; \
 	fi
 
-ref:
-	$(MAKE) ctags cscope
-
 cscope:
 	rm -f cscope.files cscope.out
 	for FILE in ${SOURCE_FILES}; do \
 	echo $$FILE >> cscope.files; done
 	cscope -b -f cscope.out
-
-glink: make_configure
-	@./configure -q -b
-	rm -f gdb
-	ln -s ${GDB}/gdb gdb
-	(cd ${GDB}/gdb; rm -f ${PROGRAM}; ln -s ../../${PROGRAM} ${PROGRAM})
-
-name:
-	@echo ${PROGRAM}
 
 dis:
 	objdump --disassemble --line-numbers ${PROGRAM} > ${PROGRAM}.dis
