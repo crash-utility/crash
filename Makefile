@@ -272,8 +272,6 @@ export DEBUG
 CRASH_CFLAGS=$(DEBUG_CFLAGS) -D${TARGET} ${TARGET_CFLAGS} ${GDB_FLAGS} ${CFLAGS}
 
 GPL_FILES=
-TAR_FILES=${SOURCE_FILES} Makefile ${GPL_FILES} README crash-release crash.8 \
-	${EXTENSION_SOURCE_FILES} ${MEMORY_DRIVER_FILES}
 CSCOPE_FILES=${SOURCE_FILES}
 
 READLINE_DIRECTORY=./${GDB}/readline/readline
@@ -664,16 +662,6 @@ show_files:
 
 ctags:
 	ctags ${SOURCE_FILES}
-
-tar: make_configure
-	@./configure -q -b
-	@$(MAKE) do_tar
-
-do_tar:
-	@if [ -f ${PROGRAM}  ]; then \
-		./${PROGRAM} --no_scroll --no_crashrc -h README > README; fi
-	tar cvzf ${PROGRAM}.tar.gz ${TAR_FILES} ${GDB_FILES} ${GDB_PATCH_FILES}
-	@echo; ls -l ${PROGRAM}.tar.gz
 
 VERSION=
 RELEASE=0
