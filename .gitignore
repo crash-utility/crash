@@ -1,5 +1,7 @@
 configure
 build_data.c
+Makefile.inc
+Makefile.inc.new
 cscope.out
 crashlib.a
 *.o

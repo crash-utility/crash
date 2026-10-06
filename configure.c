@@ -67,8 +67,32 @@ void show_configuration(void);
 void target_rebuild_instructions(struct supported_gdb_version *, char *);
 void arch_mismatch(struct supported_gdb_version *);
 void get_current_configuration(struct supported_gdb_version *);
-void makefile_setup(FILE **, FILE **);
-void makefile_create(FILE **, FILE **);
+/*
+ *  configure does not modify the top-level Makefile.  It writes the
+ *  variables it manages to Makefile.inc as complete "NAME=value" lines;
+ *  the Makefile includes that file after its own defaults, so removing the
+ *  generated file returns the build to those defaults.
+ */
+#define CONFIG_OVERRIDE "Makefile.inc"
+#define CONFIG_STRING_SIZE 1024
+
+struct configure_config {
+	char target[CONFIG_STRING_SIZE];
+	char target_cflags[CONFIG_STRING_SIZE];
+	char gdb_conf_flags[CONFIG_STRING_SIZE];
+	char ldflags[CONFIG_STRING_SIZE];
+	char gdb[CONFIG_STRING_SIZE];
+	char gdb_files[CONFIG_STRING_SIZE];
+	char gdb_ofiles[CONFIG_STRING_SIZE];
+	char gdb_patch_files[CONFIG_STRING_SIZE];
+	char gdb_flags[CONFIG_STRING_SIZE];
+	char gpl_files[CONFIG_STRING_SIZE];
+	char version[CONFIG_STRING_SIZE];
+	char warning_options[CONFIG_STRING_SIZE];
+	char warning_error[CONFIG_STRING_SIZE];
+};
+void config_read(struct configure_config *);
+void config_write(struct configure_config *);
 char *strip_linefeeds(char *);
 char *upper_case(char *, char *);
 char *lower_case(char *, char *);
@@ -730,13 +754,12 @@ show_configuration(void)
 void
 build_configure(struct supported_gdb_version *sp)
 {
-	FILE *fp1, *fp2;
-	char buf[512];
 	char *target;
 	char *target_CFLAGS;
 	char *gdb_conf_flags;
 	char *ldflags;
 	char *cflags;
+	struct configure_config config;
 
 	get_current_configuration(sp);
 
@@ -849,40 +872,24 @@ build_configure(struct supported_gdb_version *sp)
 	cflags = get_extra_flags("CFLAGS.extra", NULL);
 	gdb_conf_flags = get_extra_flags("GDBFLAGS.extra", gdb_conf_flags);
 
-	makefile_setup(&fp1, &fp2);
+	config_read(&config);
 
-	while (fgets(buf, 512, fp1)) {
-		if (strncmp(buf, "TARGET=", strlen("TARGET=")) == 0)
-			fprintf(fp2, "%s\n", target);
-                else if (strncmp(buf, "TARGET_CFLAGS=",
-			strlen("TARGET_CFLAGS=")) == 0)
-                       	fprintf(fp2, "%s%s%s\n", target_CFLAGS,
-				cflags ? " " : "", cflags ? cflags : "");
-		else if (strncmp(buf, "GDB_CONF_FLAGS=",
-			strlen("GDB_CONF_FLAGS=")) == 0)
-			fprintf(fp2, "%s\n", gdb_conf_flags);
-		else if (strncmp(buf, "GDB_FILES=",strlen("GDB_FILES=")) == 0)
-			fprintf(fp2, "%s\n", sp->GDB_FILES);
-		else if (strncmp(buf, "GDB_OFILES=",strlen("GDB_OFILES=")) == 0)
-                        fprintf(fp2, "%s\n", sp->GDB_OFILES);
-		else if (strncmp(buf, "GDB_PATCH_FILES=",strlen("GDB_PATCH_FILES=")) == 0)
-                        fprintf(fp2, "%s\n", sp->GDB_PATCH_FILES);
-		else if (strncmp(buf, "GDB_FLAGS=",strlen("GDB_FLAGS=")) == 0)
-                        fprintf(fp2, "%s\n", sp->GDB_FLAGS);
-		else if (strncmp(buf, "GPL_FILES=", strlen("GPL_FILES=")) == 0)
-			fprintf(fp2, "GPL_FILES=%s\n", strcmp(sp->GPL, "GPLv2") == 0 ? 
-				"COPYING" : "COPYING3");
-                else if (strncmp(buf, "GDB=", strlen("GDB=")) == 0) {
-                        fprintf(fp2, "%s\n", sp->GDB);
-                        sprintf(target_data.gdb_version, "%s", &sp->GDB[4]);
-		} else if (strncmp(buf, "LDFLAGS=", strlen("LDFLAGS=")) == 0) {
-                       	fprintf(fp2, "LDFLAGS=%s\n", ldflags ? ldflags : "");
-		} else
-			fprintf(fp2, "%s", buf);
+	sprintf(config.target, "%s", target);
+	sprintf(config.target_cflags, "%s%s%s", target_CFLAGS,
+		cflags ? " " : "", cflags ? cflags : "");
+	sprintf(config.gdb_conf_flags, "%s", gdb_conf_flags);
+	sprintf(config.gdb_files, "%s", sp->GDB_FILES);
+	sprintf(config.gdb_ofiles, "%s", sp->GDB_OFILES);
+	sprintf(config.gdb_patch_files, "%s", sp->GDB_PATCH_FILES);
+	sprintf(config.gdb_flags, "%s", sp->GDB_FLAGS);
+	sprintf(config.gpl_files, "GPL_FILES=%s",
+		strcmp(sp->GPL, "GPLv2") == 0 ? "COPYING" : "COPYING3");
+	sprintf(config.gdb, "%s", sp->GDB);
+	sprintf(config.ldflags, "LDFLAGS=%s", ldflags ? ldflags : "");
 
-	}
+	config_write(&config);
 
-	makefile_create(&fp1, &fp2);
+	sprintf(target_data.gdb_version, "%s", &sp->GDB[4]);
 	show_configuration();
 	make_build_data(&target[strlen("TARGET=")]);
 }
@@ -890,10 +897,11 @@ build_configure(struct supported_gdb_version *sp)
 void
 release_configure(char *gdb_version, struct supported_gdb_version *sp)
 {
-	FILE *fp1, *fp2;
+	FILE *fp;
 	int found;
 	char buf[512];
 	char gdb_files[MAXSTRLEN];
+	struct configure_config config;
 
 	get_current_configuration(sp);
 
@@ -905,25 +913,19 @@ release_configure(char *gdb_version, struct supported_gdb_version *sp)
 	sprintf(gdb_files, "GDB_%s_FILES", 
 		&gdb_version[strlen("gdb-")]);
 
-	makefile_setup(&fp1, &fp2);
-
+	/*
+	 *  The Makefile must define the GDB_<version>_FILES variable that
+	 *  GDB_FILES is set to.
+	 */
 	found = 0;
-	while (fgets(buf, 512, fp1)) {
-		if (strncmp(buf, gdb_files, strlen(gdb_files)) == 0)
-			found++;
-		if (strncmp(buf, "GDB_FILES=", strlen("GDB_FILES=")) == 0)
-			fprintf(fp2, "GDB_FILES=${%s}\n", gdb_files);
-		else if (strncmp(buf, "VERSION=", strlen("VERSION=")) == 0)
-                        fprintf(fp2, "VERSION=%s\n", 
-				target_data.release);
-		else if (strncmp(buf, "GDB_PATCH_FILES=", strlen("GDB_PATCH_FILES=")) == 0)
-			fprintf(fp2, "%s\n", sp->GDB_PATCH_FILES);
-		else if (strncmp(buf, "GPL_FILES=", strlen("GPL_FILES=")) == 0)
-			fprintf(fp2, "GPL_FILES=%s\n", strcmp(sp->GPL, "GPLv2") == 0 ? 
-				"COPYING" : "COPYING3");
-		else
-			fprintf(fp2, "%s", buf);
-
+	if ((fp = fopen("Makefile", "r")) != NULL) {
+		while (fgets(buf, 512, fp)) {
+			if (strncmp(buf, gdb_files, strlen(gdb_files)) == 0) {
+				found++;
+				break;
+			}
+		}
+		fclose(fp);
 	}
 
         if (!found) {
@@ -931,7 +933,13 @@ release_configure(char *gdb_version, struct supported_gdb_version *sp)
                 exit(1);
         }
 
-	makefile_create(&fp1, &fp2);
+	config_read(&config);
+	sprintf(config.gdb_files, "GDB_FILES=${%s}", gdb_files);
+	sprintf(config.version, "VERSION=%s", target_data.release);
+	sprintf(config.gdb_patch_files, "%s", sp->GDB_PATCH_FILES);
+	sprintf(config.gpl_files, "GPL_FILES=%s",
+		strcmp(sp->GPL, "GPLv2") == 0 ? "COPYING" : "COPYING3");
+	config_write(&config);
 }
 
 /*
@@ -1003,182 +1011,180 @@ make_crash_release(char *package, int release)
 void
 gdb_configure(struct supported_gdb_version *sp)
 {
-	FILE *fp1, *fp2;
-	char buf[512];
+	struct configure_config config;
 
 	get_current_configuration(sp);
 
-	makefile_setup(&fp1, &fp2);
-
-	while (fgets(buf, 512, fp1)) {
-		if (strncmp(buf, "GDB=", strlen("GDB=")) == 0)
-			fprintf(fp2, "%s\n", sp->GDB);
-		else
-			fprintf(fp2, "%s", buf);
-
-	}
-
-	makefile_create(&fp1, &fp2);
+	config_read(&config);
+	sprintf(config.gdb, "%s", sp->GDB);
+	config_write(&config);
 }
 
 void
 unconfigure(void)
 {
-	FILE *fp1, *fp2;
-	char buf[512];
-
-	makefile_setup(&fp1, &fp2);
-
-	while (fgets(buf, 512, fp1)) {
-                if (strncmp(buf, "TARGET=", strlen("TARGET=")) == 0)
-                        fprintf(fp2, "TARGET=\n");
-                else if (strncmp(buf, "TARGET_CFLAGS=",
-			strlen("TARGET_CFLAGS=")) == 0)
-                        fprintf(fp2, "TARGET_CFLAGS=\n");
-		else if (strncmp(buf, "GDB_CONF_FLAGS=",
-			strlen("GDB_CONF_FLAGS=")) == 0)
-			fprintf(fp2, "GDB_CONF_FLAGS=\n");
-                else if (strncmp(buf, "GDB_FILES=",strlen("GDB_FILES=")) == 0)
-                        fprintf(fp2, "GDB_FILES=\n");
-                else if (strncmp(buf, "GDB_OFILES=",strlen("GDB_OFILES=")) == 0)
-                        fprintf(fp2, "GDB_OFILES=\n");
-                else if (strncmp(buf, "GDB_PATCH_FILES=",strlen("GDB_PATCH_FILES=")) == 0)
-                        fprintf(fp2, "GDB_PATCH_FILES=\n");
-                else if (strncmp(buf, "GDB_FLAGS=",strlen("GDB_FLAGS=")) == 0)
-                        fprintf(fp2, "GDB_FLAGS=\n");
-                else if (strncmp(buf, "GDB=", strlen("GDB=")) == 0) 
-                        fprintf(fp2, "GDB=\n");
-                else if (strncmp(buf, "VERSION=", strlen("VERSION=")) == 0) 
-                        fprintf(fp2, "VERSION=\n");
-                else if (strncmp(buf, "GPL_FILES=", strlen("GPL_FILES=")) == 0) 
-                        fprintf(fp2, "GPL_FILES=\n");
-                else if (strncmp(buf, "LDFLAGS=", strlen("LDFLAGS=")) == 0) 
-                        fprintf(fp2, "LDFLAGS=\n");
-                else if (strncmp(buf, "WARNING_ERROR=", 
-			strlen("WARNING_ERROR=")) == 0) {
-                        shift_string_right(buf, 1);
-			buf[0] = '#';
-                        fprintf(fp2, "%s", buf);
-		} else if (strncmp(buf, "WARNING_OPTIONS=",
-                    strlen("WARNING_OPTIONS=")) == 0) {
-                        shift_string_right(buf, 1);
-			buf[0] = '#';
-                        fprintf(fp2, "%s", buf);
-		} else
-                        fprintf(fp2, "%s", buf);
-	}
-
-	makefile_create(&fp1, &fp2);
+	/*
+	 *  Removing the generated override file restores the distributed
+	 *  defaults.
+	 */
+	if (file_exists(CONFIG_OVERRIDE) && unlink(CONFIG_OVERRIDE) != 0)
+		perror(CONFIG_OVERRIDE);
 }
 
 void
 set_warnings(int w)
 {
-        FILE *fp1, *fp2;
-        char buf[512];
+	FILE *fp;
+	char buf[512];
+	char options[CONFIG_STRING_SIZE - sizeof("WARNING_OPTIONS=")];
+	char error[CONFIG_STRING_SIZE - sizeof("WARNING_ERROR=")];
+	struct configure_config config;
 
-        makefile_setup(&fp1, &fp2);
- 
-        while (fgets(buf, 512, fp1)) {
-		if (strncmp(buf, "#WARNING_ERROR=", 
-		    strlen("#WARNING_ERROR=")) == 0) {
-			switch (w)
-			{
-			case 'W':
-				shift_string_left(buf, 1);
-				break;
-			case 'w':
-			case 'n':
-				break;
-			}
+	/*
+	 *  The warning flags are maintained as commented-out defaults in the
+	 *  Makefile; activate as many of them as requested.
+	 */
+	options[0] = '\0';
+	error[0] = '\0';
+	if ((fp = fopen("Makefile", "r")) != NULL) {
+		while (fgets(buf, 512, fp)) {
+			strip_linefeeds(buf);
+			if (strncmp(buf, "#WARNING_OPTIONS=",
+			    strlen("#WARNING_OPTIONS=")) == 0)
+				sprintf(options, "%s",
+					&buf[strlen("#WARNING_OPTIONS=")]);
+			else if (strncmp(buf, "#WARNING_ERROR=",
+			    strlen("#WARNING_ERROR=")) == 0)
+				sprintf(error, "%s",
+					&buf[strlen("#WARNING_ERROR=")]);
 		}
+		fclose(fp);
+	}
 
-                if (strncmp(buf, "WARNING_ERROR=", 
-		    strlen("WARNING_ERROR=")) == 0) {
-			switch (w) 
-			{
-			case 'n':
-			case 'w':
-				shift_string_right(buf, 1);
-				buf[0] = '#';
-				break;
-			case 'W':
-				break;
-			}
-		}
-		
-                if (strncmp(buf, "#WARNING_OPTIONS=",
-                    strlen("#WARNING_OPTIONS=")) == 0) { 
-			switch (w)
-			{
-			case 'W':
-			case 'w':
-				shift_string_left(buf, 1);
-				break;
-			case 'n':
-				break;
-			}
-		}
+	config_read(&config);
 
-                if (strncmp(buf, "WARNING_OPTIONS=",
-                    strlen("WARNING_OPTIONS=")) == 0) {
-			switch (w) 
-			{
-			case 'w':
-			case 'W':
-				break;
-			case 'n':
-				shift_string_right(buf, 1);
-				buf[0] = '#';
-				break;
-			}
-		}
+	switch (w)
+	{
+	case 'W':
+		sprintf(config.warning_options, "WARNING_OPTIONS=%s", options);
+		sprintf(config.warning_error, "WARNING_ERROR=%s", error);
+		break;
+	case 'w':
+		sprintf(config.warning_options, "WARNING_OPTIONS=%s", options);
+		sprintf(config.warning_error, "WARNING_ERROR=");
+		break;
+	case 'n':
+	default:
+		sprintf(config.warning_options, "WARNING_OPTIONS=");
+		sprintf(config.warning_error, "WARNING_ERROR=");
+		break;
+	}
 
-                fprintf(fp2, "%s", buf);
-        }
-
-        makefile_create(&fp1, &fp2);
+	config_write(&config);
 }
 
+/*
+ *  Read the current override file, if any, so that a mode only has to
+ *  change the variables it is responsible for.  Every field is kept as a
+ *  complete "NAME=value" line so that clearing a value keeps its name.
+ */
 void
-makefile_setup(FILE **fp1, FILE **fp2)
+config_read(struct configure_config *config)
 {
-        if (stat("Makefile", &target_data.statbuf) == -1) {
-                perror("Makefile");
-                exit(1);
-        }
+	FILE *fp;
+	char buf[CONFIG_STRING_SIZE];
 
-        if ((*fp1 = fopen("Makefile", "r")) == NULL) {
-                perror("fopen");
-                fprintf(stderr, "cannot open existing Makefile\n");
-                exit(1);
-        }
+	sprintf(config->target, "TARGET=");
+	sprintf(config->target_cflags, "TARGET_CFLAGS=");
+	sprintf(config->gdb_conf_flags, "GDB_CONF_FLAGS=");
+	sprintf(config->ldflags, "LDFLAGS=");
+	sprintf(config->gdb, "GDB=");
+	sprintf(config->gdb_files, "GDB_FILES=");
+	sprintf(config->gdb_ofiles, "GDB_OFILES=");
+	sprintf(config->gdb_patch_files, "GDB_PATCH_FILES=");
+	sprintf(config->gdb_flags, "GDB_FLAGS=");
+	sprintf(config->gpl_files, "GPL_FILES=");
+	sprintf(config->version, "VERSION=");
+	sprintf(config->warning_options, "WARNING_OPTIONS=");
+	sprintf(config->warning_error, "WARNING_ERROR=");
 
-        unlink("Makefile.new");
-        if ((*fp2 = fopen("Makefile.new", "w+")) == NULL) {
-                perror("fopen");
-                fprintf(stderr, "cannot create new Makefile\n");
-                exit(1);
-        }
+	if ((fp = fopen(CONFIG_OVERRIDE, "r")) == NULL)
+		return;
+
+	while (fgets(buf, sizeof(buf), fp)) {
+		strip_linefeeds(buf);
+		if (strncmp(buf, "TARGET=", strlen("TARGET=")) == 0)
+			sprintf(config->target, "%s", buf);
+		else if (strncmp(buf, "TARGET_CFLAGS=",
+		    strlen("TARGET_CFLAGS=")) == 0)
+			sprintf(config->target_cflags, "%s", buf);
+		else if (strncmp(buf, "GDB_CONF_FLAGS=",
+		    strlen("GDB_CONF_FLAGS=")) == 0)
+			sprintf(config->gdb_conf_flags, "%s", buf);
+		else if (strncmp(buf, "GDB_FILES=", strlen("GDB_FILES=")) == 0)
+			sprintf(config->gdb_files, "%s", buf);
+		else if (strncmp(buf, "GDB_OFILES=", strlen("GDB_OFILES=")) == 0)
+			sprintf(config->gdb_ofiles, "%s", buf);
+		else if (strncmp(buf, "GDB_PATCH_FILES=",
+		    strlen("GDB_PATCH_FILES=")) == 0)
+			sprintf(config->gdb_patch_files, "%s", buf);
+		else if (strncmp(buf, "GDB_FLAGS=", strlen("GDB_FLAGS=")) == 0)
+			sprintf(config->gdb_flags, "%s", buf);
+		else if (strncmp(buf, "GPL_FILES=", strlen("GPL_FILES=")) == 0)
+			sprintf(config->gpl_files, "%s", buf);
+		else if (strncmp(buf, "GDB=", strlen("GDB=")) == 0)
+			sprintf(config->gdb, "%s", buf);
+		else if (strncmp(buf, "LDFLAGS=", strlen("LDFLAGS=")) == 0)
+			sprintf(config->ldflags, "%s", buf);
+		else if (strncmp(buf, "VERSION=", strlen("VERSION=")) == 0)
+			sprintf(config->version, "%s", buf);
+		else if (strncmp(buf, "WARNING_OPTIONS=",
+		    strlen("WARNING_OPTIONS=")) == 0)
+			sprintf(config->warning_options, "%s", buf);
+		else if (strncmp(buf, "WARNING_ERROR=",
+		    strlen("WARNING_ERROR=")) == 0)
+			sprintf(config->warning_error, "%s", buf);
+	}
+
+	fclose(fp);
 }
 
+/*
+ *  Write the complete override file, so that a mode which runs later in
+ *  the same configure invocation sees the values set by an earlier one.
+ */
 void
-makefile_create(FILE **fp1, FILE **fp2)
+config_write(struct configure_config *config)
 {
-        fclose(*fp1);
-        fclose(*fp2);
+	FILE *fp;
+	char tmp[CONFIG_STRING_SIZE];
 
-        if (system("mv Makefile.new Makefile") != 0) {
-                fprintf(stderr, "Makefile: cannot create new Makefile\n");
-                fprintf(stderr, "please copy Makefile.new to Makefile\n");
-                exit(1);
-        }
+	sprintf(tmp, "%s.new", CONFIG_OVERRIDE);
+	if ((fp = fopen(tmp, "w")) == NULL) {
+		perror(tmp);
+		exit(1);
+	}
 
-        if (chown("Makefile", target_data.statbuf.st_uid, 
-	    target_data.statbuf.st_gid) == -1) {
-                fprintf(stderr,
-                    "Makefile: cannot restore original owner/group\n");
-        }
+	fprintf(fp, "%s\n", config->target);
+	fprintf(fp, "%s\n", config->target_cflags);
+	fprintf(fp, "%s\n", config->gdb_conf_flags);
+	fprintf(fp, "%s\n", config->ldflags);
+	fprintf(fp, "%s\n", config->gdb);
+	fprintf(fp, "%s\n", config->gdb_files);
+	fprintf(fp, "%s\n", config->gdb_ofiles);
+	fprintf(fp, "%s\n", config->gdb_patch_files);
+	fprintf(fp, "%s\n", config->gdb_flags);
+	fprintf(fp, "%s\n", config->gpl_files);
+	fprintf(fp, "%s\n", config->version);
+	fprintf(fp, "%s\n", config->warning_options);
+	fprintf(fp, "%s\n", config->warning_error);
+
+	fclose(fp);
+
+	if (rename(tmp, CONFIG_OVERRIDE) != 0) {
+		perror(CONFIG_OVERRIDE);
+		exit(1);
+	}
 }
 
 
