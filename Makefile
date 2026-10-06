@@ -707,7 +707,6 @@ do_release:
 	@chmod 666 crash-release
 	@rm -rf ./RELDIR; mkdir ./RELDIR; mkdir ./RELDIR/${PROGRAM}-${VERSION}
 	@rm -f ${PROGRAM}-${VERSION}.tar.gz 
-	@rm -f ${PROGRAM}-${VERSION}-${RELEASE}.src.rpm
 	@chown root ./RELDIR/${PROGRAM}-${VERSION}
 	@tar cf - ${SOURCE_FILES} Makefile ${GDB_FILES} ${GDB_PATCH_FILES} ${GPL_FILES} \
 	crash-release crash.8 ${EXTENSION_SOURCE_FILES} ${MEMORY_DRIVER_FILES} | \
@@ -724,6 +723,14 @@ do_release:
 	@rm -rf ./RELDIR
 	@echo
 	@ls -l ${PROGRAM}-${VERSION}.tar.gz
+
+#
+# Create the source RPM from the tarball built by "make release".
+#
+srpm: make_configure
+	@if [ "${VERSION}" = "" ] || [ ! -f ${PROGRAM}-${VERSION}.tar.gz ]; then \
+	  echo "make srpm: run \"make release\" first"; echo; exit 1; fi
+	@rm -f ${PROGRAM}-${VERSION}-${RELEASE}.src.rpm
 	@./configure -s > ${PROGRAM}.spec
 	@if [ -s ${PROGRAM}.spec ]; then \
 	  rm -rf ./RPMBUILD; \
