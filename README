@@ -93,10 +93,12 @@
 
     $ make help
 
-  Changing the target ("make target=...") or toggling DEBUG on an existing
-  build tree does not recompile objects that are already up to date.  Run
-  "make clean" before rebuilding, and also remove the gdb-16.2 directory if
-  the embedded gdb was configured for a different target.
+  To start over, use "make distclean", which removes every build product, the
+  generated configuration, the extracted gdb source directory and any release
+  tarball/spec/source RPM that is present.  Plain "make clean" keeps the
+  configured gdb directory, so rebuilding after editing crash's sources stays
+  fast.  A build never modifies the distributed Makefile; the configured values
+  are kept in the generated Makefile.inc file.
 
   To cross compile the crash utility for aarch64 on x86_64:
     $ make CROSS_COMPILE=aarch64-linux-gnu- -j`nproc`
@@ -106,6 +108,10 @@
   The initial build will take several minutes  because the embedded gdb module
   must be configured and built.  Alternatively, the crash source RPM file
   may be installed and built, and the resultant crash binary RPM file installed.
+
+  To create a source RPM from this tree, run "make release" as root, which
+  creates the crash-<version>.tar.gz source tarball, and then "make srpm",
+  which creates the crash.spec file and the source RPM from that tarball.
 
   The crash binary can only be used on systems of the same architecture as
   the host build system.  There are a few optional manners of building the
@@ -141,6 +147,11 @@
   All of the alternate build commands above are "sticky" in that the
   special "make" targets only have to be entered one time; all subsequent
   builds will follow suit.
+
+  Changing the target ("make target=...") or switching one of the optional
+  features on an existing build tree does not recompile objects that are
+  already up to date, since make cannot see that the compiler flags changed;
+  run "make distclean" first to start from a clean tree.
 
   If the tool is run against a kernel dumpfile, two arguments are required, the
   uncompressed kernel name and the kernel dumpfile name.  
