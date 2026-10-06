@@ -317,6 +317,67 @@ all: make_configure
 #	@$(MAKE) extensions
 
 #
+# Summarize the targets and build options described in the README.
+#
+.PHONY: help
+help:
+	@echo 'Usage: make [target] [option[=value] ...]'
+	@echo ''
+	@echo 'Build targets:'
+	@echo '  (default)           build crash and the embedded gdb for this host'
+	@echo '  extensions          build the extension modules (extensions/)'
+	@echo '  memory_driver       build the memory driver module (memory_driver/)'
+	@echo '  gdb                 rebuild the gdb objects crash adds, then relink'
+	@echo '  install             install the crash binary under DESTDIR (default /usr/bin)'
+	@echo ''
+	@echo 'Cleanup targets:'
+	@echo '  clean               remove crash objects, crashlib.a and the crash binary;'
+	@echo '                      the configured gdb directory is kept'
+	@echo '  distclean           remove everything a build creates, including the'
+	@echo '                      extracted gdb tree, Makefile.inc, configure,'
+	@echo '                      build_data.c and the release tarball/spec/source RPM'
+	@echo ''
+	@echo 'Build options:'
+	@echo '  target=<arch>       build crash to analyze dumpfiles of another'
+	@echo '                      architecture (default: this host).  Cross targets'
+	@echo '                      are limited to these host/target= combinations:'
+	@echo '                          X86_64 -> X86 ARM ARM64 MIPS PPC64 RISCV64'
+	@echo '                                    LOONGARCH64'
+	@echo '                          X86    -> ARM MIPS'
+	@echo '                          PPC64  -> PPC'
+	@echo '                          other  -> native only; ALPHA, S390, S390X,'
+	@echo '                                    SPARC64, MIPS64 and IA64 must be'
+	@echo '                                    built on that host'
+	@echo '  CROSS_COMPILE=<pfx> cross compile the crash binary itself, for example'
+	@echo '                      make CROSS_COMPILE=aarch64-linux-gnu- -j$$(nproc)'
+	@echo '  DEBUG=1             build crash and the embedded gdb with debug info (-g)'
+	@echo '  warn                enable the #WARNING_OPTIONS flags from the Makefile'
+	@echo '  Warn                as warn, plus -Werror (note the capital W)'
+	@echo '  nowarn              use neither; the choice is remembered'
+	@echo '  lzo                 add support for LZO-compressed dumpfiles'
+	@echo '  snappy              add support for snappy-compressed dumpfiles'
+	@echo '  zstd                add support for zstd-compressed dumpfiles'
+	@echo ''
+	@echo 'Packaging targets (normally run as root):'
+	@echo '  release             create the source tarball crash-<version>.tar.gz'
+	@echo '  srpm                create crash.spec and the source RPM from that tarball'
+	@echo '  files               print the tarball file list'
+	@echo ''
+	@echo 'Other targets:'
+	@echo '  ctags               build the ctags reference'
+	@echo '  cscope              build the cscope reference'
+	@echo '  dis                 write a disassembly of the crash binary to crash.dis'
+	@echo '  valgrind            build crash for valgrind memcheck'
+	@echo ''
+	@echo 'Notes:'
+	@echo '  - Build in parallel, for example: make -j$$(nproc)'
+	@echo '  - The embedded gdb takes most of the build time; keeping its configured'
+	@echo '    directory (plain "make clean") avoids rebuilding it.'
+	@echo '  - Changing target=, DEBUG=1 or a feature option needs make clean (or'
+	@echo '    make distclean) first, since make cannot see that -D or -g changed.'
+	@echo '  - See README for the prerequisites and the full description.'
+
+#
 # The embedded gdb is built for the selected target only -- gdb, bfd and
 # opcodes already default to that -- without the full-screen TUI and
 # without the libctf and libbacktrace libraries, none of which crash uses.
