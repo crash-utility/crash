@@ -382,23 +382,42 @@ help:
 # opcodes already default to that -- without the full-screen TUI and
 # without the libctf and libbacktrace libraries, none of which crash uses.
 #
+# .configured is written only after the gdb configure script has finished.
+# gdb's config.status is created near the start of its configure run, so
+# testing for that would mistake a configure interrupted with Ctrl-C for a
+# complete one, and the incremental path below would then fail with
+# "No targets specified and no makefile found".
+#
 gdb_merge: force
 	@if [ ! -f ${GDB}/README ]; then \
 	  $(MAKE) gdb_unzip; fi
 	@echo "${LDFLAGS} -lz -ldl -rdynamic" > ${GDB}/gdb/mergelibs
 	@echo "../../${PROGRAM} ../../${PROGRAM}lib.a" > ${GDB}/gdb/mergeobj
 	@rm -f ${PROGRAM}
-	@if [ ! -f ${GDB}/config.status ]; then \
+	@if [ ! -f ${GDB}/.configured ]; then \
 	  (cd ${GDB}; ./configure ${GDB_CONF_FLAGS} --with-separate-debug-dir=/usr/lib/debug \
 	    --with-bugurl="" --with-expat=no --with-python=no --disable-sim \
-	    --disable-tui --disable-libctf --disable-libbacktrace; \
+	    --disable-tui --disable-libctf --disable-libbacktrace && \
+	  touch .configured; \
 	  $(MAKE) CRASH_TARGET=${TARGET}; echo ${TARGET} > crash.target) \
 	else $(MAKE) rebuild; fi
 	@if [ ! -f ${PROGRAM} ]; then \
 	  echo; echo "${PROGRAM} build failed"; \
+	  if [ ! -f ${GDB}/.configured ]; then \
+	    echo; \
+	    echo "The embedded gdb was not configured completely, which is what an"; \
+	    echo "interrupted build leaves behind; \"make distclean\" removes the"; \
+	    echo "build products so the build can start over cleanly."; fi; \
 	  echo; exit 1; fi
 
 rebuild:
+	@if [ ! -f ${GDB}/gdb/Makefile ]; then \
+	  echo; \
+	  echo "${GDB}/gdb/Makefile does not exist, so the embedded gdb was left"; \
+	  echo "unconfigured -- an interrupted build leaves it in this state."; \
+	  echo "Remove the build products and start over with:"; \
+	  echo; echo "    make distclean"; \
+	  echo; exit 1; fi
 	@if [ ! -f ${GDB}/${GDB}.patch ]; then \
 	  touch ${GDB}/${GDB}.patch; fi
 	@if [ -f ${GDB}.patch ] && [ -s ${GDB}.patch ] && \

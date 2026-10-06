@@ -390,7 +390,9 @@ target_rebuild_instructions(struct supported_gdb_version *sp, char *target)
 	fprintf(stderr, " 1. remove the %s subdirectory\n",
 		&sp->GDB[strlen("GDB=")]);
 	fprintf(stderr, " 2. perform a \"make clean\"\n");
-	fprintf(stderr, " 3. retry the build\n\n");
+	fprintf(stderr, " 3. retry the build\n");
+	fprintf(stderr,
+	    "\nOr do steps 1 and 2 with a single \"make distclean\".\n\n");
 }
 
 void
