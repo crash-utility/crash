@@ -173,7 +173,7 @@
     certain conditions.  Enter "help copying" to see the conditions.
     This program has absolutely no warranty.  Enter "help warranty" for details.
      
-    GNU gdb 16.2
+    GNU gdb 16.x
     Copyright 2013 Free Software Foundation, Inc.
     License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
     This is free software: you are free to change and redistribute it.
@@ -213,7 +213,7 @@
     exit           log            repeat         timer          
     extend         mach           runq           tree           
     
-    crash version: 9.0.0    gdb version: 16.2
+    crash version: 9.0.x    gdb version: 16.x
     For help on any command above, enter "help <command>".
     For help on input options, enter "help input".
     For help on output options, enter "help output".
@@ -241,7 +241,7 @@
     certain conditions.  Enter "help copying" to see the conditions.
     This program has absolutely no warranty.  Enter "help warranty" for details.
      
-    GNU gdb 16.2
+    GNU gdb 16.x
     Copyright 2013 Free Software Foundation, Inc.
     License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
     This is free software: you are free to change and redistribute it.

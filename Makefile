@@ -655,8 +655,6 @@ files: make_configure
 # there is no separate gdb_files target.
 #
 show_files:
-	@if [ -f ${PROGRAM}  ]; then \
-		./${PROGRAM} --no_scroll --no_crashrc -h README > README; fi
 	@echo ${SOURCE_FILES} Makefile ${GDB_FILES} ${GDB_PATCH_FILES} ${GPL_FILES} README \
 	crash-release crash.8 ${EXTENSION_SOURCE_FILES} ${MEMORY_DRIVER_FILES}
 
@@ -700,7 +698,6 @@ do_release:
 	crash-release crash.8 ${EXTENSION_SOURCE_FILES} ${MEMORY_DRIVER_FILES} | \
 	(cd ./RELDIR/${PROGRAM}-${VERSION}; tar xf -)
 	@cp ${GDB}.tar.gz ./RELDIR/${PROGRAM}-${VERSION}
-	@./${PROGRAM} --no_scroll --no_crashrc -h README > README
 	@cp README ./RELDIR/${PROGRAM}-${VERSION}/README
 	@(cd ./RELDIR; find . -exec chown root {} ";")
 	@(cd ./RELDIR; find . -exec chgrp root {} ";")
