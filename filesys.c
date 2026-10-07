@@ -4574,4 +4574,8 @@ check_live_arch_mismatch(void)
 	if (machine_type("PPC"))
 		error(FATAL, "compiled for the PPC architecture\n");
 #endif
+#ifdef __aarch64__
+	if (machine_type("X86_64"))
+		error(FATAL, "compiled for the X86_64 architecture\n");
+#endif
 }

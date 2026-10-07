@@ -133,6 +133,8 @@
      riscv64 dumpfiles may be built by typing "make target=RISCV64".
   o  On an x86_64 host, an x86_64 binary that can be used to analyze
      loongarch64 dumpfiles may be built by typing "make target=LOONGARCH64".
+  o  On an arm64 host, an arm64 binary that can be used to analyze
+     x86_64 dumpfiles may be built by typing "make target=X86_64".
 
   Traditionally when vmcores are compressed via the makedumpfile(8) facility
   the libz compression library is used, and by default the crash utility

@@ -35,7 +35,11 @@
 #endif
 #ifndef IA64
 typedef unsigned int u32;
+#if defined(X86_64) && !defined(__x86_64__)
+#include "lkcd_x86_64_pt_regs.h"        /* for pt_regs                      */
+#else
 #include <asm/ptrace.h>                 /* for pt_regs                      */
+#endif
 #endif
 
 /* necessary header definitions in all cases */

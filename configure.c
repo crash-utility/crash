@@ -206,6 +206,7 @@ void add_extra_lib(char *);
 #define GDB_TARGET_MIPS_ON_X86_64  "GDB_CONF_FLAGS=--target=mipsel-elf-linux CFLAGS=-m32 CXXFLAGS=-m32"
 #define GDB_TARGET_RISCV64_ON_X86_64  "GDB_CONF_FLAGS=--target=riscv64-unknown-linux-gnu"
 #define GDB_TARGET_LOONGARCH64_ON_X86_64  "GDB_CONF_FLAGS=--target=loongarch64-unknown-linux-gnu"
+#define GDB_TARGET_X86_64_ON_ARM64  "GDB_CONF_FLAGS=--target=x86_64-pc-linux-gnu"
      
 /*
  *  The original plan was to allow the use of a particular version
@@ -500,6 +501,12 @@ get_current_configuration(struct supported_gdb_version *sp)
 			 *  Build an ARM64 crash binary on an X86_64 host.
 			 */
 			target_data.target = ARM64;
+		} else if ((target_data.target == ARM64) &&
+			(name_to_target((char *)target_data.target_as_param) == X86_64)) {
+			/*
+			 *  Build an X86_64 crash binary on an ARM64 host.
+			 */
+			target_data.target = X86_64;
 		} else if ((target_data.target == X86_64) &&
 			(name_to_target((char *)target_data.target_as_param) == PPC64)) {
 			/*
@@ -596,11 +603,32 @@ get_current_configuration(struct supported_gdb_version *sp)
 		    (target_data.initial_gdb_target != X86))
 			arch_mismatch(sp);
 
+		if ((target_data.initial_gdb_target == X86_64) &&
+		    (target_data.target != X86_64) &&
+		    (target_data.host == ARM64)) {
+			if (target_data.target == ARM64) {
+				/*
+				 *  An X86_64 cross gdb built on an ARM64 host is sticky.
+				 */
+				target_data.target = X86_64;
+			} else
+				arch_mismatch(sp);
+		}
+
 		if ((target_data.initial_gdb_target == ARM64) &&
 		    (target_data.target != ARM64)) {
-			if (target_data.target == X86_64) 
+			if (target_data.host == ARM64) {
+				/*
+				 *  The gdb in this tree is a native ARM64 gdb; it cannot
+				 *  serve any other target, so a clean rebuild is required.
+				 */
+				arch_mismatch(sp);
+			} else if (target_data.host == X86_64 && target_data.target == X86_64) {
+				/*
+				 *  An ARM64 cross gdb built on an X86_64 host is sticky.
+				 */
 				target_data.target = ARM64;
-			else
+			} else
 				arch_mismatch(sp);
 		}
 		if ((target_data.target == ARM64) &&
@@ -812,7 +840,9 @@ build_configure(struct supported_gdb_version *sp)
                 break;
 	case X86_64:
                 target = TARGET_X86_64;
-                target_CFLAGS = TARGET_CFLAGS_X86_64;
+		target_CFLAGS = TARGET_CFLAGS_X86_64;
+		if (target_data.host == ARM64)
+			gdb_conf_flags = GDB_TARGET_X86_64_ON_ARM64;
                 break;
 	case ARM:
                 target = TARGET_ARM;

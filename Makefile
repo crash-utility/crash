@@ -98,7 +98,7 @@ GENERIC_HFILES=defs.h xen_hyper_defs.h xen_dom0.h
 MCORE_HFILES=va_server.h vas_crash.h
 REDHAT_HFILES=netdump.h diskdump.h makedumpfile.h xendump.h kvmdump.h qemu-load.h vmcore.h
 LKCD_DUMP_HFILES=lkcd_vmdump_v1.h lkcd_vmdump_v2_v3.h lkcd_dump_v5.h \
-        lkcd_dump_v7.h lkcd_dump_v8.h
+        lkcd_dump_v7.h lkcd_dump_v8.h lkcd_x86_64_pt_regs.h
 LKCD_OBSOLETE_HFILES=lkcd_fix_mem.h
 LKCD_TRACE_HFILES=lkcd_x86_trace.h
 IBM_HFILES=ibm_common.h
@@ -345,6 +345,7 @@ help:
 	@echo '                                    LOONGARCH64'
 	@echo '                          X86    -> ARM MIPS'
 	@echo '                          PPC64  -> PPC'
+	@echo '                          ARM64  -> X86_64'
 	@echo '                          other  -> native only; ALPHA, S390, S390X,'
 	@echo '                                    SPARC64, MIPS64 and IA64 must be'
 	@echo '                                    built on that host'
