@@ -409,9 +409,6 @@ install:
 	/usr/bin/install ${PROGRAM} ${INSTALLDIR}
 #	/usr/bin/install ${PROGRAM}d ${INSTALLDIR}
 
-unconfig: make_configure
-	@./configure -u
-
 warn Warn nowarn lzo snappy zstd valgrind: all
 	@true  #dummy
 
