@@ -656,7 +656,6 @@ struct new_utsname {
 #define GCC_3_3_2      (0x800)
 #define KMOD_V1       (0x1000)
 #define KMOD_V2       (0x2000)
-#define KALLSYMS_V2   (0x2000)
 #define TVEC_BASES_V2 (0x4000)
 #define GCC_3_3_3     (0x8000)
 #define USE_OLD_BT   (0x10000)
@@ -676,6 +675,7 @@ struct new_utsname {
 #define ARCH_PVOPS          (0x10000000)
 #define PRE_KERNEL_INIT     (0x20000000)
 #define ARCH_PVOPS_XEN      (0x40000000)
+#define KALLSYMS_V2	(0x80000000)
 
 #define GCC_VERSION_DEPRECATED (GCC_3_2|GCC_3_2_3|GCC_2_96|GCC_3_3_2|GCC_3_3_3)
 
