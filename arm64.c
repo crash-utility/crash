@@ -1719,7 +1719,11 @@ arm64_calc_physvirt_offset(void)
 				machdep->flags |= HAS_PHYSVIRT_OFFSET;
 				ms->physvirt_offset = physvirt_offset;
 
-				/* Update the ms->phys_offset which is wrong */
+				/*
+				 * physvirt_offset is authoritative on 5.4-5.10
+				 * kernels; reading it is what makes live
+				 * /proc/kcore debugging work.
+				 */
 				ms->phys_offset = ms->physvirt_offset + ms->page_offset;
 				return;
 			}
@@ -1737,6 +1741,30 @@ arm64_calc_physvirt_offset(void)
 	/* Useless if no symbol 'physvirt_offset', just keep semantics */
 	ms->physvirt_offset = ms->phys_offset - ms->page_offset;
 
+}
+
+/*
+ *  Store the kernel's "memstart_addr" value as the physical base address
+ *  of the dumpfile.
+ *
+ *  Since kernel commit 7bc1a0f9e176 ("arm64: mm: use single quantity to
+ *  represent the PA to VA translation") memstart_addr is no longer always
+ *  a physical address: for a 52-bit VA kernel running with less than 52
+ *  bits of VA, the kernel adjusts it by _PAGE_OFFSET(48) - _PAGE_OFFSET(52)
+ *  so that it becomes negative.  crash needs the real physical base for
+ *  address translation.
+ */
+static void
+arm64_store_phys_offset(ulong value)
+{
+	struct machine_specific *ms = machdep->machspec;
+	ulong memstart_addr = value;
+
+	if ((long)memstart_addr < 0)
+		ms->phys_offset = memstart_addr +
+			ARM64_FLIP_PAGE_OFFSET_48 - ARM64_FLIP_PAGE_OFFSET_52;
+	else
+		ms->phys_offset = value;
 }
 
 static void
@@ -1766,8 +1794,10 @@ arm64_calc_phys_offset(void)
 		if ((machdep->flags & NEW_VMEMMAP) &&
 		    ms->kimage_voffset && (sp = kernel_symbol_search("memstart_addr"))) {
 			if (pc->flags & PROC_KCORE) {
-				if (arm64_get_vmcoreinfo(&ms->phys_offset, "NUMBER(PHYS_OFFSET)", NUM_HEX))
+				if (arm64_get_vmcoreinfo(&phys_offset, "NUMBER(PHYS_OFFSET)", NUM_HEX)) {
+					arm64_store_phys_offset(phys_offset);
 					return;
+				}
 				vaddr = symbol_value_from_proc_kallsyms("memstart_addr");
 				if (vaddr == BADVAL)
 					vaddr = sp->value;
@@ -1778,7 +1808,7 @@ arm64_calc_phys_offset(void)
 			}
 			if (READMEM(pc->mfd, &phys_offset, sizeof(phys_offset),
 			    vaddr, paddr) > 0) {
-				ms->phys_offset = phys_offset;
+				arm64_store_phys_offset(phys_offset);
 
 				return;
 			}
@@ -1813,11 +1843,11 @@ arm64_calc_phys_offset(void)
 		if (errflag)
 			return;
 
-		ms->phys_offset = phys_offset;
+		arm64_store_phys_offset(phys_offset);
 	} else if (DISKDUMP_DUMPFILE() && diskdump_phys_base(&phys_offset)) {
-		ms->phys_offset = phys_offset;
+		arm64_store_phys_offset(phys_offset);
 	} else if (KDUMP_DUMPFILE() && arm64_kdump_phys_base(&phys_offset)) {
-		ms->phys_offset = phys_offset;
+		arm64_store_phys_offset(phys_offset);
 	} else {
 		error(WARNING,
 			"phys_offset cannot be determined from the dumpfile.\n");

@@ -3509,6 +3509,13 @@ typedef signed int s32;
 					<< (machdep->machspec->VA_BITS - 1))
 /* kernels >= v5.4 the kernel VA space is flipped */
 #define ARM64_FLIP_PAGE_OFFSET (-(1UL) << machdep->machspec->VA_BITS)
+/*
+ * Fixed 48/52-bit page offsets, used to decode the kernel's negative
+ * memstart_addr when CONFIG_ARM64_VA_BITS_52 is enabled but fewer than
+ * 52 VA bits are active.
+ */
+#define ARM64_FLIP_PAGE_OFFSET_48 (-(1UL) << 48)
+#define ARM64_FLIP_PAGE_OFFSET_52 (-(1UL) << 52)
 
 #define ARM64_USERSPACE_TOP  ((1UL) << machdep->machspec->VA_BITS)
 #define ARM64_USERSPACE_TOP_ACTUAL  ((1UL) << machdep->machspec->VA_BITS_ACTUAL)
