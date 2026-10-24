@@ -6960,13 +6960,13 @@ percpu_counter_sum_positive(ulong fbc)
 {
 	int i, count;
 	ulong addr;
-	long ret;
+	int64_t ret;
 
 	if (INVALID_MEMBER(percpu_counter_count))
 		return 0;
 
 	readmem(fbc + OFFSET(percpu_counter_count), KVADDR, &ret,
-		sizeof(long long), "percpu_counter.count", FAULT_ON_ERROR);
+		sizeof(ret), "percpu_counter.count", FAULT_ON_ERROR);
 
 	if (INVALID_MEMBER(percpu_counter_counters)) /* !CONFIG_SMP */
 		return (ret < 0) ? 0 : ret;
