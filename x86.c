@@ -4482,12 +4482,16 @@ x86_omit_frame_pointer(void)
 {
 	ulonglong push_bp_mov_esp_bp;
         int i;
-        char *checkfuncs[] = {"sys_open", "sys_fork", "sys_read"};
+        char *checkfuncs[] = {"sys_open", "sys_fork", "sys_read",
+			"__ia32_sys_open", "__ia32_sys_fork",
+			"__ia32_sys_read"};
 
 	if (pc->flags & KERNEL_DEBUG_QUERY)
 		return FALSE;
 
-        for (i = 0; i < 2; i++) {
+        for (i = 0; i < 6; i++) {
+		if(!kernel_symbol_exists(checkfuncs[i]))
+			continue;
                 if (!readmem(symbol_value(checkfuncs[i]), KVADDR,
                     &push_bp_mov_esp_bp, sizeof(ulonglong),
                     "x86_omit_frame_pointer", RETURN_ON_ERROR))
