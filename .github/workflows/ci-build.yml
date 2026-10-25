@@ -1,92 +1,72 @@
 name: Build
 
+# Primary architectures: cross compiled on every push to master, on
+# ubuntu-26.04, the first Ubuntu with a loongarch64 cross toolchain (and the
+# image ubuntu-latest switches to in November 2026).  Dispatch with an "arches"
+# list to build a subset, or run "CI build (one arch)" for a single
+# architecture.
 on:
   push:
-    branches: [ "master" ]
+    branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      arches:
+        description: 'Comma-separated subset (empty = all): x86_64 x86 aarch64 riscv64 loongarch64'
+        required: false
+        default: ''
+  workflow_call:
+    inputs:
+      arches:
+        description: 'Comma-separated subset (empty = all)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    name: Build
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        arch:
-        - x86_64
-        - aarch64
-        - s390x
-        - powerpc64
-        - x86
-        - riscv64
-        - mips
-        - alpha
-        - sparc64
-
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Set Environment
-      env:
-        ARCH: ${{ matrix.arch }}
-      run: |
-        case $ARCH in
-          x86)         GNU_ARCH="i686-linux-gnu" ;;
-          x86_64)      CROSS_COMPILER_PKG="gcc-x86-64-linux-gnu"
-                       CROSS_COMPILER_PKG+=" g++-x86-64-linux-gnu"
-                       GNU_ARCH="$ARCH-linux-gnu" ;;
-          *)           GNU_ARCH="$ARCH-linux-gnu" ;;
-        esac
-
-        if [ -n "$GNU_ARCH" ]; then
-          if [ -z "$CROSS_COMPILER_PKG" ]; then
-            CROSS_COMPILER_PKG="gcc-$GNU_ARCH"
-            CROSS_COMPILER_PKG+=" g++-$GNU_ARCH"
+      - name: Select arches
+        id: select
+        env:
+          ALL_ARCHES: x86_64 x86 aarch64 riscv64 loongarch64
+          REQUESTED: ${{ inputs.arches }}
+        run: |
+          set -eu
+          if [ -z "$REQUESTED" ]; then
+            selected=$ALL_ARCHES
+          else
+            selected=
+            for arch in $(echo "$REQUESTED" | tr ',' ' '); do
+              case " $ALL_ARCHES " in
+                *" $arch "*) selected="$selected $arch" ;;
+                *) echo "Unknown architecture '$arch'; valid: $ALL_ARCHES" >&2
+                   exit 1 ;;
+              esac
+            done
           fi
-          EXTRA_PKGS+=" $CROSS_COMPILER_PKG"
-          CROSS_COMPILE="$GNU_ARCH"
-        fi
+          if [ -z "${selected// /}" ]; then
+            echo "No architectures selected" >&2
+            exit 1
+          fi
+          matrix=$(printf '%s\n' $selected | jq -R . | jq -s -c '{arch: .}')
+          echo "matrix=$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
-        echo "EXTRA_PKGS=$EXTRA_PKGS" >> $GITHUB_ENV
-        echo "CROSS_COMPILE=$CROSS_COMPILE" >> $GITHUB_ENV
-
-    - name: Install deps for crash-utility building
-      run: |
-        sudo apt-get update
-        sudo apt-get install make gcc g++ bison flex texinfo wget patch tar build-essential libc-dev autoconf automake libncurses-dev
-
-    - name: Install corss compile tool pkgs
-      if: env.EXTRA_PKGS != ''
-      run: |
-        sudo apt-get update
-        sudo apt-get -q=2 install ${{ env.EXTRA_PKGS }}
-
-    - name: Cross compile gmp lib
-      run: |
-        mkdir $GITHUB_WORKSPACE/libtools
-        wget https://gcc.gnu.org/pub/gcc/infrastructure/gmp-6.2.1.tar.bz2
-        tar -jxvf gmp-6.2.1.tar.bz2
-        cd gmp-6.2.1
-        ./configure --host=${{ env.CROSS_COMPILE }} --prefix=$GITHUB_WORKSPACE/libtools
-        make -j`nproc`
-        sudo make install
-        cd ..
-    - name: Cross compile mpfr lib
-      run: |
-        wget https://gcc.gnu.org/pub/gcc/infrastructure/mpfr-4.1.0.tar.bz2
-        tar -jxvf mpfr-4.1.0.tar.bz2
-        cd mpfr-4.1.0
-        ./configure --host=${{ env.CROSS_COMPILE }} --prefix=$GITHUB_WORKSPACE/libtools --with-gmp=$GITHUB_WORKSPACE/libtools
-        make -j`nproc`
-        sudo make install
-        cd ..
-    - name: Cross compile crash-utility
-      run: |
-        sudo cp $GITHUB_WORKSPACE/libtools/include/* /usr/include/
-        sudo cp -r $GITHUB_WORKSPACE/libtools/lib/* /usr/lib/
-        make CROSS_COMPILE=${{ env.CROSS_COMPILE }}- -j`nproc` warn
-    - name: Checking and Clean up
-      run: |
-        echo "Run command: file crash ..."
-        file crash
-        echo "Clean up for compiling ..."
-        make CROSS_COMPILE=${{ env.CROSS_COMPILE }}- -j`nproc` clean
+  build:
+    name: ${{ matrix.arch }}
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    uses: ./.github/workflows/ci-arch-build.yml
+    with:
+      arch: ${{ matrix.arch }}
+      runner: ubuntu-26.04
