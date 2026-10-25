@@ -11,6 +11,19 @@ on:
     - cron: '10 2 1 * *'
   workflow_dispatch:
     inputs:
+      arch:
+        description: 'Architecture to build (all = the whole group)'
+        type: choice
+        default: all
+        options:
+        - all
+        - s390x
+        - powerpc64le
+        - powerpc64
+        - mips
+        - alpha
+        - sparc64
+      # optional comma-separated subset, overrides the dropdown above
       arches:
         description: 'Comma-separated subset (empty = all): s390x powerpc64le powerpc64 mips alpha sparc64'
         required: false
@@ -39,13 +52,23 @@ jobs:
         env:
           ALL_ARCHES: s390x powerpc64le powerpc64 mips alpha sparc64
           REQUESTED: ${{ inputs.arches }}
+          SINGLE: ${{ inputs.arch }}
         run: |
           set -eu
-          if [ -z "$REQUESTED" ]; then
+          # the dropdown picks one arch; "all" (or an explicit list) keeps the
+          # whole group
+          if [ -n "${REQUESTED:-}" ]; then
+            wanted=$REQUESTED
+          elif [ -n "${SINGLE:-}" ] && [ "$SINGLE" != all ]; then
+            wanted=$SINGLE
+          else
+            wanted=
+          fi
+          if [ -z "$wanted" ]; then
             selected=$ALL_ARCHES
           else
             selected=
-            for arch in $(echo "$REQUESTED" | tr ',' ' '); do
+            for arch in $(echo "$wanted" | tr ',' ' '); do
               case " $ALL_ARCHES " in
                 *" $arch "*) selected="$selected $arch" ;;
                 *) echo "Unknown architecture '$arch'; valid: $ALL_ARCHES" >&2
