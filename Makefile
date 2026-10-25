@@ -61,6 +61,8 @@ else ifeq (${ARCH}, powerpc64)
 CONF_TARGET_ARCH := PPC64
 else ifeq (${ARCH}, ppc64le)
 CONF_TARGET_ARCH := PPC64
+else ifeq (${ARCH}, powerpc64le)
+CONF_TARGET_ARCH := PPC64
 else ifeq (${ARCH}, alpha)
 CONF_TARGET_ARCH := ALPHA
 else ifeq (${ARCH}, i386)
@@ -71,6 +73,8 @@ else ifeq (${ARCH}, sparc64)
 CONF_TARGET_ARCH := SPARC64
 else ifeq (${ARCH}, riscv64)
 CONF_TARGET_ARCH := RISCV64
+else ifeq (${ARCH}, loongarch64)
+CONF_TARGET_ARCH := LOONGARCH64
 else
 $(error The current Arch(${ARCH}) does not support cross compilation)
 endif
