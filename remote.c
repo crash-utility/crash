@@ -3269,7 +3269,8 @@ copy_remote_file(struct remote_file *rfp, int fd, char *file, char *ttystr)
 	char *bufptr;
 	long pct, last;
         ulong size, offset, filesize;
-        ulong ret, req, tot;
+	ssize_t ret;
+	ulong req, tot;
 	int sysret ATTRIBUTE_UNUSED;
 	ssize_t bytes ATTRIBUTE_UNUSED;
 
@@ -3293,15 +3294,15 @@ copy_remote_file(struct remote_file *rfp, int fd, char *file, char *ttystr)
         	sprintf(recvbuf, "%s:FAIL", sendbuf);
         	bufptr = readbuf;
         	while (req) {
-                	ret = recv(pc->sockfd, bufptr, req, 0);
-                	if (!tot && STRNEQ(bufptr, recvbuf)) {
-                        	tot = -1;
-                        	break;
-                	}
-                	req -= ret;
-                	tot += ret;
-                	bufptr += ret;
-        	}
+			ret = recv(pc->sockfd, bufptr, req, 0);
+			if ((ret < 0) || (!tot && STRNEQ(bufptr, recvbuf))) {
+				tot = -1;
+				break;
+			}
+			req -= (ulong)ret;
+			tot += (ulong)ret;
+			bufptr += ret;
+		}
 
 		if (tot == -1)
 			break;
@@ -3366,7 +3367,8 @@ copy_remote_gzip_file(struct remote_file *rfp, char *file, char *ttystr)
 	FILE *pipe;
 	size_t gtot;
 	struct stat sbuf;
-        ulong pct, ret, req, tot, total;
+	ulong pct, req, tot, total;
+	ssize_t ret;
 
 	sprintf(readbuf, "/usr/bin/gunzip > %s", pc->namelist);
         if ((pipe = popen(readbuf, "w")) == NULL)
@@ -3388,7 +3390,11 @@ copy_remote_gzip_file(struct remote_file *rfp, char *file, char *ttystr)
 		tot = 0;
 
                 while (req) {
-                        ret = (ulong)recv(pc->sockfd, bufptr, req, 0); 
+			ret = recv(pc->sockfd, bufptr, req, 0);
+			if (ret < 0) {
+				tot = -1;
+				break;
+			}
                         if (!tot) {
 				if (STRNEQ(bufptr, FAILMSG)) {
 					fprintf(fp, 
@@ -3412,8 +3418,8 @@ copy_remote_gzip_file(struct remote_file *rfp, char *file, char *ttystr)
 					total += gtot;
 				}
                         } 
-                        req -= ret;
-                        tot += ret;
+                        req -= (ulong)ret;
+                        tot += (ulong)ret;
                         bufptr += ret;
                 }
 
@@ -3606,7 +3612,8 @@ remote_memory_dump(int verbose)
 	char datahdr[DATA_HDRSIZE];
         char *type, *bufptr, *p1;
 	ulong done, total;
-	ulong ret, req, tot;
+	ssize_t ret;
+	ulong req, tot;
 	size_t dtot;
 
         if (pc->flags & REM_NETDUMP)
@@ -3636,7 +3643,11 @@ remote_memory_dump(int verbose)
 		tot = 0;
 
                 while (req) {
-                        ret = recv(pc->sockfd, bufptr, req, 0); 
+                        ret = recv(pc->sockfd, bufptr, req, 0);
+			if (ret < 0) {
+				tot = -1;
+				break;
+			}
                         if (!tot) {
 				if (STRNEQ(bufptr, FAILMSG)) {
 					fprintf(fp, 
@@ -3660,8 +3671,8 @@ remote_memory_dump(int verbose)
 					total += dtot;
 				}
                         }
-                        req -= ret;
-                        tot += ret;
+                        req -= (ulong)ret;
+                        tot += (ulong)ret;
                         bufptr += ret;
                 }
 
@@ -3793,7 +3804,8 @@ remote_execute(void)
 	char datahdr[DATA_HDRSIZE];
         char *bufptr, *p1;
 	ulong done, total;
-	ulong ret, req, tot;
+	ssize_t ret;
+	ulong req, tot;
 	size_t dtot;
 
 	if (!STRNEQ(args[0], "@") || strlen(args[0]) == 1)
@@ -3823,6 +3835,10 @@ remote_execute(void)
 
                 while (req) {
                         ret = recv(pc->sockfd, bufptr, req, 0); 
+			if (ret < 0) {
+				tot = -1;
+				break;
+			}
                         if (!tot) {
 				if (STRNEQ(bufptr, FAILMSG)) {
 					fprintf(fp, 
@@ -3846,8 +3862,8 @@ remote_execute(void)
 					total += dtot;
 				}
                         }
-                        req -= ret;
-                        tot += ret;
+                        req -= (ulong)ret;
+                        tot += (ulong)ret;
                         bufptr += ret;
                 }
 
