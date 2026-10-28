@@ -1,0 +1,282 @@
+name: CI build (one arch)
+
+# Cross compiles crash for a single architecture, or builds it natively when the
+# target is the runner's own architecture.  Used by the primary and secondary
+# matrix workflows, and dispatchable directly to build just one arch.
+#
+# gmp/mpfr come from the Ubuntu archive when the target architecture has
+# packages there (amd64, i386, arm64, ppc64el, s390x, riscv64) and are built
+# from source otherwise (powerpc64, mips, alpha, sparc64, loongarch64).
+# loongarch64 needs a 26.04 runner: the ubuntu-24.04 archive has no
+# loongarch64 cross toolchain.
+on:
+  workflow_call:
+    inputs:
+      arch:
+        description: 'Architecture to cross compile for'
+        required: true
+        type: string
+      runner:
+        description: 'Runner image label'
+        required: false
+        type: string
+        default: ubuntu-24.04
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 'Architecture to cross compile for'
+        required: true
+        type: choice
+        default: x86_64
+        options:
+        - x86_64
+        - x86
+        - aarch64
+        - riscv64
+        - s390x
+        - powerpc64
+        - mips
+        - alpha
+        - sparc64
+        - powerpc64le
+        - loongarch64
+      runner:
+        description: 'Runner image label'
+        required: false
+        type: choice
+        default: ubuntu-24.04
+        options:
+        - ubuntu-24.04
+        - ubuntu-26.04
+
+permissions:
+  contents: read
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  build:
+    name: ${{ inputs.arch }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 45
+    # per arch, so the primary and secondary groups never cancel each other
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.arch }}
+      cancel-in-progress: true
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # The embedded gdb refuses to configure without GMP >= 4.2 and MPFR >= 3.1,
+    # so either the Ubuntu multiarch packages or a source build is used.
+    - name: Set Environment
+      env:
+        ARCH: ${{ inputs.arch }}
+      run: |
+        # GNU_ARCH  cross compiler triplet, also crash's CROSS_COMPILE
+        # DEB_ARCH  dpkg architecture of the target gmp/mpfr packages
+        # MA_ARCH   multiarch tuple the packages install their files under
+        case $ARCH in
+          x86)     GNU_ARCH=i686-linux-gnu;    DEB_ARCH=i386;    MA_ARCH=i386-linux-gnu ;;
+          # the runner is amd64, so x86_64 is a plain native build
+          x86_64)  GNU_ARCH=;                  DEB_ARCH=amd64;   MA_ARCH=x86_64-linux-gnu ;;
+          aarch64) GNU_ARCH=aarch64-linux-gnu; DEB_ARCH=arm64;   MA_ARCH=aarch64-linux-gnu ;;
+          riscv64) GNU_ARCH=riscv64-linux-gnu; DEB_ARCH=riscv64; MA_ARCH=riscv64-linux-gnu ;;
+          s390x)   GNU_ARCH=s390x-linux-gnu;   DEB_ARCH=s390x;   MA_ARCH=s390x-linux-gnu ;;
+          # ppc64el is an Ubuntu architecture: archive packages exist, but the
+          # Debian cross triplet is powerpc64le-linux-gnu
+          powerpc64le) GNU_ARCH="$ARCH-linux-gnu"; DEB_ARCH=ppc64el; MA_ARCH="$ARCH-linux-gnu" ;;
+          loongarch64) GNU_ARCH="$ARCH-linux-gnu"; DEB_ARCH=;        MA_ARCH= ;;
+          *)       GNU_ARCH="$ARCH-linux-gnu"; DEB_ARCH=;        MA_ARCH= ;;
+        esac
+
+        {
+          echo "CROSS_COMPILE=$GNU_ARCH"
+          echo "DEB_ARCH=$DEB_ARCH"
+          echo "MA_ARCH=$MA_ARCH"
+          if [ -n "$GNU_ARCH" ]; then
+            echo "CROSS_PKGS=gcc-$GNU_ARCH g++-$GNU_ARCH"
+          fi
+        } >> "$GITHUB_ENV"
+
+    - name: Install deps for crash-utility building
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          make gcc g++ bison flex texinfo wget patch tar build-essential \
+          autoconf automake libncurses-dev zlib1g-dev
+
+    # no --no-install-recommends here: gcc-<triplet> only *recommends* the
+    # target libc (libc6-dev-<target>-cross), which the cross build needs
+    - name: Install cross compile tool pkgs
+      if: env.CROSS_PKGS != ''
+      run: |
+        sudo apt-get install -y ${{ env.CROSS_PKGS }}
+
+    # amd64, i386, arm64, s390x and riscv64 have target packages in the Ubuntu
+    # archive; powerpc64 is big-endian (only little-endian ppc64el exists) and
+    # mips, alpha and sparc64 are not Ubuntu architectures at all.
+    - name: Install gmp/mpfr from the Ubuntu archive
+      if: env.DEB_ARCH != ''
+      run: |
+        sources=/etc/apt/sources.list.d/ubuntu.sources
+        keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+        # Use the suite this runner actually is, and mirror the exact suite list
+        # the image uses (including -security): multiarch packages have to match
+        # the versions already installed, otherwise apt wants to downgrade them.
+        suite=$(. /etc/os-release && printf '%s' "${VERSION_CODENAME:-}")
+        if [ -z "$suite" ]; then
+          echo "cannot determine the Ubuntu suite" >&2
+          exit 1
+        fi
+        # union of every suite the image uses (they are split across stanzas,
+        # so -security would be missed by looking at the first line only)
+        if [ -f "$sources" ]; then
+          suites=$( { sed -n 's/^Suites: *//p' "$sources"; echo "$suite $suite-updates"; } |
+                     tr ' ' '\n' | awk 'NF && !seen[$0]++' | paste -sd' ' - )
+        else
+          suites="$suite $suite-updates"
+        fi
+
+        if [ "$DEB_ARCH" != amd64 ]; then
+          sudo dpkg --add-architecture "$DEB_ARCH"
+
+          if [ -f "$sources" ]; then
+            keyring=$(sed -n 's/^Signed-By: //p' "$sources" | head -n 1)
+            # Keep every host architecture the image enabled (26.04 ships
+            # amd64v3 next to amd64): restricting this to amd64 drops those
+            # indexes and makes apt want to downgrade the installed builds.
+            # The target architecture comes from the foreign source below.
+            host_archs=$( { dpkg --print-architecture; dpkg --print-foreign-architectures; } |
+                          grep -vx "$DEB_ARCH" | paste -sd' ' - )
+            if ! grep -q '^Architectures:' "$sources"; then
+              sudo sed -i "/^Types: deb\$/a Architectures: $host_archs" "$sources"
+            fi
+          fi
+
+          # i386 is served by archive.ubuntu.com, the remaining architectures
+          # only by ports.ubuntu.com
+          case $DEB_ARCH in
+            i386) mirror=http://archive.ubuntu.com/ubuntu/ ;;
+            *)    mirror=http://ports.ubuntu.com/ubuntu-ports/ ;;
+          esac
+          printf 'Types: deb\nURIs: %s\nSuites: %s\nComponents: main universe\nArchitectures: %s\nSigned-By: %s\n' \
+            "$mirror" "$suites" "$DEB_ARCH" "$keyring" |
+            sudo tee /etc/apt/sources.list.d/ubuntu-foreign.sources > /dev/null
+
+          sudo apt-get update
+        fi
+
+        # crash configures the embedded gdb without --with-gmp/--with-mpfr, so
+        # the files have to be visible in the compiler's default search paths;
+        # multiarch packages install them under /usr/{include,lib}/<tuple>.
+        link_from() {
+          root=${1%/}
+          # gmp.h is per-architecture (usr/include/<tuple>/), mpfr.h is shared
+          # (usr/include/), so look in both places
+          for header in gmp.h mpfr.h; do
+            src=
+            for dir in "$root/usr/include/$MA_ARCH" "$root/usr/include"; do
+              if [ -e "$dir/$header" ]; then
+                src=$dir/$header
+                break
+              fi
+            done
+            if [ -n "$src" ] && [ "$src" != "/usr/include/$header" ]; then
+              sudo ln -sf "$src" "/usr/include/$header"
+            fi
+          done
+          for library in libgmp.so libmpfr.so; do
+            src=
+            for dir in "$root/usr/lib/$MA_ARCH" "$root/usr/lib"; do
+              if [ -e "$dir/$library" ]; then
+                src=$dir/$library
+                break
+              fi
+            done
+            if [ -n "$src" ] && [ "$src" != "/usr/lib/$library" ]; then
+              sudo ln -sf "$src" "/usr/lib/$library"
+            fi
+          done
+        }
+
+        # Prefer a normal install, but apt refuses it when keeping the multiarch
+        # versions in sync would downgrade the host's amd64v3 packages.  In that
+        # case unpack the two libraries instead: linking only needs the header
+        # and the shared object, not an installed package.
+        if sudo apt-get install -y "libgmp-dev:$DEB_ARCH" "libmpfr-dev:$DEB_ARCH"; then
+          link_from /
+        else
+          echo "apt refused the install, unpacking the packages instead"
+          work=$(mktemp -d)
+          (
+            cd "$work"
+            apt-get download "libgmp10:$DEB_ARCH" "libgmp-dev:$DEB_ARCH" \
+                             "libmpfr6:$DEB_ARCH" "libmpfr-dev:$DEB_ARCH"
+            for deb in ./*.deb; do dpkg-deb -x "$deb" root; done
+          )
+          link_from "$work/root"
+        fi
+
+    - name: Build gmp from source
+      if: env.DEB_ARCH == ''
+      run: |
+        wget -q --tries=3 --timeout=30 https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
+        echo "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898  gmp-6.3.0.tar.xz" | sha256sum -c -
+        tar -xJf gmp-6.3.0.tar.xz
+        cd gmp-6.3.0
+        # gcc 15 defaults to -std=gnu23 and GMP 6.3.0's configure probes still
+        # use implicit-int style code, so pin the dialect for the build
+        CFLAGS="-O2 -std=gnu17" ./configure --host="$CROSS_COMPILE" --prefix=/usr
+        make -j"$(nproc)"
+        sudo make install
+
+    - name: Build mpfr from source
+      if: env.DEB_ARCH == ''
+      run: |
+        wget -q --tries=3 --timeout=30 https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz
+        echo "277807353a6726978996945af13e52829e3abd7a9a5b7fb2793894e18f1fcbb2  mpfr-4.2.1.tar.xz" | sha256sum -c -
+        tar -xJf mpfr-4.2.1.tar.xz
+        cd mpfr-4.2.1
+        CFLAGS="-O2 -std=gnu17" ./configure --host="$CROSS_COMPILE" --prefix=/usr
+        make -j"$(nproc)"
+        sudo make install
+
+    - name: Build crash
+      run: |
+        args=()
+        if [ -n "${CROSS_COMPILE:-}" ]; then
+          args+=("CROSS_COMPILE=$CROSS_COMPILE-")
+        fi
+        make "${args[@]}" -j"$(nproc)" warn
+
+    - name: Check the built binary
+      run: |
+        if [ -n "${CROSS_COMPILE:-}" ]; then
+          compiler="$CROSS_COMPILE-gcc"
+        else
+          compiler=gcc
+        fi
+        file crash
+        "$compiler" --version | head -n 1
+        printf 'int main(void) { return 0; }\n' > probe.c
+        "$compiler" -c probe.c -o probe.o
+        for field in 'Class:' 'Data:' 'Machine:'; do
+          expected=$(readelf -h probe.o | sed -n "s/^ *$field *//p")
+          actual=$(readelf -h crash | sed -n "s/^ *$field *//p")
+          if [ "$expected" != "$actual" ]; then
+            echo "crash has $field '$actual', the compiler targets '$expected'"
+            exit 1
+          fi
+        done
+        rm -f probe.c probe.o
+
+    - name: Clean up for compiling
+      run: |
+        args=()
+        if [ -n "${CROSS_COMPILE:-}" ]; then
+          args+=("CROSS_COMPILE=$CROSS_COMPILE-")
+        fi
+        make "${args[@]}" -j"$(nproc)" clean

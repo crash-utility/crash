@@ -1,0 +1,30 @@
+name: Build (all arches)
+
+# Manual only: builds the primary and secondary arch groups in a single run.
+# Pushes already build the primary group, and the secondary group has its own
+# monthly schedule, so this workflow has no trigger of its own besides dispatch.
+on:
+  workflow_dispatch:
+    inputs:
+      groups:
+        description: 'Arch groups to build'
+        type: choice
+        default: both
+        options:
+        - both
+        - primary
+        - secondary
+
+permissions:
+  contents: read
+
+jobs:
+  primary:
+    name: Primary group
+    if: inputs.groups == 'both' || inputs.groups == 'primary'
+    uses: ./.github/workflows/ci-build.yml
+
+  secondary:
+    name: Secondary group
+    if: inputs.groups == 'both' || inputs.groups == 'secondary'
+    uses: ./.github/workflows/ci-build-secondary.yml

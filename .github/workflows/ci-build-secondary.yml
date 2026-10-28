@@ -1,0 +1,96 @@
+name: Build (secondary)
+
+# Secondary architectures: not built on every push, but run monthly and on
+# demand, all on the 24.04 image: mips has no cross toolchain in Ubuntu 26.04 at
+# all.  s390x and ppc64le have archive packages for the target gmp/mpfr;
+# powerpc64, mips, alpha and sparc64 build them from source.
+# Dispatch with an "arches" list to build a subset, or run
+# "CI build (one arch)" for a single architecture.
+on:
+  schedule:
+    - cron: '10 2 1 * *'
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 'Architecture to build (all = the whole group)'
+        type: choice
+        default: all
+        options:
+        - all
+        - s390x
+        - powerpc64le
+        - powerpc64
+        - mips
+        - alpha
+        - sparc64
+      # optional comma-separated subset, overrides the dropdown above
+      arches:
+        description: 'Comma-separated subset (empty = all): s390x powerpc64le powerpc64 mips alpha sparc64'
+        required: false
+        default: ''
+  workflow_call:
+    inputs:
+      arches:
+        description: 'Comma-separated subset (empty = all)'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Select arches
+        id: select
+        env:
+          ALL_ARCHES: s390x powerpc64le powerpc64 mips alpha sparc64
+          REQUESTED: ${{ inputs.arches }}
+          SINGLE: ${{ inputs.arch }}
+        run: |
+          set -eu
+          # the dropdown picks one arch; "all" (or an explicit list) keeps the
+          # whole group
+          if [ -n "${REQUESTED:-}" ]; then
+            wanted=$REQUESTED
+          elif [ -n "${SINGLE:-}" ] && [ "$SINGLE" != all ]; then
+            wanted=$SINGLE
+          else
+            wanted=
+          fi
+          if [ -z "$wanted" ]; then
+            selected=$ALL_ARCHES
+          else
+            selected=
+            for arch in $(echo "$wanted" | tr ',' ' '); do
+              case " $ALL_ARCHES " in
+                *" $arch "*) selected="$selected $arch" ;;
+                *) echo "Unknown architecture '$arch'; valid: $ALL_ARCHES" >&2
+                   exit 1 ;;
+              esac
+            done
+          fi
+          if [ -z "${selected// /}" ]; then
+            echo "No architectures selected" >&2
+            exit 1
+          fi
+          matrix=$(printf '%s\n' $selected | jq -R . | jq -s -c '{arch: .}')
+          echo "matrix=$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.arch }}
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    uses: ./.github/workflows/ci-arch-build.yml
+    with:
+      arch: ${{ matrix.arch }}
+      runner: ubuntu-24.04
