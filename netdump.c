@@ -4652,13 +4652,10 @@ proc_kcore_init_32(FILE *fp, int kcore_fd)
 		goto bailout;
 	}
 
-	if (fd != kcore_fd)
-		close(fd);
-
 	elf32 = (Elf32_Ehdr *)&eheader[0];
 	if (elf32->e_phoff > sizeof(eheader) - 2 * sizeof(Elf32_Phdr)) {
 		error(INFO, "/proc/kcore: ELF program header offset too big!\n");
-		return FALSE;
+		goto bailout;
 	}
 	notes32 = (Elf32_Phdr *)&eheader[elf32->e_phoff];
 	load32 = notes32 + 1;
@@ -4690,6 +4687,9 @@ proc_kcore_init_32(FILE *fp, int kcore_fd)
 	pkd->flags |= KCORE_ELF32;
 	
 	kcore_memory_dump(CRASHDEBUG(1) ? fp : pc->nullfp);
+
+	if (fd != kcore_fd)
+		close(fd);
 
 	return TRUE;
 
@@ -4730,13 +4730,10 @@ proc_kcore_init_64(FILE *fp, int kcore_fd)
 		goto bailout;
 	}
 
-	if (fd != kcore_fd)
-		close(fd);
-
 	elf64 = (Elf64_Ehdr *)&eheader[0];
 	if (elf64->e_phoff > sizeof(eheader) - 2 * sizeof(Elf64_Phdr)) {
 		error(INFO, "/proc/kcore: ELF program header offset too big!\n");
-		return FALSE;
+		goto bailout;
 	}
 	notes64 = (Elf64_Phdr *)&eheader[elf64->e_phoff];
 	load64 = notes64 + 1;
@@ -4769,6 +4766,9 @@ proc_kcore_init_64(FILE *fp, int kcore_fd)
 	pkd->flags |= KCORE_ELF64;
 	
 	kcore_memory_dump(CRASHDEBUG(1) ? fp : pc->nullfp);
+
+	if (fd != kcore_fd)
+		close(fd);
 
 	return TRUE;
 
