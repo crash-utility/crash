@@ -860,6 +860,7 @@ SITE_DIR=_site
 website: ${PROGRAM}
 	rm -rf ${SITE_DIR}
 	python3 scripts/gen-help-rst.py --crash $(abspath ${PROGRAM}) --out $(abspath doc/help)
+	python3 scripts/gen-changelog.py --repo . --out $(abspath doc/changelog.rst)
 	$(MAKE) -C doc website WEBSITE_DIR=$(abspath ${SITE_DIR})
 	@echo "Site generated in ${SITE_DIR}"
 

@@ -31,6 +31,14 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Fetch release tags
+        run: |
+          git remote add upstream https://github.com/crash-utility/crash.git 2>/dev/null || true
+          git fetch --tags upstream
 
       - name: Install build and documentation dependencies
         run: |

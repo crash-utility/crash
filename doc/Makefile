@@ -24,12 +24,15 @@ help/index.rst:
 	@mkdir -p help
 	@printf 'Crash command help\n==================\n\nThe command help pages are generated from the crash binary when the\ndocumentation website is built.\n' > $@
 
-html htmldocs: help/index.rst
+changelog.rst:
+	@printf 'Crash changelog\n===============\n\nThe changelog is generated from the git log when the documentation\nwebsite is built.\n' > $@
+
+html htmldocs: help/index.rst changelog.rst
 	$(SPHINXBUILD) -b html $(SPHINXOPTS) $(SOURCEDIR) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
-website: help/index.rst
+website: help/index.rst changelog.rst
 	$(SPHINXBUILD) -b html -d $(BUILDDIR)/doctrees $(SPHINXOPTS) $(SOURCEDIR) $(WEBSITE_DIR)
 	@echo
 	@echo "Build finished. The HTML pages are in $(WEBSITE_DIR)."
@@ -42,4 +45,4 @@ pdf latexpdf: latex
 	@echo "Build finished. The PDF is in $(BUILDDIR)/latex."
 
 clean cleandocs:
-	rm -rf $(BUILDDIR) help
+	rm -rf $(BUILDDIR) help changelog.rst

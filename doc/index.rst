@@ -16,4 +16,5 @@ produced a core dump (a *dumpfile*).
    help/index
    extensions
    whitepaper
+   changelog
    links
