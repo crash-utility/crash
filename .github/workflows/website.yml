@@ -1,0 +1,63 @@
+name: Website
+
+# Build the documentation and command help pages from this repository and
+# publish them to the project's GitHub Pages site.
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'doc/**'
+      - 'scripts/**'
+      - 'help.c'
+      - 's390dbf.c'
+      - 'global_data.c'
+      - 'extensions/**'
+      - 'Makefile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and documentation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            make gcc g++ bison flex texinfo wget patch tar build-essential \
+            autoconf automake libncurses-dev zlib1g-dev \
+            libgmp-dev libmpfr-dev python3-sphinx python3-sphinx-rtd-theme
+
+      - name: Build crash
+        run: make -j"$(nproc)" warn
+
+      - name: Build the website
+        run: make website
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
