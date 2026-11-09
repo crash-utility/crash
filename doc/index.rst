@@ -11,7 +11,9 @@ produced a core dump (a *dumpfile*).
 
 .. toctree::
    :hidden:
+   :maxdepth: 2
 
+   help/index
    whitepaper
    extensions
    links

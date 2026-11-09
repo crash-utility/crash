@@ -1,3 +1,5 @@
+:orphan:
+
 Crash Utility Maintenance Guide
 ===============================
 
@@ -589,7 +591,7 @@ make_configure @./configure ${CONF_TARGET_FLAG} -p "RPMPKG=${RPMPKG}" -b @make
 --no-print-directory gdb_merge The ``make_configure`` dependency re-compiles
 ``configure.c`` every time. Then ``configure`` is called, optionally passing
 the CONF_TARGET_FLAG if it had been invoked with
-``make TARGET=<``*architecture>*, and the RPMPKG release string if it was
+``make TARGET=<architecture>``, and the RPMPKG release string if it was
 invoked with ``make RPMPKG=`` <*version*>, and most importantly, the ``-b``
 argument. ``configure -b`` creates a copy of the ``Makefile``, where it
 modifies the original in order to set the
@@ -996,7 +998,7 @@ by the initialization banner:
 However, GDB can be configured such that it runs on the host architecture, but
 can analyze the binary executable and core file of a different architecture.
 The crash utility itself can be built to target a different architecture by
-invoking it with ``make TARGET=<``*architecture>*, subject to the restrictions
+invoking it with ``make TARGET=<architecture>``, subject to the restrictions
 shown in this :ref:`table <target_arch>`. So, for example, this crash utility
 binary was built on an x86_64 host by invoking ``make TARGET=ARM64``; note
 that it shows both ``--host`` and ``--target`` values:
@@ -1086,7 +1088,7 @@ As a result of the build procedure, two files are stored in the
 
 1. the TARGET architecture is stored in the ``crash.target`` file. This file is
    used to make the TARGET architecture "sticky" across subsequent builds, and
-   will also prevent an attempt to invoke ``make TARGET=<``*architecture>* on a
+   will also prevent an attempt to invoke ``make TARGET=<architecture>`` on a
    previously built tree that has a different TARGET architecture.
 2. a copy of the ``gdb-`` <*version*>.``patch`` file; this file is used to
    recognize whether the top-level version of the file has changed, and therefore
@@ -4845,7 +4847,7 @@ https://fedoraproject.org/wiki/Fedora_30_Mass_Rebuild
 Mon Sep 24 2018 Dave Anderson - 7.2.4-1 - Update to latest upstream release
 \* Thu Jul 12 2018 Fedora Release Engineering - 7.2.3-2 - Rebuilt for https://fedoraproject.org/wiki/Fedora_29_Mass_Rebuild \*
 Fri May 18 2018 Dave Anderson - 7.2.3-1 - Update to latest upstream release
-``...``*(remainder of changelog not shown)*
+``...`` *(remainder of changelog not shown)*
 
 .. _rhel:
 
@@ -4894,7 +4896,7 @@ ELF kdump vmcores form s390x KASLR kernels Resolves: rhbz#1786996
 Mon Jun 10 2019 Dave Anderson - 7.2.6-2 - Fix "p" command regression Resolves:
 rhbz#1718417 - Fix arm64 debug kernel read error message during initialization
 Resolves: rhbz#1718736
-\* Mon May 6 2019 Dave Anderson - 7.2.6-1 - Rebase to latest upstream sources Resolves: rhbz#1686560 - Utilize the VMCOREINFO PT_NOTE in /proc/kcore header Resolves: rhbz#1627528 - Support extraction of CONFIG_PROC_VMCORE_DEVICE_DUMP data from dumpfile header Resolves: rhbz#1702535 ``...``*(remainder
+\* Mon May 6 2019 Dave Anderson - 7.2.6-1 - Rebase to latest upstream sources Resolves: rhbz#1686560 - Utilize the VMCOREINFO PT_NOTE in /proc/kcore header Resolves: rhbz#1627528 - Support extraction of CONFIG_PROC_VMCORE_DEVICE_DUMP data from dumpfile header Resolves: rhbz#1702535 ``...`` *(remainder
 of changelog not shown)*
 
 .. _centos:

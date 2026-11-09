@@ -859,8 +859,8 @@ SITE_DIR=_site
 
 website: ${PROGRAM}
 	rm -rf ${SITE_DIR}
+	python3 scripts/gen-help-rst.py --crash $(abspath ${PROGRAM}) --out $(abspath doc/help)
 	$(MAKE) -C doc website WEBSITE_DIR=$(abspath ${SITE_DIR})
-	python3 scripts/gen-help-site.py --crash $(abspath ${PROGRAM}) --out $(abspath ${SITE_DIR})
 	@echo "Site generated in ${SITE_DIR}"
 
 .PHONY: doc htmldocs pdfdocs cleandocs website

@@ -20,12 +20,16 @@ help:
 	@echo "  pdf / latexpdf     to make a PDF file (requires a LaTeX toolchain)"
 	@echo "  clean / cleandocs  to remove the build directory"
 
-html htmldocs:
+help/index.rst:
+	@mkdir -p help
+	@printf 'Crash command help\n==================\n\nThe command help pages are generated from the crash binary when the\ndocumentation website is built.\n' > $@
+
+html htmldocs: help/index.rst
 	$(SPHINXBUILD) -b html $(SPHINXOPTS) $(SOURCEDIR) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
 
-website:
+website: help/index.rst
 	$(SPHINXBUILD) -b html -d $(BUILDDIR)/doctrees $(SPHINXOPTS) $(SOURCEDIR) $(WEBSITE_DIR)
 	@echo
 	@echo "Build finished. The HTML pages are in $(WEBSITE_DIR)."
@@ -38,4 +42,4 @@ pdf latexpdf: latex
 	@echo "Build finished. The PDF is in $(BUILDDIR)/latex."
 
 clean cleandocs:
-	rm -rf $(BUILDDIR)
+	rm -rf $(BUILDDIR) help

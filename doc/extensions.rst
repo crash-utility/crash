@@ -50,7 +50,7 @@ To add the module's command(s) to a running crash session, enter:
 ``crash> extend <path-to>/<module>.so``
 
 The command(s) registered by the extension module will appear in the crash
-`help <help_pages/help.html>`__ menu. The module can be installed
+`help <help/help.html>`__ menu. The module can be installed
 automatically if the ``extend`` command above is entered in either
 *./.crashrc* or *$HOME/.crashrc*.
 
