@@ -1,6 +1,7 @@
-links
+Links
 =====
 
+* `crash-9.0.3.tar.gz <https://github.com/crash-utility/crash/archive/refs/tags/9.0.3.tar.gz>`_ / `crash-9.0.3.zip <https://github.com/crash-utility/crash/archive/refs/tags/9.0.3.zip>`_
 * `crash source code <https://github.com/crash-utility/crash>`_
 * `GitHub releases <https://github.com/crash-utility/crash/releases>`_
 * `Fedora builds <https://koji.fedoraproject.org/koji/packageinfo?packageID=307>`_
