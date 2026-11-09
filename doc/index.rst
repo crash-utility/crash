@@ -13,4 +13,5 @@ produced a core dump (a *dumpfile*).
    :hidden:
 
    whitepaper
+   extensions
    links

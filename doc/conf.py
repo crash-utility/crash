@@ -31,7 +31,7 @@ master_doc = 'index'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['output', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ['output', 'Thumbs.db', '.DS_Store', 'maintenance.rst']
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
