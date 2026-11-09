@@ -29,3 +29,5 @@ TAGS
 
 # Clang's compilation database file
 /compile_commands.json
+
+/_site/

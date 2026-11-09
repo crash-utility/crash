@@ -467,6 +467,7 @@ clean: make_configure
 
 do_clean:
 	rm -f ${OBJECT_FILES} ${DAEMON_OBJECT_FILES} ${PROGRAM} ${PROGRAM}lib.a ${GDB_OFILES}
+	rm -rf ${SITE_DIR}
 	@$(MAKE) -C extensions -i clean
 	@$(MAKE) -C memory_driver -i clean
 	@$(MAKE) -C doc -i clean
@@ -838,8 +839,7 @@ memory_driver: make_configure
 
 #
 # Documentation.  The reStructuredText sources live in doc/ and are the
-# source of truth for the crash documentation; the HTML generated here is
-# what gets published on the crash utility web site.
+# source of truth for the crash documentation.
 #
 doc: htmldocs
 
@@ -852,4 +852,15 @@ pdfdocs:
 cleandocs:
 	$(MAKE) -C doc clean
 
-.PHONY: doc htmldocs pdfdocs cleandocs
+#
+# Build the documentation and the command help pages into one directory.
+#
+SITE_DIR=_site
+
+website: ${PROGRAM}
+	rm -rf ${SITE_DIR}
+	$(MAKE) -C doc website WEBSITE_DIR=$(abspath ${SITE_DIR})
+	python3 scripts/gen-help-site.py --crash $(abspath ${PROGRAM}) --out $(abspath ${SITE_DIR})
+	@echo "Site generated in ${SITE_DIR}"
+
+.PHONY: doc htmldocs pdfdocs cleandocs website
