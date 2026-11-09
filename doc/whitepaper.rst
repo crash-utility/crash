@@ -17,6 +17,13 @@ by David Anderson
 | A copy of the license is included in the section entitled "GNU Free
 | Documentation License".
 
+.. note::
+
+   Some of this documentation may be out of sync with the current code
+   and needs updating.  Patches in this area are welcome; please send
+   them to the `crash-utility mailing list
+   <https://lists.crash-utility.osci.io/admin/lists/devel.lists.crash-utility.osci.io/>`_.
+
 Content
 -------
 
