@@ -14,6 +14,6 @@ produced a core dump (a *dumpfile*).
    :maxdepth: 2
 
    help/index
-   whitepaper
    extensions
+   whitepaper
    links
