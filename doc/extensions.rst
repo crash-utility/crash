@@ -1,6 +1,8 @@
 Crash extension modules
 =======================
 
+*Converted to reStructuredText by Rui Yang with AI assistance.*
+
 The ``echo.c`` extension module can be used as a simple template for creating
 an extension module to implement a new command.
 

@@ -3,7 +3,9 @@
 White Paper: Crash Utility
 ==========================
 
-by David Anderson
+Original author: Dave Anderson
+
+*Converted to reStructuredText by Rui Yang with AI assistance.*
 
 | Copyright © 2003, 2008, 2022 by Red Hat, Inc.
 | Copyright © 2022 by NEC Corporation

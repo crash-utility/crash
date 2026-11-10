@@ -3,7 +3,9 @@
 Crash Utility Maintenance Guide
 ===============================
 
-Dave Anderson
+Original author: Dave Anderson
+
+*Converted to reStructuredText by Rui Yang with AI assistance.*
 
 Copyright © 2020 by Red Hat, Inc. Copyright © 2021 by NEC Corporation
 
