@@ -49,10 +49,10 @@ jobs:
             libgmp-dev libmpfr-dev python3-sphinx python3-sphinx-rtd-theme
 
       - name: Build crash
-        run: make -j"$(nproc)" warn
+        run: make -j"$(nproc)" TARGET=X86_64 warn
 
       - name: Build the website
-        run: make website
+        run: make TARGET=X86_64 website
 
       - name: Upload the site
         uses: actions/upload-pages-artifact@v3
